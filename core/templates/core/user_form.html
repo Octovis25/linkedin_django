@@ -1,0 +1,22 @@
+{% extends "core/base.html" %}
+{% block title %}{{ title }}{% endblock %}
+{% block content %}
+<div style="max-width:600px"><div class="card">
+<h2>{{ title }}</h2>
+{% if form.non_field_errors %}{% for e in form.non_field_errors %}<div class="msg msg-error">{{ e }}</div>{% endfor %}{% endif %}
+<form method="post">{% csrf_token %}
+{% for field in form %}
+{% if field.name == "is_superuser" or field.name == "is_active" %}
+<div class="checkbox-row">{{ field }} <label for="{{ field.id_for_label }}" style="font-size:.85rem">{{ field.label }}</label></div>
+{% else %}
+<div class="form-group"><label>{{ field.label }}</label>{{ field }}
+{% if field.help_text %}<div class="help">{{ field.help_text }}</div>{% endif %}
+{% for error in field.errors %}<div class="msg msg-error">{{ error }}</div>{% endfor %}
+</div>
+{% endif %}
+{% endfor %}
+<div style="display:flex;gap:.5rem;margin-top:1rem">
+<button type="submit" class="btn btn-primary">Speichern</button>
+<a href="{% url 'user_list' %}" class="btn btn-secondary">Abbrechen</a>
+</div></form></div></div>
+{% endblock %}

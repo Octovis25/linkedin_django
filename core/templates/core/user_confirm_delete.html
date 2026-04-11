@@ -1,0 +1,12 @@
+{% extends "core/base.html" %}
+{% block title %}User loeschen{% endblock %}
+{% block content %}
+<div style="max-width:500px"><div class="card">
+<h2>User wirklich loeschen?</h2>
+<p style="margin-bottom:1rem;color:var(--octo-muted)">User <strong style="color:var(--octo-white)">{{ del_user.username }}</strong> ({{ del_user.first_name }} {{ del_user.last_name }}) wird unwiderruflich geloescht.</p>
+<form method="post">{% csrf_token %}
+<div style="display:flex;gap:.5rem">
+<button type="submit" class="btn btn-danger">Ja, loeschen</button>
+<a href="{% url 'user_list' %}" class="btn btn-secondary">Abbrechen</a>
+</div></form></div></div>
+{% endblock %}

@@ -1,0 +1,16 @@
+{% extends "core/base.html" %}
+{% block title %}Post bearbeiten{% endblock %}
+{% block content %}
+<div style="max-width:600px"><div class="card">
+<h2>Post bearbeiten – {{ post.post_id }}</h2>
+<form method="post">{% csrf_token %}
+{% for field in form %}
+<div class="form-group"><label>{{ field.label }}</label>{{ field }}
+{% if field.help_text %}<div class="help">{{ field.help_text }}</div>{% endif %}
+{% for error in field.errors %}<div class="msg msg-error">{{ error }}</div>{% endfor %}
+</div>{% endfor %}
+<div style="display:flex;gap:.5rem">
+<button type="submit" class="btn btn-primary">Speichern</button>
+<a href="{% url 'posts_posted:list' %}" class="btn btn-secondary">Abbrechen</a>
+</div></form></div></div>
+{% endblock %}

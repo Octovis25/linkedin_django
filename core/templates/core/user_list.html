@@ -1,0 +1,22 @@
+{% extends "core/base.html" %}
+{% block title %}User-Verwaltung{% endblock %}
+{% block content %}
+<div class="card">
+<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem">
+<h2 style="margin:0">User-Verwaltung <span style="color:var(--octo-muted);font-weight:400">({{ users|length }})</span></h2>
+<a href="{% url 'user_create' %}" class="btn btn-primary">+ Neuer User</a>
+</div>
+<table><thead><tr><th>Username</th><th>Name</th><th>E-Mail</th><th>Rolle</th><th>Letzter Login</th><th>Status</th><th>Aktionen</th></tr></thead>
+<tbody>{% for u in users %}<tr>
+<td><strong style="color:var(--octo-white)">{{ u.username }}</strong></td>
+<td>{{ u.first_name }} {{ u.last_name }}</td>
+<td>{{ u.email|default:"-" }}</td>
+<td>{% if u.is_superuser %}<span class="role-badge role-admin">Admin</span>{% else %}<span class="role-badge role-user">User</span>{% endif %}</td>
+<td>{{ u.last_login|default:"-" }}</td>
+<td>{% if u.is_active %}<span class="status-active">Aktiv</span>{% else %}<span class="status-inactive">Gesperrt</span>{% endif %}</td>
+<td class="actions">
+<a href="{% url 'user_edit' u.pk %}" class="btn btn-secondary btn-sm">Bearbeiten</a>
+{% if u != request.user %}<a href="{% url 'user_delete' u.pk %}" class="btn btn-danger btn-sm">Loeschen</a>{% endif %}
+</td></tr>{% endfor %}
+</tbody></table></div>
+{% endblock %}

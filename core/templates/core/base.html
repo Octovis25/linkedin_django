@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{% block title %}LinkedIn Dashboard – Octotrial{% endblock %}</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+:root {
+    --octo-dark: #1a1f2e;
+    --octo-navy: #232838;
+    --octo-card: #2a3040;
+    --octo-teal: #2ec4b6;
+    --octo-teal-hover: #25a89c;
+    --octo-light: #e8edf5;
+    --octo-muted: #8892a4;
+    --octo-white: #ffffff;
+    --octo-danger: #e74c3c;
+    --octo-danger-hover: #c0392b;
+    --octo-success-bg: #1a3a2a;
+    --octo-success-text: #2ec4b6;
+    --octo-error-bg: #3a1a1a;
+    --octo-error-text: #e74c3c;
+    --octo-border: #363d50;
+    --octo-input-bg: #1e2333;
+    --radius: 10px;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Inter',sans-serif;background:var(--octo-dark);color:var(--octo-light);min-height:100vh}
+
+/* Navbar */
+.navbar{background:var(--octo-navy);border-bottom:1px solid var(--octo-border);padding:0 2rem;display:flex;justify-content:space-between;align-items:center;height:60px}
+.navbar .brand{display:flex;align-items:center;gap:.6rem;font-size:1.15rem;font-weight:600;color:var(--octo-white);text-decoration:none}
+.navbar .brand .octo-icon{width:28px;height:28px;background:var(--octo-teal);border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:.8rem;font-weight:700;color:var(--octo-dark)}
+.nav-links{display:flex;gap:.3rem;align-items:center}
+.nav-links a{color:var(--octo-muted);text-decoration:none;padding:.5rem .9rem;border-radius:6px;font-size:.85rem;font-weight:500;transition:all .2s}
+.nav-links a:hover,.nav-links a.active{color:var(--octo-white);background:rgba(46,196,182,.1)}
+.nav-user{color:var(--octo-muted);font-size:.8rem;padding-left:1rem;border-left:1px solid var(--octo-border);margin-left:.5rem}
+
+/* Layout */
+.container{max-width:1140px;margin:0 auto;padding:1.5rem}
+
+/* Cards */
+.card{background:var(--octo-navy);border:1px solid var(--octo-border);border-radius:var(--radius);padding:1.5rem;margin-bottom:1.25rem}
+.card h2{font-size:1rem;font-weight:600;color:var(--octo-white);margin-bottom:1rem;letter-spacing:.02em}
+
+/* Forms */
+.form-input{width:100%;padding:.55rem .75rem;background:var(--octo-input-bg);border:1px solid var(--octo-border);border-radius:8px;color:var(--octo-light);font-size:.9rem;font-family:inherit;transition:border .2s}
+.form-input:focus{border-color:var(--octo-teal);outline:none;box-shadow:0 0 0 3px rgba(46,196,182,.15)}
+.form-input::placeholder{color:var(--octo-muted)}
+.form-group{margin-bottom:.9rem}
+.form-group label{display:block;font-weight:500;margin-bottom:.3rem;font-size:.85rem;color:var(--octo-light)}
+.form-group .help{font-size:.78rem;color:var(--octo-muted);margin-top:.2rem}
+
+/* Buttons */
+.btn{padding:.55rem 1.1rem;border:none;border-radius:8px;font-size:.85rem;cursor:pointer;font-weight:500;text-decoration:none;display:inline-flex;align-items:center;gap:.4rem;transition:all .2s;font-family:inherit}
+.btn-primary{background:var(--octo-teal);color:var(--octo-dark)}.btn-primary:hover{background:var(--octo-teal-hover)}
+.btn-danger{background:var(--octo-danger);color:#fff}.btn-danger:hover{background:var(--octo-danger-hover)}
+.btn-secondary{background:var(--octo-card);color:var(--octo-light);border:1px solid var(--octo-border)}.btn-secondary:hover{background:var(--octo-border)}
+.btn-sm{padding:.3rem .65rem;font-size:.78rem}
+
+/* Tables */
+table{width:100%;border-collapse:collapse}
+th{text-align:left;padding:.65rem .7rem;font-size:.75rem;text-transform:uppercase;letter-spacing:.05em;color:var(--octo-muted);border-bottom:1px solid var(--octo-border);font-weight:600}
+td{padding:.6rem .7rem;border-bottom:1px solid rgba(54,61,80,.5);font-size:.88rem}
+tr:hover{background:rgba(46,196,182,.04)}
+
+/* Messages */
+.msg{padding:.7rem 1rem;border-radius:8px;margin-bottom:.9rem;font-size:.88rem;border:1px solid transparent}
+.msg-success{background:var(--octo-success-bg);color:var(--octo-success-text);border-color:rgba(46,196,182,.2)}
+.msg-error{background:var(--octo-error-bg);color:var(--octo-error-text);border-color:rgba(231,76,60,.2)}
+
+/* Badges */
+.post-link{max-width:340px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:block;color:var(--octo-teal);text-decoration:none;font-size:.85rem}
+.post-link:hover{text-decoration:underline;color:var(--octo-teal-hover)}
+.actions{display:flex;gap:.35rem}
+.badge{font-size:.72rem;padding:.2rem .5rem;border-radius:4px;background:rgba(46,196,182,.12);color:var(--octo-teal);font-family:'JetBrains Mono',monospace;letter-spacing:.02em}
+.role-badge{font-size:.72rem;padding:.2rem .5rem;border-radius:4px;font-weight:500}
+.role-admin{background:rgba(255,193,7,.15);color:#ffc107}
+.role-user{background:rgba(46,196,182,.12);color:var(--octo-teal)}
+.checkbox-row{display:flex;align-items:center;gap:.5rem;margin-bottom:.9rem}
+.checkbox-row input[type=checkbox]{width:16px;height:16px;accent-color:var(--octo-teal)}
+.status-active{color:var(--octo-teal)}.status-inactive{color:var(--octo-danger)}
+</style>
+</head>
+<body>
+<nav class="navbar">
+<a href="{% url 'home' %}" class="brand"><span class="octo-icon">O</span> LinkedIn Dashboard</a>
+<div class="nav-links">
+<a href="{% url 'posts_posted:list' %}">Post-Daten</a>
+{% if user.is_superuser %}<a href="{% url 'user_list' %}">User-Verwaltung</a>{% endif %}
+<a href="{% url 'change_password' %}">Passwort</a>
+<a href="{% url 'logout' %}">Logout</a>
+<span class="nav-user">{{ user.username }}</span>
+</div>
+</nav>
+<div class="container">
+{% if messages %}{% for msg in messages %}<div class="msg {% if msg.tags == 'success' %}msg-success{% else %}msg-error{% endif %}">{{ msg }}</div>{% endfor %}{% endif %}
+{% block content %}{% endblock %}
+</div></body></html>
