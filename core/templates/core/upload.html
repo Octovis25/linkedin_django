@@ -1,31 +1,31 @@
 {% extends "core/base.html" %}
-{% block title %}Upload Data{% endblock %}
+{% block title %}Upload & Import Data{% endblock %}
 {% block content %}
 <div class="card">
-    <h2>Excel-Dateien hochladen</h2>
-    <form method="post" enctype="multipart/form-data" id="uploadForm">
+    <h2>Upload Excel Files</h2>
+    <form method="post" enctype="multipart/form-data" id="uploadForm" action="?action=upload">
         {% csrf_token %}
         <div class="form-group">
             <div id="dropZone" style="border: 3px dashed var(--octo-turquoise); border-radius: 8px; padding: 3rem; text-align: center; background: var(--octo-light-gray); cursor: pointer; transition: all 0.3s;">
-                <p style="font-size: 1.2rem; color: var(--octo-petrol); margin-bottom: 0.5rem;">📁 Dateien hier ablegen</p>
-                <p style="color: #666; font-size: 0.9rem;">oder klicken zum Auswählen</p>
+                <p style="font-size: 1.2rem; color: var(--octo-petrol); margin-bottom: 0.5rem;">📁 Drop files here</p>
+                <p style="color: #666; font-size: 0.9rem;">or click to select</p>
                 <input type="file" name="files" id="fileInput" multiple accept=".xlsx,.xls,.csv" style="display: none;">
             </div>
             <div id="fileList" style="margin-top: 1rem; font-size: 0.9rem;"></div>
         </div>
-        <button type="submit" class="btn btn-secondary" id="uploadBtn" style="display: none;">Hochladen</button>
+        <button type="submit" class="btn btn-secondary" id="uploadBtn" style="display: none;">Upload</button>
     </form>
 </div>
 
 <div class="card">
-    <h2>Hochgeladene Dateien ({{ files|length }})</h2>
+    <h2>Uploaded Files ({{ files|length }})</h2>
     {% if files %}
     <table>
         <thead>
             <tr>
-                <th>Dateiname</th>
-                <th>Größe</th>
-                <th>Hochgeladen</th>
+                <th>Filename</th>
+                <th>Size</th>
+                <th>Uploaded</th>
                 <th>Status</th>
             </tr>
         </thead>
@@ -35,15 +35,31 @@
                 <td>{{ file.name }}</td>
                 <td>{{ file.size|filesizeformat }}</td>
                 <td>{{ file.date|date:"d.m.Y H:i" }}</td>
-                <td><span style="color: var(--octo-orange); font-weight: 500;">⏳ Wartet auf Import</span></td>
+                <td><span style="color: var(--octo-orange); font-weight: 500;">⏳ Waiting for import</span></td>
             </tr>
             {% endfor %}
         </tbody>
     </table>
+    <form method="post" action="?action=import" style="margin-top: 1rem;">
+        {% csrf_token %}
+        <button type="submit" class="btn btn-secondary">▶ Start Import</button>
+        <p style="font-size: 0.85rem; color: #666; margin-top: 0.5rem;">Processes all uploaded files and imports them into the database.</p>
+    </form>
     {% else %}
-    <p style="color: var(--octo-text);">Noch keine Dateien hochgeladen.</p>
+    <p style="color: var(--octo-text);">No files uploaded yet.</p>
     {% endif %}
 </div>
+
+{% if log %}
+<div class="card">
+    <h3>Import Log</h3>
+    <div style="background: #f5f5f5; padding: 1rem; border-radius: 6px; font-family: monospace; font-size: 0.85rem; max-height: 400px; overflow-y: auto;">
+        {% for line in log %}
+        <div>{{ line }}</div>
+        {% endfor %}
+    </div>
+</div>
+{% endif %}
 {% endblock %}
 
 {% block extra_js %}
@@ -52,12 +68,9 @@ const dropZone = document.getElementById('dropZone');
 const fileInput = document.getElementById('fileInput');
 const fileList = document.getElementById('fileList');
 const uploadBtn = document.getElementById('uploadBtn');
-const uploadForm = document.getElementById('uploadForm');
 
-// Klick auf Zone = Dateiauswahl
 dropZone.addEventListener('click', () => fileInput.click());
 
-// Drag & Drop
 dropZone.addEventListener('dragover', (e) => {
     e.preventDefault();
     dropZone.style.borderColor = 'var(--octo-orange)';
@@ -77,14 +90,13 @@ dropZone.addEventListener('drop', (e) => {
     showFiles();
 });
 
-// Dateiauswahl per Dialog
 fileInput.addEventListener('change', showFiles);
 
 function showFiles() {
     const files = fileInput.files;
     if (files.length === 0) return;
     
-    let html = '<strong>' + files.length + ' Datei(en) ausgewählt:</strong><ul style="margin-top:0.5rem;padding-left:1.5rem">';
+    let html = '<strong>' + files.length + ' file(s) selected:</strong><ul style="margin-top:0.5rem;padding-left:1.5rem">';
     for (let i = 0; i < files.length; i++) {
         html += '<li>' + files[i].name + ' (' + formatBytes(files[i].size) + ')</li>';
     }
@@ -100,11 +112,5 @@ function formatBytes(bytes) {
     const i = Math.floor(Math.log(bytes) / Math.log(k));
     return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
 }
-
-// Auto-Submit nach Upload
-uploadForm.addEventListener('submit', (e) => {
-    uploadBtn.textContent = 'Wird hochgeladen...';
-    uploadBtn.disabled = true;
-});
 </script>
 {% endblock %}

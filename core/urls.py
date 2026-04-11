@@ -12,5 +12,4 @@ urlpatterns = [
     path("users/<int:pk>/edit/", views.user_edit, name="user_edit"),
     path("users/<int:pk>/delete/", views.user_delete, name="user_delete"),
     path("data/upload/", views.upload_data, name="upload_data"),
-    path("data/import/", views.import_run, name="import_run"),
 ]
