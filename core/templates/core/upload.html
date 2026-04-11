@@ -3,13 +3,17 @@
 {% block content %}
 <div class="card">
     <h2>Excel-Dateien hochladen</h2>
-    <form method="post" enctype="multipart/form-data">
+    <form method="post" enctype="multipart/form-data" id="uploadForm">
         {% csrf_token %}
         <div class="form-group">
-            <label>Dateien auswählen (Competitors, Content, Followers, Visitors)</label>
-            <input type="file" name="files" multiple accept=".xlsx,.xls,.csv" style="padding: 0.5rem;">
+            <div id="dropZone" style="border: 3px dashed var(--octo-turquoise); border-radius: 8px; padding: 3rem; text-align: center; background: var(--octo-light-gray); cursor: pointer; transition: all 0.3s;">
+                <p style="font-size: 1.2rem; color: var(--octo-petrol); margin-bottom: 0.5rem;">📁 Dateien hier ablegen</p>
+                <p style="color: #666; font-size: 0.9rem;">oder klicken zum Auswählen</p>
+                <input type="file" name="files" id="fileInput" multiple accept=".xlsx,.xls,.csv" style="display: none;">
+            </div>
+            <div id="fileList" style="margin-top: 1rem; font-size: 0.9rem;"></div>
         </div>
-        <button type="submit" class="btn btn-secondary">Hochladen</button>
+        <button type="submit" class="btn btn-secondary" id="uploadBtn" style="display: none;">Hochladen</button>
     </form>
 </div>
 
@@ -21,6 +25,7 @@
             <tr>
                 <th>Dateiname</th>
                 <th>Größe</th>
+                <th>Hochgeladen</th>
                 <th>Status</th>
             </tr>
         </thead>
@@ -29,7 +34,8 @@
             <tr>
                 <td>{{ file.name }}</td>
                 <td>{{ file.size|filesizeformat }}</td>
-                <td><span style="color: var(--octo-orange);">Wartet auf Import</span></td>
+                <td>{{ file.date|date:"d.m.Y H:i" }}</td>
+                <td><span style="color: var(--octo-orange); font-weight: 500;">⏳ Wartet auf Import</span></td>
             </tr>
             {% endfor %}
         </tbody>
@@ -38,4 +44,67 @@
     <p style="color: var(--octo-text);">Noch keine Dateien hochgeladen.</p>
     {% endif %}
 </div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+const dropZone = document.getElementById('dropZone');
+const fileInput = document.getElementById('fileInput');
+const fileList = document.getElementById('fileList');
+const uploadBtn = document.getElementById('uploadBtn');
+const uploadForm = document.getElementById('uploadForm');
+
+// Klick auf Zone = Dateiauswahl
+dropZone.addEventListener('click', () => fileInput.click());
+
+// Drag & Drop
+dropZone.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    dropZone.style.borderColor = 'var(--octo-orange)';
+    dropZone.style.background = '#fff9f0';
+});
+
+dropZone.addEventListener('dragleave', () => {
+    dropZone.style.borderColor = 'var(--octo-turquoise)';
+    dropZone.style.background = 'var(--octo-light-gray)';
+});
+
+dropZone.addEventListener('drop', (e) => {
+    e.preventDefault();
+    dropZone.style.borderColor = 'var(--octo-turquoise)';
+    dropZone.style.background = 'var(--octo-light-gray)';
+    fileInput.files = e.dataTransfer.files;
+    showFiles();
+});
+
+// Dateiauswahl per Dialog
+fileInput.addEventListener('change', showFiles);
+
+function showFiles() {
+    const files = fileInput.files;
+    if (files.length === 0) return;
+    
+    let html = '<strong>' + files.length + ' Datei(en) ausgewählt:</strong><ul style="margin-top:0.5rem;padding-left:1.5rem">';
+    for (let i = 0; i < files.length; i++) {
+        html += '<li>' + files[i].name + ' (' + formatBytes(files[i].size) + ')</li>';
+    }
+    html += '</ul>';
+    fileList.innerHTML = html;
+    uploadBtn.style.display = 'inline-block';
+}
+
+function formatBytes(bytes) {
+    if (bytes === 0) return '0 Bytes';
+    const k = 1024;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
+}
+
+// Auto-Submit nach Upload
+uploadForm.addEventListener('submit', (e) => {
+    uploadBtn.textContent = 'Wird hochgeladen...';
+    uploadBtn.disabled = true;
+});
+</script>
 {% endblock %}

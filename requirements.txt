@@ -2,3 +2,4 @@ Django>=4.2,<5.1
 mysqlclient>=2.2
 python-dotenv>=1.0
 gunicorn>=21.2
+openpyxl>=3.1

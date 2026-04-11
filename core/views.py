@@ -1,10 +1,13 @@
 import os
+import shutil
+from datetime import datetime
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.models import User
 from django.contrib import messages
 from django.conf import settings
 from .forms import CreateUserForm, EditUserForm, ChangeOwnPasswordForm
+import openpyxl
 
 @login_required
 def home(request):
@@ -12,18 +15,18 @@ def home(request):
 
 @login_required
 def upload_data(request):
-    uploaded_files = []
     upload_dir = os.path.join(settings.MEDIA_ROOT, 'uploads')
     
     if request.method == "POST" and request.FILES.getlist('files'):
         os.makedirs(upload_dir, exist_ok=True)
+        uploaded_count = 0
         for f in request.FILES.getlist('files'):
             path = os.path.join(upload_dir, f.name)
             with open(path, 'wb+') as destination:
                 for chunk in f.chunks():
                     destination.write(chunk)
-            uploaded_files.append(f.name)
-        messages.success(request, f"{len(uploaded_files)} Datei(en) hochgeladen!")
+            uploaded_count += 1
+        messages.success(request, f"✅ {uploaded_count} Datei(en) erfolgreich hochgeladen!")
         return redirect("upload_data")
     
     # Liste der hochgeladenen Dateien
@@ -35,19 +38,101 @@ def upload_data(request):
                 files.append({
                     'name': fname,
                     'size': os.path.getsize(fpath),
-                    'date': os.path.getmtime(fpath)
+                    'date': datetime.fromtimestamp(os.path.getmtime(fpath))
                 })
+    files.sort(key=lambda x: x['date'], reverse=True)
     
     return render(request, "core/upload.html", {"files": files})
+
+def analyze_file_type(filepath):
+    """Analysiert Excel-Datei und bestimmt den Typ anhand der Spalten"""
+    try:
+        wb = openpyxl.load_workbook(filepath, read_only=True)
+        sheet = wb.active
+        headers = [cell.value.lower() if cell.value else '' for cell in sheet[1]]
+        wb.close()
+        
+        # Competitor-Datei?
+        if 'competitor_name' in headers or 'competitor' in headers:
+            return 'competitors'
+        
+        # Followers-Datei?
+        if 'followers_total' in headers or 'followers' in headers:
+            return 'followers'
+        
+        # Visitors-Datei?
+        if 'page_views' in headers or 'visitors' in headers:
+            return 'visitors'
+        
+        # Content/Posts-Datei?
+        if 'post_id' in headers or 'impressions' in headers or 'post_title' in headers:
+            return 'content'
+        
+        return 'unknown'
+    except Exception as e:
+        return f'error: {str(e)}'
 
 @login_required
 def import_run(request):
     log = []
+    upload_dir = os.path.join(settings.MEDIA_ROOT, 'uploads')
+    
     if request.method == "POST":
-        # Hier später orchestrate_imports.py aufrufen
-        log.append("Import gestartet...")
-        log.append("TODO: orchestrate_imports.py integrieren")
-        messages.info(request, "Import-Funktion wird noch implementiert.")
+        if not os.path.exists(upload_dir):
+            messages.warning(request, "Keine Dateien zum Importieren vorhanden.")
+            return redirect("import_run")
+        
+        files = [f for f in os.listdir(upload_dir) if os.path.isfile(os.path.join(upload_dir, f))]
+        
+        if not files:
+            messages.warning(request, "Upload-Ordner ist leer.")
+            return redirect("import_run")
+        
+        log.append(f"📋 {len(files)} Datei(en) gefunden in uploads/")
+        log.append("")
+        
+        processed = 0
+        errors = 0
+        
+        for fname in files:
+            fpath = os.path.join(upload_dir, fname)
+            log.append(f"🔍 Analysiere: {fname}")
+            
+            # Datei-Typ bestimmen
+            file_type = analyze_file_type(fpath)
+            
+            if file_type == 'unknown':
+                log.append(f"   ⚠️  Typ konnte nicht bestimmt werden (Spalten passen zu keinem bekannten Format)")
+                errors += 1
+                continue
+            elif file_type.startswith('error'):
+                log.append(f"   ❌ Fehler beim Lesen: {file_type}")
+                errors += 1
+                continue
+            
+            # Ziel-Ordner
+            target_dir = os.path.join(settings.MEDIA_ROOT, 'linkedin_data', file_type)
+            os.makedirs(target_dir, exist_ok=True)
+            target_path = os.path.join(target_dir, fname)
+            
+            # Verschieben
+            try:
+                shutil.move(fpath, target_path)
+                log.append(f"   ✅ Typ: {file_type} → verschoben nach linkedin_data/{file_type}/")
+                log.append(f"   📊 Import in Datenbank... (TODO: Import-Skript aufrufen)")
+                processed += 1
+            except Exception as e:
+                log.append(f"   ❌ Fehler beim Verschieben: {str(e)}")
+                errors += 1
+            
+            log.append("")
+        
+        log.append("=" * 60)
+        log.append(f"✅ Erfolgreich verarbeitet: {processed}")
+        if errors > 0:
+            log.append(f"❌ Fehler: {errors}")
+        
+        messages.success(request, f"Import abgeschlossen: {processed} Datei(en) verarbeitet, {errors} Fehler")
     
     return render(request, "core/import_run.html", {"log": log})
 
