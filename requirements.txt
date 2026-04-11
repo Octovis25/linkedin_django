@@ -1,6 +1,9 @@
-Django>=4.2,<5.1
-mysqlclient>=2.2
-python-dotenv>=1.0
-gunicorn>=21.2
-openpyxl>=3.1
-xlrd>=2.0
+Django>=5.0
+pandas>=2.0
+openpyxl>=3.1.0
+xlrd>=2.0.0
+sqlalchemy>=2.0
+pymysql>=1.1.0
+python-dotenv>=1.0.0
+requests>=2.31.0
+openpyxl>=3.1.0

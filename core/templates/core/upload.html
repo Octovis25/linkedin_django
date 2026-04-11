@@ -1,116 +1,58 @@
-{% extends "core/base.html" %}
-{% block title %}Upload & Import Data{% endblock %}
+{% extends 'core/base.html' %}
+
+{% block title %}Upload Data{% endblock %}
+
 {% block content %}
+<h1>📤 Upload & Manage Files</h1>
+
 <div class="card">
-    <h2>Upload Excel Files</h2>
-    <form method="post" enctype="multipart/form-data" id="uploadForm" action="?action=upload">
+    <h2>Select a file:</h2>
+    <form method="post" enctype="multipart/form-data">
         {% csrf_token %}
-        <div class="form-group">
-            <div id="dropZone" style="border: 3px dashed var(--octo-turquoise); border-radius: 8px; padding: 3rem; text-align: center; background: var(--octo-light-gray); cursor: pointer; transition: all 0.3s;">
-                <p style="font-size: 1.2rem; color: var(--octo-petrol); margin-bottom: 0.5rem;">📁 Drop files here</p>
-                <p style="color: #666; font-size: 0.9rem;">or click to select</p>
-                <input type="file" name="files" id="fileInput" multiple accept=".xlsx,.xls,.csv" style="display: none;">
-            </div>
-            <div id="fileList" style="margin-top: 1rem; font-size: 0.9rem;"></div>
-        </div>
-        <button type="submit" class="btn btn-secondary" id="uploadBtn" style="display: none;">Upload</button>
+        {{ form.as_p }}
+        <button type="submit" class="btn btn-primary">Upload</button>
     </form>
+    <p style="margin-top: 0.5rem; color: #666; font-size: 0.85rem;">Upload .xls, .xlsx, or .csv files</p>
 </div>
 
 <div class="card">
-    <h2>Uploaded Files ({{ files|length }})</h2>
+    <h2>📂 Files in uploads/ ({{ files|length }})</h2>
     {% if files %}
     <table>
         <thead>
             <tr>
                 <th>Filename</th>
                 <th>Size</th>
-                <th>Uploaded</th>
-                <th>Status</th>
+                <th>Actions</th>
             </tr>
         </thead>
         <tbody>
             {% for file in files %}
             <tr>
                 <td>{{ file.name }}</td>
-                <td>{{ file.size|filesizeformat }}</td>
-                <td>{{ file.date|date:"d.m.Y H:i" }}</td>
-                <td><span style="color: var(--octo-orange); font-weight: 500;">⏳ Waiting for import</span></td>
+                <td>{{ file.size }}</td>
+                <td>
+                    <a href="{% url 'delete_file' file.name %}" 
+                       class="btn btn-danger btn-sm"
+                       onclick="return confirm('Datei {{ file.name }} löschen?')">
+                        🗑️ Delete
+                    </a>
+                </td>
             </tr>
             {% endfor %}
         </tbody>
     </table>
-    <form method="post" action="?action=import" style="margin-top: 1rem;">
-        {% csrf_token %}
-        <button type="submit" class="btn btn-secondary">▶ Start Import</button>
-        <p style="font-size: 0.85rem; color: #666; margin-top: 0.5rem;">Processes all uploaded files and imports them into the database.</p>
-    </form>
     {% else %}
-    <p style="color: var(--octo-text);">No files uploaded yet.</p>
+    <p style="color: #666;">Keine Dateien hochgeladen.</p>
     {% endif %}
 </div>
 
-{% if log %}
-<div class="card">
-    <h3>Import Log</h3>
-    <div style="background: #f5f5f5; padding: 1rem; border-radius: 6px; font-family: monospace; font-size: 0.85rem; max-height: 400px; overflow-y: auto;">
-        {% for line in log %}
-        <div>{{ line }}</div>
-        {% endfor %}
-    </div>
+<div class="card" style="background-color: var(--octo-light-gray);">
+    <h2>🔍 Analyze & Import Files</h2>
+    <p style="margin-bottom: 1rem;">Analysiert alle Dateien im Upload-Ordner und importiert sie in die Datenbank.</p>
+    <form method="post" action="{% url 'analyze' %}">
+        {% csrf_token %}
+        <button type="submit" class="btn btn-secondary">🔍 Analyze & Import Files</button>
+    </form>
 </div>
-{% endif %}
-{% endblock %}
-
-{% block extra_js %}
-<script>
-const dropZone = document.getElementById('dropZone');
-const fileInput = document.getElementById('fileInput');
-const fileList = document.getElementById('fileList');
-const uploadBtn = document.getElementById('uploadBtn');
-
-dropZone.addEventListener('click', () => fileInput.click());
-
-dropZone.addEventListener('dragover', (e) => {
-    e.preventDefault();
-    dropZone.style.borderColor = 'var(--octo-orange)';
-    dropZone.style.background = '#fff9f0';
-});
-
-dropZone.addEventListener('dragleave', () => {
-    dropZone.style.borderColor = 'var(--octo-turquoise)';
-    dropZone.style.background = 'var(--octo-light-gray)';
-});
-
-dropZone.addEventListener('drop', (e) => {
-    e.preventDefault();
-    dropZone.style.borderColor = 'var(--octo-turquoise)';
-    dropZone.style.background = 'var(--octo-light-gray)';
-    fileInput.files = e.dataTransfer.files;
-    showFiles();
-});
-
-fileInput.addEventListener('change', showFiles);
-
-function showFiles() {
-    const files = fileInput.files;
-    if (files.length === 0) return;
-    
-    let html = '<strong>' + files.length + ' file(s) selected:</strong><ul style="margin-top:0.5rem;padding-left:1.5rem">';
-    for (let i = 0; i < files.length; i++) {
-        html += '<li>' + files[i].name + ' (' + formatBytes(files[i].size) + ')</li>';
-    }
-    html += '</ul>';
-    fileList.innerHTML = html;
-    uploadBtn.style.display = 'inline-block';
-}
-
-function formatBytes(bytes) {
-    if (bytes === 0) return '0 Bytes';
-    const k = 1024;
-    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
-}
-</script>
 {% endblock %}

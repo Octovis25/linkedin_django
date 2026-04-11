@@ -1,0 +1,467 @@
+{% extends 'core/base.html' %}
+
+{% block title %}Collectives Dashboard{% endblock %}
+
+{% block content %}
+<style>
+/* Additional styles for Collectives dashboard */
+.nav-tabs { display: flex; gap: 0; margin-bottom: 1.5rem; border-bottom: 2px solid var(--octo-light-gray); }
+.nav-tabs button { background: none; border: none; padding: 0.75rem 1.5rem; color: var(--octo-petrol); font-weight: 500; cursor: pointer; border-bottom: 3px solid transparent; }
+.nav-tabs button:hover { color: var(--octo-orange); }
+.nav-tabs button.active { color: var(--octo-orange); border-bottom-color: var(--octo-orange); }
+.tab-content { display: none; }
+.tab-content.active { display: block; }
+.search-box { width: 100%; padding: 0.75rem; border: 2px solid var(--octo-light-gray); border-radius: 6px; font-size: 0.9rem; margin-bottom: 1rem; }
+.filter-chips { display: flex; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 1rem; }
+.chip { padding: 0.4rem 1rem; border-radius: 20px; font-size: 0.85rem; cursor: pointer; border: 2px solid transparent; background: var(--octo-light-gray); color: var(--octo-dark-petrol); }
+.chip.active { border-color: var(--octo-petrol); background: #e8f0fe; color: var(--octo-petrol); }
+.chip:hover { background: #ddd; }
+select.status-select, select.typ-select { padding: 0.4rem 0.6rem; border-radius: 6px; border: 1px solid var(--octo-light-gray); font-size: 0.85rem; cursor: pointer; background: white; }
+select.status-select { min-width: 180px; }
+select.typ-select { min-width: 100px; }
+.status-wip { background: #FFF9C4 !important; }
+.status-ready { background: #C8E6C9 !important; }
+.status-posted { background: #BBDEFB !important; }
+.status-rejected { background: #FFCDD2 !important; }
+.saved-indicator { color: #2e7d32; font-size: 0.75rem; margin-left: 0.5rem; display: none; }
+.loading { text-align: center; color: #888; padding: 2rem; }
+.error-msg { background: #fce4ec; color: #c62828; padding: 1rem; border-radius: 6px; text-align: center; }
+.page-count-badge { background: var(--octo-petrol); color: white; border-radius: 50%; width: 28px; height: 28px; display: inline-flex; align-items: center; justify-content: center; font-size: 0.8rem; font-weight: 700; margin-left: 0.5rem; }
+.tree-node-header { display: flex; align-items: center; gap: 0.5rem; padding: 0.6rem; cursor: pointer; border-bottom: 1px solid var(--octo-light-gray); user-select: none; font-size: 0.9rem; font-weight: 600; background: #f8f9fa; }
+.tree-node-header:hover { background: #e8f0fe; }
+.tree-node-toggle { width: 16px; text-align: center; font-size: 0.75rem; color: #888; transition: transform 0.15s; }
+.tree-node-toggle.open { transform: rotate(90deg); }
+.tree-node-count { background: var(--octo-petrol); color: white; border-radius: 10px; padding: 1px 7px; font-size: 0.75rem; font-weight: 700; }
+.tree-node-children { display: none; }
+.tree-node-children.open { display: block; }
+.tree-page { display: flex; align-items: center; gap: 0.5rem; padding: 0.5rem; border-bottom: 1px solid #f5f5f5; font-size: 0.85rem; }
+.tree-page:hover { background: #f0f4ff; }
+.tree-page-title { flex: 1; }
+.tree-page-meta { font-size: 0.75rem; color: #aaa; white-space: nowrap; }
+.tree-page-link { font-size: 0.75rem; color: var(--octo-petrol); text-decoration: none; white-space: nowrap; margin-left: 0.5rem; }
+.tree-page-link:hover { text-decoration: underline; }
+.settings-card { max-width: 500px; }
+.alert { padding: 0.75rem; border-radius: 6px; font-size: 0.85rem; margin-top: 1rem; display: none; }
+.alert.success { background: #e8f5e9; color: #2e7d32; }
+.alert.error { background: #fce4ec; color: #c62828; }
+</style>
+
+<h1>📊 Collectives Dashboard</h1>
+
+<!-- Navigation Tabs -->
+<div class="nav-tabs">
+    <button onclick="showTab('dashboard', this)" class="active">Dashboard</button>
+    <button onclick="showTab('kollektive', this)">Kollektive</button>
+    <button onclick="showTab('settings', this)">Settings</button>
+</div>
+
+<!-- Tab: Dashboard -->
+<div class="tab-content active" id="tab-dashboard">
+    <div class="card">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+            <h2>📊 Post-Status <span class="page-count-badge" id="dashCount">0</span></h2>
+            <div style="display: flex; gap: 0.5rem;">
+                <button class="btn btn-primary" onclick="exportExcel()">📊 Excel Export</button>
+                <button class="btn btn-secondary" onclick="loadDashboard()">Refresh</button>
+            </div>
+        </div>
+        
+        <input type="text" id="dashSearch" class="search-box" placeholder="Search by title or folder..." onkeyup="filterDashboard()">
+        
+        <div class="filter-chips">
+            <div class="chip active" onclick="setFilter('', this)">All</div>
+            <div class="chip" onclick="setFilter('Post', this)">Post</div>
+            <div class="chip" onclick="setFilter('Other', this)">Other</div>
+            <div class="chip" onclick="setFilter('__kein__', this)">No Status</div>
+        </div>
+        
+        <div id="dashContainer">
+            <div class="loading">Loading...</div>
+        </div>
+    </div>
+</div>
+
+<!-- Tab: Kollektive -->
+<div class="tab-content" id="tab-kollektive">
+    <div class="card">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+            <h2>📁 Kollektive: <span id="kollName">-</span> <span class="page-count-badge" id="pageCount">0</span></h2>
+            <div style="display: flex; gap: 0.5rem;">
+                <button class="btn btn-primary" onclick="exportExcel()">📊 Excel Export</button>
+                <button class="btn btn-secondary" onclick="loadPages()">Refresh</button>
+            </div>
+        </div>
+        
+        <div id="pagesContainer">
+            <div class="loading">Loading...</div>
+        </div>
+    </div>
+</div>
+
+<!-- Tab: Settings -->
+<div class="tab-content" id="tab-settings">
+    <div class="card settings-card">
+        <h2>⚙️ Nextcloud Credentials</h2>
+        
+        <div class="form-group">
+            <label>Nextcloud URL</label>
+            <input type="text" id="ncUrl" placeholder="https://nextcloud.example.com">
+        </div>
+        
+        <div class="form-group">
+            <label>Kollektive Name</label>
+            <input type="text" id="kollektiveName" placeholder="My Collective">
+        </div>
+        
+        <div class="form-group">
+            <label>Username</label>
+            <input type="text" id="ncUser" placeholder="username">
+        </div>
+        
+        <div class="form-group">
+            <label>App-Password</label>
+            <input type="password" id="ncPass" placeholder="app-password">
+        </div>
+        
+        <div style="display: flex; gap: 0.5rem; margin-top: 1.5rem;">
+            <button class="btn btn-primary" onclick="saveConfig()">Save</button>
+            <button class="btn btn-secondary" onclick="testConnection()">Test Connection</button>
+        </div>
+        
+        <div class="alert" id="settingsAlert"></div>
+    </div>
+</div>
+
+<script>
+let allPages = [];
+let cfg = {};
+let activeFilter = '';
+
+function showTab(name, el) {
+    document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.nav-tabs button').forEach(a => a.classList.remove('active'));
+    document.getElementById('tab-' + name).classList.add('active');
+    if (el) el.classList.add('active');
+    
+    if (name === 'dashboard') loadDashboard();
+    if (name === 'kollektive') loadPages();
+}
+
+async function loadConfig() {
+    const r = await fetch('/collectives/api/config/');
+    cfg = await r.json();
+    document.getElementById('kollName').textContent = cfg.kollektive_name || '-';
+    
+    if (cfg.nextcloud_url) document.getElementById('ncUrl').value = cfg.nextcloud_url;
+    if (cfg.kollektive_name) document.getElementById('kollektiveName').value = cfg.kollektive_name;
+    if (cfg.username) document.getElementById('ncUser').value = cfg.username;
+}
+
+async function saveConfig() {
+    const payload = {
+        nextcloud_url: document.getElementById('ncUrl').value,
+        kollektive_name: document.getElementById('kollektiveName').value,
+        username: document.getElementById('ncUser').value,
+        app_password: document.getElementById('ncPass').value
+    };
+    
+    const r = await fetch('/collectives/api/config/', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json', 'X-CSRFToken': getCookie('csrftoken')},
+        body: JSON.stringify(payload)
+    });
+    
+    const data = await r.json();
+    showAlert(data.success ? 'Saved!' : 'Error', data.success ? 'success' : 'error');
+    await loadConfig();
+}
+
+async function testConnection() {
+    const r = await fetch('/collectives/api/test-connection/', {
+        method: 'POST',
+        headers: {'X-CSRFToken': getCookie('csrftoken')}
+    });
+    
+    const data = await r.json();
+    showAlert(data.message, data.success ? 'success' : 'error');
+    await loadConfig();
+}
+
+function showAlert(msg, type) {
+    const el = document.getElementById('settingsAlert');
+    el.textContent = msg;
+    el.className = 'alert ' + type;
+    el.style.display = 'block';
+    setTimeout(() => el.style.display = 'none', 4000);
+}
+
+async function loadDashboard() {
+    const container = document.getElementById('dashContainer');
+    container.innerHTML = '<div class="loading">Loading...</div>';
+    
+    try {
+        const r = await fetch('/collectives/api/pages/');
+        const data = await r.json();
+        
+        if (!data.success) {
+            container.innerHTML = `<div class="error-msg">${data.message}</div>`;
+            return;
+        }
+        
+        allPages = data.pages || [];
+        document.getElementById('dashCount').textContent = allPages.length;
+        renderDashboard(allPages);
+    } catch(e) {
+        container.innerHTML = '<div class="error-msg">Connection error.</div>';
+    }
+}
+
+function setFilter(val, el) {
+    activeFilter = val;
+    document.querySelectorAll('.filter-chips .chip').forEach(c => c.classList.remove('active'));
+    el.classList.add('active');
+    filterDashboard();
+}
+
+function filterDashboard() {
+    const q = document.getElementById('dashSearch').value.toLowerCase();
+    let filtered = allPages;
+    
+    if (activeFilter === '__kein__') {
+        filtered = filtered.filter(p => !p.typ || p.typ === '');
+    } else if (activeFilter) {
+        filtered = filtered.filter(p => p.typ === activeFilter);
+    }
+    
+    if (q) {
+        filtered = filtered.filter(p => 
+            p.title.toLowerCase().includes(q) || 
+            (p.folder||'').toLowerCase().includes(q)
+        );
+    }
+    
+    renderDashboard(filtered);
+}
+
+function statusClass(s) {
+    if (s === '📝 In Bearbeitung') return 'status-wip';
+    if (s === '🚀 Bereit zum Posten') return 'status-ready';
+    if (s === '📤 Gepostet') return 'status-posted';
+    if (s === '❌ Verworfen') return 'status-rejected';
+    return '';
+}
+
+function renderDashboard(pages) {
+    const container = document.getElementById('dashContainer');
+    
+    if (!pages.length) {
+        container.innerHTML = '<div class="loading">No entries found.</div>';
+        return;
+    }
+    
+    let html = `<table><thead><tr>
+        <th>Title</th><th>Folder</th><th>Typ</th><th>Status</th><th>Modified</th><th>Link</th>
+    </tr></thead><tbody>`;
+    
+    pages.forEach((p, i) => {
+        const sc = statusClass(p.status);
+        const escapedPath = p.path.replace(/'/g, "\\'");
+        
+        html += `<tr class="${sc}" id="row_${i}">
+            <td><strong>${p.title}</strong></td>
+            <td style="color: #888; font-size: 0.85rem;">${p.folder || '—'}</td>
+            <td>
+                <select class="typ-select" onchange="saveTyp('${escapedPath}', this, ${i})">
+                    <option value="" ${!p.typ?'selected':''}>—</option>
+                    <option value="Post" ${p.typ==='Post'?'selected':''}>Post</option>
+                    <option value="Other" ${p.typ==='Other'?'selected':''}>Other</option>
+                </select>
+            </td>
+            <td>
+                <select class="status-select" onchange="saveStatus('${escapedPath}', this, ${i})">
+                    <option value="" ${!p.status?'selected':''}>— no status —</option>
+                    <option value="📝 In Bearbeitung" ${p.status==='📝 In Bearbeitung'?'selected':''}>📝 In Bearbeitung</option>
+                    <option value="🚀 Bereit zum Posten" ${p.status==='🚀 Bereit zum Posten'?'selected':''}>🚀 Bereit zum Posten</option>
+                    <option value="📤 Gepostet" ${p.status==='📤 Gepostet'?'selected':''}>📤 Gepostet</option>
+                    <option value="❌ Verworfen" ${p.status==='❌ Verworfen'?'selected':''}>❌ Verworfen</option>
+                </select>
+                <span class="saved-indicator" id="saved_${i}">✓</span>
+            </td>
+            <td>${formatDate(p.modified)}</td>
+            <td><a href="${p.url}" target="_blank" style="color: var(--octo-petrol); text-decoration: none; font-size: 0.85rem;">Open →</a></td>
+        </tr>`;
+    });
+    
+    html += '</tbody></table>';
+    container.innerHTML = html;
+}
+
+async function saveStatus(path, selectEl, idx) {
+    const status = selectEl.value;
+    const row = document.getElementById('row_' + idx);
+    row.className = statusClass(status);
+    
+    const page = allPages.find(p => p.path === path);
+    if (page) page.status = status;
+    
+    await fetch('/collectives/api/status/', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json', 'X-CSRFToken': getCookie('csrftoken')},
+        body: JSON.stringify({ path, status })
+    });
+    
+    const indicator = document.getElementById('saved_' + idx);
+    indicator.style.display = 'inline';
+    setTimeout(() => indicator.style.display = 'none', 2000);
+}
+
+async function saveTyp(path, selectEl, idx) {
+    const typ = selectEl.value;
+    
+    const page = allPages.find(p => p.path === path);
+    if (page) page.typ = typ;
+    
+    await fetch('/collectives/api/status/', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json', 'X-CSRFToken': getCookie('csrftoken')},
+        body: JSON.stringify({ path, typ })
+    });
+    
+    const indicator = document.getElementById('saved_' + idx);
+    indicator.style.display = 'inline';
+    setTimeout(() => indicator.style.display = 'none', 2000);
+}
+
+async function loadPages() {
+    const container = document.getElementById('pagesContainer');
+    container.innerHTML = '<div class="loading">Loading...</div>';
+    
+    try {
+        const r = await fetch('/collectives/api/pages/');
+        const data = await r.json();
+        
+        if (!data.success) {
+            container.innerHTML = `<div class="error-msg">${data.message}</div>`;
+            return;
+        }
+        
+        allPages = data.pages || [];
+        document.getElementById('pageCount').textContent = allPages.length;
+        renderTree(allPages);
+    } catch(e) {
+        container.innerHTML = '<div class="error-msg">Connection error.</div>';
+    }
+}
+
+function buildTree(pages) {
+    const root = { children: {}, pages: [] };
+    
+    pages.forEach(p => {
+        const parts = p.folder_parts && p.folder_parts.length > 0 ? p.folder_parts : [];
+        let node = root;
+        
+        parts.forEach(part => {
+            if (!node.children[part]) node.children[part] = { children: {}, pages: [] };
+            node = node.children[part];
+        });
+        
+        node.pages.push(p);
+    });
+    
+    return root;
+}
+
+function renderTree(pages) {
+    const container = document.getElementById('pagesContainer');
+    
+    if (!pages.length) {
+        container.innerHTML = '<div class="loading">No pages found.</div>';
+        return;
+    }
+    
+    const tree = buildTree(pages);
+    container.innerHTML = '<div style="background: white; border-radius: 6px; border: 1px solid var(--octo-light-gray); overflow: hidden;">' + renderNode(tree, 0) + '</div>';
+}
+
+function renderNode(node, depth) {
+    let html = '';
+    const indent = depth * 20;
+    
+    node.pages.forEach(p => {
+        html += `<div class="tree-page">
+            <span style="width:${indent+24}px;display:inline-block"></span>
+            <span style="color:#aaa;font-size:0.85rem">📄</span>
+            <span class="tree-page-title">${p.title}</span>
+            <span class="tree-page-meta">${formatDate(p.modified)} · ${formatSize(p.size)}</span>
+            <a class="tree-page-link" href="${p.url}" target="_blank">Open in Nextcloud →</a>
+        </div>`;
+    });
+    
+    Object.keys(node.children).sort().forEach(folderName => {
+        const child = node.children[folderName];
+        const total = countPages(child);
+        const id = 'node_' + Math.random().toString(36).substr(2,9);
+        
+        html += `<div>
+            <div class="tree-node-header" onclick="toggleNode('${id}')">
+                <span style="width:${indent}px;display:inline-block"></span>
+                <span class="tree-node-toggle" id="tog_${id}">▶</span>
+                <span>📁</span>
+                <span style="flex:1">${folderName}</span>
+                <span class="tree-node-count">${total}</span>
+            </div>
+            <div class="tree-node-children" id="${id}">${renderNode(child, depth+1)}</div>
+        </div>`;
+    });
+    
+    return html;
+}
+
+function countPages(node) {
+    let c = node.pages.length;
+    Object.values(node.children).forEach(ch => c += countPages(ch));
+    return c;
+}
+
+function toggleNode(id) {
+    document.getElementById(id).classList.toggle('open');
+    document.getElementById('tog_' + id).classList.toggle('open');
+}
+
+function formatDate(s) {
+    if (!s) return '';
+    try {
+        return new Date(s).toLocaleDateString('de-DE');
+    } catch(e) {
+        return s;
+    }
+}
+
+function formatSize(b) {
+    if (!b) return '0 KB';
+    return (b/1024).toFixed(1) + ' KB';
+}
+
+function exportExcel() {
+    window.location.href = '/collectives/api/export-excel/';
+}
+
+function getCookie(name) {
+    let cookieValue = null;
+    if (document.cookie && document.cookie !== '') {
+        const cookies = document.cookie.split(';');
+        for (let i = 0; i < cookies.length; i++) {
+            const cookie = cookies[i].trim();
+            if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                break;
+            }
+        }
+    }
+    return cookieValue;
+}
+
+loadConfig();
+loadDashboard();
+</script>
+{% endblock %}
