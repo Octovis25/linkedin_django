@@ -9,266 +9,239 @@
         :root {
             --octo-petrol: #008591;
             --octo-turquoise: #61CEBC;
+            --octo-orange: #F56E28;
             --octo-dark-petrol: #005F68;
             --octo-text: #161616;
             --octo-white: #FFFFFF;
             --octo-light-gray: #F9F7F0;
         }
-        
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-        
+        * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
             font-family: 'Roboto', Arial, sans-serif;
             background-color: var(--octo-white);
             color: var(--octo-text);
-            line-height: 1.6;
+            line-height: 1.4;
+            font-size: 14px;
         }
-        
-        /* Header */
         header {
             background-color: var(--octo-white);
             border-bottom: 2px solid var(--octo-petrol);
-            padding: 1rem 2rem;
+            padding: 0.5rem 1.5rem;
+        }
+        .header-top {
             display: flex;
             justify-content: space-between;
             align-items: center;
+            margin-bottom: 0.5rem;
         }
-        
-        .logo {
-            height: 50px;
+        .logo { height: 40px; }
+        .user-section {
+            display: flex;
+            gap: 1.5rem;
+            align-items: center;
+            font-size: 14px;
         }
-        
+        .user-info { color: var(--octo-dark-petrol); font-weight: 500; }
         nav {
             display: flex;
-            gap: 2rem;
-            align-items: center;
+            gap: 0;
+            border-bottom: 2px solid var(--octo-light-gray);
         }
-        
         nav a {
             color: var(--octo-petrol);
             text-decoration: none;
             font-weight: 500;
-            transition: color 0.3s;
+            padding: 0.5rem 1rem;
+            border-bottom: 3px solid transparent;
+            transition: all 0.3s;
         }
-        
-        nav a:hover {
-            color: var(--octo-turquoise);
+        nav a:hover, nav a.active {
+            color: var(--octo-orange);
+            border-bottom-color: var(--octo-orange);
         }
-        
-        .user-info {
+        .sub-nav {
+            display: flex;
+            gap: 0;
+            background: var(--octo-light-gray);
+            padding: 0 1.5rem;
+        }
+        .sub-nav a {
             color: var(--octo-dark-petrol);
-            font-weight: 500;
+            padding: 0.4rem 1rem;
+            font-size: 0.9rem;
+            text-decoration: none;
+            border-bottom: 2px solid transparent;
         }
-        
-        /* Main Content */
+        .sub-nav a:hover, .sub-nav a.active {
+            color: var(--octo-orange);
+            border-bottom-color: var(--octo-orange);
+        }
         main {
             max-width: 1400px;
-            margin: 2rem auto;
-            padding: 0 2rem;
+            margin: 1rem auto;
+            padding: 0 1.5rem;
         }
-        
         h1, h2, h3 {
             color: var(--octo-petrol);
-            margin-bottom: 1rem;
+            margin-bottom: 0.75rem;
+            font-size: 1.3rem;
         }
-        
-        /* Buttons */
+        h2 { font-size: 1.1rem; }
         .btn {
             display: inline-block;
-            padding: 0.75rem 1.5rem;
+            padding: 0.4rem 1rem;
             border: none;
             border-radius: 6px;
-            font-size: 1rem;
+            font-size: 0.9rem;
             font-weight: 500;
             cursor: pointer;
             text-decoration: none;
             transition: all 0.3s;
         }
-        
         .btn-primary {
             background-color: var(--octo-petrol);
             color: var(--octo-white);
         }
-        
-        .btn-primary:hover {
-            background-color: var(--octo-dark-petrol);
-        }
-        
+        .btn-primary:hover { background-color: var(--octo-dark-petrol); }
         .btn-secondary {
-            background-color: var(--octo-turquoise);
+            background-color: var(--octo-orange);
             color: var(--octo-white);
         }
-        
-        .btn-secondary:hover {
-            background-color: var(--octo-petrol);
-        }
-        
+        .btn-secondary:hover { background-color: #d55a1f; }
         .btn-danger {
             background-color: #dc3545;
             color: var(--octo-white);
         }
-        
-        .btn-danger:hover {
-            background-color: #c82333;
+        .btn-danger:hover { background-color: #c82333; }
+        .btn-sm {
+            padding: 0.3rem 0.75rem;
+            font-size: 0.85rem;
         }
-        
-        /* Tables */
         table {
             width: 100%;
             border-collapse: collapse;
             background-color: var(--octo-white);
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-            border-radius: 8px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            border-radius: 6px;
             overflow: hidden;
+            font-size: 0.9rem;
         }
-        
         thead {
             background-color: var(--octo-petrol);
             color: var(--octo-white);
         }
-        
         th, td {
-            padding: 1rem;
+            padding: 0.6rem 0.8rem;
             text-align: left;
             border-bottom: 1px solid var(--octo-light-gray);
         }
-        
-        tr:hover {
-            background-color: var(--octo-light-gray);
-        }
-        
-        /* Forms */
-        .form-group {
-            margin-bottom: 1.5rem;
-        }
-        
+        tr:hover { background-color: var(--octo-light-gray); }
+        .form-group { margin-bottom: 1rem; }
         label {
             display: block;
             color: var(--octo-petrol);
             font-weight: 500;
-            margin-bottom: 0.5rem;
+            margin-bottom: 0.3rem;
+            font-size: 0.9rem;
         }
-        
-        input[type="text"],
-        input[type="url"],
-        input[type="date"],
-        input[type="datetime-local"],
-        input[type="password"],
-        select {
+        input[type="text"], input[type="url"], input[type="date"], input[type="file"],
+        input[type="datetime-local"], input[type="password"], select {
             width: 100%;
-            padding: 0.75rem;
+            padding: 0.5rem;
             border: 2px solid var(--octo-light-gray);
             border-radius: 6px;
-            font-size: 1rem;
+            font-size: 0.9rem;
             transition: border-color 0.3s;
         }
-        
-        input:focus,
-        select:focus {
+        input:focus, select:focus {
             outline: none;
-            border-color: var(--octo-turquoise);
+            border-color: var(--octo-orange);
         }
-        
-        /* Messages */
-        .messages {
-            margin: 1rem 0;
-        }
-        
+        .messages { margin: 0.75rem 0; }
         .alert {
-            padding: 1rem;
+            padding: 0.75rem;
             border-radius: 6px;
-            margin-bottom: 1rem;
+            margin-bottom: 0.75rem;
+            font-size: 0.9rem;
         }
-        
         .alert-success {
             background-color: #d4edda;
             color: #155724;
             border: 1px solid #c3e6cb;
         }
-        
         .alert-error {
             background-color: #f8d7da;
             color: #721c24;
             border: 1px solid #f5c6cb;
         }
-        
         .alert-info {
             background-color: #d1ecf1;
             color: #0c5460;
             border: 1px solid #bee5eb;
         }
-        
-        /* Card */
         .card {
             background-color: var(--octo-white);
-            border-radius: 8px;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-            padding: 2rem;
-            margin-bottom: 2rem;
+            border-radius: 6px;
+            box-shadow: 0 1px 4px rgba(0,0,0,0.1);
+            padding: 1.25rem;
+            margin-bottom: 1.25rem;
         }
-        
-        /* Links */
         a {
             color: var(--octo-petrol);
             transition: color 0.3s;
         }
-        
-        a:hover {
-            color: var(--octo-turquoise);
-        }
-        
-        /* Footer */
+        a:hover { color: var(--octo-orange); }
         footer {
             background-color: var(--octo-light-gray);
             color: var(--octo-text);
             text-align: center;
-            padding: 1rem;
-            margin-top: 3rem;
+            padding: 0.75rem;
+            margin-top: 2rem;
             border-top: 2px solid var(--octo-petrol);
+            font-size: 0.85rem;
         }
     </style>
 </head>
 <body>
     <header>
-        <a href="/">
-            <img src="{% static 'images/octovis_logo--1-.png' %}" alt="Octovis Logo" class="logo">
-        </a>
-        <nav>
-            <a href="/">Dashboard</a>
-            <a href="/posts/">Posts Posted</a>
-            {% if user.is_authenticated %}
-                {% if user.is_superuser %}
-                    <a href="/users/">User-Verwaltung</a>
+        <div class="header-top">
+            <a href="/"><img src="{% static 'images/octovis_logo--1-.png' %}" alt="Octovis Logo" class="logo"></a>
+            <div class="user-section">
+                {% if user.is_authenticated %}
+                    {% if user.is_superuser %}
+                        <a href="/users/">User-Verwaltung</a>
+                    {% endif %}
+                    <span class="user-info">{{ user.username }}</span>
+                    <a href="/change-password/">Passwort ändern</a>
+                    <a href="/logout/">Logout</a>
+                {% else %}
+                    <a href="/login/">Login</a>
                 {% endif %}
-                <span class="user-info">{{ user.username }}</span>
-                <a href="/change-password/">Passwort ändern</a>
-                <a href="/logout/">Logout</a>
-            {% else %}
-                <a href="/login/">Login</a>
-            {% endif %}
+            </div>
+        </div>
+        <nav>
+            <a href="/" {% if request.path == '/' %}class="active"{% endif %}>Dashboard</a>
+            <a href="/data/posts/" {% if '/data/' in request.path %}class="active"{% endif %}>Data</a>
         </nav>
+        {% if '/data/' in request.path %}
+        <div class="sub-nav">
+            <a href="/data/posts/" {% if '/data/posts/' in request.path %}class="active"{% endif %}>Posts Posted</a>
+            <a href="/data/upload/" {% if '/data/upload/' in request.path %}class="active"{% endif %}>Upload Data</a>
+            <a href="/data/import/" {% if '/data/import/' in request.path %}class="active"{% endif %}>Run Import</a>
+        </div>
+        {% endif %}
     </header>
-
     <main>
         {% if messages %}
-            <div class="messages">
-                {% for message in messages %}
-                    <div class="alert alert-{{ message.tags }}">
-                        {{ message }}
-                    </div>
-                {% endfor %}
-            </div>
+        <div class="messages">
+            {% for message in messages %}
+            <div class="alert alert-{{ message.tags }}">{{ message }}</div>
+            {% endfor %}
+        </div>
         {% endif %}
-
         {% block content %}{% endblock %}
     </main>
-
-    <footer>
-        <p>&copy; 2026 Octotrial | LinkedIn Dashboard</p>
-    </footer>
+    <footer><p>&copy; 2026 Octotrial | LinkedIn Dashboard</p></footer>
+    {% block extra_js %}{% endblock %}
 </body>
 </html>

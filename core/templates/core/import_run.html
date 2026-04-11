@@ -1,0 +1,23 @@
+{% extends "core/base.html" %}
+{% block title %}Daten-Import{% endblock %}
+{% block content %}
+<div class="card">
+    <h2>Daten-Import starten</h2>
+    <p style="margin-bottom: 1rem;">Verarbeitet alle hochgeladenen Dateien und importiert sie in die Datenbank.</p>
+    <form method="post">
+        {% csrf_token %}
+        <button type="submit" class="btn btn-secondary">Import starten</button>
+    </form>
+</div>
+
+{% if log %}
+<div class="card">
+    <h3>Import-Log</h3>
+    <div style="background: #f5f5f5; padding: 1rem; border-radius: 6px; font-family: monospace; font-size: 0.85rem;">
+        {% for line in log %}
+        <div>{{ line }}</div>
+        {% endfor %}
+    </div>
+</div>
+{% endif %}
+{% endblock %}

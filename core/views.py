@@ -1,12 +1,55 @@
+import os
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.models import User
 from django.contrib import messages
+from django.conf import settings
 from .forms import CreateUserForm, EditUserForm, ChangeOwnPasswordForm
 
 @login_required
 def home(request):
-    return redirect("posts_posted:list")
+    return render(request, "core/home.html")
+
+@login_required
+def upload_data(request):
+    uploaded_files = []
+    upload_dir = os.path.join(settings.MEDIA_ROOT, 'uploads')
+    
+    if request.method == "POST" and request.FILES.getlist('files'):
+        os.makedirs(upload_dir, exist_ok=True)
+        for f in request.FILES.getlist('files'):
+            path = os.path.join(upload_dir, f.name)
+            with open(path, 'wb+') as destination:
+                for chunk in f.chunks():
+                    destination.write(chunk)
+            uploaded_files.append(f.name)
+        messages.success(request, f"{len(uploaded_files)} Datei(en) hochgeladen!")
+        return redirect("upload_data")
+    
+    # Liste der hochgeladenen Dateien
+    files = []
+    if os.path.exists(upload_dir):
+        for fname in os.listdir(upload_dir):
+            fpath = os.path.join(upload_dir, fname)
+            if os.path.isfile(fpath):
+                files.append({
+                    'name': fname,
+                    'size': os.path.getsize(fpath),
+                    'date': os.path.getmtime(fpath)
+                })
+    
+    return render(request, "core/upload.html", {"files": files})
+
+@login_required
+def import_run(request):
+    log = []
+    if request.method == "POST":
+        # Hier später orchestrate_imports.py aufrufen
+        log.append("Import gestartet...")
+        log.append("TODO: orchestrate_imports.py integrieren")
+        messages.info(request, "Import-Funktion wird noch implementiert.")
+    
+    return render(request, "core/import_run.html", {"log": log})
 
 @login_required
 def user_list(request):
