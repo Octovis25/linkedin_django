@@ -1,26 +1,32 @@
 from django.shortcuts import render, redirect
-from django.contrib.auth.decorators import login_required
 from django.http import JsonResponse, HttpResponse
 from django.views.decorators.http import require_http_methods
-from django.contrib import messages
-from .models import CollectivesConfig, PageStatus
-from .utils import fetch_collective_pages, test_nextcloud_connection
+from django.contrib.auth.decorators import login_required
+from django.views.decorators.csrf import csrf_exempt
+import requests
+from requests.auth import HTTPBasicAuth
+from datetime import datetime
+import tempfile
 from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment
 from openpyxl.worksheet.table import Table, TableStyleInfo
-from datetime import datetime
-import tempfile
+from .models import CollectivesConfig, PageStatus
+from .utils import parse_webdav_response, build_collectives_url
+
+STATUS_OPTIONS = ['', '📝 In Progress', '🚀 Ready to Post', '📤 Posted', '❌ Rejected']
+TYP_OPTIONS = ['', 'Post', 'Other']
 
 @login_required
-def collectives_dashboard(request):
-    """Main Collectives dashboard view"""
-    return render(request, 'collectives/dashboard.html')
+def dashboard(request):
+    """Main dashboard view"""
+    config = CollectivesConfig.get_config()
+    return render(request, 'collectives/dashboard.html', {'config': config})
 
 @login_required
 @require_http_methods(["GET", "POST"])
 def api_config(request):
-    """Get or update Nextcloud config"""
-    config, created = CollectivesConfig.objects.get_or_create(user=request.user)
+    """Get or update Nextcloud configuration"""
+    config = CollectivesConfig.get_config()
     
     if request.method == 'POST':
         import json
@@ -33,6 +39,8 @@ def api_config(request):
         if data.get('app_password'):
             config.app_password = data.get('app_password')
         
+        # Update connected status
+        config.connected = bool(config.nextcloud_url and config.username and config.app_password)
         config.save()
         
         return JsonResponse({
@@ -41,143 +49,186 @@ def api_config(request):
                 'nextcloud_url': config.nextcloud_url,
                 'kollektive_name': config.kollektive_name,
                 'username': config.username,
-                'connected': bool(config.nextcloud_url and config.username and config.app_password)
+                'connected': config.connected
             }
         })
     
+    # GET request
     return JsonResponse({
         'nextcloud_url': config.nextcloud_url,
         'kollektive_name': config.kollektive_name,
         'username': config.username,
-        'app_password': '',  # Never send password to frontend
-        'connected': bool(config.nextcloud_url and config.username and config.app_password)
+        'connected': config.connected
     })
 
 @login_required
 @require_http_methods(["POST"])
-def api_test_connection(request):
+def test_connection(request):
     """Test Nextcloud connection"""
-    config = CollectivesConfig.objects.filter(user=request.user).first()
+    config = CollectivesConfig.get_config()
     
-    if not config or not config.nextcloud_url or not config.username or not config.app_password:
-        return JsonResponse({
-            'success': False,
-            'message': 'Please fill in all fields'
-        })
-    
-    success = test_nextcloud_connection(
-        config.nextcloud_url,
-        config.username,
-        config.app_password
-    )
-    
-    if success:
-        return JsonResponse({
-            'success': True,
-            'message': f'Connection to {config.nextcloud_url} successful!'
-        })
-    else:
-        return JsonResponse({
-            'success': False,
-            'message': 'Connection failed. Check credentials.'
-        })
-
-@login_required
-def api_pages(request):
-    """Fetch pages from Nextcloud Collectives"""
-    config = CollectivesConfig.objects.filter(user=request.user).first()
-    
-    if not config or not config.nextcloud_url or not config.app_password:
-        return JsonResponse({
-            'success': False,
-            'message': 'Not connected'
-        })
+    if not config.nextcloud_url or not config.username or not config.app_password:
+        return JsonResponse({'success': False, 'message': 'Please fill in all fields'})
     
     try:
-        pages = fetch_collective_pages(config)
+        url = f"{config.nextcloud_url}/remote.php/dav/files/{config.username}/"
+        r = requests.request(
+            'PROPFIND',
+            url,
+            auth=HTTPBasicAuth(config.username, config.app_password),
+            headers={'Depth': '0'},
+            timeout=10
+        )
         
-        # Add status and typ from database
-        for page in pages:
-            status_obj = PageStatus.objects.filter(
-                user=request.user,
-                path=page['path']
-            ).first()
-            
-            if status_obj:
-                page['status'] = status_obj.status
-                page['typ'] = status_obj.typ
-            else:
-                page['status'] = ''
-                page['typ'] = ''
-        
-        return JsonResponse({
-            'success': True,
-            'pages': pages
-        })
-    
+        if r.status_code in [200, 207]:
+            config.connected = True
+            config.save()
+            return JsonResponse({
+                'success': True,
+                'message': f'Connection to {config.nextcloud_url} successful!'
+            })
+        else:
+            return JsonResponse({
+                'success': False,
+                'message': f'Error: HTTP {r.status_code}'
+            })
     except Exception as e:
         return JsonResponse({
             'success': False,
-            'message': str(e)
+            'message': f'Connection error: {str(e)}'
         })
 
 @login_required
+@require_http_methods(["GET"])
+def get_status(request):
+    """Get all page statuses"""
+    statuses = {}
+    for ps in PageStatus.objects.all():
+        statuses[ps.path] = {
+            'status': ps.status,
+            'typ': ps.typ
+        }
+    return JsonResponse(statuses)
+
+@login_required
+@csrf_exempt
 @require_http_methods(["POST"])
-def api_status(request):
-    """Update page status or typ"""
+def set_status(request):
+    """Update status or type for a page"""
     import json
     data = json.loads(request.body)
-    
     path = data.get('path')
-    if not path:
-        return JsonResponse({'success': False, 'message': 'No path provided'})
     
-    status_obj, created = PageStatus.objects.get_or_create(
-        user=request.user,
-        path=path
-    )
+    if not path:
+        return JsonResponse({'success': False, 'message': 'No path specified'})
+    
+    page_status, created = PageStatus.objects.get_or_create(path=path)
     
     if 'status' in data:
-        status_obj.status = data['status']
+        page_status.status = data['status']
     
     if 'typ' in data:
-        status_obj.typ = data['typ']
+        page_status.typ = data['typ']
     
-    status_obj.save()
+    page_status.save()
     
     return JsonResponse({'success': True})
 
 @login_required
-def api_export_excel(request):
-    """Export pages to Excel"""
-    config = CollectivesConfig.objects.filter(user=request.user).first()
+def get_pages(request):
+    """Fetch all pages from Nextcloud Collectives via WebDAV"""
+    config = CollectivesConfig.get_config()
     
-    if not config or not config.nextcloud_url or not config.app_password:
+    if not config.connected:
         return JsonResponse({'success': False, 'message': 'Not connected'})
     
+    if not config.kollektive_name:
+        return JsonResponse({'success': False, 'message': 'No collective configured'})
+    
     try:
-        pages = fetch_collective_pages(config)
+        webdav_url = f"{config.nextcloud_url}/remote.php/dav/files/{config.username}/Kollektive/{config.kollektive_name}/"
         
-        # Add status
-        for page in pages:
-            status_obj = PageStatus.objects.filter(
-                user=request.user,
-                path=page['path']
-            ).first()
+        r = requests.request(
+            'PROPFIND',
+            webdav_url,
+            auth=HTTPBasicAuth(config.username, config.app_password),
+            headers={'Depth': 'infinity'},
+            timeout=30
+        )
+        
+        if r.status_code in [200, 207]:
+            pages = parse_webdav_response(r.text, config.username, config.kollektive_name)
             
-            if status_obj:
-                page['status'] = status_obj.status
-                page['typ'] = status_obj.typ
-            else:
-                page['status'] = ''
-                page['typ'] = ''
-        
-        # Create Excel
+            # Add status and typ from database
+            status_map = {ps.path: ps for ps in PageStatus.objects.all()}
+            
+            for page in pages:
+                # Build correct Collectives URL
+                if page.get('is_readme'):
+                    # Readme = folder page -> URL is just the folder path
+                    if page['folder_parts']:
+                        page['url'] = build_collectives_url(
+                            config.nextcloud_url,
+                            config.kollektive_name,
+                            page['folder_parts'][:-1],
+                            page['folder_parts'][-1]
+                        )
+                    else:
+                        from urllib.parse import quote
+                        page['url'] = f"{config.nextcloud_url}/apps/collectives/{quote(config.kollektive_name)}"
+                else:
+                    page['url'] = build_collectives_url(
+                        config.nextcloud_url,
+                        config.kollektive_name,
+                        page['folder_parts'],
+                        page['title']
+                    )
+                
+                # Add status and typ
+                ps = status_map.get(page['path'])
+                if ps:
+                    page['status'] = ps.status
+                    page['typ'] = ps.typ
+                else:
+                    page['status'] = ''
+                    page['typ'] = ''
+            
+            return JsonResponse({'success': True, 'pages': pages})
+        else:
+            return JsonResponse({'success': False, 'message': f'HTTP {r.status_code}'})
+    
+    except Exception as e:
+        return JsonResponse({'success': False, 'message': str(e)})
+
+@login_required
+def export_excel(request):
+    """Export pages to Excel file with formatting"""
+    config = CollectivesConfig.get_config()
+    
+    if not config.connected:
+        return JsonResponse({'success': False, 'message': 'Not connected'})
+    
+    # Get pages using the same logic as get_pages
+    pages_response = get_pages(request)
+    pages_data = pages_response.content.decode('utf-8')
+    import json
+    pages_dict = json.loads(pages_data)
+    
+    if not pages_dict.get('success'):
+        return JsonResponse({'success': False, 'message': pages_dict.get('message', 'Error')})
+    
+    pages = pages_dict.get('pages', [])
+    
+    if not pages:
+        return JsonResponse({'success': False, 'message': 'No pages found'})
+    
+    try:
         wb = Workbook()
         ws = wb.active
         ws.title = "Collective Pages"
         
-        headers = ['Title', 'Folder / Hierarchy', 'Typ', 'Status', 'Last Modified', 'Size (KB)', 'Owner', 'Path']
+        # Headers
+        headers = ['Title', 'Folder / Hierarchy', 'Type', 'Status', 'Last Modified', 'Size (KB)', 'Owner', 'Path']
         ws.append(headers)
         
         # Header styling
@@ -190,12 +241,12 @@ def api_export_excel(request):
             cell.font = header_font
             cell.alignment = Alignment(horizontal='center', vertical='center')
         
-        # Status colors
+        # Status color mapping
         status_fills = {
-            '📝 In Bearbeitung': PatternFill(start_color='FFF9C4', end_color='FFF9C4', fill_type='solid'),
-            '🚀 Bereit zum Posten': PatternFill(start_color='C8E6C9', end_color='C8E6C9', fill_type='solid'),
-            '📤 Gepostet': PatternFill(start_color='BBDEFB', end_color='BBDEFB', fill_type='solid'),
-            '❌ Verworfen': PatternFill(start_color='FFCDD2', end_color='FFCDD2', fill_type='solid'),
+            '📝 In Progress': PatternFill(start_color='FFF9C4', end_color='FFF9C4', fill_type='solid'),
+            '🚀 Ready to Post': PatternFill(start_color='C8E6C9', end_color='C8E6C9', fill_type='solid'),
+            '📤 Posted': PatternFill(start_color='BBDEFB', end_color='BBDEFB', fill_type='solid'),
+            '❌ Rejected': PatternFill(start_color='FFCDD2', end_color='FFCDD2', fill_type='solid'),
         }
         
         # Add data rows
@@ -238,7 +289,7 @@ def api_export_excel(request):
         ws.column_dimensions['G'].width = 25
         ws.column_dimensions['H'].width = 50
         
-        # Add table
+        # Add table with AutoFilter
         tab_ref = f"A1:H{len(pages) + 1}"
         tab = Table(displayName="CollectivePages", ref=tab_ref)
         tab.tableStyleInfo = TableStyleInfo(name="TableStyleMedium9", showRowStripes=True)
@@ -249,17 +300,28 @@ def api_export_excel(request):
         wb.save(tmp.name)
         tmp.close()
         
-        koll_name = config.kollektive_name.replace(' ', '_').replace('&', 'and')
+        # Read file content
+        with open(tmp.name, 'rb') as f:
+            file_content = f.read()
+        
+        # Generate filename
+        koll_name = config.kollektive_name.replace(' ', '_').replace('&', 'and') if config.kollektive_name else 'Collective'
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
         filename = f"Collective_Export_{koll_name}_{timestamp}.xlsx"
         
-        with open(tmp.name, 'rb') as f:
-            response = HttpResponse(
-                f.read(),
-                content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-            )
-            response['Content-Disposition'] = f'attachment; filename="{filename}"'
-            return response
-    
+        # Return as download
+        response = HttpResponse(
+            file_content,
+            content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        )
+        response['Content-Disposition'] = f'attachment; filename="{filename}"'
+        
+        # Clean up temp file
+        import os
+        os.unlink(tmp.name)
+        
+        return response
+        
     except Exception as e:
-        return JsonResponse({'success': False, 'message': str(e)})
+        return JsonResponse({'success': False, 'message': f'Excel Export Error: {str(e)}'})
+

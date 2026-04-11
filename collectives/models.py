@@ -1,28 +1,33 @@
 from django.db import models
 
 class CollectivesConfig(models.Model):
-    user = models.OneToOneField('auth.User', on_delete=models.CASCADE)
-    nextcloud_url = models.URLField(max_length=500, blank=True)
-    kollektive_name = models.CharField(max_length=200, blank=True)
-    username = models.CharField(max_length=200, blank=True)
-    app_password = models.CharField(max_length=200, blank=True)
+    """Stores Nextcloud connection settings (replaces config.json)"""
+    nextcloud_url = models.CharField(max_length=255, blank=True, default='')
+    kollektive_name = models.CharField(max_length=100, blank=True, default='')
+    username = models.CharField(max_length=100, blank=True, default='')
+    app_password = models.CharField(max_length=255, blank=True, default='')
+    connected = models.BooleanField(default=False)
     
     class Meta:
         db_table = 'collectives_config'
     
-    def __str__(self):
-        return f"Config for {self.user.username}"
+    @classmethod
+    def get_config(cls):
+        """Get or create singleton config"""
+        obj, _ = cls.objects.get_or_create(pk=1)
+        return obj
 
 class PageStatus(models.Model):
-    user = models.ForeignKey('auth.User', on_delete=models.CASCADE)
-    path = models.CharField(max_length=1000)
-    status = models.CharField(max_length=100, blank=True)
-    typ = models.CharField(max_length=50, blank=True)
+    """Stores status and type per page (replaces status.json)"""
+    path = models.CharField(max_length=512, unique=True, db_index=True)
+    status = models.CharField(max_length=50, blank=True, default='')
+    typ = models.CharField(max_length=20, blank=True, default='')
     updated_at = models.DateTimeField(auto_now=True)
     
     class Meta:
-        db_table = 'collectives_page_status'
-        unique_together = ['user', 'path']
+        db_table = 'collectives_pagestatus'
+        verbose_name_plural = 'Page Statuses'
     
     def __str__(self):
         return f"{self.path} - {self.status}"
+

@@ -1,17 +1,15 @@
-import requests
-from requests.auth import HTTPBasicAuth
 import xml.etree.ElementTree as ET
 from urllib.parse import unquote, quote
 
 def build_collectives_url(base_url, kollektive_name, folder_parts, title):
-    """Build correct Collectives URL for browser"""
+    """Build the correct Collectives URL for browser."""
     path_parts = list(folder_parts) + [title]
     encoded_parts = [quote(p) for p in path_parts]
     path_str = '/'.join(encoded_parts)
     return f"{base_url}/apps/collectives/{quote(kollektive_name)}/{path_str}"
 
 def parse_webdav_response(xml_text, username, kollektive_name):
-    """Parse WebDAV PROPFIND XML response"""
+    """Parse WebDAV XML response and extract page information."""
     namespaces = {
         'd': 'DAV:',
         'oc': 'http://owncloud.org/ns',
@@ -29,7 +27,7 @@ def parse_webdav_response(xml_text, username, kollektive_name):
         
         href_text = unquote(href.text)
         
-        # Skip directories and non-.md files
+        # Skip directories and non-markdown files
         if href_text.endswith('/') or not href_text.endswith('.md'):
             continue
         
@@ -55,7 +53,7 @@ def parse_webdav_response(xml_text, username, kollektive_name):
         size = int(getcontentlength.text) if getcontentlength is not None and getcontentlength.text else 0
         owner = owner_display.text if owner_display is not None else ''
         
-        # Clean path
+        # Extract folder hierarchy
         clean_path = href_text
         if clean_path.startswith(base_path):
             clean_path = clean_path[len(base_path):]
@@ -87,60 +85,3 @@ def parse_webdav_response(xml_text, username, kollektive_name):
     
     return pages
 
-def fetch_collective_pages(config):
-    """Fetch pages from Nextcloud Collectives via WebDAV"""
-    url = config.nextcloud_url.rstrip('/')
-    username = config.username
-    app_password = config.app_password
-    kollektive_name = config.kollektive_name
-    
-    if not kollektive_name:
-        raise ValueError('No collective configured')
-    
-    webdav_url = f"{url}/remote.php/dav/files/{username}/Kollektive/{kollektive_name}/"
-    
-    r = requests.request(
-        'PROPFIND',
-        webdav_url,
-        auth=HTTPBasicAuth(username, app_password),
-        headers={'Depth': 'infinity'},
-        timeout=30
-    )
-    
-    if r.status_code not in [200, 207]:
-        raise Exception(f'WebDAV error: HTTP {r.status_code}')
-    
-    pages = parse_webdav_response(r.text, username, kollektive_name)
-    
-    # Add URLs
-    for page in pages:
-        if page.get('is_readme'):
-            page['url'] = build_collectives_url(
-                url,
-                kollektive_name,
-                page['folder_parts'][:-1],
-                page['folder_parts'][-1]
-            ) if page['folder_parts'] else f"{url}/apps/collectives/{quote(kollektive_name)}"
-        else:
-            page['url'] = build_collectives_url(
-                url,
-                kollektive_name,
-                page['folder_parts'],
-                page['title']
-            )
-    
-    return pages
-
-def test_nextcloud_connection(url, username, app_password):
-    """Test Nextcloud connection"""
-    try:
-        r = requests.request(
-            'PROPFIND',
-            f"{url}/remote.php/dav/files/{username}/",
-            auth=HTTPBasicAuth(username, app_password),
-            headers={'Depth': '0'},
-            timeout=10
-        )
-        return r.status_code in [200, 207]
-    except Exception:
-        return False

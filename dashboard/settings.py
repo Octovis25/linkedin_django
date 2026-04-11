@@ -7,7 +7,9 @@ SECRET_KEY = os.getenv("DJANGO_SECRET_KEY", "change-me")
 DEBUG = os.getenv("DJANGO_DEBUG", "True").lower() in ("true", "1")
 ALLOWED_HOSTS = os.getenv("DJANGO_ALLOWED_HOSTS", "localhost,127.0.0.1").split(",")
 INSTALLED_APPS = ["django.contrib.admin","django.contrib.auth","django.contrib.contenttypes",
-    "django.contrib.sessions","django.contrib.messages","django.contrib.staticfiles","core","posts_posted"]
+    "django.contrib.sessions","django.contrib.messages","django.contrib.staticfiles","core","posts_posted",
+    'collectives',
+]
 MIDDLEWARE = ["django.middleware.security.SecurityMiddleware","django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware","django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware","django.contrib.messages.middleware.MessageMiddleware"]

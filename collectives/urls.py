@@ -1,11 +1,14 @@
 from django.urls import path
 from . import views
 
+app_name = 'collectives'
+
 urlpatterns = [
-    path('', views.collectives_dashboard, name='collectives_dashboard'),
-    path('api/config/', views.api_config, name='collectives_api_config'),
-    path('api/test-connection/', views.api_test_connection, name='collectives_api_test'),
-    path('api/pages/', views.api_pages, name='collectives_api_pages'),
-    path('api/status/', views.api_status, name='collectives_api_status'),
-    path('api/export-excel/', views.api_export_excel, name='collectives_api_export'),
+    path('', views.dashboard, name='dashboard'),
+    path('api/config/', views.api_config, name='api_config'),
+    path('api/test-connection/', views.test_connection, name='test_connection'),
+    path('api/status/', views.get_status, name='get_status'),
+    path('api/status/set/', views.set_status, name='set_status'),
+    path('api/pages/', views.get_pages, name='get_pages'),
+    path('api/export-excel/', views.export_excel, name='export_excel'),
 ]
