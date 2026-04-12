@@ -4,7 +4,7 @@
 <div class="card">
 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem">
 <h2 style="margin:0">User-Verwaltung <span style="color:var(--octo-muted);font-weight:400">({{ users|length }})</span></h2>
-<a href="{% url 'user_create' %}" class="btn btn-primary">+ Neuer User</a>
+<a href="{% url 'user_add' %}" class="btn btn-primary">+ Neuer User</a>
 </div>
 <table><thead><tr><th>Username</th><th>Name</th><th>E-Mail</th><th>Rolle</th><th>Letzter Login</th><th>Status</th><th>Aktionen</th></tr></thead>
 <tbody>{% for u in users %}<tr>
