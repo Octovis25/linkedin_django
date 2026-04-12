@@ -1,3 +1,6 @@
+import logging
+logger = logging.getLogger(__name__)
+
 from django.shortcuts import render
 from django.http import JsonResponse, HttpResponse
 from django.views.decorators.http import require_http_methods
@@ -140,6 +143,7 @@ def set_status(request):
     """Update status or type for a page"""
     import json
     data = json.loads(request.body)
+    logger.info(f"set_status called with data: {data}")
     path = data.get('path')
     
     if not path:

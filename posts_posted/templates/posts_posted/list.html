@@ -19,7 +19,14 @@
 <table><thead><tr><th>Post-ID</th><th>Post-Link</th><th>Gepostet am</th><th>Erstellt am</th><th>Aktionen</th></tr></thead>
 <tbody>{% for p in posts %}<tr>
 <td><span class="badge">{{ p.post_id }}</span></td>
-<td><a href="{{ p.post_link }}" target="_blank" rel="noopener noreferrer" class="post-link" style="color:#0077b5;cursor:pointer;text-decoration:none;font-weight:500">🔗 LinkedIn Post öffnen</a></td>
+<td>
+    <a href="{{ p.post_link }}" target="_blank" rel="noopener noreferrer" style="color:#0077b5;text-decoration:none;display:inline-flex;align-items:center;gap:6px">
+        <span style="max-width:400px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ p.post_link }}</span>
+        <svg width="16" height="16" fill="currentColor" style="flex-shrink:0">
+            <path d="M11 1h4v4M15 1L8 8M13 8v6a1 1 0 01-1 1H2a1 1 0 01-1-1V4a1 1 0 011-1h6"/>
+        </svg>
+    </a>
+</td>
 <td>{{ p.post_date }}</td>
 <td>{{ p.created_at|default:"-" }}</td>
 <td class="actions">
