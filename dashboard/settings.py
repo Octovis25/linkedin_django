@@ -26,6 +26,7 @@ DATABASES = {"default":{"ENGINE":"django.db.backends.mysql",
     "OPTIONS":{"charset":"utf8mb4","init_command":"SET sql_mode='STRICT_TRANS_TABLES'"}}}
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 STATIC_URL = "/static/"
+STATIC_ROOT = BASE_DIR / "staticfiles"
 STATICFILES_DIRS = [BASE_DIR / "static"]
 LOGIN_URL = "/login/"
 LOGIN_REDIRECT_URL = "/"
