@@ -17,7 +17,7 @@ urlpatterns = [
     path("users/new/", core_views.user_create, name='user_create'),
     path("users/<int:user_id>/delete/", core_views.user_delete, name='user_delete'),
     path("login/", auth_views.LoginView.as_view(template_name="core/login.html"), name="login"),
-    path("logout/", auth_views.LogoutView.as_view(next_page="/login/"), name="logout"),
+    path("logout/", core_views.custom_logout, name="logout"),
     path("change-password/", auth_views.PasswordChangeView.as_view(
         template_name="core/change_password.html", success_url="/"), name="change_password"),
 ]

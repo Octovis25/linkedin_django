@@ -155,3 +155,9 @@ def user_delete(request, user_id):
         messages.success(request, f'User "{username}" wurde geloescht.')
         return redirect('user_list')
     return render(request, 'core/user_confirm_delete.html', {'target_user': user})
+
+from django.contrib.auth import logout as auth_logout
+
+def custom_logout(request):
+    auth_logout(request)
+    return redirect('/login/')
