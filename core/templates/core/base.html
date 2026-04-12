@@ -26,9 +26,6 @@
     .user-info { color: var(--octo-dark-petrol); font-weight: 500; }
     .user-section a { color: var(--octo-petrol); text-decoration: none; font-weight: 500; transition: color 0.3s; }
     .user-section a:hover { color: var(--octo-orange); }
-    .logout-form { display: inline; }
-    .logout-form button { background: none; border: none; color: var(--octo-petrol); font: inherit; font-weight: 500; cursor: pointer; padding: 0; transition: color 0.3s; }
-    .logout-form button:hover { color: var(--octo-orange); }
     nav { display: flex; gap: 0; border-bottom: 2px solid var(--octo-light-gray); }
     nav a { color: var(--octo-petrol); text-decoration: none; font-weight: 500; padding: 0.5rem 1rem; border-bottom: 3px solid transparent; transition: all 0.3s; }
     nav a:hover, nav a.active { color: var(--octo-orange); border-bottom-color: var(--octo-orange); }
@@ -52,7 +49,7 @@
     tr:hover { background-color: var(--octo-light-gray); }
     .form-group { margin-bottom: 1rem; }
     label { display: block; color: var(--octo-petrol); font-weight: 500; margin-bottom: 0.3rem; font-size: 0.9rem; }
-    input[type="text"], input[type="email"], input[type="url"], input[type="date"], input[type="file"], input[type="datetime-local"], input[type="password"], select { width: 100%; padding: 0.5rem; border: 2px solid var(--octo-light-gray); border-radius: 6px; font-size: 0.9rem; transition: border-color 0.3s; }
+    input[type="text"], input[type="url"], input[type="date"], input[type="file"], input[type="datetime-local"], input[type="password"], select { width: 100%; padding: 0.5rem; border: 2px solid var(--octo-light-gray); border-radius: 6px; font-size: 0.9rem; transition: border-color 0.3s; }
     input:focus, select:focus { outline: none; border-color: var(--octo-orange); }
     .messages { margin: 0.75rem 0; }
     .alert { padding: 0.75rem; border-radius: 6px; margin-bottom: 0.75rem; font-size: 0.9rem; }
@@ -73,11 +70,8 @@
       {% if user.is_authenticated %}
         {% if user.is_staff %}<a href="/users/">User-Verwaltung</a>{% endif %}
         <span class="user-info">{{ user.get_full_name|default:user.username }}</span>
-        <a href="/change-password/">Passwort ändern</a>
-        <form method="post" action="{% url 'logout' %}" class="logout-form">
-          {% csrf_token %}
-          <button type="submit">Logout</button>
-        </form>
+        <a href="/change-password/">Passwort aendern</a>
+        <a href="/logout/">Logout</a>
       {% else %}
         <a href="/login/">Login</a>
       {% endif %}
@@ -91,7 +85,8 @@
   {% if '/data/' in request.path %}
   <div class="sub-nav">
     <a href="/data/posts/" {% if request.path == '/data/posts/' %}class="active"{% endif %}>Posts Posted</a>
-    <a href="/data/upload/" {% if request.path == '/data/upload/' %}class="active"{% endif %}>Upload Data</a>
+    <a href="/data/upload/" {% if request.path == '/data/upload/' %}class="active"{% endif %}>Upload</a>
+    <a href="/data/import/" {% if request.path == '/data/import/' %}class="active"{% endif %}>Import</a>
   </div>
   {% endif %}
 </header>
@@ -105,7 +100,8 @@
   {% endif %}
   {% block content %}{% endblock %}
 </main>
-<footer>© 2026 Octotrial | LinkedIn Dashboard</footer>
-{% block extra_js %}{% endblock %}
+<footer>
+  LinkedIn Dashboard &copy; 2026 Octotrial
+</footer>
 </body>
 </html>

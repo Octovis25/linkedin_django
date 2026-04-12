@@ -31,7 +31,7 @@ def upload_view(request):
             with open(file_path, 'wb+') as destination:
                 for chunk in uploaded_file.chunks():
                     destination.write(chunk)
-            messages.success(request, f'✅ File "{uploaded_file.name}" uploaded successfully!')
+            messages.success(request, f'File "{uploaded_file.name}" uploaded successfully!')
             return redirect('upload')
     else:
         form = UploadFileForm()
@@ -59,15 +59,15 @@ def analyze_view(request):
                     if success:
                         archive_path = os.path.join(ARCHIVE_DIR, filename)
                         shutil.move(file_path, archive_path)
-                        results.append({'file': filename, 'type': file_type, 'status': '✅ Imported & archived'})
+                        results.append({'file': filename, 'type': file_type, 'status': 'Imported & archived'})
                         success_count += 1
                     else:
-                        results.append({'file': filename, 'type': file_type, 'status': '❌ Import failed'})
+                        results.append({'file': filename, 'type': file_type, 'status': 'Import failed'})
                         error_count += 1
                 else:
-                    results.append({'file': filename, 'type': 'Unknown', 'status': '⚠️ Type not recognized'})
+                    results.append({'file': filename, 'type': 'Unknown', 'status': 'Type not recognized'})
                     error_count += 1
-    messages.info(request, f'✅ {success_count} imported | ❌ {error_count} failed')
+    messages.info(request, f'{success_count} imported | {error_count} failed')
     return render(request, 'core/analyze.html', {'results': results, 'success_count': success_count, 'error_count': error_count})
 
 @login_required
@@ -75,9 +75,9 @@ def delete_file_view(request, filename):
     file_path = os.path.join(UPLOAD_DIR, filename)
     if os.path.exists(file_path):
         os.remove(file_path)
-        messages.success(request, f'🗑️ File "{filename}" deleted successfully!')
+        messages.success(request, f'File "{filename}" deleted successfully!')
     else:
-        messages.error(request, f'❌ File "{filename}" not found!')
+        messages.error(request, f'File "{filename}" not found!')
     return redirect('upload')
 
 @login_required
@@ -96,11 +96,11 @@ def user_create(request):
         is_staff_cb = request.POST.get('is_staff') == 'on'
 
         if not email:
-            messages.error(request, '❌ E-Mail-Adresse ist Pflichtfeld.')
+            messages.error(request, 'E-Mail-Adresse ist Pflichtfeld.')
             return render(request, 'core/user_create.html')
 
         if User.objects.filter(email=email).exists():
-            messages.error(request, '❌ Ein User mit dieser E-Mail existiert bereits.')
+            messages.error(request, 'Ein User mit dieser E-Mail existiert bereits.')
             return render(request, 'core/user_create.html')
 
         username = email.split('@')[0]
@@ -135,9 +135,9 @@ Dein Octotrial-Team
 """
         try:
             send_mail(subject, body, settings.DEFAULT_FROM_EMAIL, [email])
-            messages.success(request, f'✅ User "{username}" angelegt – Einladungsmail an {email} gesendet.')
+            messages.success(request, f'User "{username}" angelegt - Einladungsmail an {email} gesendet.')
         except Exception as e:
-            messages.warning(request, f'✅ User "{username}" angelegt, aber E-Mail fehlgeschlagen: {e}')
+            messages.warning(request, f'User "{username}" angelegt, aber E-Mail fehlgeschlagen: {e}')
 
         return redirect('user_list')
     return render(request, 'core/user_create.html')
@@ -147,11 +147,11 @@ Dein Octotrial-Team
 def user_delete(request, user_id):
     user = get_object_or_404(User, pk=user_id)
     if user == request.user:
-        messages.error(request, '❌ Du kannst dich nicht selbst löschen.')
+        messages.error(request, 'Du kannst dich nicht selbst loeschen.')
         return redirect('user_list')
     if request.method == 'POST':
         username = user.username
         user.delete()
-        messages.success(request, f'🗑️ User "{username}" wurde gelöscht.')
+        messages.success(request, f'User "{username}" wurde geloescht.')
         return redirect('user_list')
     return render(request, 'core/user_confirm_delete.html', {'target_user': user})

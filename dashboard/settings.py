@@ -1,7 +1,3 @@
-import pymysql
-pymysql.version_info = (2, 2, 1, "final", 0)
-pymysql.install_as_MySQLdb()
-
 import os
 from pathlib import Path
 from dotenv import load_dotenv
@@ -37,13 +33,12 @@ LOGOUT_REDIRECT_URL = "/login/"
 MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'
 
-# ── E-MAIL ────────────────────────────────────────────────────────
+# -- E-MAIL (SMTP Host Europe) ------------------------------------
 EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
-EMAIL_HOST = os.getenv("EMAIL_HOST", "smtp.hosteurope.de")
+EMAIL_HOST = os.getenv("EMAIL_HOST", "wp687.webpack.hosteurope.de")
 EMAIL_PORT = int(os.getenv("EMAIL_PORT", "587"))
 EMAIL_USE_TLS = True
 EMAIL_HOST_USER = os.getenv("EMAIL_HOST_USER", "")
 EMAIL_HOST_PASSWORD = os.getenv("EMAIL_HOST_PASSWORD", "")
-DEFAULT_FROM_EMAIL = os.getenv("DEFAULT_FROM_EMAIL", "LinkedIn Dashboard <noreply@octotrial.com>")
+DEFAULT_FROM_EMAIL = os.getenv("DEFAULT_FROM_EMAIL", "contact@octotrial.com")
 DASHBOARD_URL = os.getenv("DASHBOARD_URL", "http://localhost:8000")
-STATIC_ROOT = BASE_DIR / 'staticfiles'

@@ -1,11 +1,48 @@
 #!/bin/bash
 # ─────────────────────────────────────────────────────────────────
-# LinkedIn Dashboard – User-Einladung einrichten
-# Einfach im Projektordner (neben manage.py) ausführen:
+# LinkedIn Dashboard – User-Einladung + E-Mail (SMTP Host Europe)
+# Ausfuehren im Projektordner (neben manage.py):
 #   bash deploy_user_invite.sh
 # ─────────────────────────────────────────────────────────────────
 
-echo "🚀 Starte Deployment..."
+echo "Starte Deployment..."
+
+# ── 0. .env aktualisieren ────────────────────────────────────────
+cat > .env << 'EOF'
+# ------------------------------
+# MySQL / Host Europe
+# ------------------------------
+MYSQL_HOST=wp687.webpack.hosteurope.de
+MYSQL_PORT=3306
+MYSQL_DATABASE=db1105422-linkedin
+MYSQL_USER=db1105422-link
+MYSQL_PASSWORD=linkedin_2026
+
+# ------------------------------
+# Local base folder
+# ------------------------------
+LINKEDIN_DATA_BASE=C:\Users\ortru\Nextcloud\Marketing & Design\LinkedIn\Statistics\data
+
+# ------------------------------
+# Optional source folders
+# ------------------------------
+CONTENT_SUBDIR=content
+FOLLOWERS_SUBDIR=followers
+VISITORS_SUBDIR=visitors
+COMPETITOR_SUBDIR=competitors
+
+# ------------------------------
+# E-Mail (SMTP Host Europe)
+# ------------------------------
+EMAIL_HOST=wp687.webpack.hosteurope.de
+EMAIL_PORT=587
+EMAIL_USE_TLS=True
+EMAIL_HOST_USER=wp1105422-octotrial
+EMAIL_HOST_PASSWORD=octotrial_246
+DEFAULT_FROM_EMAIL=contact@octotrial.com
+DASHBOARD_URL=http://localhost:8000
+EOF
+echo "  .env geschrieben"
 
 # ── 1. settings.py ───────────────────────────────────────────────
 cat > dashboard/settings.py << 'EOF'
@@ -44,17 +81,17 @@ LOGOUT_REDIRECT_URL = "/login/"
 MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'
 
-# ── E-MAIL ────────────────────────────────────────────────────────
+# -- E-MAIL (SMTP Host Europe) ------------------------------------
 EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
-EMAIL_HOST = os.getenv("EMAIL_HOST", "smtp.hosteurope.de")
+EMAIL_HOST = os.getenv("EMAIL_HOST", "wp687.webpack.hosteurope.de")
 EMAIL_PORT = int(os.getenv("EMAIL_PORT", "587"))
 EMAIL_USE_TLS = True
 EMAIL_HOST_USER = os.getenv("EMAIL_HOST_USER", "")
 EMAIL_HOST_PASSWORD = os.getenv("EMAIL_HOST_PASSWORD", "")
-DEFAULT_FROM_EMAIL = os.getenv("DEFAULT_FROM_EMAIL", "LinkedIn Dashboard <noreply@octotrial.com>")
+DEFAULT_FROM_EMAIL = os.getenv("DEFAULT_FROM_EMAIL", "contact@octotrial.com")
 DASHBOARD_URL = os.getenv("DASHBOARD_URL", "http://localhost:8000")
 EOF
-echo "✅ dashboard/settings.py geschrieben"
+echo "  dashboard/settings.py geschrieben"
 
 # ── 2. urls.py ───────────────────────────────────────────────────
 cat > dashboard/urls.py << 'EOF'
@@ -85,7 +122,7 @@ urlpatterns = [
 if settings.DEBUG:
     urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
 EOF
-echo "✅ dashboard/urls.py geschrieben"
+echo "  dashboard/urls.py geschrieben"
 
 # ── 3. views.py ──────────────────────────────────────────────────
 cat > core/views.py << 'EOF'
@@ -122,7 +159,7 @@ def upload_view(request):
             with open(file_path, 'wb+') as destination:
                 for chunk in uploaded_file.chunks():
                     destination.write(chunk)
-            messages.success(request, f'✅ File "{uploaded_file.name}" uploaded successfully!')
+            messages.success(request, f'File "{uploaded_file.name}" uploaded successfully!')
             return redirect('upload')
     else:
         form = UploadFileForm()
@@ -150,15 +187,15 @@ def analyze_view(request):
                     if success:
                         archive_path = os.path.join(ARCHIVE_DIR, filename)
                         shutil.move(file_path, archive_path)
-                        results.append({'file': filename, 'type': file_type, 'status': '✅ Imported & archived'})
+                        results.append({'file': filename, 'type': file_type, 'status': 'Imported & archived'})
                         success_count += 1
                     else:
-                        results.append({'file': filename, 'type': file_type, 'status': '❌ Import failed'})
+                        results.append({'file': filename, 'type': file_type, 'status': 'Import failed'})
                         error_count += 1
                 else:
-                    results.append({'file': filename, 'type': 'Unknown', 'status': '⚠️ Type not recognized'})
+                    results.append({'file': filename, 'type': 'Unknown', 'status': 'Type not recognized'})
                     error_count += 1
-    messages.info(request, f'✅ {success_count} imported | ❌ {error_count} failed')
+    messages.info(request, f'{success_count} imported | {error_count} failed')
     return render(request, 'core/analyze.html', {'results': results, 'success_count': success_count, 'error_count': error_count})
 
 @login_required
@@ -166,9 +203,9 @@ def delete_file_view(request, filename):
     file_path = os.path.join(UPLOAD_DIR, filename)
     if os.path.exists(file_path):
         os.remove(file_path)
-        messages.success(request, f'🗑️ File "{filename}" deleted successfully!')
+        messages.success(request, f'File "{filename}" deleted successfully!')
     else:
-        messages.error(request, f'❌ File "{filename}" not found!')
+        messages.error(request, f'File "{filename}" not found!')
     return redirect('upload')
 
 @login_required
@@ -187,11 +224,11 @@ def user_create(request):
         is_staff_cb = request.POST.get('is_staff') == 'on'
 
         if not email:
-            messages.error(request, '❌ E-Mail-Adresse ist Pflichtfeld.')
+            messages.error(request, 'E-Mail-Adresse ist Pflichtfeld.')
             return render(request, 'core/user_create.html')
 
         if User.objects.filter(email=email).exists():
-            messages.error(request, '❌ Ein User mit dieser E-Mail existiert bereits.')
+            messages.error(request, 'Ein User mit dieser E-Mail existiert bereits.')
             return render(request, 'core/user_create.html')
 
         username = email.split('@')[0]
@@ -226,9 +263,9 @@ Dein Octotrial-Team
 """
         try:
             send_mail(subject, body, settings.DEFAULT_FROM_EMAIL, [email])
-            messages.success(request, f'✅ User "{username}" angelegt – Einladungsmail an {email} gesendet.')
+            messages.success(request, f'User "{username}" angelegt - Einladungsmail an {email} gesendet.')
         except Exception as e:
-            messages.warning(request, f'✅ User "{username}" angelegt, aber E-Mail fehlgeschlagen: {e}')
+            messages.warning(request, f'User "{username}" angelegt, aber E-Mail fehlgeschlagen: {e}')
 
         return redirect('user_list')
     return render(request, 'core/user_create.html')
@@ -238,16 +275,16 @@ Dein Octotrial-Team
 def user_delete(request, user_id):
     user = get_object_or_404(User, pk=user_id)
     if user == request.user:
-        messages.error(request, '❌ Du kannst dich nicht selbst löschen.')
+        messages.error(request, 'Du kannst dich nicht selbst loeschen.')
         return redirect('user_list')
     if request.method == 'POST':
         username = user.username
         user.delete()
-        messages.success(request, f'🗑️ User "{username}" wurde gelöscht.')
+        messages.success(request, f'User "{username}" wurde geloescht.')
         return redirect('user_list')
     return render(request, 'core/user_confirm_delete.html', {'target_user': user})
 EOF
-echo "✅ core/views.py geschrieben"
+echo "  core/views.py geschrieben"
 
 # ── 4. Templates ─────────────────────────────────────────────────
 mkdir -p core/templates/core
@@ -257,7 +294,7 @@ cat > core/templates/core/user_list.html << 'EOF'
 {% block title %}User-Verwaltung{% endblock %}
 {% block content %}
 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem;">
-  <h1>👥 User-Verwaltung</h1>
+  <h1>User-Verwaltung</h1>
   <a href="/users/new/" class="btn btn-primary">+ Neuen User einladen</a>
 </div>
 <table>
@@ -269,17 +306,17 @@ cat > core/templates/core/user_list.html << 'EOF'
   <tbody>
     {% for u in users %}
     <tr>
-      <td>{{ u.get_full_name|default:"–" }}</td>
+      <td>{{ u.get_full_name|default:"-" }}</td>
       <td>{{ u.username }}</td>
-      <td>{{ u.email|default:"–" }}</td>
-      <td>{% if u.is_superuser %}🔴 Superuser{% elif u.is_staff %}🟡 Staff{% else %}🟢 User{% endif %}</td>
-      <td>{% if u.is_active %}✅{% else %}❌{% endif %}</td>
+      <td>{{ u.email|default:"-" }}</td>
+      <td>{% if u.is_superuser %}Superuser{% elif u.is_staff %}Staff{% else %}User{% endif %}</td>
+      <td>{% if u.is_active %}Ja{% else %}Nein{% endif %}</td>
       <td>
         {% if u != request.user %}
         <form method="post" action="/users/{{ u.id }}/delete/" style="display:inline;"
-              onsubmit="return confirm('User {{ u.username }} wirklich löschen?')">
+              onsubmit="return confirm('User {{ u.username }} wirklich loeschen?')">
           {% csrf_token %}
-          <button type="submit" class="btn btn-danger btn-sm">Löschen</button>
+          <button type="submit" class="btn btn-danger btn-sm">Loeschen</button>
         </form>
         {% else %}
         <span style="color:#aaa; font-size:0.85rem;">Du selbst</span>
@@ -293,13 +330,13 @@ cat > core/templates/core/user_list.html << 'EOF'
 </table>
 {% endblock %}
 EOF
-echo "✅ core/templates/core/user_list.html geschrieben"
+echo "  core/templates/core/user_list.html geschrieben"
 
 cat > core/templates/core/user_create.html << 'EOF'
 {% extends "core/base.html" %}
 {% block title %}Neuen User einladen{% endblock %}
 {% block content %}
-<h1>✉️ Neuen User einladen</h1>
+<h1>Neuen User einladen</h1>
 <p style="margin-bottom:1.5rem; color:#555;">Der neue User bekommt automatisch eine E-Mail mit seinen Zugangsdaten.</p>
 <div class="card" style="max-width:500px;">
   <form method="post">
@@ -310,7 +347,7 @@ cat > core/templates/core/user_create.html << 'EOF'
     </div>
     <div class="form-group">
       <label>Nachname</label>
-      <input type="text" name="last_name" placeholder="z.B. Müller" />
+      <input type="text" name="last_name" placeholder="z.B. Mueller" />
     </div>
     <div class="form-group">
       <label>E-Mail-Adresse *</label>
@@ -321,14 +358,31 @@ cat > core/templates/core/user_create.html << 'EOF'
       <label for="is_staff" style="margin:0;">Staff-Rechte (kann andere User verwalten)</label>
     </div>
     <div style="display:flex; gap:1rem; margin-top:1.5rem;">
-      <button type="submit" class="btn btn-primary">✉️ Einladen & E-Mail senden</button>
+      <button type="submit" class="btn btn-primary">Einladen & E-Mail senden</button>
       <a href="/users/" class="btn btn-secondary">Abbrechen</a>
     </div>
   </form>
 </div>
 {% endblock %}
 EOF
-echo "✅ core/templates/core/user_create.html geschrieben"
+echo "  core/templates/core/user_create.html geschrieben"
+
+cat > core/templates/core/user_confirm_delete.html << 'EOF'
+{% extends "core/base.html" %}
+{% block title %}User loeschen{% endblock %}
+{% block content %}
+<h1>User loeschen</h1>
+<div class="card" style="max-width:500px;">
+  <p>Willst du den User <strong>{{ target_user.username }}</strong> ({{ target_user.get_full_name }}) wirklich loeschen?</p>
+  <form method="post" style="margin-top:1rem;">
+    {% csrf_token %}
+    <button type="submit" class="btn btn-danger">Ja, loeschen</button>
+    <a href="/users/" class="btn btn-secondary">Abbrechen</a>
+  </form>
+</div>
+{% endblock %}
+EOF
+echo "  core/templates/core/user_confirm_delete.html geschrieben"
 
 # ── 5. base.html ─────────────────────────────────────────────────
 cat > core/templates/core/base.html << 'EOF'
@@ -404,7 +458,7 @@ cat > core/templates/core/base.html << 'EOF'
       {% if user.is_authenticated %}
         {% if user.is_staff %}<a href="/users/">User-Verwaltung</a>{% endif %}
         <span class="user-info">{{ user.get_full_name|default:user.username }}</span>
-        <a href="/change-password/">Passwort ändern</a>
+        <a href="/change-password/">Passwort aendern</a>
         <a href="/logout/">Logout</a>
       {% else %}
         <a href="/login/">Login</a>
@@ -419,7 +473,8 @@ cat > core/templates/core/base.html << 'EOF'
   {% if '/data/' in request.path %}
   <div class="sub-nav">
     <a href="/data/posts/" {% if request.path == '/data/posts/' %}class="active"{% endif %}>Posts Posted</a>
-    <a href="/data/upload/" {% if request.path == '/data/upload/' %}class="active"{% endif %}>Upload Data</a>
+    <a href="/data/upload/" {% if request.path == '/data/upload/' %}class="active"{% endif %}>Upload</a>
+    <a href="/data/import/" {% if request.path == '/data/import/' %}class="active"{% endif %}>Import</a>
   </div>
   {% endif %}
 </header>
@@ -433,31 +488,111 @@ cat > core/templates/core/base.html << 'EOF'
   {% endif %}
   {% block content %}{% endblock %}
 </main>
-<footer>© 2026 Octotrial | LinkedIn Dashboard</footer>
-{% block extra_js %}{% endblock %}
+<footer>
+  LinkedIn Dashboard &copy; 2026 Octotrial
+</footer>
 </body>
 </html>
 EOF
-echo "✅ core/templates/core/base.html geschrieben"
+echo "  core/templates/core/base.html geschrieben"
 
-# ── 6. .env – E-Mail ergänzen (nur wenn noch nicht vorhanden) ─────
-if ! grep -q "EMAIL_HOST" .env 2>/dev/null; then
-  cat >> .env << 'EOF'
-
-# E-Mail-Konfiguration
-EMAIL_HOST=smtp.hosteurope.de
-EMAIL_PORT=587
-EMAIL_HOST_USER=noreply@octotrial.com
-EMAIL_HOST_PASSWORD=DEIN_MAIL_PASSWORT
-DEFAULT_FROM_EMAIL=LinkedIn Dashboard <noreply@octotrial.com>
-DASHBOARD_URL=https://deine-dashboard-url.de
+cat > core/templates/core/login.html << 'EOF'
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Login - LinkedIn Dashboard</title>
+  <style>
+    :root { --octo-petrol: #008591; --octo-orange: #F56E28; --octo-white: #FFFFFF; --octo-light-gray: #F9F7F0; }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: 'Roboto', Arial, sans-serif; background: var(--octo-light-gray); display: flex; justify-content: center; align-items: center; min-height: 100vh; }
+    .login-card { background: var(--octo-white); padding: 2rem; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); width: 100%; max-width: 400px; }
+    h1 { color: var(--octo-petrol); text-align: center; margin-bottom: 1.5rem; font-size: 1.5rem; }
+    .form-group { margin-bottom: 1rem; }
+    label { display: block; color: var(--octo-petrol); font-weight: 500; margin-bottom: 0.3rem; }
+    input { width: 100%; padding: 0.6rem; border: 2px solid var(--octo-light-gray); border-radius: 6px; font-size: 1rem; }
+    input:focus { outline: none; border-color: var(--octo-orange); }
+    button { width: 100%; padding: 0.7rem; background: var(--octo-petrol); color: var(--octo-white); border: none; border-radius: 6px; font-size: 1rem; font-weight: 500; cursor: pointer; margin-top: 0.5rem; }
+    button:hover { background: #005F68; }
+    .error { color: #dc3545; text-align: center; margin-bottom: 1rem; font-size: 0.9rem; }
+  </style>
+</head>
+<body>
+<div class="login-card">
+  <h1>LinkedIn Dashboard</h1>
+  {% if form.errors %}
+  <p class="error">Benutzername oder Passwort falsch.</p>
+  {% endif %}
+  <form method="post">
+    {% csrf_token %}
+    <div class="form-group">
+      <label for="id_username">Benutzername</label>
+      <input type="text" name="username" id="id_username" autofocus required />
+    </div>
+    <div class="form-group">
+      <label for="id_password">Passwort</label>
+      <input type="password" name="password" id="id_password" required />
+    </div>
+    <button type="submit">Anmelden</button>
+  </form>
+</div>
+</body>
+</html>
 EOF
-  echo "✅ .env ergänzt – bitte EMAIL_HOST_PASSWORD und DASHBOARD_URL eintragen!"
-else
-  echo "ℹ️  .env bereits vorhanden – bitte manuell prüfen"
-fi
+echo "  core/templates/core/login.html geschrieben"
 
+cat > core/templates/core/change_password.html << 'EOF'
+{% extends "core/base.html" %}
+{% block title %}Passwort aendern{% endblock %}
+{% block content %}
+<h1>Passwort aendern</h1>
+<div class="card" style="max-width:500px;">
+  <form method="post">
+    {% csrf_token %}
+    <div class="form-group">
+      <label>Altes Passwort</label>
+      <input type="password" name="old_password" required />
+    </div>
+    <div class="form-group">
+      <label>Neues Passwort</label>
+      <input type="password" name="new_password1" required />
+    </div>
+    <div class="form-group">
+      <label>Neues Passwort (Wiederholung)</label>
+      <input type="password" name="new_password2" required />
+    </div>
+    <button type="submit" class="btn btn-primary">Passwort aendern</button>
+  </form>
+  {% if form.errors %}
+  <div style="color:#dc3545; margin-top:1rem;">
+    {% for field in form %}{% for error in field.errors %}<p>{{ error }}</p>{% endfor %}{% endfor %}
+  </div>
+  {% endif %}
+</div>
+{% endblock %}
+EOF
+echo "  core/templates/core/change_password.html geschrieben"
+
+# ── 6. forms.py ──────────────────────────────────────────────────
+cat > core/forms.py << 'EOF'
+from django import forms
+
+class UploadFileForm(forms.Form):
+    file = forms.FileField(label='Datei auswaehlen')
+EOF
+echo "  core/forms.py geschrieben"
+
+# ── 7. Migrate & fertig ─────────────────────────────────────────
 echo ""
-echo "✅ Fertig! Jetzt ausführen:"
-echo "   python manage.py migrate"
-echo "   python manage.py runserver"
+echo "Dateien geschrieben. Jetzt ausfuehren:"
+echo "  python manage.py migrate"
+echo "  python manage.py runserver"
+echo ""
+
+# ── 8. Git speichern ─────────────────────────────────────────────
+echo "Git Commit..."
+git add -A
+git commit -m "User-Einladung mit E-Mail (SMTP Host Europe) - deploy_user_invite.sh"
+echo ""
+echo "FERTIG! Alles committed."

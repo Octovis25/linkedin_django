@@ -2,7 +2,7 @@
 {% block title %}User-Verwaltung{% endblock %}
 {% block content %}
 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem;">
-  <h1>👥 User-Verwaltung</h1>
+  <h1>User-Verwaltung</h1>
   <a href="/users/new/" class="btn btn-primary">+ Neuen User einladen</a>
 </div>
 <table>
@@ -14,17 +14,17 @@
   <tbody>
     {% for u in users %}
     <tr>
-      <td>{{ u.get_full_name|default:"–" }}</td>
+      <td>{{ u.get_full_name|default:"-" }}</td>
       <td>{{ u.username }}</td>
-      <td>{{ u.email|default:"–" }}</td>
-      <td>{% if u.is_superuser %}🔴 Superuser{% elif u.is_staff %}🟡 Staff{% else %}🟢 User{% endif %}</td>
-      <td>{% if u.is_active %}✅{% else %}❌{% endif %}</td>
+      <td>{{ u.email|default:"-" }}</td>
+      <td>{% if u.is_superuser %}Superuser{% elif u.is_staff %}Staff{% else %}User{% endif %}</td>
+      <td>{% if u.is_active %}Ja{% else %}Nein{% endif %}</td>
       <td>
         {% if u != request.user %}
         <form method="post" action="/users/{{ u.id }}/delete/" style="display:inline;"
-              onsubmit="return confirm('User {{ u.username }} wirklich löschen?')">
+              onsubmit="return confirm('User {{ u.username }} wirklich loeschen?')">
           {% csrf_token %}
-          <button type="submit" class="btn btn-danger btn-sm">Löschen</button>
+          <button type="submit" class="btn btn-danger btn-sm">Loeschen</button>
         </form>
         {% else %}
         <span style="color:#aaa; font-size:0.85rem;">Du selbst</span>
