@@ -1,4 +1,4 @@
-from django.shortcuts import render, redirect
+from django.shortcuts import render
 from django.http import JsonResponse, HttpResponse
 from django.views.decorators.http import require_http_methods
 from django.contrib.auth.decorators import login_required
@@ -7,6 +7,7 @@ import requests
 from requests.auth import HTTPBasicAuth
 from datetime import datetime
 import tempfile
+import os
 from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment
 from openpyxl.worksheet.table import Table, TableStyleInfo
@@ -16,17 +17,40 @@ from .utils import parse_webdav_response, build_collectives_url
 STATUS_OPTIONS = ['', '📝 In Progress', '🚀 Ready to Post', '📤 Posted', '❌ Rejected']
 TYP_OPTIONS = ['', 'Post', 'Other']
 
+def get_config_with_env():
+    """Get config from database, but use environment variables as defaults"""
+    config = CollectivesConfig.get_config()
+    
+    # Use environment variables if database is empty - STRIP whitespace/newlines!
+    if not config.nextcloud_url:
+        config.nextcloud_url = os.environ.get('NEXTCLOUD_URL', '').strip()
+    if not config.kollektive_name:
+        config.kollektive_name = os.environ.get('KOLLEKTIVE_NAME', '').strip()
+    if not config.username:
+        config.username = os.environ.get('NEXTCLOUD_USER', '').strip()
+    if not config.app_password:
+        config.app_password = os.environ.get('NEXTCLOUD_APP_PASSWORD', '').strip()
+    
+    # Update connected status
+    config.connected = bool(config.nextcloud_url and config.username and config.app_password)
+    
+    # Save to database if loaded from env
+    if config.connected:
+        config.save()
+    
+    return config
+
 @login_required
 def dashboard(request):
     """Main dashboard view"""
-    config = CollectivesConfig.get_config()
+    config = get_config_with_env()
     return render(request, 'collectives/dashboard.html', {'config': config})
 
 @login_required
 @require_http_methods(["GET", "POST"])
 def api_config(request):
     """Get or update Nextcloud configuration"""
-    config = CollectivesConfig.get_config()
+    config = get_config_with_env()
     
     if request.method == 'POST':
         import json
@@ -39,7 +63,6 @@ def api_config(request):
         if data.get('app_password'):
             config.app_password = data.get('app_password')
         
-        # Update connected status
         config.connected = bool(config.nextcloud_url and config.username and config.app_password)
         config.save()
         
@@ -65,7 +88,7 @@ def api_config(request):
 @require_http_methods(["POST"])
 def test_connection(request):
     """Test Nextcloud connection"""
-    config = CollectivesConfig.get_config()
+    config = get_config_with_env()
     
     if not config.nextcloud_url or not config.username or not config.app_password:
         return JsonResponse({'success': False, 'message': 'Please fill in all fields'})
@@ -137,7 +160,7 @@ def set_status(request):
 @login_required
 def get_pages(request):
     """Fetch all pages from Nextcloud Collectives via WebDAV"""
-    config = CollectivesConfig.get_config()
+    config = get_config_with_env()
     
     if not config.connected:
         return JsonResponse({'success': False, 'message': 'Not connected'})
@@ -165,7 +188,6 @@ def get_pages(request):
             for page in pages:
                 # Build correct Collectives URL
                 if page.get('is_readme'):
-                    # Readme = folder page -> URL is just the folder path
                     if page['folder_parts']:
                         page['url'] = build_collectives_url(
                             config.nextcloud_url,
@@ -203,7 +225,7 @@ def get_pages(request):
 @login_required
 def export_excel(request):
     """Export pages to Excel file with formatting"""
-    config = CollectivesConfig.get_config()
+    config = get_config_with_env()
     
     if not config.connected:
         return JsonResponse({'success': False, 'message': 'Not connected'})
@@ -317,7 +339,6 @@ def export_excel(request):
         response['Content-Disposition'] = f'attachment; filename="{filename}"'
         
         # Clean up temp file
-        import os
         os.unlink(tmp.name)
         
         return response
