@@ -42,3 +42,4 @@ EMAIL_HOST_USER = os.getenv("EMAIL_HOST_USER", "")
 EMAIL_HOST_PASSWORD = os.getenv("EMAIL_HOST_PASSWORD", "")
 DEFAULT_FROM_EMAIL = os.getenv("DEFAULT_FROM_EMAIL", "LinkedIn Dashboard <noreply@octotrial.com>")
 DASHBOARD_URL = os.getenv("DASHBOARD_URL", "http://localhost:8000")
+STATIC_ROOT = BASE_DIR / 'staticfiles'
