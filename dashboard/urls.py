@@ -14,12 +14,12 @@ urlpatterns = [
     path("data/posts/", include("posts_posted.urls")),
     path("collectives/", include("collectives.urls")),
     path("users/", core_views.user_list, name='user_list'),
-    path("users/add/", core_views.user_add, name='user_add'),
-    path("users/<int:pk>/edit/", core_views.user_edit, name='user_edit'),
-    path("users/<int:pk>/delete/", core_views.user_delete, name='user_delete'),
-    path("change-password/", core_views.change_password, name='change_password'),
+    path("users/new/", core_views.user_create, name='user_create'),
+    path("users/<int:user_id>/delete/", core_views.user_delete, name='user_delete'),
     path("login/", auth_views.LoginView.as_view(template_name="core/login.html"), name="login"),
     path("logout/", auth_views.LogoutView.as_view(next_page="/login/"), name="logout"),
+    path("change-password/", auth_views.PasswordChangeView.as_view(
+        template_name="core/change_password.html", success_url="/"), name="change_password"),
 ]
 
 if settings.DEBUG:
