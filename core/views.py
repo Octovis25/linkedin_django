@@ -116,3 +116,62 @@ def delete_file_view(request, filename):
 
 def home_view(request):
     return render(request, 'core/home.html')
+
+
+# ─── User-Verwaltung ───────────────────────────────────────────────────────────
+
+from django.contrib.auth.models import User
+from django.contrib.auth import update_session_auth_hash
+from django.contrib.auth.forms import PasswordChangeForm, UserCreationForm, UserChangeForm
+from django.http import HttpResponseForbidden
+
+@login_required
+def user_list(request):
+    if not request.user.is_superuser:
+        return HttpResponseForbidden("Kein Zugriff.")
+    users = User.objects.all().order_by('username')
+    return render(request, 'core/user_list.html', {'users': users})
+
+@login_required
+def user_add(request):
+    if not request.user.is_superuser:
+        return HttpResponseForbidden("Kein Zugriff.")
+    form = UserCreationForm(request.POST or None)
+    if request.method == 'POST' and form.is_valid():
+        form.save()
+        messages.success(request, 'Benutzer erfolgreich erstellt.')
+        return redirect('user_list')
+    return render(request, 'core/user_form.html', {'form': form, 'title': 'Benutzer hinzufügen'})
+
+@login_required
+def user_edit(request, pk):
+    if not request.user.is_superuser:
+        return HttpResponseForbidden("Kein Zugriff.")
+    user = User.objects.get(pk=pk)
+    form = UserChangeForm(request.POST or None, instance=user)
+    if request.method == 'POST' and form.is_valid():
+        form.save()
+        messages.success(request, 'Benutzer gespeichert.')
+        return redirect('user_list')
+    return render(request, 'core/user_form.html', {'form': form, 'title': 'Benutzer bearbeiten'})
+
+@login_required
+def user_delete(request, pk):
+    if not request.user.is_superuser:
+        return HttpResponseForbidden("Kein Zugriff.")
+    user = User.objects.get(pk=pk)
+    if request.method == 'POST':
+        user.delete()
+        messages.success(request, 'Benutzer gelöscht.')
+        return redirect('user_list')
+    return render(request, 'core/user_confirm_delete.html', {'user_obj': user})
+
+@login_required
+def change_password(request):
+    form = PasswordChangeForm(request.user, request.POST or None)
+    if request.method == 'POST' and form.is_valid():
+        user = form.save()
+        update_session_auth_hash(request, user)
+        messages.success(request, 'Passwort erfolgreich geändert.')
+        return redirect('home')
+    return render(request, 'core/change_password.html', {'form': form})
