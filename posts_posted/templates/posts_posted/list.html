@@ -41,7 +41,7 @@
 {% for p in posts %}<tr>
 <td><span class="badge">{{ p.post_id }}</span></td>
 <td><a href="{{ p.post_link }}" target="_blank" rel="noopener noreferrer" class="post-link" style="color:#0077b5;cursor:pointer;text-decoration:none;font-weight:500">🔗 LinkedIn Post öffnen</a></td>
-<td>{{ p.post_date }}</td>
+<td>{{ p.post_date|date:"d.m.Y" }}</td>
 <td>{{ p.created_at|default:"-" }}</td>
 <td class="actions">
   <a href="{% url 'posts_posted:edit' p.pk %}" class="btn btn-secondary btn-sm">Bearbeiten</a>
