@@ -13,10 +13,11 @@
 
 <div class="card">
 <h2>Neuen Post eintragen</h2>
-<form method="post" action="{% url 'posts_posted:add' %}">{% csrf_token %}
+<form method="post" action="{% url 'posts_posted:add' %}" enctype="multipart/form-data">{% csrf_token %}
 <div style="display:grid;grid-template-columns:1fr 200px auto;gap:1rem;align-items:end">
 <div class="form-group"><label>{{ form.post_link.label }}</label>{{ form.post_link }}<div class="help">{{ form.post_link.help_text }}</div></div>
 <div class="form-group"><label>{{ form.post_date.label }}</label>{{ form.post_date }}</div>
+<div class="form-group"><label>{{ form.post_image.label }}</label>{{ form.post_image }}</div>
 <button type="submit" class="btn btn-primary">Speichern</button>
 </div></form></div>
 
@@ -46,7 +47,7 @@
   <th onclick="sortTable(2)" style="cursor:pointer">Post-Link ↕</th>
   <th onclick="sortTable(3)" style="cursor:pointer">Gepostet am ↕</th>
   <th onclick="sortTable(4)" style="cursor:pointer">Erstellt am ↕</th>
-  <th>Aktionen</th>
+  <th>Bild</th><th>Aktionen</th>
 </tr></thead>
 <tbody>
 {% for p in posts %}<tr>
@@ -60,6 +61,7 @@
 </td>
 <td>{{ p.post_date|date:"d.m.Y" }}</td>
 <td>{{ p.created_at|default:"-" }}</td>
+<td>{% if p.post_image %}<a href="{{ p.post_image.url }}" target="_blank"><img src="{{ p.post_image.url }}" style="max-height:50px;max-width:80px;border-radius:4px"></a>{% else %}-{% endif %}</td>
 <td class="actions">
   <a href="{% url 'posts_posted:edit' p.pk %}" class="btn btn-secondary btn-sm">Bearbeiten</a>
   <a href="{% url 'posts_posted:delete' p.pk %}" class="btn btn-danger btn-sm">Loeschen</a>

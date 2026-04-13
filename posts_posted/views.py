@@ -31,7 +31,7 @@ def post_list(request):
 @login_required
 def post_add(request):
     if request.method == "POST":
-        form = PostPostedForm(request.POST)
+        form = PostPostedForm(request.POST, request.FILES)
         if form.is_valid():
             try: form.save(); messages.success(request, "Post-Datum gespeichert!")
             except Exception as e: messages.error(request, str(e))
@@ -44,7 +44,7 @@ def post_add(request):
 def post_edit(request, pk):
     post = get_object_or_404(LinkedinPostPosted, pk=pk)
     if request.method == "POST":
-        form = PostPostedForm(request.POST, instance=post)
+        form = PostPostedForm(request.POST, request.FILES, instance=post)
         if form.is_valid():
             try: form.save(); messages.success(request, "Aktualisiert!")
             except Exception as e: messages.error(request, str(e))

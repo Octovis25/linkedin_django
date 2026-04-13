@@ -39,6 +39,7 @@ class LinkedinPostPosted(models.Model):
         verbose_name="Erstellt am",
     )
     post_date = models.DateField(
+    post_image = models.ImageField(upload_to="post_images/", blank=True, null=True, verbose_name="Post-Bild")
         verbose_name="Tatsaechlich gepostet am",
     )
 
