@@ -9,6 +9,8 @@ urlpatterns = [
     path('api/test-connection/', views.test_connection, name='test_connection'),
     path('api/status/', views.get_status, name='get_status'),
     path('api/status/set/', views.set_status, name='set_status'),
+    path('api/status/save/', views.set_status, name='save_status'),
     path('api/pages/', views.get_pages, name='get_pages'),
     path('api/export-excel/', views.export_excel, name='export_excel'),
+    path('api/sync/', views.sync_collective_posts, name='sync'),
 ]

@@ -7,27 +7,26 @@ class CollectivesConfig(models.Model):
     username = models.CharField(max_length=100, blank=True, default='')
     app_password = models.CharField(max_length=255, blank=True, default='')
     connected = models.BooleanField(default=False)
-    
+
     class Meta:
         db_table = 'collectives_config'
-    
+
     @classmethod
     def get_config(cls):
-        """Get or create singleton config"""
         obj, _ = cls.objects.get_or_create(pk=1)
         return obj
 
 class PageStatus(models.Model):
-    """Stores status and type per page (replaces status.json)"""
+    """Stores status and type per page — folder = eindeutige ID"""
     path = models.CharField(max_length=512, unique=True, db_index=True)
     status = models.CharField(max_length=50, blank=True, default='')
     typ = models.CharField(max_length=20, blank=True, default='')
+    planned_date = models.DateField(null=True, blank=True)
     updated_at = models.DateTimeField(auto_now=True)
-    
+
     class Meta:
         db_table = 'collectives_pagestatus'
         verbose_name_plural = 'Page Statuses'
-    
+
     def __str__(self):
         return f"{self.path} - {self.status}"
-
