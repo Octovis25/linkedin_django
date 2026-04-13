@@ -1,112 +1,33 @@
 {% extends "core/base.html" %}
 {% block title %}Post-Datum-Zuordnung{% endblock %}
 {% block content %}
-
-<style>
-.link-cell { display:flex; align-items:center; gap:6px; max-width:280px; }
-.link-cell a { color:#0077b5; text-decoration:none; font-size:13px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:220px; display:inline-block; }
-.link-cell a:hover { text-decoration:underline; }
-.copy-btn { border:none; background:none; cursor:pointer; font-size:14px; padding:0; flex-shrink:0; }
-.copy-btn:hover { opacity:.7; }
-.title-cell { font-size:12px; color:#444; max-width:200px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-</style>
-
 <div class="card">
 <h2>Neuen Post eintragen</h2>
 <form method="post" action="{% url 'posts_posted:add' %}" enctype="multipart/form-data">{% csrf_token %}
-<div style="display:grid;grid-template-columns:1fr 200px auto;gap:1rem;align-items:end">
+<div style="display:grid;grid-template-columns:1fr 200px 200px auto;gap:1rem;align-items:end">
 <div class="form-group"><label>{{ form.post_link.label }}</label>{{ form.post_link }}<div class="help">{{ form.post_link.help_text }}</div></div>
 <div class="form-group"><label>{{ form.post_date.label }}</label>{{ form.post_date }}</div>
 <div class="form-group"><label>{{ form.post_image.label }}</label>{{ form.post_image }}</div>
 <button type="submit" class="btn btn-primary">Speichern</button>
 </div></form></div>
-
 <div class="card">
 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem">
-  <h2 style="margin:0">Alle Eintraege ({{ posts|length }})</h2>
-  <form style="display:flex;gap:.5rem;width:300px">
-    <input type="text" name="q" value="{{ query }}" class="form-input" placeholder="Suche...">
-    <button type="submit" class="btn btn-secondary btn-sm">Suchen</button>
-  </form>
-</div>
-
-<!-- Spaltenfilter -->
-<div style="display:grid;grid-template-columns:1.5fr 2fr 1.5fr 1.5fr 1.5fr 1fr;gap:.5rem;margin-bottom:.5rem">
-  <input type="text" id="f-id"      placeholder="Post-ID..."      class="form-input" style="font-size:12px;padding:4px 8px" oninput="filterTable()">
-  <input type="text" id="f-title"   placeholder="Titel..."         class="form-input" style="font-size:12px;padding:4px 8px" oninput="filterTable()">
-  <input type="text" id="f-link"    placeholder="Link..."          class="form-input" style="font-size:12px;padding:4px 8px" oninput="filterTable()">
-  <input type="text" id="f-date"    placeholder="Gepostet am..."   class="form-input" style="font-size:12px;padding:4px 8px" oninput="filterTable()">
-  <input type="text" id="f-created" placeholder="Erstellt am..."   class="form-input" style="font-size:12px;padding:4px 8px" oninput="filterTable()">
-  <div></div>
-</div>
-
-<table id="postsTable">
-<thead><tr>
-  <th onclick="sortTable(0)" style="cursor:pointer">Post-ID ↕</th>
-  <th onclick="sortTable(1)" style="cursor:pointer">Post-Titel ↕</th>
-  <th onclick="sortTable(2)" style="cursor:pointer">Post-Link ↕</th>
-  <th onclick="sortTable(3)" style="cursor:pointer">Gepostet am ↕</th>
-  <th onclick="sortTable(4)" style="cursor:pointer">Erstellt am ↕</th>
-  <th>Bild</th><th>Aktionen</th>
-</tr></thead>
-<tbody>
-{% for p in posts %}<tr>
+<h2 style="margin:0">Alle Eintraege ({{ posts|length }})</h2>
+<form style="display:flex;gap:.5rem;width:300px">
+<input type="text" name="q" value="{{ query }}" class="form-input" placeholder="Suche...">
+<button type="submit" class="btn btn-secondary btn-sm">Suchen</button>
+</form></div>
+<table><thead><tr><th>Post-ID</th><th>Post-Link</th><th>Gepostet am</th><th>Erstellt am</th><th>Bild</th><th>Aktionen</th></tr></thead>
+<tbody>{% for p in posts %}<tr>
 <td><span class="badge">{{ p.post_id }}</span></td>
-<td class="title-cell" title="{{ p.post_title }}">{{ p.post_title|default:"—" }}</td>
-<td>
-  <div class="link-cell">
-    <a href="{{ p.post_link }}" target="_blank" rel="noopener noreferrer" title="{{ p.post_link }}">{{ p.post_link }}</a>
-    <button class="copy-btn" onclick="copyLink(this)" data-url="{{ p.post_link }}" title="Link kopieren">📋</button>
-  </div>
-</td>
-<td>{{ p.post_date|date:"d.m.Y" }}</td>
+<td><a href="{{ p.post_link }}" target="_blank" rel="noopener noreferrer" class="post-link">🔗 LinkedIn Post öffnen</a></td>
+<td>{{ p.post_date }}</td>
 <td>{{ p.created_at|default:"-" }}</td>
-<td>{% if p.post_image %}<a href="{{ p.post_image.url }}" target="_blank"><img src="{{ p.post_image.url }}" style="max-height:50px;max-width:80px;border-radius:4px"></a>{% else %}-{% endif %}</td>
+<td>{% if p.post_image %}<div style="display:flex;align-items:center;gap:.4rem"><a href="{{ p.post_image.url }}" target="_blank"><img src="{{ p.post_image.url }}" style="max-height:50px;max-width:80px;border-radius:4px" alt="Post-Bild"></a><a href="{{ p.post_image.url }}" download class="btn btn-secondary btn-sm" title="Bild herunterladen">⬇</a></div>{% else %}-{% endif %}</td>
 <td class="actions">
-  <a href="{% url 'posts_posted:edit' p.pk %}" class="btn btn-secondary btn-sm">Bearbeiten</a>
-  <a href="{% url 'posts_posted:delete' p.pk %}" class="btn btn-danger btn-sm">Loeschen</a>
+<a href="{% url 'posts_posted:edit' p.pk %}" class="btn btn-secondary btn-sm">Bearbeiten</a>
+<a href="{% url 'posts_posted:delete' p.pk %}" class="btn btn-danger btn-sm">Loeschen</a>
 </td></tr>{% empty %}
-<tr><td colspan="6" style="text-align:center;color:#aaa;padding:2rem">Noch keine Eintraege.</td></tr>
-{% endfor %}
+<tr><td colspan="6" style="text-align:center;color:#aaa;padding:2rem">Noch keine Eintraege.</td></tr>{% endfor %}
 </tbody></table></div>
-
-<script>
-function copyLink(btn) {
-  navigator.clipboard.writeText(btn.dataset.url).then(() => {
-    btn.textContent = '✅';
-    setTimeout(() => btn.textContent = '📋', 1500);
-  });
-}
-
-function filterTable() {
-  const fId      = document.getElementById('f-id').value.toLowerCase();
-  const fTitle   = document.getElementById('f-title').value.toLowerCase();
-  const fLink    = document.getElementById('f-link').value.toLowerCase();
-  const fDate    = document.getElementById('f-date').value.toLowerCase();
-  const fCreated = document.getElementById('f-created').value.toLowerCase();
-  document.querySelectorAll('#postsTable tbody tr').forEach(row => {
-    const c = row.querySelectorAll('td');
-    if (!c.length) return;
-    const show = c[0].innerText.toLowerCase().includes(fId) &&
-                 c[1].innerText.toLowerCase().includes(fTitle) &&
-                 c[2].innerText.toLowerCase().includes(fLink) &&
-                 c[3].innerText.toLowerCase().includes(fDate) &&
-                 c[4].innerText.toLowerCase().includes(fCreated);
-    row.style.display = show ? '' : 'none';
-  });
-}
-
-let sortDir = {};
-function sortTable(colIdx) {
-  const tbody = document.querySelector('#postsTable tbody');
-  const rows = Array.from(tbody.querySelectorAll('tr'));
-  sortDir[colIdx] = !sortDir[colIdx];
-  rows.sort((a, b) => {
-    const aT = a.querySelectorAll('td')[colIdx]?.innerText.trim() || '';
-    const bT = b.querySelectorAll('td')[colIdx]?.innerText.trim() || '';
-    return sortDir[colIdx] ? aT.localeCompare(bT) : bT.localeCompare(aT);
-  });
-  rows.forEach(r => tbody.appendChild(r));
-}
-</script>
 {% endblock %}

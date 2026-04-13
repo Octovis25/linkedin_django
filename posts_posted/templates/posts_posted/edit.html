@@ -2,9 +2,17 @@
 {% block title %}Post bearbeiten{% endblock %}
 {% block content %}
 <div style="max-width:600px"><div class="card">
-<h2>Post bearbeiten – {{ post.post_id }}</h2>
+<h2>Post bearbeiten - {{ post.post_id }}</h2>
 <form method="post" enctype="multipart/form-data">{% csrf_token %}
-{% if post.post_image %}<div style="margin-bottom:1rem"><p style="font-size:.85rem;font-weight:500;margin-bottom:.3rem">Aktuelles Bild:</p><a href="{{ post.post_image.url }}" target="_blank"><img src="{{ post.post_image.url }}" style="max-height:150px;border-radius:6px;border:1px solid #ddd"></a></div>{% endif %}
+{% if post.post_image %}
+<div style="margin-bottom:1rem">
+<p style="font-size:.85rem;font-weight:500;margin-bottom:.3rem">Aktuelles Bild:</p>
+<div style="display:flex;align-items:flex-end;gap:.5rem">
+<a href="{{ post.post_image.url }}" target="_blank"><img src="{{ post.post_image.url }}" style="max-height:150px;border-radius:6px;border:1px solid #ddd"></a>
+<a href="{{ post.post_image.url }}" download class="btn btn-secondary btn-sm">⬇ Download</a>
+</div>
+</div>
+{% endif %}
 {% for field in form %}
 <div class="form-group"><label>{{ field.label }}</label>{{ field }}
 {% if field.help_text %}<div class="help">{{ field.help_text }}</div>{% endif %}
