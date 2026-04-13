@@ -14,7 +14,7 @@ def extract_post_id(url):
     return m.group(1) if m else None
 
 class LinkedinPostPosted(models.Model):
-    post_link = models.CharField(max_length=512, unique=True, verbose_name="Post-Link")
+    post_link = models.CharField(max_length=512, primary_key=True, verbose_name="Post-Link")
     post_id = models.CharField(max_length=30, unique=True, blank=True, null=True, verbose_name="Post-ID")
     created_at = models.DateTimeField(blank=True, null=True, verbose_name="Erstellt am")
     post_date = models.DateField(verbose_name="Tatsaechlich gepostet am")
