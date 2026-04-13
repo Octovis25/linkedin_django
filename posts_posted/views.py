@@ -8,7 +8,7 @@ from .forms import PostPostedForm
 @login_required
 def post_list(request):
     query = request.GET.get("q", "").strip()
-    posts = LinkedinPostPosted.objects.all()
+    posts = LinkedinPostPosted.objects.all().order_by('-post_date', '-created_at')
     if query: posts = posts.filter(Q(post_link__icontains=query)|Q(post_id__icontains=query))
     return render(request, "posts_posted/list.html", {"posts": posts, "form": PostPostedForm(), "query": query})
 

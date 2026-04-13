@@ -1,6 +1,7 @@
 {% extends "core/base.html" %}
 {% block title %}Post-Datum-Zuordnung{% endblock %}
 {% block content %}
+
 <div class="card">
 <h2>Neuen Post eintragen</h2>
 <form method="post" action="{% url 'posts_posted:add' %}">{% csrf_token %}
@@ -9,30 +10,78 @@
 <div class="form-group"><label>{{ form.post_date.label }}</label>{{ form.post_date }}</div>
 <button type="submit" class="btn btn-primary">Speichern</button>
 </div></form></div>
+
 <div class="card">
 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem">
-<h2 style="margin:0">Alle Eintraege ({{ posts|length }})</h2>
-<form style="display:flex;gap:.5rem;width:300px">
-<input type="text" name="q" value="{{ query }}" class="form-input" placeholder="Suche...">
-<button type="submit" class="btn btn-secondary btn-sm">Suchen</button>
-</form></div>
-<table><thead><tr><th>Post-ID</th><th>Post-Link</th><th>Gepostet am</th><th>Erstellt am</th><th>Aktionen</th></tr></thead>
-<tbody>{% for p in posts %}<tr>
+  <h2 style="margin:0">Alle Eintraege ({{ posts|length }})</h2>
+  <form style="display:flex;gap:.5rem;width:300px">
+    <input type="text" name="q" value="{{ query }}" class="form-input" placeholder="Suche...">
+    <button type="submit" class="btn btn-secondary btn-sm">Suchen</button>
+  </form>
+</div>
+
+<!-- Spaltenfilter -->
+<div style="display:grid;grid-template-columns:2fr 3fr 1.5fr 1.5fr 1.5fr;gap:.5rem;margin-bottom:.5rem">
+  <input type="text" id="f-id"      placeholder="Post-ID filtern..."    class="form-input" style="font-size:12px;padding:4px 8px" oninput="filterTable()">
+  <input type="text" id="f-link"    placeholder="Link filtern..."        class="form-input" style="font-size:12px;padding:4px 8px" oninput="filterTable()">
+  <input type="text" id="f-date"    placeholder="Datum filtern..."       class="form-input" style="font-size:12px;padding:4px 8px" oninput="filterTable()">
+  <input type="text" id="f-created" placeholder="Erstellt filtern..."    class="form-input" style="font-size:12px;padding:4px 8px" oninput="filterTable()">
+  <div></div>
+</div>
+
+<table id="postsTable">
+<thead><tr>
+  <th onclick="sortTable(0)" style="cursor:pointer">Post-ID ↕</th>
+  <th onclick="sortTable(1)" style="cursor:pointer">Post-Link ↕</th>
+  <th onclick="sortTable(2)" style="cursor:pointer">Gepostet am ↕</th>
+  <th onclick="sortTable(3)" style="cursor:pointer">Erstellt am ↕</th>
+  <th>Aktionen</th>
+</tr></thead>
+<tbody>
+{% for p in posts %}<tr>
 <td><span class="badge">{{ p.post_id }}</span></td>
-<td>
-    <a href="{{ p.post_link }}" target="_blank" rel="noopener noreferrer" style="color:#0077b5;text-decoration:none;display:inline-flex;align-items:center;gap:6px">
-        <span style="max-width:400px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ p.post_link }}</span>
-        <svg width="16" height="16" fill="currentColor" style="flex-shrink:0">
-            <path d="M11 1h4v4M15 1L8 8M13 8v6a1 1 0 01-1 1H2a1 1 0 01-1-1V4a1 1 0 011-1h6"/>
-        </svg>
-    </a>
-</td>
+<td><a href="{{ p.post_link }}" target="_blank" rel="noopener noreferrer" class="post-link" style="color:#0077b5;cursor:pointer;text-decoration:none;font-weight:500">🔗 LinkedIn Post öffnen</a></td>
 <td>{{ p.post_date }}</td>
 <td>{{ p.created_at|default:"-" }}</td>
 <td class="actions">
-<a href="{% url 'posts_posted:edit' p.pk %}" class="btn btn-secondary btn-sm">Bearbeiten</a>
-<a href="{% url 'posts_posted:delete' p.pk %}" class="btn btn-danger btn-sm">Loeschen</a>
+  <a href="{% url 'posts_posted:edit' p.pk %}" class="btn btn-secondary btn-sm">Bearbeiten</a>
+  <a href="{% url 'posts_posted:delete' p.pk %}" class="btn btn-danger btn-sm">Loeschen</a>
 </td></tr>{% empty %}
-<tr><td colspan="5" style="text-align:center;color:#aaa;padding:2rem">Noch keine Eintraege.</td></tr>{% endfor %}
+<tr><td colspan="5" style="text-align:center;color:#aaa;padding:2rem">Noch keine Eintraege.</td></tr>
+{% endfor %}
 </tbody></table></div>
+
+<script>
+function filterTable() {
+  const fId      = document.getElementById('f-id').value.toLowerCase();
+  const fLink    = document.getElementById('f-link').value.toLowerCase();
+  const fDate    = document.getElementById('f-date').value.toLowerCase();
+  const fCreated = document.getElementById('f-created').value.toLowerCase();
+  const rows = document.querySelectorAll('#postsTable tbody tr');
+  rows.forEach(row => {
+    const cells = row.querySelectorAll('td');
+    if (!cells.length) return;
+    const id      = cells[0].innerText.toLowerCase();
+    const link    = cells[1].innerText.toLowerCase();
+    const date    = cells[2].innerText.toLowerCase();
+    const created = cells[3].innerText.toLowerCase();
+    const show = id.includes(fId) && link.includes(fLink) && date.includes(fDate) && created.includes(fCreated);
+    row.style.display = show ? '' : 'none';
+  });
+}
+
+let sortDir = {};
+function sortTable(colIdx) {
+  const table = document.getElementById('postsTable');
+  const tbody = table.querySelector('tbody');
+  const rows = Array.from(tbody.querySelectorAll('tr'));
+  sortDir[colIdx] = !sortDir[colIdx];
+  rows.sort((a, b) => {
+    const aT = a.querySelectorAll('td')[colIdx]?.innerText.trim() || '';
+    const bT = b.querySelectorAll('td')[colIdx]?.innerText.trim() || '';
+    return sortDir[colIdx] ? aT.localeCompare(bT) : bT.localeCompare(aT);
+  });
+  rows.forEach(r => tbody.appendChild(r));
+}
+</script>
 {% endblock %}
