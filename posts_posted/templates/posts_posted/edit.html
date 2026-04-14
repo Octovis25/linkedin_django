@@ -1,25 +1,88 @@
-{% extends "core/base.html" %}
-{% block title %}Post bearbeiten{% endblock %}
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Post bearbeiten - LinkedIn Dashboard{% endblock %}
+
 {% block content %}
-<div style="max-width:600px"><div class="card">
-<h2>Post bearbeiten - {{ post.post_id }}</h2>
-<form method="post" enctype="multipart/form-data">{% csrf_token %}
-{% if post.post_image %}
-<div style="margin-bottom:1rem">
-<p style="font-size:.85rem;font-weight:500;margin-bottom:.3rem">Aktuelles Bild:</p>
-<div style="display:flex;align-items:flex-end;gap:.5rem">
-<a href="{{ post.post_image.url }}" target="_blank"><img src="{{ post.post_image.url }}" style="max-height:150px;border-radius:6px;border:1px solid #ddd"></a>
-<a href="{{ post.post_image.url }}" download class="btn btn-secondary btn-sm">⬇ Download</a>
+<div class="card">
+    <h1>Post bearbeiten</h1>
+
+    <div style="margin-bottom:1.5rem; padding:1rem; background:var(--octo-light-gray); border-radius:6px;">
+        <p><strong>Post-ID:</strong> {{ post_info.post_id }}</p>
+        <p><strong>Titel:</strong> {{ post_info.post_title|default:"—" }}</p>
+        {% if post_info.post_url %}
+            <p><strong>Link:</strong> <a href="{{ post_info.post_url }}" target="_blank">LinkedIn Post oeffnen</a></p>
+        {% endif %}
+    </div>
+
+    <form method="POST" enctype="multipart/form-data" id="editForm">
+        {% csrf_token %}
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:1rem; margin-bottom:1rem;">
+            <div class="form-group">
+                <label for="post_date">Tatsaechlich gepostet am</label>
+                <input type="date" id="post_date" name="post_date"
+                       value="{% if posted and posted.post_date %}{{ posted.post_date|date:'Y-m-d' }}{% endif %}">
+            </div>
+            <div class="form-group">
+                <label>Post-Bild</label>
+                <div id="dropZone" style="border:2px dashed var(--octo-petrol); border-radius:8px; padding:2rem; text-align:center; cursor:pointer; transition:all 0.3s; background:var(--octo-light-gray);">
+                    {% if posted and posted.post_image %}
+                        <img id="preview" src="{{ posted.post_image.url }}" style="max-width:200px; max-height:200px; border-radius:4px;">
+                        <p style="margin-top:0.5rem; font-size:0.85rem; color:var(--octo-dark-petrol);">Neues Bild hierher ziehen oder klicken</p>
+                    {% else %}
+                        <img id="preview" style="max-width:200px; max-height:200px; border-radius:4px; display:none;">
+                        <p id="dropText" style="color:var(--octo-dark-petrol);">&#128247; Bild hierher ziehen oder klicken</p>
+                    {% endif %}
+                </div>
+                <input type="file" id="post_image" name="post_image" accept="image/*" style="display:none;">
+            </div>
+        </div>
+        <button type="submit" class="btn btn-primary">Speichern</button>
+        <a href="{% url 'posts_posted:list' %}" class="btn btn-secondary" style="margin-left:0.5rem;">Zurueck</a>
+    </form>
 </div>
-</div>
-{% endif %}
-{% for field in form %}
-<div class="form-group"><label>{{ field.label }}</label>{{ field }}
-{% if field.help_text %}<div class="help">{{ field.help_text }}</div>{% endif %}
-{% for error in field.errors %}<div class="msg msg-error">{{ error }}</div>{% endfor %}
-</div>{% endfor %}
-<div style="display:flex;gap:.5rem">
-<button type="submit" class="btn btn-primary">Speichern</button>
-<a href="{% url 'posts_posted:list' %}" class="btn btn-secondary">Abbrechen</a>
-</div></form></div></div>
+
+<script>
+const dropZone = document.getElementById('dropZone');
+const fileInput = document.getElementById('post_image');
+const preview = document.getElementById('preview');
+const dropText = document.getElementById('dropText');
+
+dropZone.addEventListener('click', () => fileInput.click());
+
+dropZone.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    dropZone.style.borderColor = 'var(--octo-orange)';
+    dropZone.style.background = '#fff3e0';
+});
+
+dropZone.addEventListener('dragleave', () => {
+    dropZone.style.borderColor = 'var(--octo-petrol)';
+    dropZone.style.background = 'var(--octo-light-gray)';
+});
+
+dropZone.addEventListener('drop', (e) => {
+    e.preventDefault();
+    dropZone.style.borderColor = 'var(--octo-petrol)';
+    dropZone.style.background = 'var(--octo-light-gray)';
+    if (e.dataTransfer.files.length) {
+        fileInput.files = e.dataTransfer.files;
+        showPreview(e.dataTransfer.files[0]);
+    }
+});
+
+fileInput.addEventListener('change', () => {
+    if (fileInput.files.length) showPreview(fileInput.files[0]);
+});
+
+function showPreview(file) {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+        preview.src = e.target.result;
+        preview.style.display = 'block';
+        if (dropText) dropText.style.display = 'none';
+    };
+    reader.readAsDataURL(file);
+}
+</script>
 {% endblock %}

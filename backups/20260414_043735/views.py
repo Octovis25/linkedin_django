@@ -19,19 +19,12 @@ def post_list(request):
     if post_ids:
         placeholders = ','.join(['%s'] * len(post_ids))
         with connection.cursor() as cur:
-            cur.execute(f"SELECT post_id, COALESCE(post_title, post_title_raw, '') FROM linkedin_posts WHERE post_id IN ({placeholders})", post_ids)
+            cur.execute(f"SELECT post_id, post_title FROM linkedin_posts WHERE post_id IN ({placeholders})", post_ids)
             for row in cur.fetchall():
-                title_map[row[0]] = row[1] or ''
+                title_map[row[0]] = row[1]
 
     for p in posts:
         p.post_title = title_map.get(p.post_id, '')
-
-    # Falls Suche: auch im Titel filtern (nachtraeglich)
-    if query:
-        q_lower = query.lower()
-        posts = [p for p in posts if q_lower in (p.post_title or '').lower()
-                 or q_lower in (p.post_id or '').lower()
-                 or q_lower in (p.post_link or '').lower()]
 
     return render(request, "posts_posted/list.html", {"posts": posts, "form": PostPostedForm(), "query": query})
 
