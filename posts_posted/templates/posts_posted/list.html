@@ -18,16 +18,37 @@
 .copy-link-btn:hover { color: var(--octo-orange); }
 .actions-cell .btn { font-size: 0.75rem; padding: 0.25rem 0.6rem; }
 .no-date { color: #e74c3c; font-style: italic; }
-</style>
 
-<div class="card">
-<h2>Neuen Post eintragen</h2>
-<form method="post" action="{% url 'posts_posted:add' %}">{% csrf_token %}
-<div style="display:grid;grid-template-columns:1fr 200px auto;gap:1rem;align-items:end">
-<div class="form-group"><label>{{ form.post_link.label }}</label>{{ form.post_link }}<div class="help">{{ form.post_link.help_text }}</div></div>
-<div class="form-group"><label>{{ form.post_date.label }}</label>{{ form.post_date }}</div>
-<button type="submit" class="btn btn-primary">Speichern</button>
-</div></form></div>
+/* Thumbnail mit Hover-Zoom */
+.thumb-wrap {
+    position: relative;
+    display: inline-block;
+}
+.thumb-wrap img.thumb {
+    max-height: 40px;
+    max-width: 60px;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: transform 0.2s;
+}
+.thumb-wrap .thumb-large {
+    display: none;
+    position: absolute;
+    bottom: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 1000;
+    border: 3px solid var(--octo-petrol);
+    border-radius: 8px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.3);
+    background: #fff;
+    max-width: 400px;
+    max-height: 350px;
+}
+.thumb-wrap:hover .thumb-large {
+    display: block;
+}
+</style>
 
 <div class="card">
 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem">
@@ -43,6 +64,7 @@
     <th>Post-Titel</th>
     <th>Post-Link</th>
     <th>Gepostet am</th>
+    <th>Bild</th>
     <th>Aktionen</th>
 </tr></thead>
 <tbody>
@@ -58,22 +80,31 @@
     </td>
     <td>
         {% if p.has_date %}
-            {{ p.post_date }}
+            {{ p.post_date_formatted }}
         {% else %}
             <span class="no-date">kein Datum</span>
+        {% endif %}
+    </td>
+    <td>
+        {% if p.pp_id and p.post_image %}
+        <div class="thumb-wrap">
+            <img src="{% url 'posts_posted:image_proxy' p.pp_id %}" class="thumb" alt="Post-Bild">
+            <img src="{% url 'posts_posted:image_proxy' p.pp_id %}" class="thumb-large" alt="Post-Bild gross">
+        </div>
+        {% else %}
+            <span style="color:#aaa">—</span>
         {% endif %}
     </td>
     <td class="actions-cell">
         {% if p.pp_id %}
             <a href="{% url 'posts_posted:edit' p.pp_id %}" class="btn btn-secondary btn-sm">Bearbeiten</a>
-            <a href="{% url 'posts_posted:delete' p.pp_id %}" class="btn btn-danger btn-sm">L&ouml;schen</a>
         {% else %}
             <span style="color:#aaa;font-size:0.8rem">&mdash;</span>
         {% endif %}
     </td>
 </tr>
 {% empty %}
-<tr><td colspan="5" style="text-align:center;color:#aaa;padding:2rem">Noch keine Eintraege.</td></tr>
+<tr><td colspan="6" style="text-align:center;color:#aaa;padding:2rem">Noch keine Eintraege.</td></tr>
 {% endfor %}
 </tbody></table>
 </div>
