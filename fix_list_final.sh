@@ -1,3 +1,43 @@
+#!/bin/bash
+##############################################################
+# fix_list_final.sh
+# 1. Schreibt die RICHTIGE list.html in den RICHTIGEN Pfad
+# 2. Loescht ALLE anderen/falschen list.html Kopien
+# 3. Entfernt post_add und post_delete aus Views + URLs
+##############################################################
+set -e
+cd /opt/render/project/src 2>/dev/null || cd "$(dirname "$0")"
+
+echo "============================================"
+echo " SAUBERMACHEN - list.html"
+echo "============================================"
+
+echo ""
+echo "=== 1. ALLE falschen list.html finden und loeschen ==="
+# Finde alle list.html die NICHT im richtigen Pfad liegen
+find . -name "list.html" -not -path "*/posts_posted/templates/posts_posted/list.html" -not -path "./node_modules/*" -not -path "./.git/*" 2>/dev/null | while read f; do
+    echo "   LOESCHE: $f"
+    rm -f "$f"
+done
+
+# Auch alte Varianten loeschen
+for old in list_FIXED.html list_TOOLTIP_DATE.html; do
+    find . -name "$old" -not -path "./.git/*" 2>/dev/null | while read f; do
+        echo "   LOESCHE ALT: $f"
+        rm -f "$f"
+    done
+done
+echo "   Alte/doppelte Templates geloescht."
+
+echo ""
+echo "=== 2. Richtiges Template-Verzeichnis sicherstellen ==="
+mkdir -p posts_posted/templates/posts_posted
+echo "   OK: posts_posted/templates/posts_posted/"
+
+echo ""
+echo "=== 3. SAUBERE list.html schreiben ==="
+
+cat > posts_posted/templates/posts_posted/list.html << 'HTMLEOF'
 {% extends "core/base.html" %}
 {% block title %}Post-Datum-Zuordnung{% endblock %}
 {% block content %}
@@ -118,3 +158,56 @@ function closeLightbox() {
 document.addEventListener('keydown', function(e) { if (e.key === 'Escape') closeLightbox(); });
 </script>
 {% endblock %}
+HTMLEOF
+echo "   RICHTIGE list.html geschrieben."
+
+echo ""
+echo "=== 4. post_add aus views.py entfernen ==="
+if grep -q "def post_add" posts_posted/views.py 2>/dev/null; then
+    python3 -c "
+import re
+with open('posts_posted/views.py','r') as f: code=f.read()
+code2 = re.sub(r'\n@login_required\ndef post_add\(request\):.*?(?=\n@login_required|\n@csrf|\ndef |\Z)', '', code, flags=re.S)
+with open('posts_posted/views.py','w') as f: f.write(code2)
+print('   post_add view entfernt.')
+"
+else
+    echo "   post_add nicht gefunden (OK)."
+fi
+
+echo ""
+echo "=== 5. add-Route aus urls.py entfernen ==="
+if grep -q "'add'" posts_posted/urls.py 2>/dev/null; then
+    sed -i "/name='add'/d" posts_posted/urls.py
+    echo "   add-Route entfernt."
+else
+    echo "   add-Route nicht gefunden (OK)."
+fi
+
+echo ""
+echo "=== 6. delete-Route aus urls.py entfernen ==="
+if grep -q "'delete'" posts_posted/urls.py 2>/dev/null; then
+    sed -i "/name='delete'/d" posts_posted/urls.py
+    echo "   delete-Route entfernt."
+else
+    echo "   delete-Route nicht gefunden (OK)."
+fi
+
+echo ""
+echo "=== 7. Kontrolle ==="
+echo "--- urls.py ---"
+cat posts_posted/urls.py
+echo ""
+echo "--- Alle list.html im Projekt ---"
+find . -name "list.html" -not -path "./.git/*" 2>/dev/null
+echo ""
+echo "--- Alle list_*.html im Projekt ---"
+find . -name "list_*.html" -not -path "./.git/*" 2>/dev/null
+echo ""
+
+echo "============================================"
+echo " FERTIG! Jetzt:"
+echo "  git add -A"
+echo "  git commit -m 'Fix: clean list - no add, no delete, image proxy'"
+echo "  git push"
+echo "============================================"

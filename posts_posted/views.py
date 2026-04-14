@@ -33,36 +33,6 @@ def post_list(request):
 
 
 @login_required
-def post_add(request):
-    if request.method == "POST":
-        form = PostPostedForm(request.POST, request.FILES)
-        if form.is_valid():
-            try:
-                post = form.save(commit=False)
-
-                # Handle image upload to Nextcloud
-                upload_file = request.FILES.get('upload_image')
-                if upload_file:
-                    filename = f"{post.post_id}_{upload_file.name}"
-                    nc_path = upload_image_to_nextcloud(upload_file, filename)
-                    if nc_path:
-                        post.post_image = nc_path
-                        messages.success(request, "Post gespeichert + Bild in Nextcloud hochgeladen!")
-                    else:
-                        messages.warning(request, "Post gespeichert, aber Bild-Upload nach Nextcloud fehlgeschlagen.")
-                else:
-                    messages.success(request, "Post-Datum gespeichert!")
-
-                post.save()
-            except Exception as e:
-                messages.error(request, str(e))
-        else:
-            for errs in form.errors.values():
-                for e in errs: messages.error(request, e)
-    return redirect("posts_posted:list")
-
-
-@login_required
 def post_edit(request, pk):
     post = get_object_or_404(LinkedinPostPosted, pk=pk)
     if request.method == "POST":
