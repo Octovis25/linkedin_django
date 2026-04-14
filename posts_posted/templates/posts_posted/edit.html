@@ -1,5 +1,4 @@
-{% extends "base.html" %}
-{% load static %}
+{% extends "core/base.html" %}
 
 {% block title %}Post bearbeiten - LinkedIn Dashboard{% endblock %}
 
@@ -8,10 +7,10 @@
     <h1>Post bearbeiten</h1>
 
     <div style="margin-bottom:1.5rem; padding:1rem; background:var(--octo-light-gray); border-radius:6px;">
-        <p><strong>Post-ID:</strong> {{ post_info.post_id }}</p>
-        <p><strong>Titel:</strong> {{ post_info.post_title|default:"—" }}</p>
-        {% if post_info.post_url %}
-            <p><strong>Link:</strong> <a href="{{ post_info.post_url }}" target="_blank">LinkedIn Post oeffnen</a></p>
+        <p><strong>Post-ID:</strong> {{ post.post_id }}</p>
+        <p><strong>Titel:</strong> {{ post.post_title|default:"—" }}</p>
+        {% if post.post_link %}
+            <p><strong>Link:</strong> <a href="{{ post.post_link }}" target="_blank">LinkedIn Post oeffnen</a></p>
         {% endif %}
     </div>
 
@@ -21,13 +20,13 @@
             <div class="form-group">
                 <label for="post_date">Tatsaechlich gepostet am</label>
                 <input type="date" id="post_date" name="post_date"
-                       value="{% if posted and posted.post_date %}{{ posted.post_date|date:'Y-m-d' }}{% endif %}">
+                       value="{% if post.post_date %}{{ post.post_date|date:'Y-m-d' }}{% endif %}">
             </div>
             <div class="form-group">
                 <label>Post-Bild</label>
                 <div id="dropZone" style="border:2px dashed var(--octo-petrol); border-radius:8px; padding:2rem; text-align:center; cursor:pointer; transition:all 0.3s; background:var(--octo-light-gray);">
-                    {% if posted and posted.post_image %}
-                        <img id="preview" src="{{ posted.post_image.url }}" style="max-width:200px; max-height:200px; border-radius:4px;">
+                    {% if post.post_image %}
+                        <img id="preview" src="{{ post.post_image.url }}" style="max-width:200px; max-height:200px; border-radius:4px;">
                         <p style="margin-top:0.5rem; font-size:0.85rem; color:var(--octo-dark-petrol);">Neues Bild hierher ziehen oder klicken</p>
                     {% else %}
                         <img id="preview" style="max-width:200px; max-height:200px; border-radius:4px; display:none;">
@@ -47,42 +46,11 @@ const dropZone = document.getElementById('dropZone');
 const fileInput = document.getElementById('post_image');
 const preview = document.getElementById('preview');
 const dropText = document.getElementById('dropText');
-
 dropZone.addEventListener('click', () => fileInput.click());
-
-dropZone.addEventListener('dragover', (e) => {
-    e.preventDefault();
-    dropZone.style.borderColor = 'var(--octo-orange)';
-    dropZone.style.background = '#fff3e0';
-});
-
-dropZone.addEventListener('dragleave', () => {
-    dropZone.style.borderColor = 'var(--octo-petrol)';
-    dropZone.style.background = 'var(--octo-light-gray)';
-});
-
-dropZone.addEventListener('drop', (e) => {
-    e.preventDefault();
-    dropZone.style.borderColor = 'var(--octo-petrol)';
-    dropZone.style.background = 'var(--octo-light-gray)';
-    if (e.dataTransfer.files.length) {
-        fileInput.files = e.dataTransfer.files;
-        showPreview(e.dataTransfer.files[0]);
-    }
-});
-
-fileInput.addEventListener('change', () => {
-    if (fileInput.files.length) showPreview(fileInput.files[0]);
-});
-
-function showPreview(file) {
-    const reader = new FileReader();
-    reader.onload = (e) => {
-        preview.src = e.target.result;
-        preview.style.display = 'block';
-        if (dropText) dropText.style.display = 'none';
-    };
-    reader.readAsDataURL(file);
-}
+dropZone.addEventListener('dragover', (e) => { e.preventDefault(); dropZone.style.borderColor='var(--octo-orange)'; dropZone.style.background='#fff3e0'; });
+dropZone.addEventListener('dragleave', () => { dropZone.style.borderColor='var(--octo-petrol)'; dropZone.style.background='var(--octo-light-gray)'; });
+dropZone.addEventListener('drop', (e) => { e.preventDefault(); dropZone.style.borderColor='var(--octo-petrol)'; dropZone.style.background='var(--octo-light-gray)'; if(e.dataTransfer.files.length){fileInput.files=e.dataTransfer.files;showPreview(e.dataTransfer.files[0]);} });
+fileInput.addEventListener('change', () => { if(fileInput.files.length) showPreview(fileInput.files[0]); });
+function showPreview(file){ const r=new FileReader(); r.onload=(e)=>{preview.src=e.target.result;preview.style.display='block';if(dropText)dropText.style.display='none';}; r.readAsDataURL(file); }
 </script>
 {% endblock %}
