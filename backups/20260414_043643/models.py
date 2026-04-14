@@ -15,7 +15,6 @@ def extract_post_id(url):
 
 class LinkedinPostPosted(models.Model):
     post_link = models.CharField(max_length=512, primary_key=True, verbose_name="Post-Link")
-    post_title = models.CharField(max_length=500, blank=True, null=True, verbose_name="Post Title")
     post_id = models.CharField(max_length=30, unique=True, blank=True, null=True, verbose_name="Post-ID")
     created_at = models.DateTimeField(blank=True, null=True, verbose_name="Erstellt am")
     post_date = models.DateField(verbose_name="Tatsaechlich gepostet am")
@@ -28,16 +27,13 @@ class LinkedinPostPosted(models.Model):
 
     def clean(self):
         extracted = extract_post_id(self.post_link)
-    post_title = models.CharField(max_length=500, blank=True, null=True, verbose_name="Post Title")
         if not extracted:
             raise ValidationError({"post_link": "Keine post_id im Link gefunden."})
-    post_title = models.CharField(max_length=500, blank=True, null=True, verbose_name="Post Title")
         self.post_id = extracted
         qs = LinkedinPostPosted.objects.filter(post_id=self.post_id)
         if self.pk: qs = qs.exclude(pk=self.pk)
         if qs.exists():
             raise ValidationError({"post_link": f"Post mit ID {self.post_id} existiert bereits!"})
-    post_title = models.CharField(max_length=500, blank=True, null=True, verbose_name="Post Title")
 
     def save(self, *args, **kwargs):
         self.full_clean()

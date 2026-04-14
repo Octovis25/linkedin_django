@@ -1,3 +1,25 @@
+#!/bin/bash
+set -e
+
+echo "=== Posts Posted Enhancement ==="
+echo "Adding: Title column, Image thumbnail, Copy link button"
+
+# Backup
+mkdir -p backups/$(date +%Y%m%d_%H%M%S)
+cp posts_posted/templates/posts_posted/list.html backups/$(date +%Y%m%d_%H%M%S)/ 2>/dev/null || true
+cp posts_posted/models.py backups/$(date +%Y%m%d_%H%M%S)/ 2>/dev/null || true
+cp posts_posted/views.py backups/$(date +%Y%m%d_%H%M%S)/ 2>/dev/null || true
+
+# 1) Update Model - add title field if not exists
+if ! grep -q "post_title" posts_posted/models.py; then
+    sed -i '/post_link/a\    post_title = models.CharField(max_length=500, blank=True, null=True, verbose_name="Post Title")' posts_posted/models.py
+    echo "✅ Model: post_title field added"
+else
+    echo "ℹ️  Model: post_title already exists"
+fi
+
+# 2) Create new list.html template with all features
+cat > posts_posted/templates/posts_posted/list.html << 'HTML'
 {% extends "core/base.html" %}
 {% load static %}
 
@@ -344,3 +366,49 @@ function showPreview(file) {
 }
 </script>
 {% endblock %}
+HTML
+
+echo "✅ Template: list.html updated with all features"
+
+# 3) Update views.py to handle new fields
+cat > /tmp/views_patch.py << 'PYPATCH'
+import re
+import sys
+
+with open('posts_posted/views.py', 'r') as f:
+    content = f.read()
+
+# Check if create view handles post_title and post_image
+if 'post_title' not in content:
+    # Find the create function and add handling
+    content = re.sub(
+        r"(post_link\s*=\s*request\.POST\.get\('post_link'\))",
+        r"\1\n        post_title = request.POST.get('post_title', '')\n        post_image = request.FILES.get('post_image')",
+        content
+    )
+    
+    # Update object creation to include new fields
+    content = re.sub(
+        r"(PostPosted\.objects\.create\([^)]*post_link\s*=\s*post_link)",
+        r"\1, post_title=post_title, post_image=post_image",
+        content
+    )
+    
+    print("Views patched for post_title and post_image")
+else:
+    print("Views already have post_title handling")
+
+with open('posts_posted/views.py', 'w') as f:
+    f.write(content)
+PYPATCH
+
+python3 /tmp/views_patch.py || echo "⚠️ Manual views.py update may be needed"
+
+echo ""
+echo "=== Done! ==="
+echo ""
+echo "Next steps:"
+echo "1) python manage.py makemigrations posts_posted"
+echo "2) python manage.py migrate"
+echo "3) git add . && git commit -m 'Add title, image thumbnail, copy link to posts' && git push"
+echo "4) Manual deploy on Render"
