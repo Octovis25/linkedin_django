@@ -2,7 +2,17 @@
 {% block title %}Post-Datum-Zuordnung{% endblock %}
 {% block content %}
 <div class="card">
-<h2>Alle Eintraege ({{ posts|length }})</h2>
+<h2>Neuen Post eintragen</h2>
+<form method="post" action="{% url 'posts_posted:add' %}" enctype="multipart/form-data">{% csrf_token %}
+<div style="display:grid;grid-template-columns:1fr 200px 200px auto;gap:1rem;align-items:end">
+<div class="form-group"><label>{{ form.post_link.label }}</label>{{ form.post_link }}<div class="help">{{ form.post_link.help_text }}</div></div>
+<div class="form-group"><label>{{ form.post_date.label }}</label>{{ form.post_date }}</div>
+<div class="form-group"><label>{{ form.post_image.label }}</label>{{ form.post_image }}</div>
+<button type="submit" class="btn btn-primary">Speichern</button>
+</div></form></div>
+<div class="card">
+<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem">
+<h2 style="margin:0">Alle Eintraege ({{ posts|length }})</h2>
 <form style="display:flex;gap:.5rem;width:300px">
 <input type="text" name="q" value="{{ query }}" class="form-input" placeholder="Suche...">
 <button type="submit" class="btn btn-secondary btn-sm">Suchen</button>
@@ -16,7 +26,7 @@
 <td>{% if p.post_image %}<div style="display:flex;align-items:center;gap:.4rem"><a href="{{ p.post_image.url }}" target="_blank"><img src="{{ p.post_image.url }}" style="max-height:50px;max-width:80px;border-radius:4px" alt="Post-Bild"></a><a href="{{ p.post_image.url }}" download class="btn btn-secondary btn-sm" title="Bild herunterladen">⬇</a></div>{% else %}-{% endif %}</td>
 <td class="actions">
 <a href="{% url 'posts_posted:edit' p.pk %}" class="btn btn-secondary btn-sm">Bearbeiten</a>
-<a href="{% url 'posts_posted:delete' p.pk %}" class="btn btn-danger btn-sm">Loeschen</a>
+
 </td></tr>{% empty %}
 <tr><td colspan="6" style="text-align:center;color:#aaa;padding:2rem">Noch keine Eintraege.</td></tr>{% endfor %}
 </tbody></table></div>
