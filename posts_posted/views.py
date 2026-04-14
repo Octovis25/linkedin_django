@@ -2,7 +2,6 @@ from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.db import connection
-from django.db.models import Q
 from django.http import HttpResponse, Http404
 from .models import LinkedinPostPosted
 from .forms import PostPostedForm
@@ -11,25 +10,51 @@ from .nc_storage import upload_image_to_nextcloud, download_image_from_nextcloud
 
 @login_required
 def post_list(request):
+    """linkedin_posts ist die fuehrende Tabelle.
+    Alle Posts werden angezeigt, auch ohne Datum."""
     query = request.GET.get("q", "").strip()
-    posts = LinkedinPostPosted.objects.all().order_by('-post_date', '-created_at')
+
+    # Fuehrend: linkedin_posts (alle Posts)
+    # LEFT JOIN mit linkedin_posts_posted (Datum + Bild)
+    sql = """
+        SELECT
+            lp.post_id,
+            lp.post_title,
+            lp.post_link,
+            COALESCE(pp.post_date, NULL) AS post_date,
+            pp.post_image,
+            pp.post_link AS pp_pk
+        FROM linkedin_posts lp
+        LEFT JOIN linkedin_posts_posted pp ON lp.post_id = pp.post_id
+    """
+    params = []
+
     if query:
-        posts = posts.filter(Q(post_link__icontains=query)|Q(post_id__icontains=query))
+        sql += " WHERE lp.post_id LIKE %s OR lp.post_title LIKE %s OR lp.post_link LIKE %s"
+        like = f"%{query}%"
+        params = [like, like, like]
 
-    # post_title aus linkedin_posts dazu mergen
-    post_ids = [p.post_id for p in posts if p.post_id]
-    title_map = {}
-    if post_ids:
-        placeholders = ','.join(['%s'] * len(post_ids))
-        with connection.cursor() as cur:
-            cur.execute(f"SELECT post_id, post_title FROM linkedin_posts WHERE post_id IN ({placeholders})", post_ids)
-            for row in cur.fetchall():
-                title_map[row[0]] = row[1]
+    sql += " ORDER BY lp.post_date DESC, lp.post_id DESC"
 
-    for p in posts:
-        p.post_title = title_map.get(p.post_id, '')
+    with connection.cursor() as cur:
+        cur.execute(sql, params)
+        columns = [col[0] for col in cur.description]
+        rows = cur.fetchall()
 
-    return render(request, "posts_posted/list.html", {"posts": posts, "form": PostPostedForm(), "query": query})
+    posts = []
+    for row in rows:
+        post = dict(zip(columns, row))
+        posts.append({
+            'post_id': post['post_id'],
+            'post_title': post.get('post_title') or '',
+            'post_link': post.get('post_link') or '',
+            'post_date': post.get('post_date'),
+            'post_image': post.get('post_image') or '',
+            'pp_pk': post.get('pp_pk') or '',  # PK fuer Bearbeiten-Link
+            'has_posted_entry': bool(post.get('pp_pk')),
+        })
+
+    return render(request, "posts_posted/list.html", {"posts": posts, "query": query})
 
 
 @login_required
@@ -41,13 +66,10 @@ def post_edit(request, pk):
             try:
                 obj = form.save(commit=False)
 
-                # Handle image upload to Nextcloud
                 upload_file = request.FILES.get('upload_image')
                 if upload_file:
-                    # Delete old image if exists
                     if obj.post_image:
                         delete_image_from_nextcloud(obj.post_image)
-
                     filename = f"{obj.post_id}_{upload_file.name}"
                     nc_path = upload_image_to_nextcloud(upload_file, filename)
                     if nc_path:
@@ -68,31 +90,14 @@ def post_edit(request, pk):
 
 
 @login_required
-def post_delete(request, pk):
-    post = get_object_or_404(LinkedinPostPosted, pk=pk)
-    if request.method == "POST":
-        # Delete image from Nextcloud too
-        if post.post_image:
-            delete_image_from_nextcloud(post.post_image)
-        post.delete()
-        messages.success(request, f"Post {post.post_id} geloescht.")
-        return redirect("posts_posted:list")
-    return render(request, "posts_posted/confirm_delete.html", {"post": post})
-
-
-@login_required
 def post_image_proxy(request, pk):
-    """Proxy: Holt das Bild aus Nextcloud und liefert es aus.
-    So braucht niemand direkten Nextcloud-Zugang."""
+    """Proxy: Holt das Bild aus Nextcloud und liefert es aus."""
     post = get_object_or_404(LinkedinPostPosted, pk=pk)
-
     if not post.post_image:
         raise Http404("Kein Bild vorhanden")
-
     content, content_type = download_image_from_nextcloud(post.post_image)
     if content is None:
         raise Http404("Bild konnte nicht aus Nextcloud geladen werden")
-
     response = HttpResponse(content, content_type=content_type)
-    response['Cache-Control'] = 'public, max-age=86400'  # 24h Cache
+    response['Cache-Control'] = 'public, max-age=86400'
     return response

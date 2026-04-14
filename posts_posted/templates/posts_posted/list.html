@@ -39,6 +39,7 @@
     max-width: 90%; max-height: 90%;
     border-radius: 8px; box-shadow: 0 4px 20px rgba(0,0,0,0.5);
 }
+.no-date { color: #cc6600; font-style: italic; }
 </style>
 
 <div class="card" style="margin-bottom: 1rem;">
@@ -69,13 +70,20 @@
             <td>{{ p.post_id }}</td>
             <td class="post-title-cell" title="{{ p.post_title|default:'-' }}">{{ p.post_title|default:"-"|truncatechars:50 }}</td>
             <td>
-                <a href="{{ p.post_link }}" target="_blank" rel="noopener noreferrer">&#128279; Link</a>
+                <a href="{{ p.post_link }}" target="_blank" rel="noopener noreferrer"
+                   title="{{ p.post_link }}">&#128279; Link</a>
                 <a href="#" class="copy-link-btn" onclick="copyLink('{{ p.post_link }}', event)" title="Link kopieren">&#128203;</a>
             </td>
-            <td>{{ p.post_date|date:"d.m.Y"|default:"-" }}</td>
+            <td>
+                {% if p.post_date %}
+                    {{ p.post_date|date:"d.m.Y" }}
+                {% else %}
+                    <span class="no-date">&ndash;</span>
+                {% endif %}
+            </td>
             <td>
                 {% if p.post_image %}
-                    <img src="{% url 'posts_posted:image_proxy' p.pk %}"
+                    <img src="{% url 'posts_posted:image_proxy' p.pp_pk %}"
                          alt="Post-Bild" class="post-thumb"
                          onclick="openLightbox(this.src)">
                 {% else %}
@@ -83,7 +91,11 @@
                 {% endif %}
             </td>
             <td>
-                <a href="{% url 'posts_posted:edit' p.pk %}" class="btn btn-secondary btn-sm">Bearbeiten</a>
+                {% if p.has_posted_entry %}
+                    <a href="{% url 'posts_posted:edit' p.pp_pk %}" class="btn btn-secondary btn-sm">Bearbeiten</a>
+                {% else %}
+                    <span style="color:#aaa; font-size:0.85rem;">kein Eintrag</span>
+                {% endif %}
             </td>
         </tr>
         {% empty %}
