@@ -81,12 +81,12 @@
 <script>
 function copyLink(link, event) {
     event.preventDefault();
-    navigator.clipboard.writeText(link).then(function() {
-        var btn = event.target;
-        var orig = btn.textContent;
+    navigator.clipboard.writeText(link).then(() => {
+        const btn = event.target;
+        const orig = btn.textContent;
         btn.textContent = '\u2713';
         btn.style.color = 'green';
-        setTimeout(function() { btn.textContent = orig; btn.style.color = ''; }, 1500);
+        setTimeout(() => { btn.textContent = orig; btn.style.color = ''; }, 1500);
     });
 }
 </script>

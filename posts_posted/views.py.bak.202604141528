@@ -2,6 +2,7 @@ from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.db import connection
+from django.http import HttpResponse, Http404
 from .models import LinkedinPostPosted
 from .forms import PostPostedForm
 
@@ -29,14 +30,14 @@ def post_list(request):
 
     if query:
         sql += """
-            WHERE lp.post_id LIKE %s
-               OR lp.post_title LIKE %s
-               OR lp.post_link LIKE %s
+            WHERE lp.post_id ILIKE %s
+               OR lp.post_title ILIKE %s
+               OR lp.post_link ILIKE %s
         """
-        like = "%%{}%%".format(query)
+        like = f"%{query}%"
         params = [like, like, like]
 
-    sql += " ORDER BY COALESCE(pp.post_date, lp.post_date) DESC, lp.post_id DESC"
+    sql += " ORDER BY COALESCE(pp.post_date, lp.post_date) DESC NULLS LAST, lp.post_id DESC"
 
     with connection.cursor() as cur:
         cur.execute(sql, params)
@@ -102,6 +103,6 @@ def post_delete(request, pk):
     post = get_object_or_404(LinkedinPostPosted, pk=pk)
     if request.method == "POST":
         post.delete()
-        messages.success(request, "Post {} geloescht.".format(post.post_id))
+        messages.success(request, f"Post {post.post_id} geloescht.")
         return redirect("posts_posted:list")
     return render(request, "posts_posted/confirm_delete.html", {"post": post})
