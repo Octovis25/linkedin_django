@@ -38,7 +38,7 @@ def post_list(request):
 
     sql += """
         ORDER BY
-            CASE WHEN pp.post_date IS NULL AND lp.post_date IS NULL THEN 0 ELSE 1 END,
+            pp.post_date IS NOT NULL, lp.post_date IS NOT NULL,
             COALESCE(pp.post_date, lp.post_date) DESC,
             lp.post_id DESC
     """
