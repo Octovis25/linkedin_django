@@ -2,41 +2,57 @@ from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.db import connection
-from django.db.models import Q
 from .models import LinkedinPostPosted
 from .forms import PostPostedForm
+
+
+class PostRow:
+    """Leichtgewichtiges Objekt fuer Template-Zugriff."""
+    def __init__(self, data):
+        for k, v in data.items():
+            setattr(self, k, v)
+        self.pk = data.get("posted_pk") or data.get("post_id")
+
 
 @login_required
 def post_list(request):
     query = request.GET.get("q", "").strip()
-    posts = list(LinkedinPostPosted.objects.all().order_by('-post_date'))
 
-    post_ids = [p.post_id for p in posts if p.post_id]
-    title_map = {}
-    if post_ids:
-        placeholders = ','.join(['%s'] * len(post_ids))
-        with connection.cursor() as cur:
-            cur.execute(
-                f"SELECT post_id, COALESCE(post_title, post_title_raw, '') "
-                f"FROM linkedin_posts WHERE post_id IN ({placeholders})",
-                post_ids
-            )
-            for row in cur.fetchall():
-                title_map[row[0]] = row[1] or ''
-
-    for p in posts:
-        p.post_title = title_map.get(p.post_id, '')
-
+    sql = """
+        SELECT
+            lp.post_id,
+            COALESCE(lp.post_title, lp.post_title_raw, '') AS post_title,
+            lp.post_url                                     AS post_link,
+            lp.created_at,
+            pp.post_date,
+            pp.post_image,
+            pp.id                                            AS posted_pk
+        FROM linkedin_posts lp
+        LEFT JOIN linkedin_posts_posted pp ON pp.post_id = lp.post_id
+    """
+    params = []
     if query:
-        q_lower = query.lower()
-        posts = [p for p in posts
-                 if q_lower in (p.post_title or '').lower()
-                 or q_lower in (p.post_id or '').lower()
-                 or q_lower in (p.post_link or '').lower()]
+        sql += """
+        WHERE lp.post_id LIKE %s
+           OR COALESCE(lp.post_title, lp.post_title_raw, '') LIKE %s
+           OR COALESCE(lp.post_url, '') LIKE %s
+        """
+        like = f"%{query}%"
+        params = [like, like, like]
+
+    sql += " ORDER BY COALESCE(pp.post_date, lp.post_date, lp.created_at) DESC"
+
+    with connection.cursor() as cur:
+        cur.execute(sql, params)
+        columns = [col[0] for col in cur.description]
+        rows = cur.fetchall()
+
+    posts = [PostRow(dict(zip(columns, row))) for row in rows]
 
     return render(request, "posts_posted/list.html", {
         "posts": posts, "form": PostPostedForm(), "query": query
     })
+
 
 @login_required
 def post_add(request):
@@ -54,25 +70,68 @@ def post_add(request):
                     messages.error(request, e)
     return redirect("posts_posted:list")
 
+
 @login_required
 def post_edit(request, pk):
-    post = get_object_or_404(LinkedinPostPosted, pk=pk)
+    # pk kann posted_pk (int) oder post_id (string) sein
+    posted = None
+    post_id = str(pk)
+
+    # Versuche erst linkedin_posts_posted zu finden
+    try:
+        posted = LinkedinPostPosted.objects.get(pk=int(pk))
+        post_id = posted.post_id
+    except (LinkedinPostPosted.DoesNotExist, ValueError):
+        # pk ist eine post_id — evtl. noch kein Eintrag in posts_posted
+        posted = LinkedinPostPosted.objects.filter(post_id=post_id).first()
+
+    # Post-Info aus linkedin_posts holen
+    with connection.cursor() as cur:
+        cur.execute(
+            "SELECT post_id, COALESCE(post_title, post_title_raw, '') AS post_title, "
+            "post_url, created_at FROM linkedin_posts WHERE post_id = %s",
+            [post_id]
+        )
+        row = cur.fetchone()
+
+    post_info = {}
+    if row:
+        post_info = {"post_id": row[0], "post_title": row[1],
+                     "post_link": row[2], "created_at": row[3]}
+
     if request.method == "POST":
-        # Datum direkt aus dem Formular lesen
         new_date = request.POST.get("post_date", "").strip()
         new_image = request.FILES.get("post_image")
         try:
+            from datetime import date as dt_date
+            if posted is None:
+                # Noch kein Eintrag in linkedin_posts_posted -> neu anlegen
+                posted = LinkedinPostPosted()
+                posted.post_id = post_id
+                posted.post_link = post_info.get("post_link", "")
             if new_date:
-                from datetime import date as dt_date
-                post.post_date = dt_date.fromisoformat(new_date)
+                posted.post_date = dt_date.fromisoformat(new_date)
             if new_image:
-                post.post_image = new_image
-            post.save()
+                posted.post_image = new_image
+            posted.save()
             messages.success(request, "Aktualisiert!")
         except Exception as e:
             messages.error(request, str(e))
         return redirect("posts_posted:list")
-    return render(request, "posts_posted/edit.html", {"post": post})
+
+    # Template-Kontext
+    class EditPost:
+        pass
+    p = EditPost()
+    p.post_id = post_info.get("post_id", post_id)
+    p.post_title = post_info.get("post_title", "")
+    p.post_link = post_info.get("post_link", "")
+    p.post_date = posted.post_date if posted else None
+    p.post_image = posted.post_image if posted else None
+    p.pk = posted.pk if posted else post_id
+
+    return render(request, "posts_posted/edit.html", {"post": p})
+
 
 @login_required
 def post_delete(request, pk):
