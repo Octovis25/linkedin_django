@@ -10,7 +10,7 @@ INSTALLED_APPS = ["django.contrib.admin","django.contrib.auth","django.contrib.c
     "django.contrib.sessions","django.contrib.messages","django.contrib.staticfiles","core","posts_posted",
     'collectives',
 ]
-MIDDLEWARE = ["django.middleware.security.SecurityMiddleware","django.contrib.sessions.middleware.SessionMiddleware",
+MIDDLEWARE = ["django.middleware.security.SecurityMiddleware","whitenoise.middleware.WhiteNoiseMiddleware","django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware","django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware","django.contrib.messages.middleware.MessageMiddleware"]
 ROOT_URLCONF = "dashboard.urls"
@@ -43,3 +43,5 @@ EMAIL_HOST_USER = os.getenv("EMAIL_HOST_USER", "")
 EMAIL_HOST_PASSWORD = os.getenv("EMAIL_HOST_PASSWORD", "")
 DEFAULT_FROM_EMAIL = os.getenv("DEFAULT_FROM_EMAIL", "contact@octotrial.com")
 DASHBOARD_URL = os.getenv("DASHBOARD_URL", "http://localhost:8000")
+
+STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
