@@ -5,36 +5,39 @@ from django.db import connection
 from django.http import HttpResponse, Http404
 from .models import LinkedinPostPosted
 from .forms import PostPostedForm
-from .nc_storage import upload_image_to_nextcloud, download_image_from_nextcloud, delete_image_from_nextcloud
 
 
 @login_required
 def post_list(request):
     """linkedin_posts ist die fuehrende Tabelle.
-    Alle Posts werden angezeigt, auch ohne Datum."""
+    Alle Posts werden angezeigt, auch wenn kein Eintrag
+    in linkedin_posts_posted existiert (= kein Datum)."""
     query = request.GET.get("q", "").strip()
 
-    # Fuehrend: linkedin_posts (alle Posts)
-    # LEFT JOIN mit linkedin_posts_posted (Datum + Bild)
     sql = """
         SELECT
             lp.post_id,
             lp.post_title,
             lp.post_link,
-            COALESCE(pp.post_date, NULL) AS post_date,
+            pp.post_date,
             pp.post_image,
-            pp.post_link AS pp_pk
+            pp.id AS pp_id
         FROM linkedin_posts lp
-        LEFT JOIN linkedin_posts_posted pp ON lp.post_id = pp.post_id
+        LEFT JOIN linkedin_posts_posted pp
+            ON lp.post_id = pp.post_id
     """
     params = []
 
     if query:
-        sql += " WHERE lp.post_id LIKE %s OR lp.post_title LIKE %s OR lp.post_link LIKE %s"
+        sql += """
+            WHERE lp.post_id ILIKE %s
+               OR lp.post_title ILIKE %s
+               OR lp.post_link ILIKE %s
+        """
         like = f"%{query}%"
         params = [like, like, like]
 
-    sql += " ORDER BY lp.post_date DESC, lp.post_id DESC"
+    sql += " ORDER BY COALESCE(pp.post_date, lp.post_date) DESC NULLS LAST, lp.post_id DESC"
 
     with connection.cursor() as cur:
         cur.execute(sql, params)
@@ -43,44 +46,50 @@ def post_list(request):
 
     posts = []
     for row in rows:
-        post = dict(zip(columns, row))
+        d = dict(zip(columns, row))
         posts.append({
-            'post_id': post['post_id'],
-            'post_title': post.get('post_title') or '',
-            'post_link': post.get('post_link') or '',
-            'post_date': post.get('post_date'),
-            'post_image': post.get('post_image') or '',
-            'pp_pk': post.get('pp_pk') or '',  # PK fuer Bearbeiten-Link
-            'has_posted_entry': bool(post.get('pp_pk')),
+            "post_id":    d["post_id"],
+            "post_title": d.get("post_title") or "",
+            "post_link":  d.get("post_link") or "",
+            "post_date":  d.get("post_date"),
+            "post_image": d.get("post_image") or "",
+            "pp_id":      d.get("pp_id"),
+            "has_date":   d.get("post_date") is not None,
         })
 
-    return render(request, "posts_posted/list.html", {"posts": posts, "query": query})
+    return render(request, "posts_posted/list.html", {
+        "posts": posts,
+        "form": PostPostedForm(),
+        "query": query,
+    })
+
+
+@login_required
+def post_add(request):
+    if request.method == "POST":
+        form = PostPostedForm(request.POST)
+        if form.is_valid():
+            try:
+                form.save()
+                messages.success(request, "Post-Datum gespeichert!")
+            except Exception as e:
+                messages.error(request, str(e))
+        else:
+            for errs in form.errors.values():
+                for e in errs:
+                    messages.error(request, e)
+    return redirect("posts_posted:list")
 
 
 @login_required
 def post_edit(request, pk):
     post = get_object_or_404(LinkedinPostPosted, pk=pk)
     if request.method == "POST":
-        form = PostPostedForm(request.POST, request.FILES, instance=post)
+        form = PostPostedForm(request.POST, instance=post)
         if form.is_valid():
             try:
-                obj = form.save(commit=False)
-
-                upload_file = request.FILES.get('upload_image')
-                if upload_file:
-                    if obj.post_image:
-                        delete_image_from_nextcloud(obj.post_image)
-                    filename = f"{obj.post_id}_{upload_file.name}"
-                    nc_path = upload_image_to_nextcloud(upload_file, filename)
-                    if nc_path:
-                        obj.post_image = nc_path
-                        messages.success(request, "Aktualisiert + neues Bild hochgeladen!")
-                    else:
-                        messages.warning(request, "Aktualisiert, aber Bild-Upload fehlgeschlagen.")
-                else:
-                    messages.success(request, "Aktualisiert!")
-
-                obj.save()
+                form.save()
+                messages.success(request, "Aktualisiert!")
             except Exception as e:
                 messages.error(request, str(e))
             return redirect("posts_posted:list")
@@ -90,14 +99,10 @@ def post_edit(request, pk):
 
 
 @login_required
-def post_image_proxy(request, pk):
-    """Proxy: Holt das Bild aus Nextcloud und liefert es aus."""
+def post_delete(request, pk):
     post = get_object_or_404(LinkedinPostPosted, pk=pk)
-    if not post.post_image:
-        raise Http404("Kein Bild vorhanden")
-    content, content_type = download_image_from_nextcloud(post.post_image)
-    if content is None:
-        raise Http404("Bild konnte nicht aus Nextcloud geladen werden")
-    response = HttpResponse(content, content_type=content_type)
-    response['Cache-Control'] = 'public, max-age=86400'
-    return response
+    if request.method == "POST":
+        post.delete()
+        messages.success(request, f"Post {post.post_id} geloescht.")
+        return redirect("posts_posted:list")
+    return render(request, "posts_posted/confirm_delete.html", {"post": post})
