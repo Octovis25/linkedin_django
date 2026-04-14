@@ -23,7 +23,7 @@
     </thead>
     <tbody>
       {% for p in posts %}
-      <tr>
+      <tr{% if not p.post_date %} style="background:#fff8e1"{% endif %}>
         <td><span class="badge">{{ p.post_id }}</span></td>
 
         <td>
@@ -34,15 +34,15 @@
 
         <td style="white-space:nowrap">
           <a href="{{ p.post_link }}" target="_blank" rel="noopener noreferrer" class="post-link" title="{{ p.post_link }}">🔗 Link</a>
-          <a href="javascript:void(0)" onclick="navigator.clipboard.writeText('{{ p.post_link|escapejs }}');this.textContent='✅';setTimeout(()=>this.textContent='📋',1500)" title="Link kopieren" style="margin-left:.3rem;cursor:pointer;text-decoration:none">📋</a>
+          <a href="javascript:void(0)" onclick="navigator.clipboard.writeText('{{ p.post_link|escapejs }}');this.textContent='✅';setTimeout(()=>this.textContent='📋',1500)" title="{{ p.post_link }}" style="margin-left:.3rem;cursor:pointer;text-decoration:none">📋</a>
         </td>
 
         <td>{{ p.post_date|date:"d.m.Y"|default:"-" }}</td>
 
         <td>
-          {% if p.post_image %}
-            <a href="{{ p.post_image.url }}" target="_blank">
-              <img src="{{ p.post_image.url }}" style="max-height:50px;max-width:80px;border-radius:4px" alt="Post-Bild">
+          {% if p.post_image_url %}
+            <a href="{{ p.post_image_url }}" target="_blank">
+              <img src="{{ p.post_image_url }}" style="max-height:50px;max-width:80px;border-radius:4px" alt="Post-Bild">
             </a>
           {% else %}
             &ndash;

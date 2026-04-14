@@ -2,16 +2,22 @@ from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.db import connection
+from django.conf import settings
 from .models import LinkedinPostPosted
 from .forms import PostPostedForm
 
 
 class PostRow:
-    """Leichtgewichtiges Objekt fuer Template-Zugriff."""
     def __init__(self, data):
         for k, v in data.items():
             setattr(self, k, v)
         self.pk = data.get("posted_pk") or data.get("post_id")
+        # post_image URL aufbauen (Raw SQL liefert nur den Dateinamen)
+        img = data.get("post_image")
+        if img:
+            self.post_image_url = settings.MEDIA_URL + str(img)
+        else:
+            self.post_image_url = None
 
 
 @login_required
@@ -40,7 +46,8 @@ def post_list(request):
         like = f"%{query}%"
         params = [like, like, like]
 
-    sql += " ORDER BY COALESCE(pp.post_date, lp.post_date, lp.created_at) DESC"
+    # Leere post_date ZUERST, dann absteigend nach Datum
+    sql += " ORDER BY CASE WHEN pp.post_date IS NULL THEN 0 ELSE 1 END, pp.post_date DESC"
 
     with connection.cursor() as cur:
         cur.execute(sql, params)
@@ -73,19 +80,15 @@ def post_add(request):
 
 @login_required
 def post_edit(request, pk):
-    # pk kann posted_pk (int) oder post_id (string) sein
     posted = None
     post_id = str(pk)
 
-    # Versuche erst linkedin_posts_posted zu finden
     try:
         posted = LinkedinPostPosted.objects.get(pk=int(pk))
         post_id = posted.post_id
     except (LinkedinPostPosted.DoesNotExist, ValueError):
-        # pk ist eine post_id — evtl. noch kein Eintrag in posts_posted
         posted = LinkedinPostPosted.objects.filter(post_id=post_id).first()
 
-    # Post-Info aus linkedin_posts holen
     with connection.cursor() as cur:
         cur.execute(
             "SELECT post_id, COALESCE(post_title, post_title_raw, '') AS post_title, "
@@ -105,7 +108,6 @@ def post_edit(request, pk):
         try:
             from datetime import date as dt_date
             if posted is None:
-                # Noch kein Eintrag in linkedin_posts_posted -> neu anlegen
                 posted = LinkedinPostPosted()
                 posted.post_id = post_id
                 posted.post_link = post_info.get("post_link", "")
@@ -119,7 +121,6 @@ def post_edit(request, pk):
             messages.error(request, str(e))
         return redirect("posts_posted:list")
 
-    # Template-Kontext
     class EditPost:
         pass
     p = EditPost()
