@@ -14,11 +14,12 @@ def extract_post_id(url):
     return m.group(1) if m else None
 
 class LinkedinPostPosted(models.Model):
-    post_link = models.CharField(max_length=512, primary_key=True, verbose_name="Post-Link")
+    id = models.AutoField(primary_key=True)
+    post_link = models.CharField(max_length=512, unique=True, verbose_name="Post-Link")
     post_id = models.CharField(max_length=30, unique=True, blank=True, null=True, verbose_name="Post-ID")
     created_at = models.DateTimeField(blank=True, null=True, verbose_name="Erstellt am")
-    post_date = models.DateField(verbose_name="Tatsaechlich gepostet am")
-    post_image = models.CharField(max_length=512, blank=True, null=True, verbose_name="Nextcloud Bild-Pfad")
+    post_date = models.DateField(blank=True, null=True, verbose_name="Tatsaechlich gepostet am")
+    post_image = models.CharField(max_length=512, blank=True, null=True, verbose_name="Post-Bild")
 
     class Meta:
         db_table = "linkedin_posts_posted"
@@ -33,15 +34,12 @@ class LinkedinPostPosted(models.Model):
         qs = LinkedinPostPosted.objects.filter(post_id=self.post_id)
         if self.pk: qs = qs.exclude(pk=self.pk)
         if qs.exists():
-            raise ValidationError({"post_link": f"Post mit ID {self.post_id} existiert bereits!"})
+            raise ValidationError({"post_link": "Post mit ID {} existiert bereits!".format(self.post_id)})
 
     def save(self, *args, **kwargs):
         self.full_clean()
         super().save(*args, **kwargs)
-
         from django.db import connection
         with connection.cursor() as cur:
-            cur.execute("SELECT 1 FROM linkedin_posts WHERE post_id=%s LIMIT 1", [self.post_id])
-            if cur.fetchone():
-                cur.execute("UPDATE linkedin_posts SET post_date=%s WHERE post_id=%s AND (post_date IS NULL OR post_date!=%s)",
-                    [self.post_date, self.post_id, self.post_date])
+            cur.execute("UPDATE linkedin_posts SET post_date=%s WHERE post_id=%s AND (post_date IS NULL OR post_date!=%s)",
+                [self.post_date, self.post_id, self.post_date])
