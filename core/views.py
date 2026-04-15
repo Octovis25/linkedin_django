@@ -10,8 +10,8 @@ from django.utils.crypto import get_random_string
 from .forms import UploadFileForm
 from .utils import analyze_file, import_to_db
 
-UPLOAD_DIR = os.path.join(settings.MEDIA_ROOT, 'uploads')
-ARCHIVE_DIR = os.path.join(settings.MEDIA_ROOT, 'uploads', 'archive')
+UPLOAD_DIR = os.path.join(settings.MEDIA_ROOT, 'linkedin_data')
+ARCHIVE_DIR = os.path.join(settings.MEDIA_ROOT, 'linkedin_data', 'archive')
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 os.makedirs(ARCHIVE_DIR, exist_ok=True)
 
