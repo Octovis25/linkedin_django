@@ -123,7 +123,13 @@ def post_edit(request, pk):
         form = PostPostedForm(request.POST, request.FILES, instance=post)
         if form.is_valid():
             try:
-                form.save()
+                # Datum direkt per SQL speichern (umgeht full_clean/post_url-Validierung)
+                new_date = form.cleaned_data.get('post_date')
+                with connection.cursor() as cur:
+                    cur.execute(
+                        'UPDATE linkedin_posts_posted SET post_date=%s WHERE id=%s',
+                        [new_date, post.pk]
+                    )
                 # Bild hochladen falls vorhanden
                 upload_file = request.FILES.get("upload_image")
                 if upload_file:
