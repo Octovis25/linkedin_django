@@ -171,21 +171,10 @@ def post_delete(request, pk):
 @login_required
 def post_image_proxy(request, pk):
     """Proxy: Holt das Bild aus Nextcloud und liefert es aus."""
-    from django.db import connection as _conn
-    # pp_id ist die integer-id aus der DB, post_url ist der echte PK
-    with _conn.cursor() as cur:
-        cur.execute(
-            "SELECT post_url FROM linkedin_posts_posted WHERE id = %s",
-            [pk]
-        )
-        row = cur.fetchone()
-    if not row:
-        raise Http404("Post nicht gefunden")
-    post = get_object_or_404(LinkedinPostPosted, pk=row[0])
+    post = get_object_or_404(LinkedinPostPosted, pk=pk)
     if not post.post_image:
         raise Http404("Kein Bild vorhanden")
-    # ImageField gibt FieldFile-Objekt zurück – wir brauchen den String-Pfad
-    nc_path = post.post_image.name if hasattr(post.post_image, 'name') else str(post.post_image)
+    nc_path = str(post.post_image)
     content, content_type = download_image_from_nextcloud(nc_path)
     if content is None:
         raise Http404("Bild konnte nicht aus Nextcloud geladen werden")
