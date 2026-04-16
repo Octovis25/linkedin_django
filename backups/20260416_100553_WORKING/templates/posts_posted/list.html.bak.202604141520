@@ -1,0 +1,93 @@
+{% extends "core/base.html" %}
+{% block title %}Post-Datum-Zuordnung{% endblock %}
+{% block content %}
+<style>
+.post-title-cell {
+    max-width: 300px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.copy-link-btn {
+    cursor: pointer;
+    margin-left: 0.3rem;
+    color: var(--octo-petrol);
+    text-decoration: none;
+    font-size: 1rem;
+}
+.copy-link-btn:hover { color: var(--octo-orange); }
+.actions-cell .btn { font-size: 0.75rem; padding: 0.25rem 0.6rem; }
+.no-date { color: #e74c3c; font-style: italic; }
+</style>
+
+<div class="card">
+<h2>Neuen Post eintragen</h2>
+<form method="post" action="{% url 'posts_posted:add' %}">{% csrf_token %}
+<div style="display:grid;grid-template-columns:1fr 200px auto;gap:1rem;align-items:end">
+<div class="form-group"><label>{{ form.post_link.label }}</label>{{ form.post_link }}<div class="help">{{ form.post_link.help_text }}</div></div>
+<div class="form-group"><label>{{ form.post_date.label }}</label>{{ form.post_date }}</div>
+<button type="submit" class="btn btn-primary">Speichern</button>
+</div></form></div>
+
+<div class="card">
+<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem">
+<h2 style="margin:0">Alle Posts ({{ posts|length }})</h2>
+<form style="display:flex;gap:.5rem;width:300px">
+<input type="text" name="q" value="{{ query }}" class="form-input" placeholder="Suche...">
+<button type="submit" class="btn btn-secondary btn-sm">Suchen</button>
+</form></div>
+
+<table>
+<thead><tr>
+    <th>Post-ID</th>
+    <th>Post-Titel</th>
+    <th>Post-Link</th>
+    <th>Gepostet am</th>
+    <th>Aktionen</th>
+</tr></thead>
+<tbody>
+{% for p in posts %}
+<tr>
+    <td><span class="badge">{{ p.post_id }}</span></td>
+    <td class="post-title-cell" title="{{ p.post_title }}">{{ p.post_title|default:"-"|truncatechars:80 }}</td>
+    <td>
+        {% if p.post_link %}
+        <a href="{{ p.post_link }}" target="_blank" title="{{ p.post_link }}">&#x1F517; LinkedIn</a>
+        <a href="#" class="copy-link-btn" title="Link kopieren" onclick="copyLink('{{ p.post_link }}', event)">&#x1F4CB;</a>
+        {% else %}-{% endif %}
+    </td>
+    <td>
+        {% if p.has_date %}
+            {{ p.post_date }}
+        {% else %}
+            <span class="no-date">kein Datum</span>
+        {% endif %}
+    </td>
+    <td class="actions-cell">
+        {% if p.pp_id %}
+            <a href="{% url 'posts_posted:edit' p.pp_id %}" class="btn btn-secondary btn-sm">Bearbeiten</a>
+            <a href="{% url 'posts_posted:delete' p.pp_id %}" class="btn btn-danger btn-sm">L&ouml;schen</a>
+        {% else %}
+            <span style="color:#aaa;font-size:0.8rem">&mdash;</span>
+        {% endif %}
+    </td>
+</tr>
+{% empty %}
+<tr><td colspan="5" style="text-align:center;color:#aaa;padding:2rem">Noch keine Eintraege.</td></tr>
+{% endfor %}
+</tbody></table>
+</div>
+
+<script>
+function copyLink(link, event) {
+    event.preventDefault();
+    navigator.clipboard.writeText(link).then(() => {
+        const btn = event.target;
+        const orig = btn.textContent;
+        btn.textContent = '\u2713';
+        btn.style.color = 'green';
+        setTimeout(() => { btn.textContent = orig; btn.style.color = ''; }, 1500);
+    });
+}
+</script>
+{% endblock %}
