@@ -11,14 +11,15 @@ class PostPostedForm(forms.ModelForm):
 
     class Meta:
         model = LinkedinPostPosted
-        fields = ["post_link", "post_date"]
+        fields = ["post_url", "post_date"]
         widgets = {
-            "post_link": forms.TextInput(attrs={
+            "post_url": forms.TextInput(attrs={
                 "placeholder": "LinkedIn Post-URL einfuegen...",
                 "class": "form-control"
             }),
             "post_date": forms.DateInput(attrs={
                 "type": "date",
-                "class": "form-control"
+                "class": "form-control",
+                "required": False
             }),
         }

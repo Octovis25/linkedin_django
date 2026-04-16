@@ -8,7 +8,7 @@ import requests
 from requests.auth import HTTPBasicAuth
 from urllib.parse import quote
 
-NC_IMAGE_FOLDER = "Marketing & Design/LinkedIn/Post-Bilder"
+NC_IMAGE_FOLDER = "Marketing & Design/LinkedIn/Statistics/data/Post-Bilder"
 
 def _get_nc_credentials():
     try:

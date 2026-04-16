@@ -23,8 +23,8 @@
 <form method="post" enctype="multipart/form-data" class="card">
     {% csrf_token %}
     <div class="form-group">
-        {{ form.post_link.label }}
-        {{ form.post_link }}
+        {{ form.post_url.label }}
+        {{ form.post_url }}
     </div>
     <div class="form-group">
         {{ form.post_date.label }}
@@ -36,6 +36,11 @@
         <div class="current-image">
             <p><small>Aktuelles Bild:</small></p>
             <img src="{% url 'posts_posted:image_proxy' post.pk %}" alt="Aktuelles Bild">
+            <div style="margin-top: 0.5rem;">
+                <a href="{% url 'posts_posted:delete_image' post.pk %}"
+                   class="btn btn-danger btn-sm"
+                   onclick="return confirm('Bild wirklich löschen?')">🗑 Bild löschen</a>
+            </div>
         </div>
         <p><small style="color: #888;">Neues Bild hochladen um zu ersetzen:</small></p>
         {% endif %}

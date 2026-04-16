@@ -80,6 +80,8 @@ def import_to_db(file_path, file_type):
 
             ok1 = import_posts_from_content(posts_sheet) if posts_sheet is not None else True
             ok2 = import_kennzahlen(metrics_sheet) if metrics_sheet is not None else True
+            from core.nc_storage import upload_excel_to_nextcloud
+            upload_excel_to_nextcloud(file_path, file_type)
             return ok1 and ok2
 
         elif file_type == 'posts':

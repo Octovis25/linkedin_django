@@ -73,9 +73,9 @@
     <td><span class="badge">{{ p.post_id }}</span></td>
     <td class="post-title-cell" title="{{ p.post_title }}">{{ p.post_title|default:"-"|truncatechars:80 }}</td>
     <td>
-        {% if p.post_link %}
-        <a href="{{ p.post_link }}" target="_blank" title="{{ p.post_link }}">&#x1F517; LinkedIn</a>
-        <a href="#" class="copy-link-btn" title="Link kopieren" onclick="copyLink('{{ p.post_link }}', event)">&#x1F4CB;</a>
+        {% if p.post_url %}
+        <a href="{{ p.post_url }}" target="_blank" title="{{ p.post_url }}">&#x1F517; LinkedIn</a>
+        <a href="#" class="copy-link-btn" title="Link kopieren" onclick="copyLink('{{ p.post_url }}', event)">&#x1F4CB;</a>
         {% else %}-{% endif %}
     </td>
     <td>

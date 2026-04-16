@@ -6,13 +6,49 @@
 <h1>📤 Upload & Manage Files</h1>
 
 <div class="card">
-    <h2>Select a file:</h2>
-    <form method="post" enctype="multipart/form-data">
+    <h2>Upload File</h2>
+
+    <!-- Drag & Drop Zone -->
+    <div id="drop-zone" style="
+        border: 2px dashed var(--octo-teal, #00796b);
+        border-radius: 12px;
+        padding: 2.5rem;
+        text-align: center;
+        cursor: pointer;
+        transition: background 0.2s, border-color 0.2s;
+        margin-bottom: 1rem;
+        background: #f9f9f9;
+    ">
+        <div style="font-size: 2.5rem;">📂</div>
+        <p style="margin: 0.5rem 0; font-size: 1rem; color: #555;">
+            Datei hier hinziehen oder klicken zum Auswählen
+        </p>
+        <p style="font-size: 0.8rem; color: #999;">.xls, .xlsx oder .csv</p>
+        <div id="drop-filename" style="margin-top:0.5rem; font-weight:600; color: var(--octo-teal, #00796b);"></div>
+    </div>
+
+    <!-- Hidden Form -->
+    <form id="upload-form" method="post" enctype="multipart/form-data">
         {% csrf_token %}
-        {{ form.as_p }}
-        <button type="submit" class="btn btn-primary">Upload</button>
+        <input type="file" id="file-input" name="file" accept=".xls,.xlsx,.csv"
+               style="display:none;">
+        <button type="submit" class="btn btn-primary" id="upload-btn" style="display:none;">
+            ⬆️ Jetzt hochladen
+        </button>
     </form>
-    <p style="margin-top: 0.5rem; color: #666; font-size: 0.85rem;">Upload .xls, .xlsx, or .csv files</p>
+
+    <!-- Progress Bar -->
+    <div id="progress-container" style="display:none; margin-top:1rem;">
+        <div style="background:#e0e0e0; border-radius:8px; height:10px;">
+            <div id="progress-bar" style="
+                width:0%; height:10px;
+                background: var(--octo-teal, #00796b);
+                border-radius:8px;
+                transition: width 0.3s;
+            "></div>
+        </div>
+        <p id="progress-text" style="font-size:0.85rem; color:#555; margin-top:0.3rem;">Wird hochgeladen…</p>
+    </div>
 </div>
 
 <div class="card">
@@ -32,7 +68,7 @@
                 <td>{{ file.name }}</td>
                 <td>{{ file.size }}</td>
                 <td>
-                    <a href="{% url 'delete_file' file.name %}" 
+                    <a href="{% url 'delete_file' file.name %}"
                        class="btn btn-danger btn-sm"
                        onclick="return confirm('Datei {{ file.name }} löschen?')">
                         🗑️ Delete
@@ -55,4 +91,87 @@
         <button type="submit" class="btn btn-secondary">🔍 Analyze & Import Files</button>
     </form>
 </div>
+
+<script>
+const dropZone   = document.getElementById('drop-zone');
+const fileInput  = document.getElementById('file-input');
+const uploadBtn  = document.getElementById('upload-btn');
+const uploadForm = document.getElementById('upload-form');
+const dropName   = document.getElementById('drop-filename');
+const progressC  = document.getElementById('progress-container');
+const progressB  = document.getElementById('progress-bar');
+const progressT  = document.getElementById('progress-text');
+
+// Klick auf Drop-Zone öffnet File-Dialog
+dropZone.addEventListener('click', () => fileInput.click());
+
+// Datei ausgewählt via Dialog
+fileInput.addEventListener('change', () => {
+    if (fileInput.files.length > 0) showFile(fileInput.files[0]);
+});
+
+// Drag-Events
+dropZone.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    dropZone.style.background = '#e0f2f1';
+    dropZone.style.borderColor = '#004d40';
+});
+dropZone.addEventListener('dragleave', () => resetZone());
+dropZone.addEventListener('drop', (e) => {
+    e.preventDefault();
+    resetZone();
+    const file = e.dataTransfer.files[0];
+    if (file) {
+        // DataTransfer in file input übertragen
+        const dt = new DataTransfer();
+        dt.items.add(file);
+        fileInput.files = dt.files;
+        showFile(file);
+    }
+});
+
+function showFile(file) {
+    dropName.textContent = '✅ ' + file.name;
+    uploadBtn.style.display = 'inline-block';
+}
+
+function resetZone() {
+    dropZone.style.background = '#f9f9f9';
+    dropZone.style.borderColor = 'var(--octo-teal, #00796b)';
+}
+
+// Upload mit Fortschrittsbalken
+uploadForm.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const formData = new FormData(uploadForm);
+    const xhr = new XMLHttpRequest();
+
+    progressC.style.display = 'block';
+    uploadBtn.disabled = true;
+
+    xhr.upload.addEventListener('progress', (ev) => {
+        if (ev.lengthComputable) {
+            const pct = Math.round((ev.loaded / ev.total) * 100);
+            progressB.style.width = pct + '%';
+            progressT.textContent = pct + '% hochgeladen…';
+        }
+    });
+
+    xhr.addEventListener('load', () => {
+        progressB.style.width = '100%';
+        progressT.textContent = '✅ Fertig! Seite wird neu geladen…';
+        setTimeout(() => window.location.reload(), 800);
+    });
+
+    xhr.addEventListener('error', () => {
+        progressT.textContent = '❌ Fehler beim Upload.';
+        uploadBtn.disabled = false;
+    });
+
+    const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]').value;
+    xhr.open('POST', uploadForm.action || window.location.href);
+    xhr.setRequestHeader('X-CSRFToken', csrfToken);
+    xhr.send(formData);
+});
+</script>
 {% endblock %}
