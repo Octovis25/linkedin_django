@@ -78,15 +78,19 @@ def import_to_db(file_path, file_type):
                 elif any('datum' in c or 'date' in c for c in cols) and any('impressions' in c for c in cols):
                     metrics_sheet = df
 
-            ok1 = import_posts_from_content(posts_sheet) if posts_sheet is not None else True
-            ok2 = import_kennzahlen(metrics_sheet) if metrics_sheet is not None else True
+            stats = []
+            r1 = import_posts_from_content(posts_sheet) if posts_sheet is not None else None
+            r2 = import_kennzahlen(metrics_sheet) if metrics_sheet is not None else None
+            if r1: stats.append(r1)
+            if r2: stats.append(r2)
             from core.nc_storage import upload_excel_to_nextcloud
             upload_excel_to_nextcloud(file_path, file_type)
-            return ok1 and ok2
+            return stats if stats else True
 
         elif file_type == 'posts':
             df = list(sheets.values())[0]
-            return import_posts(df)
+            r = import_posts(df)
+            return [r] if r else False
 
         print(f"{file_type} import not yet implemented")
         return False

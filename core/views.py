@@ -55,14 +55,14 @@ def analyze_view(request):
             if os.path.isfile(file_path) and not filename.startswith('.'):
                 file_type = analyze_file(file_path)
                 if file_type:
-                    success = import_to_db(file_path, file_type)
-                    if success:
+                    stats = import_to_db(file_path, file_type)
+                    if stats:
                         archive_path = os.path.join(ARCHIVE_DIR, filename)
                         shutil.move(file_path, archive_path)
-                        results.append({'file': filename, 'type': file_type, 'status': 'Imported & archived'})
+                        results.append({'file': filename, 'type': file_type, 'status': 'ok', 'stats': stats if isinstance(stats, list) else []})
                         success_count += 1
                     else:
-                        results.append({'file': filename, 'type': file_type, 'status': 'Import failed'})
+                        results.append({'file': filename, 'type': file_type, 'status': 'error', 'stats': []})
                         error_count += 1
                 else:
                     results.append({'file': filename, 'type': 'Unknown', 'status': 'Type not recognized'})

@@ -7,33 +7,39 @@
     <div class="card">
         <div class="card-body">
             {% if results %}
-            <table class="table table-striped">
-                <thead>
-                    <tr>
-                        <th>Filename</th>
-                        <th>Type</th>
-                        <th>Status</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for result in results %}
-                    <tr>
-                        <td>{{ result.file }}</td>
-                        <td>{{ result.type }}</td>
-                        <td>{{ result.status }}</td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-            
-            <div class="mt-3">
-                <p><strong>Summary:</strong></p>
-                <p>✅ Successfully imported: {{ success_count }}</p>
-                <p>❌ Errors: {{ error_count }}</p>
-            </div>
-            {% else %}
-            <p class="text-muted">No files to analyze.</p>
-            {% endif %}
+<div class="card" style="margin-top:1.5rem;">
+  <h3>Import-Ergebnis</h3>
+  <table class="table">
+    <thead>
+      <tr><th>Datei</th><th>Typ</th><th>Tabelle</th><th>Inserted</th><th>Updated</th><th>Skipped</th><th>Status</th></tr>
+    </thead>
+    <tbody>
+      {% for r in results %}
+        {% if r.stats %}
+          {% for s in r.stats %}
+          <tr>
+            <td>{% if forloop.first %}{{ r.file }}{% endif %}</td>
+            <td>{% if forloop.first %}{{ r.type }}{% endif %}</td>
+            <td><code>{{ s.table }}</code></td>
+            <td style="color:green;">{{ s.inserted }}</td>
+            <td style="color:orange;">{{ s.updated }}</td>
+            <td style="color:gray;">{{ s.skipped }}</td>
+            <td>{% if forloop.first %}{% if r.status == 'ok' %}✅{% else %}❌{% endif %}{% endif %}</td>
+          </tr>
+          {% endfor %}
+        {% else %}
+          <tr>
+            <td>{{ r.file }}</td>
+            <td>{{ r.type }}</td>
+            <td>–</td><td>–</td><td>–</td><td>–</td>
+            <td>{% if r.status == 'ok' %}✅{% else %}❌{% endif %}</td>
+          </tr>
+        {% endif %}
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
         </div>
     </div>
     
