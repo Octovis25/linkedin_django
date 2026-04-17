@@ -21,7 +21,7 @@ def get_overview_data(date_from=None, date_to=None):
         # ── Card 1: Latest total followers ──────────────────────────
         try:
             cur.execute("""
-                SELECT follower_count
+                SELECT followers_total
                 FROM linkedin_followers
                 ORDER BY date DESC
                 LIMIT 1
@@ -34,13 +34,13 @@ def get_overview_data(date_from=None, date_to=None):
         # ── Follower growth (first vs last in range) ─────────────────
         try:
             cur.execute("""
-                SELECT follower_count FROM linkedin_followers
+                SELECT followers_total FROM linkedin_followers
                 WHERE date >= %s ORDER BY date ASC LIMIT 1
             """, [date_from])
             first = cur.fetchone()
 
             cur.execute("""
-                SELECT follower_count FROM linkedin_followers
+                SELECT followers_total FROM linkedin_followers
                 WHERE date <= %s ORDER BY date DESC LIMIT 1
             """, [date_to])
             last = cur.fetchone()
@@ -64,16 +64,16 @@ def get_overview_data(date_from=None, date_to=None):
         # ── Card 3: Total impressions ────────────────────────────────
         try:
             cur.execute("""
-                SELECT SUM(impressions)
-                FROM linkedin_posts
-                WHERE date >= %s AND date <= %s
+                SELECT COALESCE(SUM(impressions),0)
+                FROM linkedin_posts_metrics
+                WHERE metric_date >= %s AND metric_date <= %s
             """, [date_from, date_to])
             row = cur.fetchone()
             data['total_impressions'] = row[0] if row and row[0] else 0
         except Exception:
             # Fallback: try without date filter
             try:
-                cur.execute("SELECT SUM(impressions) FROM linkedin_posts")
+                cur.execute("SELECT COALESCE(SUM(impressions),0) FROM linkedin_posts")
                 row = cur.fetchone()
                 data['total_impressions'] = row[0] if row and row[0] else '—'
             except Exception:
@@ -82,17 +82,17 @@ def get_overview_data(date_from=None, date_to=None):
         # ── Card 4: Total engagement ─────────────────────────────────
         try:
             cur.execute("""
-                SELECT SUM(likes + comments + shares)
-                FROM linkedin_posts
-                WHERE date >= %s AND date <= %s
+                SELECT COALESCE(SUM(likes + comments + direct_shares),0)
+                FROM linkedin_posts_metrics
+                WHERE metric_date >= %s AND metric_date <= %s
             """, [date_from, date_to])
             row = cur.fetchone()
             data['total_engagement'] = row[0] if row and row[0] else 0
         except Exception:
             try:
                 cur.execute("""
-                    SELECT SUM(likes + comments + shares)
-                    FROM linkedin_posts
+                    SELECT COALESCE(SUM(likes + comments + direct_shares),0)
+                    FROM linkedin_posts_metrics
                 """)
                 row = cur.fetchone()
                 data['total_engagement'] = row[0] if row and row[0] else '—'
@@ -102,7 +102,7 @@ def get_overview_data(date_from=None, date_to=None):
         # ── Top 5 posts by impressions ───────────────────────────────
         try:
             cur.execute("""
-                SELECT p.post_id, p.impressions, p.likes, p.comments, p.shares,
+                SELECT p.post_id, p.impressions, p.likes, p.comments, p.direct_shares,
                        pp.post_link, pp.post_date
                 FROM linkedin_posts p
                 LEFT JOIN linkedin_posts_posted pp ON p.post_id = pp.post_id
@@ -129,7 +129,7 @@ def get_overview_data(date_from=None, date_to=None):
         try:
             cur.execute("""
                 SELECT DATE_FORMAT(date, '%Y-%m') as month,
-                       MAX(follower_count) as count
+                       MAX(followers_total) as count
                 FROM linkedin_followers
                 WHERE date >= DATE_SUB(NOW(), INTERVAL 12 MONTH)
                 GROUP BY month
