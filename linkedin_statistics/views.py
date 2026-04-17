@@ -15,7 +15,7 @@ import json
 
 
 def _default_from():
-    return (date.today() - timedelta(days=30)).isoformat()
+    return (date.today() - timedelta(days=365)).isoformat()
 
 def _default_to():
     return date.today().isoformat()
