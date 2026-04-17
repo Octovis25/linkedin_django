@@ -1,206 +1,86 @@
 {% extends "core/base.html" %}
-{% block title %}Statistics Overview{% endblock %}
 {% block content %}
-<style>
-:root{--octo-teal:#007c89;--octo-orange:#e07b39;--octo-border:#e2ddd8;--octo-bg:#faf8f5;}
-/* Tab-Leiste */
-.stat-tabs{display:flex;gap:0;border-bottom:2px solid var(--octo-border);margin-bottom:1.4rem;}
-.stat-tab{padding:.6rem 1.3rem;font-size:.9rem;font-weight:700;color:#888;text-decoration:none;
-  border-bottom:3px solid transparent;margin-bottom:-2px;transition:all .15s;}
-.stat-tab.active{color:var(--octo-orange);border-bottom-color:var(--octo-orange);}
-.stat-tab:hover{color:var(--octo-teal);}
-
-/* Filter */
-.filter-bar{background:var(--octo-bg);border:1px solid var(--octo-border);border-radius:10px;
-  padding:.9rem 1.3rem;display:flex;flex-wrap:wrap;gap:.9rem;align-items:flex-end;margin-bottom:1.4rem;}
-.fg{display:flex;flex-direction:column;gap:.2rem;}
-.fg label{font-size:.75rem;font-weight:700;color:#555;text-transform:uppercase;letter-spacing:.04em;}
-.fg input[type=date]{padding:.45rem .8rem;border:1px solid #ccc;border-radius:7px;font-size:.88rem;}
-.btn-teal{background:var(--octo-teal);color:#fff;border:none;border-radius:7px;
-  padding:.5rem 1.1rem;font-size:.85rem;font-weight:700;cursor:pointer;}
-.btn-teal:hover{opacity:.85;}
-.btn-orange{background:var(--octo-orange);color:#fff;border:none;border-radius:7px;
-  padding:.5rem 1rem;font-size:.85rem;font-weight:700;cursor:pointer;}
-.btn-orange:hover{opacity:.85;}
-
-/* KPI-Grid */
-.kpi-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:1rem;margin-bottom:1.4rem;}
-.kpi-card{background:#fff;border:1px solid var(--octo-border);border-radius:10px;padding:1.1rem 1.3rem;}
-.kpi-icon{font-size:1.5rem;margin-bottom:.4rem;}
-.kpi-label{font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--octo-teal);}
-.kpi-val{font-size:1.8rem;font-weight:800;color:#1a1a2e;margin:.2rem 0 .1rem;}
-.kpi-sub{font-size:.78rem;color:#999;}
-
-/* Chart-Karte */
-.chart-card{background:#fff;border:1px solid var(--octo-border);border-radius:10px;
-  padding:1.3rem 1.5rem;margin-bottom:1.4rem;}
-.chart-card h2{font-size:1rem;color:var(--octo-teal);margin:0 0 .8rem;}
-.chart-wrap{position:relative;height:320px;}
-
-/* Top-Posts-Tabelle */
-.posts-card{background:#fff;border:1px solid var(--octo-border);border-radius:10px;overflow:hidden;margin-bottom:1.4rem;}
-.posts-card-hdr{padding:.9rem 1.3rem;border-bottom:1px solid var(--octo-border);}
-.posts-card-hdr h2{font-size:1rem;color:var(--octo-teal);margin:0;}
-table{width:100%;border-collapse:collapse;}
-thead th{font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.04em;
-  color:#888;padding:.6rem 1rem;border-bottom:2px solid var(--octo-border);background:#fafafa;text-align:left;}
-tbody td{padding:.7rem 1rem;border-bottom:1px solid #f0ece8;font-size:.85rem;vertical-align:middle;}
-tbody tr:hover{background:#f6fafb;}
-.badge-imp{background:#e8f5f6;color:var(--octo-teal);padding:.2rem .6rem;border-radius:20px;
-  font-size:.78rem;font-weight:700;}
-.badge-eng{background:#fff3ec;color:var(--octo-orange);padding:.2rem .6rem;border-radius:20px;font-size:.78rem;}
-.alert-error{background:#fde8e8;border-left:4px solid #e53935;padding:.9rem 1.2rem;
-  border-radius:0 8px 8px 0;color:#b71c1c;font-size:.85rem;margin-bottom:1rem;}
-.empty-state{text-align:center;padding:2rem;color:#999;font-size:.88rem;}
-</style>
-
-<!-- Tabs -->
-<div class="stat-tabs">
-  <a class="stat-tab active" href="{% url 'linkedin_statistics:overview' %}?date_from={{ date_from }}&date_to={{ date_to }}">📊 Overview</a>
-  <a class="stat-tab" href="{% url 'linkedin_statistics:timeline' %}?date_from={{ date_from }}&date_to={{ date_to }}">📈 Post Timeline</a>
+<div class="container mt-4">
+    <h1>LinkedIn Statistics – Overview</h1>
+    
+    <div class="row mt-4">
+        <div class="col-md-3">
+            <div class="card">
+                <div class="card-body">
+                    <h5>Followers</h5>
+                    <h2>{{ data.total_followers|default:"0" }}</h2>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card">
+                <div class="card-body">
+                    <h5>Posts</h5>
+                    <h2>{{ data.total_posts|default:"0" }}</h2>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card">
+                <div class="card-body">
+                    <h5>Impressions</h5>
+                    <h2>{{ data.total_impressions|default:"0" }}</h2>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card">
+                <div class="card-body">
+                    <h5>Engagement</h5>
+                    <h2>{{ data.total_engagement|default:"0" }}</h2>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="row mt-4">
+        <div class="col-12">
+            <h3>Top 5 Posts</h3>
+            <table class="table">
+                <thead><tr><th>Post</th><th>Date</th><th>Impressions</th><th>Likes</th></tr></thead>
+                <tbody>
+                {% for post in data.top_posts %}
+                <tr>
+                    <td><a href="{{ post.post_url }}" target="_blank">{{ post.title }}</a></td>
+                    <td>{{ post.post_date|date:"d.m.Y" }}</td>
+                    <td>{{ post.impressions }}</td>
+                    <td>{{ post.likes }}</td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="4">Keine Daten</td></tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    
+    <div class="row mt-4">
+        <div class="col-12">
+            <h3>Impressions pro Monat</h3>
+            <canvas id="chart" width="400" height="100"></canvas>
+        </div>
+    </div>
 </div>
 
-{% if db_error %}
-<div class="alert-error">⚠️ DB-Fehler: {{ db_error }}</div>
-{% endif %}
-
-<!-- Datumsfilter -->
-<form method="get" id="filterForm">
-  <div class="filter-bar">
-    <div class="fg"><label>Von</label>
-      <input type="date" name="date_from" value="{{ date_from }}"></div>
-    <div class="fg"><label>Bis</label>
-      <input type="date" name="date_to" value="{{ date_to }}"></div>
-    <button type="submit" class="btn-teal">Apply</button>
-    <button type="button" class="btn-orange" onclick="setLast30()">Last 30 days</button>
-  </div>
-</form>
-
-<!-- KPI-Kacheln -->
-<div class="kpi-grid">
-  <div class="kpi-card">
-    <div class="kpi-icon">👥</div>
-    <div class="kpi-label">Total Followers</div>
-    <div class="kpi-val">{{ data.total_followers|default:"—" }}</div>
-    <div class="kpi-sub">{{ data.followers_change|default:"" }} im Zeitraum</div>
-  </div>
-  <div class="kpi-card">
-    <div class="kpi-icon">📝</div>
-    <div class="kpi-label">Posts Published</div>
-    <div class="kpi-val">{{ data.total_posts|default:"—" }}</div>
-    <div class="kpi-sub">im gewählten Zeitraum</div>
-  </div>
-  <div class="kpi-card">
-    <div class="kpi-icon">👁</div>
-    <div class="kpi-label">Total Impressions</div>
-    <div class="kpi-val">{{ data.total_impressions|default:"—" }}</div>
-    <div class="kpi-sub">im gewählten Zeitraum</div>
-  </div>
-  <div class="kpi-card">
-    <div class="kpi-icon">❤️</div>
-    <div class="kpi-label">Total Engagement</div>
-    <div class="kpi-val">{{ data.total_engagement|default:"—" }}</div>
-    <div class="kpi-sub">Likes + Comments + Shares</div>
-  </div>
-</div>
-
-<!-- Content-Chart: Impressionen + Engagement Rate nach Monat -->
-{% if data.content_chart_labels %}
-<div class="chart-card">
-  <h2>📉 Content Metriken über Zeit</h2>
-  <div class="chart-wrap"><canvas id="contentChart"></canvas></div>
-</div>
-{% endif %}
-
-<!-- Top Posts -->
-<div class="posts-card">
-  <div class="posts-card-hdr"><h2>🏆 Top Posts by Impressions</h2></div>
-  {% if data.top_posts %}
-  <table>
-    <thead><tr>
-      <th>Datum</th><th>Titel</th>
-      <th>Impressionen</th><th>Likes</th><th>Comments</th><th>Shares</th><th>Clicks</th><th>Link</th>
-    </tr></thead>
-    <tbody>
-    {% for p in data.top_posts %}
-    <tr>
-      <td style="white-space:nowrap;color:#888;font-size:.78rem">{{ p.post_date|default:"—" }}</td>
-      <td style="max-width:300px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis"
-          title="{{ p.post_title }}">{{ p.post_title|default:p.post_id|truncatechars:60 }}</td>
-      <td><span class="badge-imp">{{ p.impressions }}</span></td>
-      <td>{{ p.likes }}</td>
-      <td>{{ p.comments }}</td>
-      <td>{{ p.shares }}</td>
-      <td>{{ p.clicks }}</td>
-      <td>{% if p.post_url %}<a href="{{ p.post_url }}" target="_blank">🔗</a>{% else %}—{% endif %}</td>
-    </tr>
-    {% endfor %}
-    </tbody>
-  </table>
-  {% else %}
-  <div class="empty-state">Keine Post-Daten gefunden. Bitte erst LinkedIn CSV-Daten importieren.</div>
-  {% endif %}
-</div>
-
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
-// Content-Chart
-const cc = {{ content_chart_json|safe }};
-if (cc.labels && cc.labels.length > 0) {
-  const ctx = document.getElementById('contentChart').getContext('2d');
-  new Chart(ctx, {
+const chartData = {{ chart_json|safe }};
+new Chart(document.getElementById('chart'), {
+    type: 'line',
     data: {
-      labels: cc.labels,
-      datasets: [
-        {
-          type: 'line',
-          label: 'Impressionen',
-          data: cc.impressions,
-          borderColor: '#0077b5',
-          backgroundColor: 'rgba(0,119,181,.08)',
-          yAxisID: 'yLeft',
-          tension: .35,
-          pointRadius: 4,
-          fill: true,
-        },
-        {
-          type: 'line',
-          label: 'Engagement Rate %',
-          data: cc.engagement,
-          borderColor: '#e07b39',
-          borderDash: [5,3],
-          backgroundColor: 'transparent',
-          yAxisID: 'yRight',
-          tension: .35,
-          pointRadius: 4,
-        },
-      ],
-    },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      plugins: {
-        legend: { position: 'bottom' },
-        tooltip: { mode: 'index', intersect: false },
-      },
-      scales: {
-        yLeft:  { position: 'left',  beginAtZero: true, title: { display: true, text: 'Impressionen' } },
-        yRight: { position: 'right', beginAtZero: true, title: { display: true, text: 'Engagement Rate %' },
-                  grid: { drawOnChartArea: false } },
-        x: { grid: { display: false } },
-      },
-    },
-  });
-}
-
-function setLast30() {
-  const to   = new Date();
-  const from = new Date();
-  from.setDate(from.getDate() - 30);
-  const fmt = d => d.toISOString().slice(0,10);
-  document.querySelector('[name=date_from]').value = fmt(from);
-  document.querySelector('[name=date_to]').value   = fmt(to);
-  document.getElementById('filterForm').submit();
-}
+        labels: chartData.labels,
+        datasets: [{
+            label: 'Impressions',
+            data: chartData.impressions,
+            borderColor: '#0077b5',
+            fill: false
+        }]
+    }
+});
 </script>
 {% endblock %}

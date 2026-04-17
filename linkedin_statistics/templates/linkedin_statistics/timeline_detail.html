@@ -1,220 +1,33 @@
 {% extends "core/base.html" %}
-{% block title %}Post Timeline – Detail{% endblock %}
 {% block content %}
-<style>
-:root {
-  --octo-teal:   #007c89;
-  --octo-orange: #e07b39;
-  --octo-border: #e2ddd8;
-  --octo-bg:     #faf8f5;
-}
-.back-link {
-  display: inline-flex;
-  align-items: center;
-  gap: .4rem;
-  color: var(--octo-teal);
-  text-decoration: none;
-  font-size: .88rem;
-  font-weight: 600;
-  margin-bottom: 1.2rem;
-}
-.back-link:hover { opacity: .75; }
-
-.detail-hero {
-  background: linear-gradient(135deg, var(--octo-teal) 0%, #00a0b0 100%);
-  color: #fff;
-  padding: 1.3rem 1.6rem;
-  border-radius: 10px;
-  margin-bottom: 1.4rem;
-}
-.detail-hero h1 { font-size: 1.2rem; margin: 0 0 .3rem; }
-.detail-hero .meta { font-size: .85rem; opacity: .85; display: flex; gap: 1.5rem; flex-wrap: wrap; }
-
-/* Gruppen-Switcher */
-.group-bar {
-  display: flex;
-  gap: .5rem;
-  margin-bottom: 1.4rem;
-  flex-wrap: wrap;
-  align-items: center;
-}
-.group-bar span { font-size: .85rem; color: #666; margin-right: .3rem; }
-.gb-btn {
-  padding: .4rem 1rem;
-  border-radius: 20px;
-  border: 2px solid var(--octo-border);
-  background: #fff;
-  color: #555;
-  font-size: .83rem;
-  font-weight: 700;
-  cursor: pointer;
-  text-decoration: none;
-  transition: all .15s;
-}
-.gb-btn:hover,
-.gb-btn.active {
-  border-color: var(--octo-teal);
-  background: var(--octo-teal);
-  color: #fff;
-}
-
-/* Chart-Karte */
-.chart-card {
-  background: #fff;
-  border: 1px solid var(--octo-border);
-  border-radius: 10px;
-  padding: 1.4rem 1.6rem;
-  margin-bottom: 1.4rem;
-}
-.chart-card h2 { font-size: 1rem; color: var(--octo-teal); margin: 0 0 1rem; }
-.chart-wrap { position: relative; height: 380px; }
-
-/* Metriken-Kacheln */
-.kpi-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-  gap: .9rem;
-  margin-bottom: 1.4rem;
-}
-.kpi-card {
-  background: #fff;
-  border: 1px solid var(--octo-border);
-  border-radius: 10px;
-  padding: 1rem 1.2rem;
-  text-align: center;
-}
-.kpi-card .kpi-val { font-size: 1.6rem; font-weight: 800; color: #222; }
-.kpi-card .kpi-lbl { font-size: .75rem; color: #888; text-transform: uppercase; letter-spacing: .04em; margin-top: .2rem; }
-
-.alert-info {
-  background: #e8f5f6;
-  border-left: 4px solid var(--octo-teal);
-  padding: .9rem 1.2rem;
-  border-radius: 0 8px 8px 0;
-  color: #005f6b;
-  font-size: .88rem;
-}
-.alert-error {
-  background: #fde8e8;
-  border-left: 4px solid #e53935;
-  padding: .9rem 1.2rem;
-  border-radius: 0 8px 8px 0;
-  color: #b71c1c;
-  font-size: .88rem;
-  margin-bottom: 1rem;
-}
-</style>
-
-<a class="back-link" href="{% url 'linkedin_statistics:timeline' %}?date_from={{ back_from }}&date_to={{ back_to }}&{% if search %}q={{ search }}{% endif %}">
-  ← Zurück zur Post-Liste
-</a>
-
-{% if db_error %}
-<div class="alert-error">⚠️ {{ db_error }}</div>
-{% endif %}
-
-{% if post %}
-<div class="detail-hero">
-  <h1>{{ post.post_title|default:post.post_id|truncatechars:100 }}</h1>
-  <div class="meta">
-    <span>📅 {{ post.post_date|default:"Datum unbekannt" }}</span>
-    <span>🆔 {{ post.post_id }}</span>
-    {% if post.post_url %}
-    <a href="{{ post.post_url }}" target="_blank" style="color:#fff;opacity:.9">🔗 LinkedIn öffnen</a>
+<div class="container mt-4">
+    <h1>Post Details</h1>
+    {% if post %}
+    <h3>{{ post.title }}</h3>
+    <p>Date: {{ post.post_date|date:"d.m.Y" }}</p>
+    <p><a href="{{ post.post_url }}" target="_blank">View on LinkedIn</a></p>
+    
+    <canvas id="chart" width="400" height="100"></canvas>
+    
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script>
+    const chartData = {{ chart_json|safe }};
+    if (chartData) {
+        new Chart(document.getElementById('chart'), {
+            type: 'line',
+            data: {
+                labels: chartData.labels,
+                datasets: [{
+                    label: 'Impressions',
+                    data: chartData.impressions,
+                    borderColor: '#0077b5'
+                }]
+            }
+        });
+    }
+    </script>
+    {% else %}
+    <p>Post nicht gefunden.</p>
     {% endif %}
-  </div>
 </div>
-
-<!-- Gruppen-Switcher -->
-<div class="group-bar">
-  <span>Gruppierung:</span>
-  <a href="?group_by=day&back_from={{ back_from }}&back_to={{ back_to }}"
-     class="gb-btn {% if group_by == 'day' %}active{% endif %}">Tag</a>
-  <a href="?group_by=week&back_from={{ back_from }}&back_to={{ back_to }}"
-     class="gb-btn {% if group_by == 'week' %}active{% endif %}">Woche</a>
-  <a href="?group_by=month&back_from={{ back_from }}&back_to={{ back_to }}"
-     class="gb-btn {% if group_by == 'month' %}active{% endif %}">Monat</a>
-</div>
-
-{% if chart_data_json != 'null' %}
-
-<!-- KPI-Kacheln (Summen) -->
-<div class="kpi-grid" id="kpiGrid"></div>
-
-<!-- Balkendiagramm -->
-<div class="chart-card">
-  <h2>📊 Interaktionen über Zeit ({{ group_by|capfirst }})</h2>
-  <div class="chart-wrap">
-    <canvas id="detailChart"></canvas>
-  </div>
-</div>
-
-{% else %}
-<div class="alert-info">
-  ℹ️ Für diesen Post sind noch keine Metriken in <code>linkedin_posts_metrics</code> vorhanden.<br>
-  Bitte prüfe, ob der LinkedIn-Export für Post-ID <strong>{{ post.post_id }}</strong> importiert wurde.
-</div>
-{% endif %}
-
-{% else %}
-<div class="alert-error">Post nicht gefunden.</div>
-{% endif %}
-
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
-<script>
-const chartData = {{ chart_data_json|safe }};
-
-if (chartData) {
-  // ── KPI-Summen ──────────────────────────────────────────────
-  const sum = arr => arr.reduce((a, b) => a + b, 0);
-  const kpis = [
-    { label: 'Impressionen', key: 'impressions', color: '#0077b5' },
-    { label: 'Clicks',       key: 'clicks',      color: '#00a0dc' },
-    { label: 'Likes',        key: 'likes',       color: '#e53935' },
-    { label: 'Comments',     key: 'comments',    color: '#43a047' },
-    { label: 'Shares',       key: 'shares',      color: '#f57c00' },
-  ];
-  const grid = document.getElementById('kpiGrid');
-  kpis.forEach(k => {
-    const total = sum(chartData[k.key]);
-    grid.innerHTML += `
-      <div class="kpi-card">
-        <div class="kpi-val" style="color:${k.color}">${total.toLocaleString('de-DE')}</div>
-        <div class="kpi-lbl">${k.label}</div>
-      </div>`;
-  });
-
-  // ── Balkendiagramm ──────────────────────────────────────────
-  const ctx = document.getElementById('detailChart').getContext('2d');
-  new Chart(ctx, {
-    type: 'bar',
-    data: {
-      labels: chartData.labels,
-      datasets: [
-        { label: 'Impressionen', data: chartData.impressions, backgroundColor: 'rgba(0,119,181,.75)',  borderRadius: 4 },
-        { label: 'Clicks',       data: chartData.clicks,      backgroundColor: 'rgba(0,160,220,.75)',  borderRadius: 4 },
-        { label: 'Likes',        data: chartData.likes,       backgroundColor: 'rgba(229,57,53,.75)',  borderRadius: 4 },
-        { label: 'Comments',     data: chartData.comments,    backgroundColor: 'rgba(67,160,71,.75)',  borderRadius: 4 },
-        { label: 'Shares',       data: chartData.shares,      backgroundColor: 'rgba(245,124,0,.75)',  borderRadius: 4 },
-      ],
-    },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      plugins: {
-        legend: { position: 'top' },
-        tooltip: { mode: 'index', intersect: false },
-      },
-      scales: {
-        x: { grid: { display: false } },
-        y: {
-          beginAtZero: true,
-          grid: { color: 'rgba(0,0,0,.04)' },
-          title: { display: true, text: 'Anzahl' },
-        },
-      },
-    },
-  });
-}
-</script>
 {% endblock %}
