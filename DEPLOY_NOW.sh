@@ -1,3 +1,8 @@
+#!/bin/bash
+set -e
+echo "=== SCHRITT 1: views.py direkt schreiben ==="
+
+cat > linkedin_statistics/views.py << 'PYEOF'
 from datetime import date
 from django.shortcuts import render
 from django.contrib.auth.decorators import login_required
@@ -158,3 +163,20 @@ def timeline_detail(request, post_id):
         'chart_data_json': json.dumps(chart_data) if chart_data else 'null',
         'db_error': db_error,
     })
+PYEOF
+
+echo "✅ views.py geschrieben"
+
+echo ""
+echo "=== SCHRITT 2: Alle alten .sh-Dateien loeschen ==="
+find . -maxdepth 1 -name "*.sh" -not -name "DEPLOY_NOW.sh" -delete
+echo "✅ .sh-Dateien geloescht"
+
+echo ""
+echo "=== SCHRITT 3: Commit & Push ==="
+git add -A
+git commit -m "fix: statistics views neu + alte sh-Dateien bereinigt"
+git push
+
+echo ""
+echo "=== FERTIG ==="
