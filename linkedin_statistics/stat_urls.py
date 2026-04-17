@@ -2,11 +2,11 @@
 Statistics Module URLs
 """
 from django.urls import path
-from . import stat_views
+from . import views
 
 app_name = 'linkedin_statistics'
 
 urlpatterns = [
-    path('', stat_views.overview, name='overview'),
-    path('timeline/', stat_views.timeline, name='timeline'),
+    path('', views.overview, name='overview'),
+    path('timeline/', views.timeline, name='timeline'),
 ]
