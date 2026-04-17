@@ -1,0 +1,55 @@
+{% extends "statistics/stat_base.html" %}
+
+{% block stats_title %}LinkedIn Statistics – Overview{% endblock %}
+
+{% block stats_content %}
+<div class="kpi-grid">
+    <div class="kpi-card">
+        <div class="kpi-label">Total Followers</div>
+        <div class="kpi-value">{{ overview_data.total_followers|default:"—" }}</div>
+        <div class="kpi-change neutral">{{ overview_data.follower_growth|default:"0" }}%</div>
+    </div>
+    
+    <div class="kpi-card">
+        <div class="kpi-label">Posts Published</div>
+        <div class="kpi-value">{{ overview_data.total_posts|default:"0" }}</div>
+        <div class="kpi-change neutral">{{ overview_data.posts_ready|default:"0" }} ready to post</div>
+    </div>
+    
+    <div class="kpi-card">
+        <div class="kpi-label">Total Impressions</div>
+        <div class="kpi-value">{{ overview_data.total_impressions|default:"—" }}</div>
+        <div class="kpi-change neutral">Last 30 days</div>
+    </div>
+    
+    <div class="kpi-card">
+        <div class="kpi-label">Total Engagement</div>
+        <div class="kpi-value">{{ overview_data.total_engagement|default:"—" }}</div>
+        <div class="kpi-change neutral">Likes + Comments + Shares</div>
+    </div>
+</div>
+
+{% if overview_data.top_posts %}
+<div class="card">
+    <h2>Top 3 Recent Posts</h2>
+    <ul class="top-posts-list">
+        {% for post in overview_data.top_posts %}
+        <li>
+            <div class="post-title">{{ post.title }}</div>
+            <div class="post-meta">Posted: {{ post.posted_date|date:"d.m.Y" }} {% if post.linkedin_url %}| <a href="{{ post.linkedin_url }}" target="_blank">View on LinkedIn</a>{% endif %}</div>
+        </li>
+        {% endfor %}
+    </ul>
+</div>
+{% else %}
+<div class="card">
+    <p style="color: #6c757d; text-align: center;">No posts found.</p>
+</div>
+{% endif %}
+
+<div style="margin-top: 2rem; padding: 1rem; background: var(--octo-light-gray); border-radius: 6px;">
+    <p style="margin: 0; color: var(--octo-dark-petrol); font-size: 0.9rem;">
+        <strong>🔜 Coming soon:</strong> Clickable post timeline, follower growth charts, and competitor analysis.
+    </p>
+</div>
+{% endblock %}

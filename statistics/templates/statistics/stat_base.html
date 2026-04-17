@@ -1,0 +1,48 @@
+{% extends "core/base.html" %}
+
+{% block content %}
+<div class="statistics-wrapper">
+    <div class="stats-header">
+        <h1>{% block stats_title %}Statistics{% endblock %}</h1>
+        
+        <div class="date-filter">
+            <form method="get" class="filter-form">
+                <label for="date-from">From:</label>
+                <input type="date" id="date-from" name="from" value="{{ date_from|date:'Y-m-d' }}">
+                
+                <label for="date-to">To:</label>
+                <input type="date" id="date-to" name="to" value="{{ date_to|date:'Y-m-d' }}">
+                
+                <button type="submit" class="btn btn-primary btn-sm">Apply</button>
+            </form>
+        </div>
+    </div>
+    
+    {% block stats_content %}
+    {% endblock %}
+</div>
+
+<style>
+    .statistics-wrapper { padding: 1rem 0; }
+    .stats-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem; }
+    .stats-header h1 { margin: 0; }
+    .date-filter { display: flex; gap: 0.75rem; align-items: center; }
+    .filter-form { display: flex; gap: 0.5rem; align-items: center; }
+    .filter-form label { margin: 0; font-size: 0.9rem; }
+    .filter-form input[type="date"] { padding: 0.4rem; font-size: 0.85rem; width: 140px; }
+    .kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 1.5rem; margin-bottom: 2rem; }
+    .kpi-card { background: var(--octo-white); border: 2px solid var(--octo-light-gray); border-radius: 8px; padding: 1.5rem; box-shadow: 0 2px 4px rgba(0,0,0,0.05); transition: all 0.3s; }
+    .kpi-card:hover { border-color: var(--octo-petrol); box-shadow: 0 4px 8px rgba(0,133,145,0.1); }
+    .kpi-label { font-size: 0.85rem; color: var(--octo-dark-petrol); font-weight: 500; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+    .kpi-value { font-size: 2rem; font-weight: 700; color: var(--octo-petrol); margin-bottom: 0.5rem; }
+    .kpi-change { font-size: 0.85rem; font-weight: 500; }
+    .kpi-change.positive { color: #28a745; }
+    .kpi-change.negative { color: #dc3545; }
+    .kpi-change.neutral { color: #6c757d; }
+    .top-posts-list { list-style: none; padding: 0; }
+    .top-posts-list li { padding: 0.75rem; border-bottom: 1px solid var(--octo-light-gray); }
+    .top-posts-list li:last-child { border-bottom: none; }
+    .post-title { font-weight: 500; color: var(--octo-petrol); margin-bottom: 0.25rem; }
+    .post-meta { font-size: 0.85rem; color: #6c757d; }
+</style>
+{% endblock %}
