@@ -1,43 +1,34 @@
-"""
-Post Timeline Report
-Shows per-post performance metrics
-Step 2 of statistics module
-"""
 from django.db import connection
 
-
 def get_all_posts(date_from=None, date_to=None):
-    """
-    Returns list of all posts with their metrics
-    """
     posts = []
     with connection.cursor() as cur:
         try:
-            query = """
-                SELECT p.post_id, p.impressions, p.likes, p.comments,
-                       p.shares, p.clicks, p.date,
-                       pp.post_link, pp.post_date
-                FROM linkedin_posts p
-                LEFT JOIN linkedin_posts_posted pp ON p.post_id = pp.post_id
-                ORDER BY p.impressions DESC
-            """
-            cur.execute(query)
+            cur.execute("""
+                SELECT lp.post_id,
+                       COALESCE(lp.post_title, lp.post_id) AS post_title,
+                       COALESCE(pp.post_date, lp.post_date) AS post_date,
+                       lp.post_url,
+                       lp.content_type,
+                       COALESCE(SUM(m.impressions), 0) AS impressions,
+                       COALESCE(SUM(m.likes), 0) AS likes,
+                       COALESCE(SUM(m.comments), 0) AS comments,
+                       COALESCE(SUM(m.direct_shares), 0) AS shares,
+                       COALESCE(SUM(m.clicks), 0) AS clicks
+                FROM linkedin_posts lp
+                LEFT JOIN linkedin_posts_posted pp ON lp.post_id = pp.post_id
+                LEFT JOIN linkedin_posts_metrics m ON lp.post_id = m.post_id
+                GROUP BY lp.post_id, lp.post_title, post_date, lp.post_url, lp.content_type
+                ORDER BY post_date DESC
+            """)
             rows = cur.fetchall()
-            posts = [
-                {
-                    'post_id': r[0],
-                    'impressions': r[1] or 0,
-                    'likes': r[2] or 0,
-                    'comments': r[3] or 0,
-                    'shares': r[4] or 0,
-                    'clicks': r[5] or 0,
-                    'date': r[6],
-                    'post_link': r[7] or '',
-                    'post_date': r[8],
-                    'engagement': (r[2] or 0) + (r[3] or 0) + (r[4] or 0),
-                }
-                for r in rows
-            ]
-        except Exception as e:
+            posts = [{
+                'post_id': r[0], 'post_title': r[1], 'post_date': r[2],
+                'post_link': r[3] or '', 'content_type': r[4] or '',
+                'impressions': r[5], 'likes': r[6], 'comments': r[7],
+                'shares': r[8], 'clicks': r[9],
+                'engagement': r[6] + r[7] + r[8],
+            } for r in rows]
+        except:
             posts = []
     return posts
