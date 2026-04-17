@@ -1,0 +1,51 @@
+{% extends "linkedin_statistics/stat_base.html" %}
+
+{% block stat_content %}
+
+<div class="stat-section">
+  <h2>📈 Post Timeline – All Posts</h2>
+  {% if posts %}
+  <div class="chart-container">
+    <table class="posts-table">
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>Post Date</th>
+          <th>Impressions</th>
+          <th>Likes</th>
+          <th>Comments</th>
+          <th>Shares</th>
+          <th>Clicks</th>
+          <th>Engagement</th>
+          <th>Link</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for post in posts %}
+        <tr>
+          <td style="color:#6c757d;">{{ forloop.counter }}</td>
+          <td>{{ post.post_date|default:post.date|default:"—" }}</td>
+          <td><span class="badge badge-impressions">{{ post.impressions }}</span></td>
+          <td>{{ post.likes }}</td>
+          <td>{{ post.comments }}</td>
+          <td>{{ post.shares }}</td>
+          <td>{{ post.clicks }}</td>
+          <td><span class="badge badge-engagement">{{ post.engagement }}</span></td>
+          <td>
+            {% if post.post_link %}
+            <a href="{{ post.post_link }}" target="_blank">🔗</a>
+            {% else %}—{% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="chart-container" style="text-align:center; color:#6c757d; padding: 2rem;">
+    No post data found. Please import LinkedIn CSV data first.
+  </div>
+  {% endif %}
+</div>
+
+{% endblock %}

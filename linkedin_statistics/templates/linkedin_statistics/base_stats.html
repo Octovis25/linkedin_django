@@ -1,0 +1,45 @@
+{% extends "core/base.html" %}
+{% load static %}
+{% block title %}Statistics – LinkedIn Dashboard{% endblock %}
+
+{% block content %}
+<!-- Statistics Sub-Navigation -->
+<div class="sub-nav" style="background:var(--octo-light-gray);padding:0 1.5rem;display:flex;gap:0;border-bottom:2px solid #e0e0e0;">
+  <a href="/statistics/" {% if active_tab == 'overview' %}class="active"{% endif %}
+     style="padding:0.5rem 1.2rem;font-size:0.9rem;text-decoration:none;color:var(--octo-dark-petrol);border-bottom:2px solid transparent;">
+    📊 Overview
+  </a>
+  <a href="/statistics/timeline/" {% if active_tab == 'timeline' %}class="active"{% endif %}
+     style="padding:0.5rem 1.2rem;font-size:0.9rem;text-decoration:none;color:var(--octo-dark-petrol);border-bottom:2px solid transparent;">
+    📈 Post Timeline
+  </a>
+</div>
+
+<!-- Datumsfilter -->
+<div style="background:#fff;border:1px solid #e0e0e0;border-radius:8px;padding:12px 20px;margin:1rem 0;display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+  <span style="font-size:13px;font-weight:600;color:#555;">Date range:</span>
+  <form method="get" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+    <input type="date" name="from" value="{{ date_from }}"
+           style="padding:6px 10px;border:1px solid #ccc;border-radius:6px;font-size:13px;">
+    <span style="color:#888;font-size:13px;">to</span>
+    <input type="date" name="to" value="{{ date_to }}"
+           style="padding:6px 10px;border:1px solid #ccc;border-radius:6px;font-size:13px;">
+    <button type="submit"
+            style="padding:6px 16px;background:#008591;color:#fff;border:none;border-radius:6px;font-size:13px;font-weight:600;cursor:pointer;">
+      Apply
+    </button>
+    <a href="?from={{ default_from }}&to={{ default_to }}"
+       style="padding:6px 16px;background:#F56E28;color:#fff;border-radius:6px;font-size:13px;font-weight:600;text-decoration:none;">
+      Last 30 days
+    </a>
+  </form>
+</div>
+
+{% if db_error %}
+<div style="background:#fce4ec;color:#c62828;padding:12px 16px;border-radius:8px;margin-bottom:1rem;font-size:13px;">
+  ⚠️ Datenbankfehler: {{ db_error }}
+</div>
+{% endif %}
+
+{% block stats_content %}{% endblock %}
+{% endblock %}

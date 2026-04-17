@@ -1,0 +1,236 @@
+{% extends "core/base.html" %}
+{% block title %}Post Timeline{% endblock %}
+{% block content %}
+<style>
+:root {
+  --octo-teal:   #007c89;
+  --octo-orange: #e07b39;
+  --octo-bg:     #faf8f5;
+  --octo-card:   #ffffff;
+  --octo-border: #e2ddd8;
+}
+.tl-hero {
+  padding: 1.4rem 0 .6rem;
+  border-bottom: 2px solid var(--octo-border);
+  margin-bottom: 1.4rem;
+}
+.tl-hero h1 { font-size: 1.3rem; color: var(--octo-teal); margin: 0; }
+.tl-hero p  { color: #777; font-size: .88rem; margin: .3rem 0 0; }
+
+/* Filter-Leiste */
+.filter-bar {
+  background: var(--octo-bg);
+  border: 1px solid var(--octo-border);
+  border-radius: 10px;
+  padding: 1rem 1.3rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: .9rem;
+  align-items: flex-end;
+  margin-bottom: 1.4rem;
+}
+.fg { display: flex; flex-direction: column; gap: .25rem; }
+.fg label { font-size: .78rem; font-weight: 700; color: #555; text-transform: uppercase; letter-spacing: .03em; }
+.fg input[type=date],
+.fg input[type=search] {
+  padding: .5rem .8rem;
+  border: 1px solid #ccc;
+  border-radius: 7px;
+  font-size: .9rem;
+  min-width: 150px;
+}
+.fg input[type=search] { min-width: 200px; }
+.btn-teal {
+  background: var(--octo-teal);
+  color: #fff;
+  border: none;
+  border-radius: 7px;
+  padding: .55rem 1.2rem;
+  font-size: .88rem;
+  font-weight: 700;
+  cursor: pointer;
+  margin-bottom: 1px;
+}
+.btn-teal:hover { opacity: .87; }
+.btn-orange {
+  background: var(--octo-orange);
+  color: #fff;
+  border: none;
+  border-radius: 7px;
+  padding: .55rem 1.1rem;
+  font-size: .88rem;
+  font-weight: 700;
+  cursor: pointer;
+  margin-bottom: 1px;
+}
+.btn-orange:hover { opacity: .87; }
+
+/* Post-Tabelle */
+.post-table-wrap {
+  background: var(--octo-card);
+  border-radius: 10px;
+  border: 1px solid var(--octo-border);
+  overflow: hidden;
+}
+.post-table-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: .9rem 1.2rem;
+  border-bottom: 1px solid var(--octo-border);
+}
+.post-table-header h2 { font-size: 1rem; color: var(--octo-teal); margin: 0; }
+.post-count { font-size: .82rem; color: #888; }
+
+table { width: 100%; border-collapse: collapse; }
+thead th {
+  text-align: left;
+  font-size: .75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  color: #888;
+  padding: .7rem 1rem;
+  border-bottom: 2px solid var(--octo-border);
+  background: #fafafa;
+}
+tbody tr {
+  cursor: pointer;
+  transition: background .13s;
+}
+tbody tr:hover { background: #f0f8f9; }
+tbody tr:hover .post-title-cell { color: var(--octo-teal); }
+tbody td {
+  padding: .75rem 1rem;
+  border-bottom: 1px solid #f0ece8;
+  font-size: .88rem;
+  vertical-align: middle;
+}
+.post-title-cell {
+  font-weight: 600;
+  color: #222;
+  max-width: 420px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition: color .13s;
+}
+.badge-date {
+  background: #e8f5f6;
+  color: var(--octo-teal);
+  padding: .2rem .6rem;
+  border-radius: 20px;
+  font-size: .78rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.badge-type {
+  background: #fff3ec;
+  color: var(--octo-orange);
+  padding: .2rem .6rem;
+  border-radius: 20px;
+  font-size: .75rem;
+  white-space: nowrap;
+}
+.arrow-cell { color: #bbb; font-size: 1rem; text-align: right; }
+.empty-state {
+  text-align: center;
+  padding: 3rem 1rem;
+  color: #999;
+}
+.empty-state .icon { font-size: 2.5rem; margin-bottom: .5rem; }
+.alert-error {
+  background: #fde8e8;
+  border-left: 4px solid #e53935;
+  padding: .9rem 1.2rem;
+  border-radius: 0 8px 8px 0;
+  color: #b71c1c;
+  font-size: .88rem;
+  margin-bottom: 1rem;
+}
+</style>
+
+<div class="tl-hero">
+  <h1>📈 Post Timeline</h1>
+  <p>Wähle einen Zeitraum → alle Posts darin erscheinen → Post anklicken für die detaillierte Metriken-Grafik.</p>
+</div>
+
+{% if db_error %}
+<div class="alert-error">⚠️ {{ db_error }}</div>
+{% endif %}
+
+<form method="get" id="filterForm">
+  <div class="filter-bar">
+    <div class="fg">
+      <label>Von</label>
+      <input type="date" name="date_from" value="{{ date_from }}">
+    </div>
+    <div class="fg">
+      <label>Bis</label>
+      <input type="date" name="date_to" value="{{ date_to }}">
+    </div>
+    <div class="fg">
+      <label>Suche</label>
+      <input type="search" name="q" value="{{ search }}" placeholder="Titel / Post-ID…">
+    </div>
+    <button type="submit" class="btn-teal">🔍 Anzeigen</button>
+    <button type="button" class="btn-orange" onclick="setLast30()">Letzte 30 Tage</button>
+  </div>
+</form>
+
+<div class="post-table-wrap">
+  <div class="post-table-header">
+    <h2>📋 Posts im Zeitraum {{ date_from }} – {{ date_to }}</h2>
+    <span class="post-count">{{ posts|length }} Post{{ posts|length|pluralize:"s" }}</span>
+  </div>
+
+  {% if posts %}
+  <table>
+    <thead>
+      <tr>
+        <th>Post-Datum</th>
+        <th>Titel</th>
+        <th>Typ</th>
+        <th>Post-ID</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for p in posts %}
+      <tr onclick="window.location='{% url 'linkedin_statistics:timeline_detail' p.post_id %}?back_from={{ date_from }}&back_to={{ date_to }}'">
+        <td><span class="badge-date">{{ p.post_date|default:"–" }}</span></td>
+        <td class="post-title-cell" title="{{ p.post_title }}">{{ p.post_title|default:p.post_id|truncatechars:80 }}</td>
+        <td>
+          {% if p.content_type %}
+          <span class="badge-type">{{ p.content_type }}</span>
+          {% else %}–{% endif %}
+        </td>
+        <td style="color:#aaa;font-size:.78rem;font-family:monospace">{{ p.post_id }}</td>
+        <td class="arrow-cell">›</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <div class="empty-state">
+    <div class="icon">📭</div>
+    <p>Keine Posts im gewählten Zeitraum gefunden.</p>
+    <p style="font-size:.82rem;margin-top:.4rem">
+      Bitte prüfe, ob das Post-Datum in <code>linkedin_posts_posted</code> oder <code>linkedin_posts</code> eingetragen ist.
+    </p>
+  </div>
+  {% endif %}
+</div>
+
+<script>
+function setLast30() {
+  const to   = new Date();
+  const from = new Date();
+  from.setDate(from.getDate() - 30);
+  const fmt = d => d.toISOString().slice(0,10);
+  document.querySelector('[name=date_from]').value = fmt(from);
+  document.querySelector('[name=date_to]').value   = fmt(to);
+  document.getElementById('filterForm').submit();
+}
+</script>
+{% endblock %}

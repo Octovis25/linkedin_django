@@ -1,0 +1,132 @@
+{% extends "core/base.html" %}
+
+{% block content %}
+<div class="stat-wrapper">
+
+  <!-- Sub-navigation tabs -->
+  <div class="stat-tabs">
+    <a href="/statistics/" class="stat-tab {% if active_tab == 'overview' %}active{% endif %}">
+      📊 Overview
+    </a>
+    <a href="/statistics/timeline/" class="stat-tab {% if active_tab == 'timeline' %}active{% endif %}">
+      📈 Post Timeline
+    </a>
+  </div>
+
+  <!-- Date range filter -->
+  <div class="stat-filter-bar">
+    <form method="get" class="filter-form">
+      <span>Date range:</span>
+      <input type="date" name="from" value="{{ date_from }}">
+      <span>to</span>
+      <input type="date" name="to" value="{{ date_to }}">
+      <button type="submit" class="btn btn-primary btn-sm">Apply</button>
+      <a href="?from={{ default_from }}&to={{ default_to }}" class="btn btn-secondary btn-sm">Last 30 days</a>
+    </form>
+  </div>
+
+  <!-- Page content -->
+  <div class="stat-content">
+    {% block stat_content %}{% endblock %}
+  </div>
+
+</div>
+
+<style>
+  .stat-wrapper { padding: 0.5rem 0; }
+
+  .stat-tabs {
+    display: flex;
+    gap: 0;
+    border-bottom: 2px solid var(--octo-petrol);
+    margin-bottom: 1.5rem;
+  }
+
+  .stat-tab {
+    padding: 0.6rem 1.5rem;
+    text-decoration: none;
+    color: var(--octo-petrol);
+    font-weight: 500;
+    border-bottom: 3px solid transparent;
+    margin-bottom: -2px;
+    transition: all 0.2s;
+  }
+
+  .stat-tab:hover {
+    color: var(--octo-orange);
+    border-bottom-color: var(--octo-orange);
+  }
+
+  .stat-tab.active {
+    color: var(--octo-orange);
+    border-bottom-color: var(--octo-orange);
+  }
+
+  .stat-filter-bar {
+    background: var(--octo-light-gray);
+    padding: 0.75rem 1rem;
+    border-radius: 6px;
+    margin-bottom: 1.5rem;
+  }
+
+  .filter-form {
+    display: flex;
+    gap: 0.75rem;
+    align-items: center;
+    font-size: 0.9rem;
+  }
+
+  .filter-form input[type="date"] {
+    padding: 0.35rem 0.5rem;
+    border: 2px solid var(--octo-light-gray);
+    border-radius: 4px;
+    font-size: 0.85rem;
+    width: 145px;
+  }
+
+  .kpi-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 1.25rem;
+    margin-bottom: 2rem;
+  }
+
+  .kpi-card {
+    background: var(--octo-white);
+    border: 2px solid var(--octo-light-gray);
+    border-radius: 8px;
+    padding: 1.25rem 1.5rem;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+    transition: all 0.25s;
+  }
+
+  .kpi-card:hover {
+    border-color: var(--octo-petrol);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0,133,145,0.15);
+  }
+
+  .kpi-icon { font-size: 1.5rem; margin-bottom: 0.5rem; }
+  .kpi-label { font-size: 0.78rem; color: var(--octo-dark-petrol); font-weight: 600; text-transform: uppercase; letter-spacing: 0.6px; margin-bottom: 0.35rem; }
+  .kpi-value { font-size: 2.2rem; font-weight: 700; color: var(--octo-petrol); line-height: 1; margin-bottom: 0.4rem; }
+  .kpi-sub { font-size: 0.82rem; color: #6c757d; }
+  .kpi-sub.positive { color: #28a745; font-weight: 600; }
+  .kpi-sub.negative { color: #dc3545; font-weight: 600; }
+
+  .stat-section { margin-bottom: 2rem; }
+  .stat-section h2 { color: var(--octo-petrol); font-size: 1.1rem; margin-bottom: 1rem; padding-bottom: 0.4rem; border-bottom: 2px solid var(--octo-light-gray); }
+
+  .chart-container { background: var(--octo-white); border: 2px solid var(--octo-light-gray); border-radius: 8px; padding: 1.25rem; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
+
+  .posts-table { width: 100%; border-collapse: collapse; font-size: 0.88rem; }
+  .posts-table thead { background: var(--octo-petrol); color: white; }
+  .posts-table th, .posts-table td { padding: 0.6rem 0.8rem; text-align: left; border-bottom: 1px solid var(--octo-light-gray); }
+  .posts-table tr:hover td { background: var(--octo-light-gray); }
+  .posts-table a { color: var(--octo-petrol); text-decoration: none; }
+  .posts-table a:hover { color: var(--octo-orange); }
+
+  .badge { display: inline-block; padding: 0.2rem 0.6rem; border-radius: 20px; font-size: 0.78rem; font-weight: 600; }
+  .badge-impressions { background: #e3f2fd; color: #1565c0; }
+  .badge-engagement { background: #e8f5e9; color: #2e7d32; }
+</style>
+{% endblock %}

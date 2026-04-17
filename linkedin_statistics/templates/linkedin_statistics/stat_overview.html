@@ -1,0 +1,129 @@
+{% extends "linkedin_statistics/stat_base.html" %}
+
+{% block stat_content %}
+
+<!-- KPI Cards -->
+<div class="kpi-grid">
+
+  <div class="kpi-card">
+    <div class="kpi-icon">👥</div>
+    <div class="kpi-label">Total Followers</div>
+    <div class="kpi-value">{{ data.total_followers }}</div>
+    <div class="kpi-sub {% if data.follower_growth > 0 %}positive{% elif data.follower_growth < 0 %}negative{% endif %}">
+      {% if data.follower_growth > 0 %}▲{% elif data.follower_growth < 0 %}▼{% endif %}
+      {{ data.follower_growth }}% in selected period
+    </div>
+  </div>
+
+  <div class="kpi-card">
+    <div class="kpi-icon">📝</div>
+    <div class="kpi-label">Posts Published</div>
+    <div class="kpi-value">{{ data.total_posts }}</div>
+    <div class="kpi-sub">Total in database</div>
+  </div>
+
+  <div class="kpi-card">
+    <div class="kpi-icon">👁️</div>
+    <div class="kpi-label">Total Impressions</div>
+    <div class="kpi-value">{{ data.total_impressions }}</div>
+    <div class="kpi-sub">Selected period</div>
+  </div>
+
+  <div class="kpi-card">
+    <div class="kpi-icon">❤️</div>
+    <div class="kpi-label">Total Engagement</div>
+    <div class="kpi-value">{{ data.total_engagement }}</div>
+    <div class="kpi-sub">Likes + Comments + Shares</div>
+  </div>
+
+</div>
+
+<!-- Follower Chart -->
+{% if data.follower_chart_labels %}
+<div class="stat-section">
+  <h2>📈 Follower Growth</h2>
+  <div class="chart-container">
+    <canvas id="followerChart" height="80"></canvas>
+  </div>
+</div>
+{% endif %}
+
+<!-- Top Posts Table -->
+<div class="stat-section">
+  <h2>🏆 Top Posts by Impressions</h2>
+  {% if data.top_posts %}
+  <div class="chart-container">
+    <table class="posts-table">
+      <thead>
+        <tr>
+          <th>Post ID</th>
+          <th>Date</th>
+          <th>Impressions</th>
+          <th>Likes</th>
+          <th>Comments</th>
+          <th>Shares</th>
+          <th>Link</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for post in data.top_posts %}
+        <tr>
+          <td><small>{{ post.post_id }}</small></td>
+          <td>{{ post.post_date|default:"—" }}</td>
+          <td><span class="badge badge-impressions">{{ post.impressions }}</span></td>
+          <td>{{ post.likes }}</td>
+          <td>{{ post.comments }}</td>
+          <td>{{ post.shares }}</td>
+          <td>
+            {% if post.post_link %}
+            <a href="{{ post.post_link }}" target="_blank">🔗 Open</a>
+            {% else %}—{% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="chart-container" style="text-align:center; color:#6c757d; padding: 2rem;">
+    No post data found. Please import LinkedIn CSV data first.
+  </div>
+  {% endif %}
+</div>
+
+<div style="padding: 1rem; background: var(--octo-light-gray); border-radius: 6px; font-size: 0.88rem; color: var(--octo-dark-petrol);">
+  <strong>🔜 Coming next:</strong> Post Timeline – click any post to see its performance over time.
+</div>
+
+<!-- Chart.js -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+{% if data.follower_chart_labels %}
+const ctx = document.getElementById('followerChart').getContext('2d');
+new Chart(ctx, {
+  type: 'line',
+  data: {
+    labels: {{ data.follower_chart_labels|safe }},
+    datasets: [{
+      label: 'Followers',
+      data: {{ data.follower_chart_values|safe }},
+      borderColor: '#008591',
+      backgroundColor: 'rgba(0,133,145,0.08)',
+      borderWidth: 2,
+      tension: 0.4,
+      fill: true,
+      pointBackgroundColor: '#008591',
+    }]
+  },
+  options: {
+    responsive: true,
+    plugins: { legend: { display: false } },
+    scales: {
+      y: { beginAtZero: false, grid: { color: '#F9F7F0' } },
+      x: { grid: { display: false } }
+    }
+  }
+});
+{% endif %}
+</script>
+{% endblock %}
