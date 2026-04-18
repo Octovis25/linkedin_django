@@ -26,7 +26,14 @@
   <form method="get" class="df">
     <label>Von</label><input type="date" name="from" value="{{ date_from }}">
     <label>Bis</label><input type="date" name="to" value="{{ date_to }}">
-    <button type="submit">Anwenden</button>
+    
+    <label>Aggregation</label>
+    <select name="group_by" style="padding:.35rem .5rem;border:1px solid #ced4da;border-radius:.25rem;font-size:.85rem">
+      <option value="day" {% if group_by == 'day' %}selected{% endif %}>Tag</option>
+      <option value="week" {% if group_by == 'week' %}selected{% endif %}>Woche</option>
+      <option value="month" {% if group_by == 'month' %}selected{% endif %}>Monat</option>
+    </select>
+<button type="submit">Anwenden</button>
   </form>
 </div>
 
@@ -35,6 +42,8 @@
   <a href="{% url 'linkedin_statistics:timeline' %}" class="{% if tab == 'timeline' %}on{% endif %}">Timeline</a>
 </div>
 
+<p style="margin:-.5rem 0 1.5rem;color:#6c757d;font-size:.85rem">{{ aggregation_note }}</p>
+
 <div class="kg">
   <div class="kc"><div class="ki">👥</div><div class="kl">Followers</div><div class="kv">{{ data.total_followers }}</div><div class="ks">{{ data.followers_change }} im Zeitraum</div></div>
   <div class="kc"><div class="ki">📝</div><div class="kl">Posts</div><div class="kv">{{ data.total_posts }}</div><div class="ks">im Zeitraum</div></div>
@@ -42,10 +51,18 @@
   <div class="kc"><div class="ki">❤️</div><div class="kl">Engagement</div><div class="kv">{{ data.total_engagement }}</div><div class="ks">Likes + Comments + Shares</div></div>
 </div>
 
+
 <div class="cc">
   <h2>📈 Content Metrics</h2>
-  <canvas id="chart1" height="100"></canvas>
+  <canvas id="chart1" height="110"></canvas>
+  <p style="margin:.75rem 0 0;color:#6c757d;font-size:.85rem">Impressions als Balken; Engagement Rate (%) als Linie. Rechte Achse ist auf 45% skaliert.</p>
 </div>
+
+<div class="cc">
+  <h2>📊 Interaktionen (absolut)</h2>
+  <canvas id="chart2" height="120"></canvas>
+</div>
+
 
 <div class="cc" style="padding:0">
   <h2 style="padding:1rem 1.5rem .5rem">🏆 Top 5 Posts</h2>
@@ -66,30 +83,82 @@
   {% else %}<p style="padding:1.5rem;text-align:center;color:#6c757d">Keine Daten vorhanden.</p>{% endif %}
 </div>
 
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src=\"https://cdn.jsdelivr.net/npm/chart.js\"></script>
 <script>
-{% if data.chart_labels %}
-new Chart(document.getElementById('chart1').getContext('2d'),{
-  type:'line',
-  data:{
-    labels:{{ data.chart_labels|safe }},
-    datasets:[
-      {label:'Impressions',data:{{ data.chart_impressions|safe }},borderColor:'#2196F3',borderWidth:2,tension:.3,fill:false,yAxisID:'y',pointBackgroundColor:'#2196F3'},
-      {label:'Engagement Rate %',data:{{ data.chart_engagement|safe }},borderColor:'#e53935',borderWidth:2,borderDash:[5,5],tension:.3,fill:false,yAxisID:'y1',pointBackgroundColor:'#e53935'}
-    ]
-  },
-  options:{
-    responsive:true,
-    interaction:{mode:'index',intersect:false},
-    plugins:{legend:{position:'bottom'}},
-    scales:{
-      y:{type:'linear',position:'left',title:{display:true,text:'Impressions'},beginAtZero:true},
-      y1:{type:'linear',position:'right',title:{display:true,text:'Engagement %'},grid:{drawOnChartArea:false},beginAtZero:true,max:50}
+const labels = {{ data.chart_labels|default:'[]'|safe }};
+
+if (labels && labels.length) {
+  // Chart 1: Impressions (bar) + Engagement Rate (line)
+  new Chart(document.getElementById('chart1').getContext('2d'), {
+    data: {
+      labels: labels,
+      datasets: [
+        {
+          type: 'bar',
+          label: 'Impressions',
+          data: {{ data.chart_impressions|default:'[]'|safe }},
+          borderWidth: 0,
+          yAxisID: 'y'
+        },
+        {
+          type: 'line',
+          label: 'Engagement Rate %',
+          data: {{ data.chart_engagement|default:'[]'|safe }},
+          borderColor: '#e53935',
+          backgroundColor: '#e53935',
+          borderWidth: 2,
+          tension: 0.3,
+          fill: false,
+          yAxisID: 'y1',
+          pointRadius: 2
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      interaction: { mode: 'index', intersect: false },
+      plugins: { legend: { position: 'bottom' } },
+      scales: {
+        x: { ticks: { maxRotation: 45, minRotation: 0 } },
+        y: { title: { display: true, text: 'Impressions' }, beginAtZero: true },
+        y1: {
+          position: 'right',
+          title: { display: true, text: 'Engagement %' },
+          grid: { drawOnChartArea: false },
+          beginAtZero: true,
+          max: 45,
+          ticks: { callback: (v) => v + '%' }
+        }
+      }
     }
-  }
-});
-{% else %}
-document.getElementById('chart1').parentElement.innerHTML+='<p style="text-align:center;color:#6c757d">Keine Chart-Daten.</p>';
-{% endif %}
+  });
+
+  // Chart 2: Interactions absolute (grouped bars)
+  new Chart(document.getElementById('chart2').getContext('2d'), {
+    type: 'bar',
+    data: {
+      labels: labels,
+      datasets: [
+        { label: 'Clicks', data: {{ data.chart_clicks|default:'[]'|safe }}, borderWidth: 0 },
+        { label: 'Reactions', data: {{ data.chart_reactions|default:'[]'|safe }}, borderWidth: 0 },
+        { label: 'Comments', data: {{ data.chart_comments|default:'[]'|safe }}, borderWidth: 0 },
+        { label: 'Shares', data: {{ data.chart_shares|default:'[]'|safe }}, borderWidth: 0 }
+      ]
+    },
+    options: {
+      responsive: true,
+      interaction: { mode: 'index', intersect: false },
+      plugins: { legend: { position: 'top' } },
+      scales: {
+        x: { ticks: { maxRotation: 45, minRotation: 0 } },
+        y: { title: { display: true, text: 'Anzahl' }, beginAtZero: true }
+      }
+    }
+  });
+
+} else {
+  document.getElementById('chart1').parentElement.innerHTML += '<p style="text-align:center;color:#6c757d">Keine Chart-Daten.</p>';
+  document.getElementById('chart2').parentElement.innerHTML += '<p style="text-align:center;color:#6c757d">Keine Chart-Daten.</p>';
+}
 </script>
 {% endblock %}
