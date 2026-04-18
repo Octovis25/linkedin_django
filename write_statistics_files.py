@@ -1,15 +1,19 @@
 #!/usr/bin/env python3
-"""
-Writes all statistics module files with correct DB column names.
-Run from repo root: python write_statistics_files.py
-"""
 import os
 
 BASE = "linkedin_statistics"
 
-# ── stat_utils.py ─────────────────────────────────────────────
-STAT_UTILS = '''\
-from datetime import datetime, timedelta
+def write(path, content):
+    full = os.path.join(BASE, path) if not path.startswith(BASE) else path
+    os.makedirs(os.path.dirname(full), exist_ok=True)
+    with open(full, 'w') as f:
+        f.write(content)
+    print(f"  OK  {full}")
+
+# ═══════════════════════════════════════════════════════════════
+# 1. stat_utils.py
+# ═══════════════════════════════════════════════════════════════
+write("stat_utils.py", """from datetime import datetime, timedelta
 
 def get_date_range(request):
     date_to = datetime.today().date()
@@ -23,21 +27,24 @@ def get_date_range(request):
         try: date_to = datetime.strptime(to_param, '%Y-%m-%d').date()
         except ValueError: pass
     return date_from, date_to
-'''
+""")
 
-# ── reports/stat_overview.py ──────────────────────────────────
-STAT_OVERVIEW = '''\
-from django.db import connection
+# ═══════════════════════════════════════════════════════════════
+# 2. reports/stat_overview.py
+# ═══════════════════════════════════════════════════════════════
+write("reports/__init__.py", "")
+write("reports/stat_overview.py", '''from django.db import connection
 
 def get_overview_data(date_from=None, date_to=None):
     data = {}
     with connection.cursor() as cur:
-        # Followers
+        # Followers - letzter bekannter Stand
         try:
             cur.execute("SELECT followers_total FROM linkedin_followers ORDER BY date DESC LIMIT 1")
             row = cur.fetchone()
             data['total_followers'] = row[0] if row else 0
-        except: data['total_followers'] = 0
+        except:
+            data['total_followers'] = 0
 
         # Follower growth
         try:
@@ -47,44 +54,71 @@ def get_overview_data(date_from=None, date_to=None):
             last = cur.fetchone()
             if first and last and first[0] and first[0] > 0:
                 data['follower_growth'] = round(((last[0] - first[0]) / first[0]) * 100, 1)
-            else: data['follower_growth'] = 0
-        except: data['follower_growth'] = 0
+            else:
+                data['follower_growth'] = 0
+        except:
+            data['follower_growth'] = 0
 
         # Total posts
         try:
             cur.execute("SELECT COUNT(*) FROM linkedin_posts")
             row = cur.fetchone()
             data['total_posts'] = row[0] if row else 0
-        except: data['total_posts'] = 0
+        except:
+            data['total_posts'] = 0
 
-        # Impressions from linkedin_posts_metrics
+        # Impressions - LETZTER STAND pro Post, dann summieren (NICHT alle Snapshots addieren!)
         try:
-            cur.execute("SELECT COALESCE(SUM(impressions),0) FROM linkedin_posts_metrics WHERE metric_date BETWEEN %s AND %s", [date_from, date_to])
+            cur.execute("""
+                SELECT COALESCE(SUM(m.impressions), 0)
+                FROM linkedin_posts_metrics m
+                INNER JOIN (
+                    SELECT post_id, MAX(metric_date) AS max_date
+                    FROM linkedin_posts_metrics
+                    WHERE metric_date BETWEEN %s AND %s
+                    GROUP BY post_id
+                ) latest ON m.post_id = latest.post_id AND m.metric_date = latest.max_date
+            """, [date_from, date_to])
             row = cur.fetchone()
             data['total_impressions'] = row[0] if row else 0
-        except: data['total_impressions'] = 0
+        except:
+            data['total_impressions'] = 0
 
-        # Engagement from linkedin_posts_metrics
+        # Engagement - LETZTER STAND pro Post, dann summieren
         try:
-            cur.execute("SELECT COALESCE(SUM(likes + comments + direct_shares),0) FROM linkedin_posts_metrics WHERE metric_date BETWEEN %s AND %s", [date_from, date_to])
+            cur.execute("""
+                SELECT COALESCE(SUM(m.likes + m.comments + m.direct_shares), 0)
+                FROM linkedin_posts_metrics m
+                INNER JOIN (
+                    SELECT post_id, MAX(metric_date) AS max_date
+                    FROM linkedin_posts_metrics
+                    WHERE metric_date BETWEEN %s AND %s
+                    GROUP BY post_id
+                ) latest ON m.post_id = latest.post_id AND m.metric_date = latest.max_date
+            """, [date_from, date_to])
             row = cur.fetchone()
             data['total_engagement'] = row[0] if row else 0
-        except: data['total_engagement'] = 0
+        except:
+            data['total_engagement'] = 0
 
-        # Top 5 posts - JOIN with metrics table
+        # Top 5 posts - letzter Stand pro Post
         try:
             cur.execute("""
                 SELECT lp.post_id,
                        COALESCE(lp.post_title, lp.post_id) AS post_title,
                        lp.post_date,
                        lp.post_url,
-                       COALESCE(SUM(m.impressions), 0) AS impressions,
-                       COALESCE(SUM(m.likes), 0) AS likes,
-                       COALESCE(SUM(m.comments), 0) AS comments,
-                       COALESCE(SUM(m.direct_shares), 0) AS shares
+                       COALESCE(m.impressions, 0) AS impressions,
+                       COALESCE(m.likes, 0) AS likes,
+                       COALESCE(m.comments, 0) AS comments,
+                       COALESCE(m.direct_shares, 0) AS shares
                 FROM linkedin_posts lp
-                LEFT JOIN linkedin_posts_metrics m ON lp.post_id = m.post_id
-                GROUP BY lp.post_id, lp.post_title, lp.post_date, lp.post_url
+                INNER JOIN linkedin_posts_metrics m ON lp.post_id = m.post_id
+                INNER JOIN (
+                    SELECT post_id, MAX(metric_date) AS max_date
+                    FROM linkedin_posts_metrics
+                    GROUP BY post_id
+                ) latest ON m.post_id = latest.post_id AND m.metric_date = latest.max_date
                 ORDER BY impressions DESC
                 LIMIT 5
             """)
@@ -94,9 +128,11 @@ def get_overview_data(date_from=None, date_to=None):
                 'post_link': r[3] or '', 'impressions': r[4],
                 'likes': r[5], 'comments': r[6], 'shares': r[7],
             } for r in rows]
-        except: data['top_posts'] = []
+        except:
+            data['top_posts'] = []
 
-        # Content Metrics Chart (Impressions + Engagement Rate per month)
+        # Content Metrics Chart - Impressions + Engagement Rate pro Monat
+        # Pro Monat: Tageswerte summieren fuer Impressions, AVG fuer Engagement Rate
         try:
             cur.execute("""
                 SELECT DATE_FORMAT(metric_date, '%%Y-%%m') AS month,
@@ -117,11 +153,12 @@ def get_overview_data(date_from=None, date_to=None):
             data['content_chart_engagement'] = []
 
     return data
-'''
+''')
 
-# ── reports/stat_timeline.py ──────────────────────────────────
-STAT_TIMELINE = '''\
-from django.db import connection
+# ═══════════════════════════════════════════════════════════════
+# 3. reports/stat_timeline.py
+# ═══════════════════════════════════════════════════════════════
+write("reports/stat_timeline.py", '''from django.db import connection
 
 def get_all_posts(date_from=None, date_to=None):
     posts = []
@@ -133,16 +170,21 @@ def get_all_posts(date_from=None, date_to=None):
                        COALESCE(pp.post_date, lp.post_date) AS post_date,
                        lp.post_url,
                        lp.content_type,
-                       COALESCE(SUM(m.impressions), 0) AS impressions,
-                       COALESCE(SUM(m.likes), 0) AS likes,
-                       COALESCE(SUM(m.comments), 0) AS comments,
-                       COALESCE(SUM(m.direct_shares), 0) AS shares,
-                       COALESCE(SUM(m.clicks), 0) AS clicks
+                       COALESCE(m.impressions, 0) AS impressions,
+                       COALESCE(m.likes, 0) AS likes,
+                       COALESCE(m.comments, 0) AS comments,
+                       COALESCE(m.direct_shares, 0) AS shares,
+                       COALESCE(m.clicks, 0) AS clicks
                 FROM linkedin_posts lp
                 LEFT JOIN linkedin_posts_posted pp ON lp.post_id = pp.post_id
                 LEFT JOIN linkedin_posts_metrics m ON lp.post_id = m.post_id
-                GROUP BY lp.post_id, lp.post_title, post_date, lp.post_url, lp.content_type
-                ORDER BY post_date DESC
+                LEFT JOIN (
+                    SELECT post_id, MAX(metric_date) AS max_date
+                    FROM linkedin_posts_metrics
+                    GROUP BY post_id
+                ) latest ON m.post_id = latest.post_id AND m.metric_date = latest.max_date
+                WHERE latest.max_date IS NOT NULL OR m.id IS NULL
+                ORDER BY COALESCE(pp.post_date, lp.post_date) DESC
             """)
             rows = cur.fetchall()
             posts = [{
@@ -155,11 +197,12 @@ def get_all_posts(date_from=None, date_to=None):
         except:
             posts = []
     return posts
-'''
+''')
 
-# ── stat_overview.html ────────────────────────────────────────
-STAT_OVERVIEW_HTML = '''\
-{% extends "linkedin_statistics/stat_base.html" %}
+# ═══════════════════════════════════════════════════════════════
+# 4. stat_overview.html
+# ═══════════════════════════════════════════════════════════════
+write("templates/linkedin_statistics/stat_overview.html", r'''{% extends "linkedin_statistics/stat_base.html" %}
 
 {% block stat_content %}
 
@@ -184,7 +227,7 @@ STAT_OVERVIEW_HTML = '''\
     <div class="kpi-icon">👁️</div>
     <div class="kpi-label">Total Impressions</div>
     <div class="kpi-value">{{ data.total_impressions }}</div>
-    <div class="kpi-sub">Selected period</div>
+    <div class="kpi-sub">Selected period (latest per post)</div>
   </div>
   <div class="kpi-card">
     <div class="kpi-icon">❤️</div>
@@ -194,7 +237,7 @@ STAT_OVERVIEW_HTML = '''\
   </div>
 </div>
 
-<!-- Content Metrics Chart -->
+<!-- Content Metrics Chart: Impressions (blau, links) + Engagement Rate (rot, rechts) -->
 {% if data.content_chart_labels %}
 <div class="stat-section">
   <h2>📈 Content Metriken über Zeit</h2>
@@ -278,7 +321,7 @@ new Chart(ctx, {
         callbacks: {
           label: function(ctx) {
             if (ctx.dataset.yAxisID === 'y1') return ctx.dataset.label + ': ' + ctx.parsed.y.toFixed(2) + '%';
-            return ctx.dataset.label + ': ' + ctx.parsed.y;
+            return ctx.dataset.label + ': ' + ctx.parsed.y.toLocaleString('de-DE');
           }
         }
       }
@@ -292,11 +335,12 @@ new Chart(ctx, {
 {% endif %}
 </script>
 {% endblock %}
-'''
+''')
 
-# ── stat_timeline.html ────────────────────────────────────────
-STAT_TIMELINE_HTML = '''\
-{% extends "linkedin_statistics/stat_base.html" %}
+# ═══════════════════════════════════════════════════════════════
+# 5. stat_timeline.html
+# ═══════════════════════════════════════════════════════════════
+write("templates/linkedin_statistics/stat_timeline.html", r'''{% extends "linkedin_statistics/stat_base.html" %}
 
 {% block stat_content %}
 <div class="stat-section">
@@ -329,22 +373,8 @@ STAT_TIMELINE_HTML = '''\
   {% endif %}
 </div>
 {% endblock %}
-'''
+''')
 
-# ── Write all files ───────────────────────────────────────────
-files = {
-    f"{BASE}/stat_utils.py": STAT_UTILS,
-    f"{BASE}/reports/stat_overview.py": STAT_OVERVIEW,
-    f"{BASE}/reports/stat_timeline.py": STAT_TIMELINE,
-    f"{BASE}/templates/{BASE}/stat_overview.html": STAT_OVERVIEW_HTML,
-    f"{BASE}/templates/{BASE}/stat_timeline.html": STAT_TIMELINE_HTML,
-}
-
-for path, content in files.items():
-    os.makedirs(os.path.dirname(path), exist_ok=True)
-    with open(path, 'w') as f:
-        f.write(content)
-    print(f"OK  {path}")
-
-print("\nAlle Dateien geschrieben!")
-print("Jetzt: git add -A && git commit -m 'fix: statistics korrekte DB-Spalten' && git push")
+print("\n✅ Alle 5 Dateien geschrieben!")
+print("Jetzt ausfuehren:")
+print("  git add -A && git commit -m 'fix: statistics korrekte Spalten + letzter Stand' && git push")

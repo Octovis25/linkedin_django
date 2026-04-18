@@ -23,7 +23,7 @@
     <div class="kpi-icon">👁️</div>
     <div class="kpi-label">Total Impressions</div>
     <div class="kpi-value">{{ data.total_impressions }}</div>
-    <div class="kpi-sub">Selected period</div>
+    <div class="kpi-sub">Selected period (latest per post)</div>
   </div>
   <div class="kpi-card">
     <div class="kpi-icon">❤️</div>
@@ -33,7 +33,7 @@
   </div>
 </div>
 
-<!-- Content Metrics Chart -->
+<!-- Content Metrics Chart: Impressions (blau, links) + Engagement Rate (rot, rechts) -->
 {% if data.content_chart_labels %}
 <div class="stat-section">
   <h2>📈 Content Metriken über Zeit</h2>
@@ -117,7 +117,7 @@ new Chart(ctx, {
         callbacks: {
           label: function(ctx) {
             if (ctx.dataset.yAxisID === 'y1') return ctx.dataset.label + ': ' + ctx.parsed.y.toFixed(2) + '%';
-            return ctx.dataset.label + ': ' + ctx.parsed.y;
+            return ctx.dataset.label + ': ' + ctx.parsed.y.toLocaleString('de-DE');
           }
         }
       }
