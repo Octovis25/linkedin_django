@@ -81,6 +81,7 @@
     <a href="/" {% if request.path == '/' %}class="active"{% endif %}>Dashboard</a>
     <a href="/data/posts/" {% if '/data/' in request.path %}class="active"{% endif %}>Data</a>
     <a href="/collectives/" {% if '/collectives/' in request.path %}class="active"{% endif %}>Collectives</a>
+    <a href="/statistics/" {% if '/statistics/' in request.path %}class="active"{% endif %}>Statistik</a>
   </nav>
   {% if '/data/' in request.path %}
   <div class="sub-nav">
