@@ -1,17 +1,15 @@
-"""linkedin_statistics/stat_views.py
+"""linkedin_statistics/stat_views.py – COMPLETE FIX (2026-04-18)
 
-Overview + Timeline (Stats).
-
-Wichtig (Aggregation):
-- Viele LinkedIn-Metriken sind *kumulativ* (Impressions, Clicks, Reactions/Likes, Comments, Shares).
-- Damit Summen pro Zeitraum nicht mehrfach gezaehlt werden, wird pro Post und pro Zeitraum
-  (Tag/Woche/Monat) nur der *letzte* Snapshot in diesem Zeitraum verwendet.
-
-UI:
-- Overview: KPI-Kacheln + zwei Charts (Impressions+Engagement% und Interaktionen absolut)
-- Timeline: Post-Liste (klickbar) – Detail-Chart wird im Template per AJAX geladen (falls vorhanden)
+Layout:
+  1) KPI-Kacheln: IMMER letzter Stand + Datum (NICHT von Von/Bis abhaengig)
+  2) Von/Bis + Aggregation (beeinflusst NUR Charts)
+  3) Chart: Impressions + Engagement Rate (Combo)
+  4) Chart: Interaktionen absolut (Grouped Bar)
+  5) Top 5 nach Impressions
+  6) Top 5 nach Engagement
 """
 
+import json
 from datetime import date, timedelta
 
 from django.contrib.auth.decorators import login_required
@@ -31,41 +29,33 @@ def _safe(cur, sql, params=None):
         return None
 
 
-def _period_fmt(group_by: str) -> str:
-    """MySQL DATE_FORMAT pattern for period bucketing."""
+def _period_fmt(group_by):
     group_by = (group_by or 'month').lower()
     if group_by == 'day':
         return '%Y-%m-%d'
     if group_by == 'week':
-        return '%x-W%v'  # ISO year-week
+        return '%x-W%v'
     return '%Y-%m'
 
 
-def _overview_series(d_from: str, d_to: str, group_by: str):
-    """Return time series rows aggregated by period.
+def _agg_text(group_by):
+    return {'day': 'tagesweise', 'week': 'wochenweise', 'month': 'monatsweise'}.get(
+        (group_by or 'month').lower(), 'monatsweise')
 
-    Uses *last snapshot per post per period* within [d_from, d_to].
-    """
+
+def _chart_series(d_from, d_to, group_by):
     fmt = _period_fmt(group_by)
-
     sql = """
-        SELECT
-            period_key,
-            COALESCE(SUM(impressions), 0)    AS impressions,
-            COALESCE(SUM(clicks), 0)         AS clicks,
-            COALESCE(SUM(likes), 0)          AS reactions,
-            COALESCE(SUM(comments), 0)       AS comments,
-            COALESCE(SUM(direct_shares), 0)  AS shares
+        SELECT period_key,
+               COALESCE(SUM(impressions),0),
+               COALESCE(SUM(clicks),0),
+               COALESCE(SUM(likes),0),
+               COALESCE(SUM(comments),0),
+               COALESCE(SUM(direct_shares),0)
         FROM (
-            SELECT
-                DATE_FORMAT(m.metric_date, %s) AS period_key,
-                m.post_id,
-                m.metric_date,
-                m.impressions,
-                m.clicks,
-                m.likes,
-                m.comments,
-                m.direct_shares
+            SELECT DATE_FORMAT(m.metric_date, %s) AS period_key,
+                   m.post_id, m.impressions, m.clicks, m.likes,
+                   m.comments, m.direct_shares
             FROM linkedin_posts_metrics m
             WHERE m.metric_date BETWEEN %s AND %s
               AND m.metric_date = (
@@ -79,178 +69,94 @@ def _overview_series(d_from: str, d_to: str, group_by: str):
         GROUP BY period_key
         ORDER BY period_key
     """
-
     with connection.cursor() as c:
         rows = _safe(c, sql, [fmt, d_from, d_to, d_from, d_to, fmt, fmt])
-
     if not rows:
-        return []
+        return [], [], [], [], [], [], []
 
-    out = []
+    labels, imps, clicks, reactions, comments, shares, eng_rate = [], [], [], [], [], [], []
     for r in rows:
-        out.append({
-            'label': r[0],
-            'impressions': int(r[1] or 0),
-            'clicks': int(r[2] or 0),
-            'reactions': int(r[3] or 0),
-            'comments': int(r[4] or 0),
-            'shares': int(r[5] or 0),
-        })
-    return out
+        labels.append(r[0])
+        imp = int(r[1] or 0)
+        cli = int(r[2] or 0)
+        rea = int(r[3] or 0)
+        com = int(r[4] or 0)
+        sha = int(r[5] or 0)
+        imps.append(imp)
+        clicks.append(cli)
+        reactions.append(rea)
+        comments.append(com)
+        shares.append(sha)
+        total_int = rea + com + sha
+        eng_rate.append(round((total_int / imp * 100) if imp else 0, 2))
+
+    return labels, imps, clicks, reactions, comments, shares, eng_rate
 
 
-def _overview_data(d_from, d_to, group_by='month'):
-    data = {
-        'total_followers': 0,
-        'followers_change': '—',
-        'total_posts': 0,
-        'total_impressions': 0,
-        'total_engagement': 0,
-        'top_posts': [],
-        # Charts
-        'chart_labels': [],
-        'chart_impressions': [],
-        'chart_engagement': [],
-        'chart_clicks': [],
-        'chart_reactions': [],
-        'chart_comments': [],
-        'chart_shares': [],
+def _kpi_snapshot():
+    kpi = {
+        'total_followers': 0, 'followers_date': None,
+        'total_posts': 0, 'posts_date': None,
+        'total_impressions': 0, 'total_engagement': 0, 'metrics_date': None,
     }
-
     with connection.cursor() as c:
+        rows = _safe(c, "SELECT followers_total, date FROM linkedin_followers ORDER BY date DESC LIMIT 1")
+        if rows and rows[0][0] is not None:
+            kpi['total_followers'] = rows[0][0]
+            kpi['followers_date'] = rows[0][1]
 
-        # Followers total
-        rows = _safe(c, "SELECT followers_total FROM linkedin_followers ORDER BY date DESC LIMIT 1")
-        if rows and rows[0][0]:
-            data['total_followers'] = rows[0][0]
-
-        # Followers delta in range (best-effort)
-        rows = _safe(
-            c,
-            """
-            SELECT
-              (SELECT followers_total FROM linkedin_followers WHERE date <= %s ORDER BY date DESC LIMIT 1),
-              (SELECT followers_total FROM linkedin_followers WHERE date <= %s ORDER BY date DESC LIMIT 1)
-            """,
-            [d_to, d_from],
-        )
-        if rows and rows[0][0] is not None and rows[0][1] is not None:
-            delta = rows[0][0] - rows[0][1]
-            data['followers_change'] = f"+{delta}" if delta >= 0 else str(delta)
-
-        # Posts count in range
-        rows = _safe(
-            c,
-            """
-            SELECT COUNT(*) FROM linkedin_posts lp
-            LEFT JOIN linkedin_posts_posted pp ON lp.post_id = pp.post_id
-            WHERE COALESCE(pp.post_date, lp.post_date) BETWEEN %s AND %s
-            """,
-            [d_from, d_to],
-        )
-        if rows:
-            data['total_posts'] = rows[0][0] or 0
-
-        # Total impressions: last snapshot per post (NOT range-limited by design)
-        rows = _safe(
-            c,
-            """
-            SELECT COALESCE(SUM(latest_imp), 0) FROM (
-                SELECT m.impressions AS latest_imp
-                FROM linkedin_posts_metrics m
-                WHERE m.metric_date = (
-                    SELECT MAX(m2.metric_date)
-                    FROM linkedin_posts_metrics m2
-                    WHERE m2.post_id = m.post_id
-                )
-                GROUP BY m.post_id
-            ) sub
-            """,
-        )
-        if rows:
-            data['total_impressions'] = rows[0][0] or 0
-
-        # Total engagement: last snapshot per post
-        rows = _safe(
-            c,
-            """
-            SELECT COALESCE(SUM(latest_eng), 0) FROM (
-                SELECT (m.likes + m.comments + m.direct_shares) AS latest_eng
-                FROM linkedin_posts_metrics m
-                WHERE m.metric_date = (
-                    SELECT MAX(m2.metric_date)
-                    FROM linkedin_posts_metrics m2
-                    WHERE m2.post_id = m.post_id
-                )
-                GROUP BY m.post_id
-            ) sub
-            """,
-        )
-        if rows:
-            data['total_engagement'] = rows[0][0] or 0
-
-        # Top 5 posts by impressions (last snapshot)
-        rows = _safe(
-            c,
-            """
-            SELECT lp.post_id,
-                   COALESCE(lp.post_title, lp.post_id),
-                   COALESCE(pp.post_date, lp.post_date),
-                   lp.post_url,
-                   m.impressions,
-                   m.likes,
-                   m.comments,
-                   m.direct_shares
+        rows = _safe(c, """
+            SELECT COUNT(*), MAX(COALESCE(pp.post_date, lp.post_date))
             FROM linkedin_posts lp
             LEFT JOIN linkedin_posts_posted pp ON lp.post_id = pp.post_id
-            INNER JOIN linkedin_posts_metrics m ON lp.post_id = m.post_id
-            WHERE m.metric_date = (
-                SELECT MAX(m2.metric_date)
-                FROM linkedin_posts_metrics m2
-                WHERE m2.post_id = m.post_id
-            )
-            ORDER BY m.impressions DESC
-            LIMIT 5
-            """,
-        )
+        """)
         if rows:
-            data['top_posts'] = [
-                {
-                    'title': r[1],
-                    'post_date': r[2],
-                    'link': r[3] or '',
-                    'impressions': r[4] or 0,
-                    'likes': r[5] or 0,
-                    'comments': r[6] or 0,
-                    'shares': r[7] or 0,
-                }
-                for r in rows
-            ]
+            kpi['total_posts'] = rows[0][0] or 0
+            kpi['posts_date'] = rows[0][1]
 
-    # Time series for charts (range-limited)
-    series = _overview_series(d_from, d_to, group_by)
-    if series:
-        labels = [r['label'] for r in series]
-        imps = [r['impressions'] for r in series]
-        clicks = [r['clicks'] for r in series]
-        reactions = [r['reactions'] for r in series]
-        comments = [r['comments'] for r in series]
-        shares = [r['shares'] for r in series]
+        rows = _safe(c, """
+            SELECT COALESCE(SUM(imp),0), COALESCE(SUM(eng),0), MAX(md)
+            FROM (
+                SELECT m.impressions AS imp,
+                       (m.likes + m.comments + m.direct_shares) AS eng,
+                       m.metric_date AS md
+                FROM linkedin_posts_metrics m
+                WHERE m.metric_date = (
+                    SELECT MAX(m2.metric_date) FROM linkedin_posts_metrics m2
+                    WHERE m2.post_id = m.post_id)
+                GROUP BY m.post_id
+            ) sub
+        """)
+        if rows and rows[0]:
+            kpi['total_impressions'] = rows[0][0] or 0
+            kpi['total_engagement'] = rows[0][1] or 0
+            kpi['metrics_date'] = rows[0][2]
+    return kpi
 
-        engagement_rate = []
-        for i, imp in enumerate(imps):
-            interactions = reactions[i] + comments[i] + shares[i]
-            engagement_rate.append(round((interactions / imp * 100.0) if imp else 0.0, 2))
 
-        data['chart_labels'] = labels
-        data['chart_impressions'] = imps
-        data['chart_clicks'] = clicks
-        data['chart_reactions'] = reactions
-        data['chart_comments'] = comments
-        data['chart_shares'] = shares
-        data['chart_engagement'] = engagement_rate
+def _top5(cursor):
+    base = """
+        SELECT lp.post_id, COALESCE(lp.post_title, lp.post_id),
+               COALESCE(pp.post_date, lp.post_date), lp.post_url,
+               m.impressions, m.clicks, m.likes, m.comments, m.direct_shares
+        FROM linkedin_posts lp
+        LEFT JOIN linkedin_posts_posted pp ON lp.post_id = pp.post_id
+        INNER JOIN linkedin_posts_metrics m ON lp.post_id = m.post_id
+        WHERE m.metric_date = (
+            SELECT MAX(m2.metric_date) FROM linkedin_posts_metrics m2
+            WHERE m2.post_id = m.post_id)
+    """
+    def to_list(rows):
+        return [{
+            'title': r[1], 'post_date': r[2], 'link': r[3] or '',
+            'impressions': r[4] or 0, 'clicks': r[5] or 0,
+            'likes': r[6] or 0, 'comments': r[7] or 0, 'shares': r[8] or 0,
+            'engagement': (r[6] or 0) + (r[7] or 0) + (r[8] or 0),
+        } for r in (rows or [])]
 
-    return data
+    by_imp = _safe(cursor, base + " ORDER BY m.impressions DESC LIMIT 5")
+    by_eng = _safe(cursor, base + " ORDER BY (m.likes+m.comments+m.direct_shares) DESC LIMIT 5")
+    return to_list(by_imp), to_list(by_eng)
 
 
 @login_required
@@ -260,76 +166,76 @@ def overview(request):
     d_to = request.GET.get('to', dt)
     group_by = request.GET.get('group_by', 'month')
 
-    aggregation_note = (
-        "Aggregation: Tag/Woche/Monat. Pro Zeitraum wird je Post nur der letzte Snapshot gezaehlt, "
-        "damit kumulative Metriken nicht mehrfach summiert werden."
-    )
+    kpi = _kpi_snapshot()
+    with connection.cursor() as c:
+        top_imp, top_eng = _top5(c)
 
-    return render(
-        request,
-        'linkedin_statistics/stat_overview.html',
-        {
-            'data': _overview_data(d_from, d_to, group_by=group_by),
-            'date_from': d_from,
-            'date_to': d_to,
-            'tab': 'overview',
-            'group_by': group_by,
-            'aggregation_note': aggregation_note,
-        },
-    )
+    labels, imps, clicks, reactions, comments, shares, eng_rate = _chart_series(d_from, d_to, group_by)
+
+    return render(request, 'linkedin_statistics/stat_overview.html', {
+        'kpi': kpi,
+        'top_posts_impressions': top_imp,
+        'top_posts_engagement': top_eng,
+        'date_from': d_from,
+        'date_to': d_to,
+        'tab': 'overview',
+        'group_by': group_by,
+        'agg_text': _agg_text(group_by),
+        'chart_labels_json': json.dumps(labels),
+        'chart_impressions_json': json.dumps(imps),
+        'chart_engagement_json': json.dumps(eng_rate),
+        'chart_clicks_json': json.dumps(clicks),
+        'chart_reactions_json': json.dumps(reactions),
+        'chart_comments_json': json.dumps(comments),
+        'chart_shares_json': json.dumps(shares),
+    })
 
 
 @login_required
 def timeline(request):
-    # Unverändert: Post-Liste (letzter Snapshot). Detaildaten (Tagesverlauf) kommen aus dem Template/AJAX.
+    df, dt = _defaults()
+    d_from = request.GET.get('from', df)
+    d_to = request.GET.get('to', dt)
+    group_by = request.GET.get('group_by', 'month')
+
     posts = []
     with connection.cursor() as c:
-        rows = _safe(
-            c,
-            """
-            SELECT lp.post_id,
-                   COALESCE(lp.post_title, lp.post_id),
+        rows = _safe(c, """
+            SELECT lp.post_id, COALESCE(lp.post_title, lp.post_id),
                    COALESCE(pp.post_date, lp.post_date),
                    lp.post_url, lp.content_type,
-                   COALESCE(m.impressions, 0),
-                   COALESCE(m.likes, 0),
-                   COALESCE(m.comments, 0),
-                   COALESCE(m.direct_shares, 0),
-                   COALESCE(m.clicks, 0)
+                   COALESCE(m.impressions,0), COALESCE(m.likes,0),
+                   COALESCE(m.comments,0), COALESCE(m.direct_shares,0),
+                   COALESCE(m.clicks,0)
             FROM linkedin_posts lp
             LEFT JOIN linkedin_posts_posted pp ON lp.post_id = pp.post_id
             LEFT JOIN linkedin_posts_metrics m ON lp.post_id = m.post_id
                 AND m.metric_date = (
-                    SELECT MAX(m2.metric_date)
-                    FROM linkedin_posts_metrics m2
-                    WHERE m2.post_id = m.post_id
-                )
+                    SELECT MAX(m2.metric_date) FROM linkedin_posts_metrics m2
+                    WHERE m2.post_id = m.post_id)
             ORDER BY COALESCE(pp.post_date, lp.post_date) DESC
-            """,
-        )
+        """)
         if rows:
-            posts = [
-                {
-                    'post_id': r[0],
-                    'title': r[1],
-                    'post_date': r[2],
-                    'link': r[3] or '',
-                    'content_type': r[4] or '',
-                    'impressions': r[5],
-                    'likes': r[6],
-                    'comments': r[7],
-                    'shares': r[8],
-                    'clicks': r[9],
-                    'engagement': (r[6] or 0) + (r[7] or 0) + (r[8] or 0),
-                }
-                for r in rows
-            ]
+            for r in rows:
+                posts.append({
+                    'post_id': r[0], 'title': r[1], 'post_date': r[2],
+                    'link': r[3] or '', 'content_type': r[4] or '',
+                    'impressions': r[5], 'likes': r[6], 'comments': r[7],
+                    'shares': r[8], 'clicks': r[9],
+                })
 
-    return render(request, 'linkedin_statistics/stat_timeline.html', {'posts': posts, 'tab': 'timeline'})
+    labels, imps, clicks, reactions, comments, shares, eng_rate = _chart_series(d_from, d_to, group_by)
 
-
-@login_required
-def timeline_detail(request, post_id):
-    # Falls eine eigene Detail-Route gebraucht wird, kann man hier JSON liefern.
-    # Aktuell bleibt der bisherige Flow kompatibel.
-    return timeline(request)
+    return render(request, 'linkedin_statistics/stat_timeline.html', {
+        'posts': posts,
+        'date_from': d_from, 'date_to': d_to,
+        'tab': 'timeline', 'group_by': group_by,
+        'agg_text': _agg_text(group_by),
+        'chart_labels_json': json.dumps(labels),
+        'chart_impressions_json': json.dumps(imps),
+        'chart_engagement_json': json.dumps(eng_rate),
+        'chart_clicks_json': json.dumps(clicks),
+        'chart_reactions_json': json.dumps(reactions),
+        'chart_comments_json': json.dumps(comments),
+        'chart_shares_json': json.dumps(shares),
+    })
