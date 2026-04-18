@@ -239,3 +239,29 @@ def timeline(request):
         'chart_comments_json': json.dumps(comments),
         'chart_shares_json': json.dumps(shares),
     })
+
+
+@login_required
+def timeline_detail(request, post_id):
+    """Detail-Chart fuer einen einzelnen Post (Tagesverlauf)."""
+    data = []
+    with connection.cursor() as c:
+        rows = _safe(c, """
+            SELECT metric_date, impressions, clicks, likes, comments, direct_shares
+            FROM linkedin_posts_metrics
+            WHERE post_id = %s
+            ORDER BY metric_date
+        """, [post_id])
+        if rows:
+            for r in rows:
+                data.append({
+                    'date': r[0].isoformat() if r[0] else '',
+                    'impressions': int(r[1] or 0),
+                    'clicks': int(r[2] or 0),
+                    'likes': int(r[3] or 0),
+                    'comments': int(r[4] or 0),
+                    'shares': int(r[5] or 0),
+                })
+
+    from django.http import JsonResponse
+    return JsonResponse({'series': data})
