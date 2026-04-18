@@ -7,9 +7,6 @@
 .df{display:flex;gap:.5rem;align-items:center;flex-wrap:wrap}
 .df input[type=date],.df select{padding:.35rem .5rem;border:1px solid #ced4da;border-radius:.25rem;font-size:.85rem}
 .df button{padding:.35rem .75rem;background:#0077B5;color:#fff;border:none;border-radius:.25rem;cursor:pointer;font-size:.85rem}
-.tabs{display:flex;gap:0;margin-bottom:1.5rem;border-bottom:2px solid #dee2e6}
-.tabs a{padding:.6rem 1.2rem;text-decoration:none;color:#6c757d;font-weight:500;border-bottom:2px solid transparent;margin-bottom:-2px}
-.tabs a.on{color:#0077B5;border-bottom-color:#0077B5}
 .kg{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:1rem;margin-bottom:2rem}
 .kc{background:#fff;border-radius:.5rem;padding:1.25rem;box-shadow:0 1px 3px rgba(0,0,0,.1);text-align:center}
 .ki{font-size:1.8rem;margin-bottom:.25rem}
@@ -56,9 +53,6 @@
   </form>
 </div>
 
-<div class="tabs">
-  <a href="{% url 'linkedin_statistics:overview' %}" class="{% if tab == 'overview' %}on{% endif %}">Overview</a>
-  <a href="{% url 'linkedin_statistics:timeline' %}" class="{% if tab == 'timeline' %}on{% endif %}">Timeline</a>
 </div>
 
 <!-- ═══ 3. Chart: Content Metrics (Impressions + Engagement Rate) ═══ -->
