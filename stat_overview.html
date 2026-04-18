@@ -10,11 +10,14 @@
 .kpi-sub{font-size:.75rem;color:#6c757d}
 .filter-bar{background:#fff;border-radius:.5rem;padding:1rem 1.5rem;box-shadow:0 1px 3px rgba(0,0,0,.1);margin-bottom:1.5rem;display:flex;gap:1rem;align-items:flex-end;flex-wrap:wrap}
 .filter-bar label{font-size:.8rem;color:#008591;font-weight:600;display:block;margin-bottom:.25rem}
-.filter-bar input,.filter-bar select{padding:.35rem .5rem;border:1px solid #ced4da;border-radius:.25rem;font-size:.85rem}
+.filter-bar input{padding:.35rem .5rem;border:1px solid #ced4da;border-radius:.25rem;font-size:.85rem}
 .filter-bar button{padding:.4rem 1rem;background:#008591;color:#fff;border:none;border-radius:.25rem;cursor:pointer;font-size:.85rem;font-weight:600}
 .filter-bar button:hover{background:#005F68}
 .cc{background:#fff;border-radius:.5rem;padding:1.5rem;box-shadow:0 1px 3px rgba(0,0,0,.1);margin-bottom:1.5rem}
 .cc h2{font-size:1.1rem;margin-bottom:1rem;color:#008591}
+.top-table{width:100%;border-collapse:collapse;font-size:.85rem}
+.top-table th{text-align:left;padding:.5rem;border-bottom:2px solid #dee2e6;color:#495057;font-weight:600}
+.top-table td{padding:.5rem;border-bottom:1px solid #f0f0f0}
 </style>
 
 <!-- KPI-Karten -->
@@ -22,82 +25,89 @@
   <div class="kpi-card">
     <div class="kpi-icon">👥</div>
     <div class="kpi-label">Followers</div>
-    <div class="kpi-value">{{ kpi.followers|default:"—" }}</div>
-    <div class="kpi-sub">Stand: {{ kpi.followers_date|default:"—" }}</div>
+    <div class="kpi-value">{{ data.total_followers|default:"—" }}</div>
+    <div class="kpi-sub">Veränderung: {{ data.followers_change|default:"—" }}</div>
   </div>
   <div class="kpi-card">
     <div class="kpi-icon">📝</div>
     <div class="kpi-label">Posts</div>
-    <div class="kpi-value">{{ kpi.posts|default:"—" }}</div>
-    <div class="kpi-sub">letzter Post: {{ kpi.last_post|default:"—" }}</div>
+    <div class="kpi-value">{{ data.total_posts|default:"—" }}</div>
+    <div class="kpi-sub">im Zeitraum</div>
   </div>
   <div class="kpi-card">
     <div class="kpi-icon">👁️</div>
     <div class="kpi-label">Impressions</div>
-    <div class="kpi-value">{{ kpi.impressions|default:"—" }}</div>
-    <div class="kpi-sub">Stand: {{ kpi.impressions_date|default:"—" }}</div>
+    <div class="kpi-value">{{ data.total_impressions|default:"—" }}</div>
+    <div class="kpi-sub">gesamt</div>
   </div>
   <div class="kpi-card">
     <div class="kpi-icon">❤️</div>
     <div class="kpi-label">Engagement</div>
-    <div class="kpi-value">{{ kpi.engagement|default:"—" }}</div>
-    <div class="kpi-sub">Likes+Comments+Shares · Stand: {{ kpi.engagement_date|default:"—" }}</div>
+    <div class="kpi-value">{{ data.total_engagement|default:"—" }}</div>
+    <div class="kpi-sub">Likes + Comments + Shares</div>
   </div>
 </div>
 
-<!-- Filter -->
+<!-- Datumsfilter -->
 <form method="get" class="filter-bar">
   <div>
     <label>Von</label>
-    <input type="date" name="from" value="{{ d_from }}">
+    <input type="date" name="from" value="{{ date_from }}">
   </div>
   <div>
     <label>Bis</label>
-    <input type="date" name="to" value="{{ d_to }}">
-  </div>
-  <div>
-    <label>Aggregation</label>
-    <select name="agg">
-      <option value="week" {% if agg == 'week' %}selected{% endif %}>Woche</option>
-      <option value="month" {% if agg == 'month' %}selected{% endif %}>Monat</option>
-    </select>
+    <input type="date" name="to" value="{{ date_to }}">
   </div>
   <button type="submit">Anwenden</button>
 </form>
 
-<!-- Charts -->
+<!-- Impressions Chart -->
 <div class="cc">
-  <h2>📈 Impressions</h2>
+  <h2>📈 Impressions pro Monat</h2>
   <canvas id="chartImpressions" height="100"></canvas>
 </div>
+
+<!-- Top Posts -->
+{% if data.top_posts %}
 <div class="cc">
-  <h2>👥 Follower-Entwicklung</h2>
-  <canvas id="chartFollowers" height="100"></canvas>
+  <h2>🏆 Top 5 Posts nach Impressions</h2>
+  <table class="top-table">
+    <thead><tr><th>Post</th><th>Datum</th><th>Impressions</th><th>Likes</th><th>Comments</th><th>Shares</th></tr></thead>
+    <tbody>
+    {% for p in data.top_posts %}
+    <tr>
+      <td>{% if p.link %}<a href="{{ p.link }}" target="_blank">{{ p.title|truncatechars:50 }}</a>{% else %}{{ p.title|truncatechars:50 }}{% endif %}</td>
+      <td>{{ p.post_date|date:"d.m.Y"|default:"—" }}</td>
+      <td>{{ p.impressions }}</td>
+      <td>{{ p.likes }}</td>
+      <td>{{ p.comments }}</td>
+      <td>{{ p.shares }}</td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
 </div>
-<div class="cc">
-  <h2>❤️ Engagement (Likes + Comments + Shares)</h2>
-  <canvas id="chartEngagement" height="100"></canvas>
-</div>
+{% endif %}
 
 {% endblock %}
 
 {% block extra_js %}
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
-const chartData = {{ chart_json|safe }};
-function makeChart(id, label, color, dataKey) {
-  const ctx = document.getElementById(id).getContext('2d');
-  const rows = chartData[dataKey] || [];
-  if (!rows.length) {
-    ctx.canvas.parentElement.innerHTML += '<p style="text-align:center;color:#6c757d;padding:1rem">Keine Daten im gewählten Zeitraum.</p>';
-    ctx.canvas.remove();
-    return;
-  }
-  new Chart(ctx, {
+const labels = {{ data.chart_labels|safe }};
+const impressions = {{ data.chart_impressions|safe }};
+if (labels.length > 0) {
+  new Chart(document.getElementById('chartImpressions').getContext('2d'), {
     type: 'bar',
     data: {
-      labels: rows.map(r => r.label),
-      datasets: [{ label, data: rows.map(r => r.value), backgroundColor: color + 'aa', borderColor: color, borderWidth: 1.5 }]
+      labels: labels,
+      datasets: [{
+        label: 'Impressions',
+        data: impressions,
+        backgroundColor: '#008591aa',
+        borderColor: '#008591',
+        borderWidth: 1.5
+      }]
     },
     options: {
       responsive: true,
@@ -105,9 +115,10 @@ function makeChart(id, label, color, dataKey) {
       scales: { y: { beginAtZero: true } }
     }
   });
+} else {
+  document.getElementById('chartImpressions').parentElement.innerHTML +=
+    '<p style="text-align:center;color:#6c757d;padding:1rem">Keine Daten im gewählten Zeitraum.</p>';
+  document.getElementById('chartImpressions').remove();
 }
-makeChart('chartImpressions', 'Impressions',       '#008591', 'impressions');
-makeChart('chartFollowers',   'Follower-Zuwachs',  '#61CEBC', 'followers');
-makeChart('chartEngagement',  'Engagement',         '#F56E28', 'engagement');
 </script>
 {% endblock %}
