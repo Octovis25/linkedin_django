@@ -2,94 +2,112 @@
 {% block title %}Statistics – Overview{% endblock %}
 {% block content %}
 <style>
-.sh{display:flex;justify-content:space-between;align-items:center;margin-bottom:1.5rem;flex-wrap:wrap;gap:1rem}
-.sh h1{margin:0;font-size:1.5rem}
-.df{display:flex;gap:.5rem;align-items:center}
-.df input[type=date]{padding:.35rem .5rem;border:1px solid #ced4da;border-radius:.25rem;font-size:.85rem}
-.df button{padding:.35rem .75rem;background:#0077B5;color:#fff;border:none;border-radius:.25rem;cursor:pointer;font-size:.85rem}
-.tabs{display:flex;gap:0;margin-bottom:1.5rem;border-bottom:2px solid #dee2e6}
-.tabs a{padding:.6rem 1.2rem;text-decoration:none;color:#6c757d;font-weight:500;border-bottom:2px solid transparent;margin-bottom:-2px}
-.tabs a.on{color:#0077B5;border-bottom-color:#0077B5}
-.kg{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:1rem;margin-bottom:2rem}
-.kc{background:#fff;border-radius:.5rem;padding:1.25rem;box-shadow:0 1px 3px rgba(0,0,0,.1);text-align:center}
-.ki{font-size:1.8rem;margin-bottom:.25rem}.kl{font-size:.8rem;color:#6c757d;text-transform:uppercase;letter-spacing:.5px}
-.kv{font-size:1.6rem;font-weight:700;color:#212529}.ks{font-size:.75rem;color:#6c757d;margin-top:.25rem}
-.cc{background:#fff;border-radius:.5rem;padding:1.5rem;box-shadow:0 1px 3px rgba(0,0,0,.1);margin-bottom:2rem}
-.cc h2{font-size:1.1rem;margin-bottom:1rem}
-.pt{width:100%;border-collapse:collapse;font-size:.85rem}
-.pt th{text-align:left;padding:.5rem;border-bottom:2px solid #dee2e6;font-weight:600;color:#495057}
-.pt td{padding:.5rem;border-bottom:1px solid #f0f0f0}
+.kpi-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:1rem;margin-bottom:1.5rem}
+.kpi-card{background:#fff;border-radius:.5rem;padding:1.25rem;box-shadow:0 1px 3px rgba(0,0,0,.1);text-align:center}
+.kpi-icon{font-size:2rem;margin-bottom:.5rem}
+.kpi-label{font-size:.75rem;text-transform:uppercase;color:#6c757d;letter-spacing:.05em}
+.kpi-value{font-size:2rem;font-weight:700;color:#161616;margin:.25rem 0}
+.kpi-sub{font-size:.75rem;color:#6c757d}
+.filter-bar{background:#fff;border-radius:.5rem;padding:1rem 1.5rem;box-shadow:0 1px 3px rgba(0,0,0,.1);margin-bottom:1.5rem;display:flex;gap:1rem;align-items:flex-end;flex-wrap:wrap}
+.filter-bar label{font-size:.8rem;color:#008591;font-weight:600;display:block;margin-bottom:.25rem}
+.filter-bar input,.filter-bar select{padding:.35rem .5rem;border:1px solid #ced4da;border-radius:.25rem;font-size:.85rem}
+.filter-bar button{padding:.4rem 1rem;background:#008591;color:#fff;border:none;border-radius:.25rem;cursor:pointer;font-size:.85rem;font-weight:600}
+.filter-bar button:hover{background:#005F68}
+.cc{background:#fff;border-radius:.5rem;padding:1.5rem;box-shadow:0 1px 3px rgba(0,0,0,.1);margin-bottom:1.5rem}
+.cc h2{font-size:1.1rem;margin-bottom:1rem;color:#008591}
 </style>
 
-<div class="sh">
-  <h1>📊 LinkedIn Statistics</h1>
-  <form method="get" class="df">
-    <label>Von</label><input type="date" name="from" value="{{ date_from }}">
-    <label>Bis</label><input type="date" name="to" value="{{ date_to }}">
-    <button type="submit">Anwenden</button>
-  </form>
+<!-- KPI-Karten -->
+<div class="kpi-grid">
+  <div class="kpi-card">
+    <div class="kpi-icon">👥</div>
+    <div class="kpi-label">Followers</div>
+    <div class="kpi-value">{{ kpi.followers|default:"—" }}</div>
+    <div class="kpi-sub">Stand: {{ kpi.followers_date|default:"—" }}</div>
+  </div>
+  <div class="kpi-card">
+    <div class="kpi-icon">📝</div>
+    <div class="kpi-label">Posts</div>
+    <div class="kpi-value">{{ kpi.posts|default:"—" }}</div>
+    <div class="kpi-sub">letzter Post: {{ kpi.last_post|default:"—" }}</div>
+  </div>
+  <div class="kpi-card">
+    <div class="kpi-icon">👁️</div>
+    <div class="kpi-label">Impressions</div>
+    <div class="kpi-value">{{ kpi.impressions|default:"—" }}</div>
+    <div class="kpi-sub">Stand: {{ kpi.impressions_date|default:"—" }}</div>
+  </div>
+  <div class="kpi-card">
+    <div class="kpi-icon">❤️</div>
+    <div class="kpi-label">Engagement</div>
+    <div class="kpi-value">{{ kpi.engagement|default:"—" }}</div>
+    <div class="kpi-sub">Likes+Comments+Shares · Stand: {{ kpi.engagement_date|default:"—" }}</div>
+  </div>
 </div>
 
-<div class="tabs">
-  <a href="{% url 'linkedin_statistics:overview' %}" class="{% if tab == 'overview' %}on{% endif %}">Overview</a>
-  <a href="{% url 'linkedin_statistics:timeline' %}" class="{% if tab == 'timeline' %}on{% endif %}">Timeline</a>
-</div>
+<!-- Filter -->
+<form method="get" class="filter-bar">
+  <div>
+    <label>Von</label>
+    <input type="date" name="from" value="{{ d_from }}">
+  </div>
+  <div>
+    <label>Bis</label>
+    <input type="date" name="to" value="{{ d_to }}">
+  </div>
+  <div>
+    <label>Aggregation</label>
+    <select name="agg">
+      <option value="week" {% if agg == 'week' %}selected{% endif %}>Woche</option>
+      <option value="month" {% if agg == 'month' %}selected{% endif %}>Monat</option>
+    </select>
+  </div>
+  <button type="submit">Anwenden</button>
+</form>
 
-<div class="kg">
-  <div class="kc"><div class="ki">👥</div><div class="kl">Followers</div><div class="kv">{{ data.total_followers }}</div><div class="ks">{{ data.followers_change }} im Zeitraum</div></div>
-  <div class="kc"><div class="ki">📝</div><div class="kl">Posts</div><div class="kv">{{ data.total_posts }}</div><div class="ks">im Zeitraum</div></div>
-  <div class="kc"><div class="ki">👁️</div><div class="kl">Impressions</div><div class="kv">{{ data.total_impressions }}</div><div class="ks">letzter Stand pro Post</div></div>
-  <div class="kc"><div class="ki">❤️</div><div class="kl">Engagement</div><div class="kv">{{ data.total_engagement }}</div><div class="ks">Likes + Comments + Shares</div></div>
-</div>
-
+<!-- Charts -->
 <div class="cc">
-  <h2>📈 Content Metrics</h2>
-  <canvas id="chart1" height="100"></canvas>
+  <h2>📈 Impressions</h2>
+  <canvas id="chartImpressions" height="100"></canvas>
+</div>
+<div class="cc">
+  <h2>👥 Follower-Entwicklung</h2>
+  <canvas id="chartFollowers" height="100"></canvas>
+</div>
+<div class="cc">
+  <h2>❤️ Engagement (Likes + Comments + Shares)</h2>
+  <canvas id="chartEngagement" height="100"></canvas>
 </div>
 
-<div class="cc" style="padding:0">
-  <h2 style="padding:1rem 1.5rem .5rem">🏆 Top 5 Posts</h2>
-  {% if data.top_posts %}
-  <table class="pt">
-    <thead><tr><th>#</th><th>Post</th><th>Datum</th><th>Impressions</th><th>Likes</th><th>Comments</th><th>Shares</th></tr></thead>
-    <tbody>
-    {% for p in data.top_posts %}
-    <tr>
-      <td>{{ forloop.counter }}</td>
-      <td>{% if p.link %}<a href="{{ p.link }}" target="_blank">{{ p.title|truncatechars:50 }}</a>{% else %}{{ p.title|truncatechars:50 }}{% endif %}</td>
-      <td>{{ p.post_date|date:"d.m.Y"|default:"—" }}</td>
-      <td>{{ p.impressions }}</td><td>{{ p.likes }}</td><td>{{ p.comments }}</td><td>{{ p.shares }}</td>
-    </tr>
-    {% endfor %}
-    </tbody>
-  </table>
-  {% else %}<p style="padding:1.5rem;text-align:center;color:#6c757d">Keine Daten vorhanden.</p>{% endif %}
-</div>
+{% endblock %}
 
+{% block extra_js %}
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
-{% if data.chart_labels %}
-new Chart(document.getElementById('chart1').getContext('2d'),{
-  type:'line',
-  data:{
-    labels:{{ data.chart_labels|safe }},
-    datasets:[
-      {label:'Impressions',data:{{ data.chart_impressions|safe }},borderColor:'#2196F3',borderWidth:2,tension:.3,fill:false,yAxisID:'y',pointBackgroundColor:'#2196F3'},
-      {label:'Engagement Rate %',data:{{ data.chart_engagement|safe }},borderColor:'#e53935',borderWidth:2,borderDash:[5,5],tension:.3,fill:false,yAxisID:'y1',pointBackgroundColor:'#e53935'}
-    ]
-  },
-  options:{
-    responsive:true,
-    interaction:{mode:'index',intersect:false},
-    plugins:{legend:{position:'bottom'}},
-    scales:{
-      y:{type:'linear',position:'left',title:{display:true,text:'Impressions'},beginAtZero:true},
-      y1:{type:'linear',position:'right',title:{display:true,text:'Engagement %'},grid:{drawOnChartArea:false},beginAtZero:true,max:50}
-    }
+const chartData = {{ chart_json|safe }};
+function makeChart(id, label, color, dataKey) {
+  const ctx = document.getElementById(id).getContext('2d');
+  const rows = chartData[dataKey] || [];
+  if (!rows.length) {
+    ctx.canvas.parentElement.innerHTML += '<p style="text-align:center;color:#6c757d;padding:1rem">Keine Daten im gewählten Zeitraum.</p>';
+    ctx.canvas.remove();
+    return;
   }
-});
-{% else %}
-document.getElementById('chart1').parentElement.innerHTML+='<p style="text-align:center;color:#6c757d">Keine Chart-Daten.</p>';
-{% endif %}
+  new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: rows.map(r => r.label),
+      datasets: [{ label, data: rows.map(r => r.value), backgroundColor: color + 'aa', borderColor: color, borderWidth: 1.5 }]
+    },
+    options: {
+      responsive: true,
+      plugins: { legend: { display: false } },
+      scales: { y: { beginAtZero: true } }
+    }
+  });
+}
+makeChart('chartImpressions', 'Impressions',       '#008591', 'impressions');
+makeChart('chartFollowers',   'Follower-Zuwachs',  '#61CEBC', 'followers');
+makeChart('chartEngagement',  'Engagement',         '#F56E28', 'engagement');
 </script>
 {% endblock %}

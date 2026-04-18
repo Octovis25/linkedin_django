@@ -1,3 +1,33 @@
+#!/bin/bash
+# ============================================================
+# FIX_STATISTICS_DEFINITIVE.sh
+# Behebt ALLE Statistics-Probleme auf einmal:
+# 1. base.html → Statistics-Link in Nav + Subnav
+# 2. settings.py → linkedin_statistics in INSTALLED_APPS
+# 3. dashboard/urls.py → Statistics-URLs eingebunden
+# 4. linkedin_statistics App-Dateien sauber setzen
+# ============================================================
+
+set -e
+
+# ── Projektpfad ermitteln ──────────────────────────────────
+PROJECT_DIR="$(cd "$(dirname "$0")" && pwd)"
+echo "📁 Projektverzeichnis: $PROJECT_DIR"
+
+# Haupt-Django-Konfig ermitteln
+DASHBOARD_DIR="$PROJECT_DIR/dashboard"
+if [ ! -d "$DASHBOARD_DIR" ]; then
+  echo "❌ dashboard/-Verzeichnis nicht gefunden. Script muss im Projektwurzel-Verzeichnis liegen."
+  exit 1
+fi
+
+# ── 1. base.html finden und patchen ───────────────────────
+echo ""
+echo "🔧 SCHRITT 1: base.html – Statistics-Link + Subnav"
+BASE_HTML=$(find "$PROJECT_DIR" -name "base.html" | grep -v ".git" | grep -v "node_modules" | head -1)
+echo "   Gefunden: $BASE_HTML"
+
+cat > "$BASE_HTML" << 'BASE_EOF'
 {% load static %}
 <!DOCTYPE html>
 <html lang="de">
@@ -286,3 +316,143 @@
 
 </body>
 </html>
+BASE_EOF
+
+echo "   ✅ base.html gesetzt"
+
+# ── 2. settings.py – linkedin_statistics in INSTALLED_APPS ─
+echo ""
+echo "🔧 SCHRITT 2: settings.py – linkedin_statistics hinzufügen"
+SETTINGS_FILE="$DASHBOARD_DIR/settings.py"
+if [ ! -f "$SETTINGS_FILE" ]; then
+  SETTINGS_FILE=$(find "$PROJECT_DIR" -name "settings.py" | grep -v ".git" | head -1)
+fi
+echo "   Gefunden: $SETTINGS_FILE"
+
+# Nur hinzufügen wenn noch nicht vorhanden
+if grep -q "linkedin_statistics" "$SETTINGS_FILE"; then
+  echo "   ℹ️  linkedin_statistics bereits in INSTALLED_APPS"
+else
+  # Nach 'collectives' einfügen (oder ans Ende der INSTALLED_APPS)
+  python3 - "$SETTINGS_FILE" << 'PYEOF'
+import sys, re
+
+path = sys.argv[1]
+with open(path, 'r') as f:
+    content = f.read()
+
+# Ersetze collectives', durch collectives', 'linkedin_statistics',
+new_content = re.sub(
+    r"'collectives'(\s*,?\s*\])",
+    "'collectives',\n    'linkedin_statistics',\n]",
+    content
+)
+
+# Falls collectives nicht gefunden, nach letztem Eintrag
+if new_content == content:
+    new_content = re.sub(
+        r'(\]\s*\nMIDDLEWARE)',
+        "    'linkedin_statistics',\n]\nMIDDLEWARE",
+        content
+    )
+
+with open(path, 'w') as f:
+    f.write(new_content)
+print("   Done")
+PYEOF
+  echo "   ✅ linkedin_statistics zu INSTALLED_APPS hinzugefügt"
+fi
+
+# ── 3. dashboard/urls.py – Statistics einbinden ───────────
+echo ""
+echo "🔧 SCHRITT 3: dashboard/urls.py – Statistics-URLs einbinden"
+MAIN_URLS="$DASHBOARD_DIR/urls.py"
+if [ ! -f "$MAIN_URLS" ]; then
+  echo "   ❌ $MAIN_URLS nicht gefunden"
+  exit 1
+fi
+
+echo "   Gefunden: $MAIN_URLS"
+cat "$MAIN_URLS"
+
+if grep -q "statistics" "$MAIN_URLS"; then
+  echo "   ℹ️  Statistics-URL bereits vorhanden"
+else
+  python3 - "$MAIN_URLS" << 'PYEOF'
+import sys, re
+
+path = sys.argv[1]
+with open(path, 'r') as f:
+    content = f.read()
+
+# Statistics-Import hinzufügen nach letztem Import
+if 'linkedin_statistics' not in content:
+    content = re.sub(
+        r'(from django\.urls import.*\n)',
+        r'\1from linkedin_statistics import stat_views\n',
+        content,
+        count=1
+    )
+
+# Statistics-URL-Zeilen einfügen vor der schließenden Klammer der urlpatterns
+if 'statistics' not in content:
+    content = re.sub(
+        r'(\])\s*$',
+        "    path('statistics/', stat_views.overview, name='stat_overview'),\n"
+        "    path('statistics/timeline/', stat_views.timeline, name='stat_timeline'),\n"
+        "    path('statistics/timeline/<int:post_id>/', stat_views.timeline_detail, name='stat_timeline_detail'),\n"
+        "]",
+        content.rstrip()
+    )
+
+with open(path, 'w') as f:
+    f.write(content)
+print("   Done")
+PYEOF
+  echo "   ✅ Statistics-URLs hinzugefügt"
+fi
+
+# ── 4. linkedin_statistics App-Struktur sicherstellen ──────
+echo ""
+echo "🔧 SCHRITT 4: linkedin_statistics App-Struktur prüfen"
+STAT_DIR="$PROJECT_DIR/linkedin_statistics"
+
+if [ ! -d "$STAT_DIR" ]; then
+  echo "   Erstelle $STAT_DIR ..."
+  mkdir -p "$STAT_DIR/templates/linkedin_statistics"
+  touch "$STAT_DIR/__init__.py"
+  cat > "$STAT_DIR/apps.py" << 'APPSEOF'
+from django.apps import AppConfig
+class LinkedinStatisticsConfig(AppConfig):
+    default_auto_field = 'django.db.models.BigAutoField'
+    name = 'linkedin_statistics'
+APPSEOF
+fi
+
+# stat_views.py kopieren wenn nicht vorhanden
+if [ ! -f "$STAT_DIR/stat_views.py" ]; then
+  echo "   ⚠️  stat_views.py fehlt – bitte manuell von /linkedin_statistics/stat_views.py kopieren"
+else
+  echo "   ✅ stat_views.py vorhanden"
+fi
+
+# Templates prüfen
+TMPL_DIR="$STAT_DIR/templates/linkedin_statistics"
+mkdir -p "$TMPL_DIR"
+
+if [ ! -f "$TMPL_DIR/stat_overview.html" ]; then
+  echo "   ⚠️  stat_overview.html fehlt im Template-Verzeichnis"
+fi
+if [ ! -f "$TMPL_DIR/stat_timeline.html" ]; then
+  echo "   ⚠️  stat_timeline.html fehlt im Template-Verzeichnis"
+fi
+
+# ── 5. Zusammenfassung ────────────────────────────────────
+echo ""
+echo "════════════════════════════════════════════════"
+echo "✅ FIX ABGESCHLOSSEN"
+echo ""
+echo "Bitte jetzt auf dem Server:"
+echo "  python manage.py collectstatic --noinput"
+echo "  → Render baut automatisch neu (git push)"
+echo "════════════════════════════════════════════════"

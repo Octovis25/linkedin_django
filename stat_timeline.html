@@ -1,12 +1,10 @@
 {% extends "base.html" %}
 {% block title %}Statistics – Timeline{% endblock %}
+
 {% block content %}
 <style>
 .sh{display:flex;justify-content:space-between;align-items:center;margin-bottom:1.5rem;flex-wrap:wrap;gap:1rem}
 .sh h1{margin:0;font-size:1.5rem}
-.tabs{display:flex;gap:0;margin-bottom:1.5rem;border-bottom:2px solid #dee2e6}
-.tabs a{padding:.6rem 1.2rem;text-decoration:none;color:#6c757d;font-weight:500;border-bottom:2px solid transparent;margin-bottom:-2px}
-.tabs a.on{color:#0077B5;border-bottom-color:#0077B5}
 .cc{background:#fff;border-radius:.5rem;padding:1.5rem;box-shadow:0 1px 3px rgba(0,0,0,.1);margin-bottom:1.5rem}
 .cc h2{font-size:1.1rem;margin-bottom:1rem}
 .pt{width:100%;border-collapse:collapse;font-size:.85rem}
@@ -17,178 +15,93 @@
 .post-chart-container{display:none;padding:1rem;background:#fafbfc;border-bottom:2px solid #e9ecef}
 .post-chart-container.open{display:block}
 .post-chart-container canvas{max-height:250px}
-.badge-top5{display:inline-block;background:#0077B5;color:#fff;font-size:.65rem;padding:.1rem .4rem;border-radius:.25rem;margin-left:.5rem;vertical-align:middle}
+.badge-top5{display:inline-block;background:#008591;color:#fff;font-size:.65rem;padding:.1rem .4rem;border-radius:.25rem;margin-left:.5rem;vertical-align:middle}
 .loading{text-align:center;color:#6c757d;padding:1rem;font-size:.85rem}
 </style>
 
-<div class="sh"><h1>📊 LinkedIn Statistics – Timeline</h1></div>
-
-<div class="tabs">
-  <a href="{% url 'linkedin_statistics:overview' %}" class="{% if tab == 'overview' %}on{% endif %}">Overview</a>
-  <a href="{% url 'linkedin_statistics:timeline' %}" class="{% if tab == 'timeline' %}on{% endif %}">Timeline</a>
+<div class="sh">
+  <h1>📊 LinkedIn Statistics – Timeline</h1>
 </div>
 
-<!-- ═══ ALLE POSTS (klickbar) ═══ -->
-<div class="cc" style="padding:0">
-  <h2 style="padding:1rem 1.5rem .5rem">📋 Alle Posts (klicken für Tagesverlauf)</h2>
+<div class="cc">
+  <h2>📈 Letzte 5 Posts – Impressions nach Tagen</h2>
+  <canvas id="top5chart" height="120"></canvas>
+</div>
+
+<div class="cc">
+  <h2>📋 Alle Posts (klicken für Tagesverlauf)</h2>
   {% if all_posts %}
-  <table class="pt" id="posts-table">
+  <table class="pt">
     <thead><tr><th>Post</th><th>Posting-Datum</th><th>Typ</th><th>Link</th></tr></thead>
     <tbody>
     {% for p in all_posts %}
-    <tr class="post-row" data-postid="{{ p.post_id }}" data-idx="{{ forloop.counter0 }}">
-      <td>
-        {{ p.title|truncatechars:60 }}
-        {% if forloop.counter <= 5 %}<span class="badge-top5">Top 5</span>{% endif %}
-      </td>
-      <td>{{ p.post_date|date:"d.m.Y"|default:"—" }}</td>
-      <td>{{ p.content_type|default:"—" }}</td>
-      <td>{% if p.link %}<a href="{{ p.link }}" target="_blank" onclick="event.stopPropagation()">🔗</a>{% else %}—{% endif %}</td>
-    </tr>
-    <tr>
-      <td colspan="4" style="padding:0">
+      <tr class="post-row" data-idx="{{ forloop.counter0 }}" data-postid="{{ p.id }}">
+        <td>{{ p.title|truncatechars:60 }}{% if forloop.counter <= 5 %}<span class="badge-top5">Top 5</span>{% endif %}</td>
+        <td>{{ p.post_date|date:"d.m.Y"|default:"—" }}</td>
+        <td>{{ p.content_type|default:"—" }}</td>
+        <td>{% if p.link %}<a href="{{ p.link }}" target="_blank">🔗</a>{% else %}—{% endif %}</td>
+      </tr>
+      <tr><td colspan="4" style="padding:0">
         <div class="post-chart-container" id="chart-container-{{ forloop.counter0 }}">
-          <canvas id="chart-{{ forloop.counter0 }}" height="200"></canvas>
           <div class="loading" id="loading-{{ forloop.counter0 }}">Lade Daten...</div>
+          <canvas id="chart-{{ forloop.counter0 }}" height="80"></canvas>
         </div>
-      </td>
-    </tr>
+      </td></tr>
     {% endfor %}
     </tbody>
   </table>
   {% else %}
-  <p style="text-align:center;color:#6c757d;padding:2rem">Keine Posts mit Posting-Datum gefunden.<br><small>Posts müssen in linkedin_posts_posted ein post_date haben.</small></p>
+  <p style="text-align:center;color:#6c757d;padding:2rem 0">
+    Keine Posts mit Posting-Datum gefunden.<br>
+    <small>Posts müssen in linkedin_posts_posted ein post_date haben.</small>
+  </p>
   {% endif %}
 </div>
+{% endblock %}
 
-<!-- ═══ TOP 5 CHART: letzte 5 Posts ═══ -->
-<div class="cc">
-  <h2>📈 Letzte 5 Posts – Impressions nach Tagen</h2>
-  <canvas id="top5chart" height="100"></canvas>
-</div>
-
+{% block extra_js %}
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
-// ═══ TOP 5 CHART ═══
 const top5Data = {{ top5_json|safe }};
 const colors = ['#2196F3','#e53935','#4CAF50','#FF9800','#9C27B0'];
-
 if (top5Data.length > 0) {
-  // X-Achse: Tag 1 bis max
   const maxDay = {{ max_days|default:30 }};
   const labels = [];
   for (let i = 1; i <= maxDay; i++) labels.push(i);
-
   const datasets = top5Data.map((p, i) => {
-    // Sparse array: nur Tage wo Daten existieren
     const data = new Array(maxDay).fill(null);
     p.days.forEach((d, j) => { if (d >= 1 && d <= maxDay) data[d-1] = p.impressions[j]; });
-    return {
-      label: p.title,
-      data: data,
-      borderColor: colors[i % colors.length],
-      borderWidth: 2,
-      tension: 0.3,
-      fill: false,
-      spanGaps: true,
-      pointRadius: 2,
-      pointBackgroundColor: colors[i % colors.length],
-    };
+    return { label: p.title, data, borderColor: colors[i % colors.length], borderWidth: 2, tension: 0.3, fill: false, spanGaps: true, pointRadius: 2 };
   });
-
   new Chart(document.getElementById('top5chart').getContext('2d'), {
-    type: 'line',
-    data: { labels: labels, datasets: datasets },
-    options: {
-      responsive: true,
-      interaction: { mode: 'index', intersect: false },
-      plugins: {
-        legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 11 } } },
-        tooltip: {
-          callbacks: {
-            label: function(ctx) {
-              if (ctx.parsed.y === null) return null;
-              return ctx.dataset.label + ': ' + ctx.parsed.y.toLocaleString('de-DE');
-            }
-          }
-        }
-      },
-      scales: {
-        x: { title: { display: true, text: 'Tag' } },
-        y: { title: { display: true, text: 'Impressions' }, beginAtZero: true }
-      }
-    }
+    type: 'line', data: { labels, datasets },
+    options: { responsive: true, plugins: { legend: { position: 'bottom' } }, scales: { x: { title: { display: true, text: 'Tag' } }, y: { beginAtZero: true } } }
   });
-} else {
-  document.getElementById('top5chart').parentElement.innerHTML += '<p style="text-align:center;color:#6c757d">Keine Daten für Chart.</p>';
 }
-
-// ═══ EINZELPOST per Klick ═══
 const chartInstances = {};
-
 document.querySelectorAll('.post-row').forEach(row => {
   row.addEventListener('click', function() {
-    const idx = this.dataset.idx;
-    const postId = this.dataset.postid;
+    const idx = this.dataset.idx, postId = this.dataset.postid;
     const container = document.getElementById('chart-container-' + idx);
     const loading = document.getElementById('loading-' + idx);
-
-    // Toggle
-    if (container.classList.contains('open')) {
-      container.classList.remove('open');
-      return;
-    }
+    if (container.classList.contains('open')) { container.classList.remove('open'); return; }
     container.classList.add('open');
-
-    // Schon geladen?
-    if (chartInstances[idx]) {
-      loading.style.display = 'none';
-      return;
-    }
-
-    // AJAX: Tagesverlauf laden
+    if (chartInstances[idx]) { loading.style.display = 'none'; return; }
     loading.style.display = 'block';
-    fetch('{% url "linkedin_statistics:timeline" %}' + postId + '/')
-      .then(r => r.json())
-      .then(data => {
+    fetch('{% url "linkedin_statistics:timeline_detail" 0 %}'.replace('/0/', '/' + postId + '/'))
+      .then(r => r.json()).then(data => {
         loading.style.display = 'none';
-        if (!data.daily || data.daily.length === 0) {
-          loading.style.display = 'block';
-          loading.textContent = 'Keine Tagesdaten vorhanden.';
-          return;
-        }
-
-        const labels = data.daily.map(d => d.tag);
-        const canvas = document.getElementById('chart-' + idx);
-
-        chartInstances[idx] = new Chart(canvas.getContext('2d'), {
+        if (!data.daily || data.daily.length === 0) { loading.style.display='block'; loading.textContent='Keine Tagesdaten.'; return; }
+        chartInstances[idx] = new Chart(document.getElementById('chart-' + idx).getContext('2d'), {
           type: 'line',
-          data: {
-            labels: labels,
-            datasets: [
-              { label: 'Impressions', data: data.daily.map(d => d.impressions), borderColor: '#2196F3', borderWidth: 2, tension: 0.3, fill: false, yAxisID: 'y' },
-              { label: 'Clicks', data: data.daily.map(d => d.clicks), borderColor: '#FF9800', borderWidth: 2, tension: 0.3, fill: false, yAxisID: 'y' },
-              { label: 'Likes', data: data.daily.map(d => d.likes), borderColor: '#4CAF50', borderWidth: 2, tension: 0.3, fill: false, yAxisID: 'y' },
-              { label: 'Comments', data: data.daily.map(d => d.comments), borderColor: '#9C27B0', borderWidth: 2, tension: 0.3, fill: false, yAxisID: 'y' },
-              { label: 'Shares', data: data.daily.map(d => d.shares), borderColor: '#607D8B', borderWidth: 2, tension: 0.3, fill: false, yAxisID: 'y' },
-              { label: 'Engagement %', data: data.daily.map(d => d.engagement_rate), borderColor: '#e53935', borderWidth: 2, borderDash: [5,5], tension: 0.3, fill: false, yAxisID: 'y1' },
-            ]
-          },
-          options: {
-            responsive: true,
-            interaction: { mode: 'index', intersect: false },
-            plugins: { legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 11 } } } },
-            scales: {
-              x: { title: { display: true, text: 'Tag' } },
-              y: { type: 'linear', position: 'left', title: { display: true, text: 'Anzahl' }, beginAtZero: true },
-              y1: { type: 'linear', position: 'right', title: { display: true, text: 'Engagement %' }, grid: { drawOnChartArea: false }, beginAtZero: true, max: 50 }
-            }
-          }
+          data: { labels: data.daily.map(d => d.tag), datasets: [
+            { label:'Impressions', data: data.daily.map(d=>d.impressions), borderColor:'#2196F3', yAxisID:'y' },
+            { label:'Clicks',      data: data.daily.map(d=>d.clicks),      borderColor:'#FF9800', yAxisID:'y' },
+            { label:'Likes',       data: data.daily.map(d=>d.likes),       borderColor:'#4CAF50', yAxisID:'y' },
+          ]},
+          options: { responsive: true, plugins: { legend: { position: 'bottom' } } }
         });
-      })
-      .catch(err => {
-        loading.textContent = 'Fehler beim Laden: ' + err;
-      });
+      }).catch(err => { loading.textContent = 'Fehler: ' + err; });
   });
 });
 </script>
