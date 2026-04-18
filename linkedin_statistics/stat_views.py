@@ -44,33 +44,22 @@ def _agg_text(group_by):
 
 
 def _chart_series(d_from, d_to, group_by):
+    """SUM ueber linkedin_content_metrics, gruppiert nach Periode."""
     fmt = _period_fmt(group_by)
     sql = """
-        SELECT period_key,
-               COALESCE(SUM(impressions),0),
-               COALESCE(SUM(clicks),0),
-               COALESCE(SUM(likes),0),
-               COALESCE(SUM(comments),0),
-               COALESCE(SUM(direct_shares),0)
-        FROM (
-            SELECT DATE_FORMAT(m.metric_date, %s) AS period_key,
-                   m.post_id, m.impressions, m.clicks, m.likes,
-                   m.comments, m.direct_shares
-            FROM linkedin_posts_metrics m
-            WHERE m.metric_date BETWEEN %s AND %s
-              AND m.metric_date = (
-                  SELECT MAX(m2.metric_date)
-                  FROM linkedin_posts_metrics m2
-                  WHERE m2.post_id = m.post_id
-                    AND m2.metric_date BETWEEN %s AND %s
-                    AND DATE_FORMAT(m2.metric_date, %s) = DATE_FORMAT(m.metric_date, %s)
-              )
-        ) sub
-        GROUP BY period_key
-        ORDER BY period_key
+        SELECT DATE_FORMAT(metric_date, %s) AS period,
+               COALESCE(SUM(impressions_total), 0),
+               COALESCE(SUM(clicks_total), 0),
+               COALESCE(SUM(reactions_total), 0),
+               COALESCE(SUM(comments_total), 0),
+               COALESCE(SUM(shares_direct_total), 0)
+        FROM linkedin_content_metrics
+        WHERE metric_date BETWEEN %s AND %s
+        GROUP BY period
+        ORDER BY period
     """
     with connection.cursor() as c:
-        rows = _safe(c, sql, [fmt, d_from, d_to, d_from, d_to, fmt, fmt])
+        rows = _safe(c, sql, [fmt, d_from, d_to])
     if not rows:
         return [], [], [], [], [], [], []
 
