@@ -4,24 +4,21 @@
 <style>
 .sh{display:flex;justify-content:space-between;align-items:center;margin-bottom:1.5rem;flex-wrap:wrap;gap:1rem}
 .sh h1{margin:0;font-size:1.5rem}
-.df{display:flex;gap:.5rem;align-items:center;flex-wrap:wrap}
-.df input[type=date],.df select{padding:.35rem .5rem;border:1px solid #ced4da;border-radius:.25rem;font-size:.85rem}
+.df{display:flex;gap:.5rem;align-items:center}
+.df input[type=date]{padding:.35rem .5rem;border:1px solid #ced4da;border-radius:.25rem;font-size:.85rem}
 .df button{padding:.35rem .75rem;background:#0077B5;color:#fff;border:none;border-radius:.25rem;cursor:pointer;font-size:.85rem}
 .tabs{display:flex;gap:0;margin-bottom:1.5rem;border-bottom:2px solid #dee2e6}
 .tabs a{padding:.6rem 1.2rem;text-decoration:none;color:#6c757d;font-weight:500;border-bottom:2px solid transparent;margin-bottom:-2px}
 .tabs a.on{color:#0077B5;border-bottom-color:#0077B5}
 .kg{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:1rem;margin-bottom:2rem}
 .kc{background:#fff;border-radius:.5rem;padding:1.25rem;box-shadow:0 1px 3px rgba(0,0,0,.1);text-align:center}
-.ki{font-size:1.8rem;margin-bottom:.25rem}
-.kl{font-size:.8rem;color:#6c757d;text-transform:uppercase;letter-spacing:.5px}
-.kv{font-size:1.6rem;font-weight:700;color:#212529}
-.ks{font-size:.75rem;color:#6c757d;margin-top:.25rem}
+.ki{font-size:1.8rem;margin-bottom:.25rem}.kl{font-size:.8rem;color:#6c757d;text-transform:uppercase;letter-spacing:.5px}
+.kv{font-size:1.6rem;font-weight:700;color:#212529}.ks{font-size:.75rem;color:#6c757d;margin-top:.25rem}
 .cc{background:#fff;border-radius:.5rem;padding:1.5rem;box-shadow:0 1px 3px rgba(0,0,0,.1);margin-bottom:2rem}
 .cc h2{font-size:1.1rem;margin-bottom:1rem}
 .pt{width:100%;border-collapse:collapse;font-size:.85rem}
 .pt th{text-align:left;padding:.5rem;border-bottom:2px solid #dee2e6;font-weight:600;color:#495057}
 .pt td{padding:.5rem;border-bottom:1px solid #f0f0f0}
-.agg-note{color:#6c757d;font-size:.8rem;margin-top:.5rem}
 </style>
 
 <div class="sh">
@@ -29,13 +26,14 @@
   <form method="get" class="df">
     <label>Von</label><input type="date" name="from" value="{{ date_from }}">
     <label>Bis</label><input type="date" name="to" value="{{ date_to }}">
+    
     <label>Aggregation</label>
-    <select name="group_by">
+    <select name="group_by" style="padding:.35rem .5rem;border:1px solid #ced4da;border-radius:.25rem;font-size:.85rem">
       <option value="day" {% if group_by == 'day' %}selected{% endif %}>Tag</option>
       <option value="week" {% if group_by == 'week' %}selected{% endif %}>Woche</option>
       <option value="month" {% if group_by == 'month' %}selected{% endif %}>Monat</option>
     </select>
-    <button type="submit">Anwenden</button>
+<button type="submit">Anwenden</button>
   </form>
 </div>
 
@@ -44,6 +42,8 @@
   <a href="{% url 'linkedin_statistics:timeline' %}" class="{% if tab == 'timeline' %}on{% endif %}">Timeline</a>
 </div>
 
+<p style="margin:-.5rem 0 1.5rem;color:#6c757d;font-size:.85rem">{{ aggregation_note }}</p>
+
 <div class="kg">
   <div class="kc"><div class="ki">👥</div><div class="kl">Followers</div><div class="kv">{{ data.total_followers }}</div><div class="ks">{{ data.followers_change }} im Zeitraum</div></div>
   <div class="kc"><div class="ki">📝</div><div class="kl">Posts</div><div class="kv">{{ data.total_posts }}</div><div class="ks">im Zeitraum</div></div>
@@ -51,26 +51,31 @@
   <div class="kc"><div class="ki">❤️</div><div class="kl">Engagement</div><div class="kv">{{ data.total_engagement }}</div><div class="ks">Likes + Comments + Shares</div></div>
 </div>
 
-<!-- ═══ EIN EINZIGER CHART: Interaktionen (absolut) als Grouped Bar Chart ═══ -->
+
+<div class="cc">
+  <h2>📈 Content Metrics</h2>
+  <canvas id="chart1" height="110"></canvas>
+  <p style="margin:.75rem 0 0;color:#6c757d;font-size:.85rem">Impressions als Balken; Engagement Rate (%) als Linie. Rechte Achse ist auf 45% skaliert.</p>
+</div>
+
 <div class="cc">
   <h2>📊 Interaktionen (absolut)</h2>
-  <canvas id="interaktionen" height="120"></canvas>
-  <p class="agg-note">Daten werden <strong>{{ agg_text }}</strong> zusammengefasst. Pro Zeitraum wird je Post nur der letzte Snapshot gezählt.</p>
+  <canvas id="chart2" height="120"></canvas>
 </div>
 
-<!-- ═══ TOP 5 nach Impressions ═══ -->
+
 <div class="cc" style="padding:0">
-  <h2 style="padding:1rem 1.5rem .5rem">🏆 Top 5 Posts – nach Impressions</h2>
-  {% if data.top_posts_impressions %}
+  <h2 style="padding:1rem 1.5rem .5rem">🏆 Top 5 Posts</h2>
+  {% if data.top_posts %}
   <table class="pt">
-    <thead><tr><th>#</th><th>Post</th><th>Datum</th><th>Impressions</th><th>Clicks</th><th>Likes</th><th>Comments</th><th>Shares</th></tr></thead>
+    <thead><tr><th>#</th><th>Post</th><th>Datum</th><th>Impressions</th><th>Likes</th><th>Comments</th><th>Shares</th></tr></thead>
     <tbody>
-    {% for p in data.top_posts_impressions %}
+    {% for p in data.top_posts %}
     <tr>
       <td>{{ forloop.counter }}</td>
       <td>{% if p.link %}<a href="{{ p.link }}" target="_blank">{{ p.title|truncatechars:50 }}</a>{% else %}{{ p.title|truncatechars:50 }}{% endif %}</td>
       <td>{{ p.post_date|date:"d.m.Y"|default:"—" }}</td>
-      <td>{{ p.impressions }}</td><td>{{ p.clicks }}</td><td>{{ p.likes }}</td><td>{{ p.comments }}</td><td>{{ p.shares }}</td>
+      <td>{{ p.impressions }}</td><td>{{ p.likes }}</td><td>{{ p.comments }}</td><td>{{ p.shares }}</td>
     </tr>
     {% endfor %}
     </tbody>
@@ -78,40 +83,66 @@
   {% else %}<p style="padding:1.5rem;text-align:center;color:#6c757d">Keine Daten vorhanden.</p>{% endif %}
 </div>
 
-<!-- ═══ TOP 5 nach Engagement ═══ -->
-<div class="cc" style="padding:0">
-  <h2 style="padding:1rem 1.5rem .5rem">🔥 Top 5 Posts – nach Engagement</h2>
-  {% if data.top_posts_engagement %}
-  <table class="pt">
-    <thead><tr><th>#</th><th>Post</th><th>Datum</th><th>Engagement</th><th>Likes</th><th>Comments</th><th>Shares</th><th>Impressions</th></tr></thead>
-    <tbody>
-    {% for p in data.top_posts_engagement %}
-    <tr>
-      <td>{{ forloop.counter }}</td>
-      <td>{% if p.link %}<a href="{{ p.link }}" target="_blank">{{ p.title|truncatechars:50 }}</a>{% else %}{{ p.title|truncatechars:50 }}{% endif %}</td>
-      <td>{{ p.post_date|date:"d.m.Y"|default:"—" }}</td>
-      <td><strong>{{ p.engagement }}</strong></td><td>{{ p.likes }}</td><td>{{ p.comments }}</td><td>{{ p.shares }}</td><td>{{ p.impressions }}</td>
-    </tr>
-    {% endfor %}
-    </tbody>
-  </table>
-  {% else %}<p style="padding:1.5rem;text-align:center;color:#6c757d">Keine Daten vorhanden.</p>{% endif %}
-</div>
-
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src=\"https://cdn.jsdelivr.net/npm/chart.js\"></script>
 <script>
-const labels = {{ chart_labels_json|safe }};
+const labels = {{ data.chart_labels|default:'[]'|safe }};
 
 if (labels && labels.length) {
-  new Chart(document.getElementById('interaktionen').getContext('2d'), {
+  // Chart 1: Impressions (bar) + Engagement Rate (line)
+  new Chart(document.getElementById('chart1').getContext('2d'), {
+    data: {
+      labels: labels,
+      datasets: [
+        {
+          type: 'bar',
+          label: 'Impressions',
+          data: {{ data.chart_impressions|default:'[]'|safe }},
+          borderWidth: 0,
+          yAxisID: 'y'
+        },
+        {
+          type: 'line',
+          label: 'Engagement Rate %',
+          data: {{ data.chart_engagement|default:'[]'|safe }},
+          borderColor: '#e53935',
+          backgroundColor: '#e53935',
+          borderWidth: 2,
+          tension: 0.3,
+          fill: false,
+          yAxisID: 'y1',
+          pointRadius: 2
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      interaction: { mode: 'index', intersect: false },
+      plugins: { legend: { position: 'bottom' } },
+      scales: {
+        x: { ticks: { maxRotation: 45, minRotation: 0 } },
+        y: { title: { display: true, text: 'Impressions' }, beginAtZero: true },
+        y1: {
+          position: 'right',
+          title: { display: true, text: 'Engagement %' },
+          grid: { drawOnChartArea: false },
+          beginAtZero: true,
+          max: 45,
+          ticks: { callback: (v) => v + '%' }
+        }
+      }
+    }
+  });
+
+  // Chart 2: Interactions absolute (grouped bars)
+  new Chart(document.getElementById('chart2').getContext('2d'), {
     type: 'bar',
     data: {
       labels: labels,
       datasets: [
-        { label: 'Clicks',    data: {{ chart_clicks_json|safe }},    borderWidth: 0 },
-        { label: 'Reactions',  data: {{ chart_reactions_json|safe }}, borderWidth: 0 },
-        { label: 'Comments',   data: {{ chart_comments_json|safe }}, borderWidth: 0 },
-        { label: 'Shares',     data: {{ chart_shares_json|safe }},   borderWidth: 0 }
+        { label: 'Clicks', data: {{ data.chart_clicks|default:'[]'|safe }}, borderWidth: 0 },
+        { label: 'Reactions', data: {{ data.chart_reactions|default:'[]'|safe }}, borderWidth: 0 },
+        { label: 'Comments', data: {{ data.chart_comments|default:'[]'|safe }}, borderWidth: 0 },
+        { label: 'Shares', data: {{ data.chart_shares|default:'[]'|safe }}, borderWidth: 0 }
       ]
     },
     options: {
@@ -124,8 +155,10 @@ if (labels && labels.length) {
       }
     }
   });
+
 } else {
-  document.getElementById('interaktionen').parentElement.innerHTML += '<p style="text-align:center;color:#6c757d">Keine Chart-Daten im gewählten Zeitraum.</p>';
+  document.getElementById('chart1').parentElement.innerHTML += '<p style="text-align:center;color:#6c757d">Keine Chart-Daten.</p>';
+  document.getElementById('chart2').parentElement.innerHTML += '<p style="text-align:center;color:#6c757d">Keine Chart-Daten.</p>';
 }
 </script>
 {% endblock %}
