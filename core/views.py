@@ -22,6 +22,13 @@ def home_view(request):
     if not request.user.is_authenticated:
         return redirect("/login/")
     from django.db import connection
+    from datetime import date, timedelta
+
+    content_type = request.GET.get('content_type', '')
+    search = request.GET.get('search', '')
+    d_from = request.GET.get('from', (date.today() - timedelta(days=365)).isoformat())
+    d_to   = request.GET.get('to', date.today().isoformat())
+
     all_posts = []
     with connection.cursor() as c:
         sql = """
@@ -37,10 +44,19 @@ def home_view(request):
                 AND m.metric_date = (
                     SELECT MAX(m2.metric_date) FROM linkedin_posts_metrics m2
                     WHERE m2.post_id = m.post_id)
-            ORDER BY COALESCE(pp.post_date, lp.post_date) DESC
+            WHERE COALESCE(pp.post_date, lp.post_date) BETWEEN %s AND %s
         """
+        params = [d_from, d_to]
+        if content_type == 'video':
+            sql += " AND lp.content_type = 'Video'"
+        elif content_type == 'novideo':
+            sql += " AND (lp.content_type != 'Video' OR lp.content_type IS NULL)"
+        if search:
+            sql += " AND (lp.post_title LIKE %s OR pp.post_title LIKE %s)"
+            params += [f'%{search}%', f'%{search}%']
+        sql += " ORDER BY COALESCE(pp.post_date, lp.post_date) DESC"
         try:
-            c.execute(sql)
+            c.execute(sql, params)
             rows = c.fetchall()
             for r in rows:
                 all_posts.append({
@@ -56,9 +72,15 @@ def home_view(request):
                     'clicks':       r[9],
                     'has_image':    bool(r[10]),
                 })
-        except Exception:
-            pass
-    return render(request, "core/home.html", {"all_posts": all_posts})
+        except Exception as e:
+            print("home_view error:", e)
+    return render(request, "core/home.html", {
+        "all_posts":    all_posts,
+        "content_type": content_type,
+        "search":       search,
+        "date_from":    d_from,
+        "date_to":      d_to,
+    })
 
 @login_required
 def upload_view(request):

@@ -14,12 +14,27 @@
 .badge-green{background:#E1F5EE;color:#0F6E56}
 .badge-blue{background:#E6F1FB;color:#185FA5}
 .badge-gray{background:#f5f5f5;color:#6c757d}
+.filter-bar{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.filter-bar select,.filter-bar input[type=date],.filter-bar input[type=text]{padding:.35rem .5rem;border:1px solid #ced4da;border-radius:.25rem;font-size:.85rem}
+.filter-bar button{padding:.35rem 1rem;background:#008080;color:#fff;border:none;border-radius:.25rem;font-size:.85rem;cursor:pointer}
 </style>
 
 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1.5rem;flex-wrap:wrap;gap:1rem">
   <h1 style="margin:0;font-size:1.5rem">📋 All Posts</h1>
-  <p style="margin:0;font-size:.85rem;color:#6c757d">{{ all_posts|length }} posts</p>
+  <form method="get" class="filter-bar">
+    <input type="date" name="from" value="{{ date_from }}">
+    <input type="date" name="to" value="{{ date_to }}">
+    <select name="content_type">
+      <option value="" {% if not content_type %}selected{% endif %}>All formats</option>
+      <option value="video" {% if content_type == 'video' %}selected{% endif %}>Video</option>
+      <option value="novideo" {% if content_type == 'novideo' %}selected{% endif %}>No video</option>
+    </select>
+    <input type="text" name="search" value="{{ search }}" placeholder="Search...">
+    <button type="submit">Apply</button>
+  </form>
 </div>
+
+<p style="font-size:.85rem;color:#6c757d;margin-bottom:1rem">{{ all_posts|length }} posts found</p>
 
 {% for p in all_posts %}
 <div class="tl-wrap">
@@ -61,5 +76,4 @@
 {% empty %}
 <p style="text-align:center;color:#6c757d;padding:2rem">No posts found.</p>
 {% endfor %}
-
 {% endblock %}
