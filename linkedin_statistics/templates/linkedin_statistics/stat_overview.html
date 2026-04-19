@@ -40,18 +40,18 @@
 <!-- ═══ 2. Von/Bis (beeinflusst NUR Charts) ═══ -->
 <div class="sh">
   <h1>📊 LinkedIn Statistics</h1>
-  <form method="get" class="df">
-    <label>From</label>
-    <input type="date" name="from" value="{{ date_from }}">
-    <label>To</label>
-    <input type="date" name="to" value="{{ date_to }}">
-    <label>Aggregation</label>
-    <select name="group_by">
+  <form method="get" style="display:flex;flex-direction:row;align-items:center;gap:.75rem;flex-wrap:wrap;margin-top:.5rem">
+    <span style="font-size:.85rem;font-weight:600">From</span>
+    <input type="date" name="from" value="{{ date_from }}" style="padding:.35rem .5rem;border:1px solid #ced4da;border-radius:.25rem;font-size:.85rem">
+    <span style="font-size:.85rem;font-weight:600">To</span>
+    <input type="date" name="to" value="{{ date_to }}" style="padding:.35rem .5rem;border:1px solid #ced4da;border-radius:.25rem;font-size:.85rem">
+    <span style="font-size:.85rem;font-weight:600">Aggregation</span>
+    <select name="group_by" style="padding:.35rem .5rem;border:1px solid #ced4da;border-radius:.25rem;font-size:.85rem">
       <option value="day" {% if group_by == 'day' %}selected{% endif %}>Day</option>
       <option value="week" {% if group_by == 'week' %}selected{% endif %}>Week</option>
       <option value="month" {% if group_by == 'month' %}selected{% endif %}>Month</option>
     </select>
-    <button type="submit">Apply</button>
+    <button type="submit" style="padding:.35rem 1rem;background:#0077B5;color:#fff;border:none;border-radius:.25rem;font-size:.85rem;cursor:pointer">Apply</button>
   </form>
 </div>
 
