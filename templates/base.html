@@ -243,11 +243,10 @@
     </div>
   </div>
 
-  <nav>
-    <a href="/statistics/" {% if request.path == '/statistics/' or request.path == '/' %}class="active"{% endif %}>Overview</a>
+    <nav>
+    <a href="/statistics/" {% if '/statistics/' in request.path %}class="active"{% endif %}>Statistics</a>
     <a href="/data/posts/" {% if '/data/' in request.path %}class="active"{% endif %}>Data</a>
     <a href="/collectives/" {% if '/collectives/' in request.path %}class="active"{% endif %}>Collectives</a>
-    <a href="/statistics/" {% if '/statistics/' in request.path %}class="active"{% endif %}>Statistics</a>
   </nav>
 
   {% if '/data/' in request.path %}
