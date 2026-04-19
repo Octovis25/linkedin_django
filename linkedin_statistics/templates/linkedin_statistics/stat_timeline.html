@@ -138,7 +138,7 @@ document.querySelectorAll('.post-row').forEach(row => {
             scales: {
               x:  { title: { display: true, text: 'Tag' } },
               y:  { type: 'linear', position: 'left',  title: { display: true, text: 'Clicks / Likes / Comments / Shares' }, beginAtZero: true, ticks: { stepSize: 1, precision: 0 } },
-              y2: { type: 'linear', position: 'right', title: { display: true, text: 'Impressions' }, grid: { drawOnChartArea: false }, beginAtZero: true, ticks: { precision: 0 } }
+              y2: { type: 'linear', position: 'right', title: { display: true, text: 'Impressions' }, grid: { drawOnChartArea: false }, beginAtZero: true, ticks: { precision: 0 }, suggestedMax: 100 }
             }
           }
         });
