@@ -42,11 +42,11 @@
   <h1>📊 LinkedIn Statistics</h1>
   <form method="get" style="display:flex;flex-direction:row;align-items:center;gap:.75rem;flex-wrap:wrap;margin-top:.5rem">
     <span style="font-size:.85rem;font-weight:600">From</span>
-    <input type="date" name="from" value="{{ date_from }}" style="padding:.35rem .5rem;border:1px solid #ced4da;border-radius:.25rem;font-size:.85rem">
+    <input type="date" name="from" value="{{ date_from }}" style="padding:.35rem .5rem;border:1px solid #ced4da;border-radius:.25rem;font-size:.85rem;width:140px">
     <span style="font-size:.85rem;font-weight:600">To</span>
-    <input type="date" name="to" value="{{ date_to }}" style="padding:.35rem .5rem;border:1px solid #ced4da;border-radius:.25rem;font-size:.85rem">
+    <input type="date" name="to" value="{{ date_to }}" style="padding:.35rem .5rem;border:1px solid #ced4da;border-radius:.25rem;font-size:.85rem;width:140px">
     <span style="font-size:.85rem;font-weight:600">Aggregation</span>
-    <select name="group_by" style="padding:.35rem .5rem;border:1px solid #ced4da;border-radius:.25rem;font-size:.85rem">
+    <select name="group_by" style="padding:.35rem .5rem;border:1px solid #ced4da;border-radius:.25rem;font-size:.85rem;width:100px">
       <option value="day" {% if group_by == 'day' %}selected{% endif %}>Day</option>
       <option value="week" {% if group_by == 'week' %}selected{% endif %}>Week</option>
       <option value="month" {% if group_by == 'month' %}selected{% endif %}>Month</option>
