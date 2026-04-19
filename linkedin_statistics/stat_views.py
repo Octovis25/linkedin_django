@@ -129,7 +129,7 @@ def _top5(cursor):
             'engagement': (r[6] or 0) + (r[7] or 0) + (r[8] or 0),
         } for r in (rows or [])]
 
-    by_imp = _safe(cursor, base + " ORDER BY COALESCE(pp.post_date, lp.post_date) DESC LIMIT 5")
+    by_imp = _safe(cursor, base + " ORDER BY m.impressions DESC LIMIT 5")
     by_eng = _safe(cursor, base + " ORDER BY (m.likes+m.comments+m.direct_shares) DESC LIMIT 5")
     return to_list(by_imp), to_list(by_eng)
 
