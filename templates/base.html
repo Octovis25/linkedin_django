@@ -260,6 +260,7 @@
   {% if '/statistics/' in request.path %}
   <div class="sub-nav">
     <a href="/statistics/" {% if request.path == '/statistics/' %}class="active"{% endif %}>Overview</a>
+    <a href="/statistics/posts/" {% if '/statistics/posts' in request.path %}class="active"{% endif %}>Posts</a>
     <a href="/statistics/timeline/" {% if '/statistics/timeline' in request.path %}class="active"{% endif %}>Timeline</a>
   </div>
   {% endif %}
