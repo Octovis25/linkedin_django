@@ -292,3 +292,60 @@ def post_image(request, post_id):
         from django.http import Http404
         raise Http404
     return HttpResponse(content, content_type=ct or 'image/png')
+
+
+@login_required
+def posts(request):
+    content_type = request.GET.get('content_type', '')
+    search = request.GET.get('search', '')
+
+    all_posts = []
+    with connection.cursor() as c:
+        sql = """
+            SELECT lp.post_id, COALESCE(pp.post_title, lp.post_title, lp.post_id),
+                   COALESCE(pp.post_date, lp.post_date),
+                   lp.post_url, lp.content_type,
+                   COALESCE(m.impressions,0), COALESCE(m.likes,0),
+                   COALESCE(m.comments,0), COALESCE(m.direct_shares,0),
+                   COALESCE(m.clicks,0), pp.post_image
+            FROM linkedin_posts lp
+            LEFT JOIN linkedin_posts_posted pp ON lp.post_id = pp.post_id
+            LEFT JOIN linkedin_posts_metrics m ON lp.post_id = m.post_id
+                AND m.metric_date = (
+                    SELECT MAX(m2.metric_date) FROM linkedin_posts_metrics m2
+                    WHERE m2.post_id = m.post_id)
+            WHERE 1=1
+        """
+        params = []
+        if content_type == 'video':
+            sql += " AND lp.content_type = 'Video'"
+        elif content_type == 'novideo':
+            sql += " AND (lp.content_type != 'Video' OR lp.content_type IS NULL)"
+        if search:
+            sql += " AND (lp.post_title LIKE %s OR pp.post_title LIKE %s)"
+            params += [f'%{search}%', f'%{search}%']
+        sql += " ORDER BY COALESCE(pp.post_date, lp.post_date) DESC"
+
+        rows = _safe(c, sql, params)
+        if rows:
+            for r in rows:
+                all_posts.append({
+                    'post_id':      r[0],
+                    'title':        r[1],
+                    'post_date':    r[2],
+                    'link':         r[3] or '',
+                    'content_type': r[4] or '',
+                    'impressions':  r[5],
+                    'likes':        r[6],
+                    'comments':     r[7],
+                    'shares':       r[8],
+                    'clicks':       r[9],
+                    'has_image':    bool(r[10]),
+                })
+
+    return render(request, 'linkedin_statistics/stat_posts.html', {
+        'all_posts':    all_posts,
+        'content_type': content_type,
+        'search':       search,
+        'tab':          'posts',
+    })
