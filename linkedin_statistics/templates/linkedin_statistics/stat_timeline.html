@@ -28,14 +28,14 @@
 
 <!-- ALLE POSTS -->
 <div class="cc" style="padding:0">
-  <h2 style="padding:1rem 1.5rem .5rem">📋 Alle Posts (klicken für Tagesverlauf)</h2>
+  <h2 style="padding:1rem 1.5rem .5rem">📋 All Posts (click for daily trend)</h2>
   {% if all_posts %}
   <table class="pt" id="posts-table">
-    <thead><tr><th>Post</th><th>Datum</th><th>Typ</th><th>Impressions</th><th>Link</th></tr></thead>
+    <thead><tr><th>Post</th><th>Date</th><th>Type</th><th>Impressions</th><th>Link</th></tr></thead>
     <tbody>
     {% for p in all_posts %}
     <tr class="post-row" data-postid="{{ p.post_id }}" data-idx="{{ forloop.counter0 }}">
-      <td>{{ p.title|truncatechars:60 }}{% if forloop.counter <= 5 %}<span class="badge-top5">Top 5</span>{% endif %}</td>
+      <td>{{ p.title|truncatechars:60 }}</td>
       <td>{{ p.post_date|date:"d.m.Y"|default:"—" }}</td>
       <td>{{ p.content_type|default:"—" }}</td>
       <td>{{ p.impressions|default:"0" }}</td>
