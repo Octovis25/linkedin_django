@@ -273,3 +273,22 @@ def timeline_detail(request, post_id):
                     'engagement_rate': eng,
                 })
     return JsonResponse({'daily': daily})
+
+
+@login_required
+def post_image(request, post_id):
+    """Proxy: lädt Bild von Nextcloud und liefert es aus."""
+    from django.http import HttpResponse
+    with connection.cursor() as c:
+        rows = _safe(c, "SELECT post_image FROM linkedin_posts_posted WHERE post_id = %s", [post_id])
+    if not rows or not rows[0][0]:
+        from django.http import Http404
+        raise Http404
+
+    nc_path = rows[0][0]
+    from posts_posted.nc_storage import download_image_from_nextcloud
+    content, ct = download_image_from_nextcloud(nc_path)
+    if not content:
+        from django.http import Http404
+        raise Http404
+    return HttpResponse(content, content_type=ct or 'image/png')
