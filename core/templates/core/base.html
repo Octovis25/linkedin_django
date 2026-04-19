@@ -89,6 +89,17 @@
     <a href="/data/import/" {% if request.path == '/data/import/' %}class="active"{% endif %}>Import</a>
   </div>
   {% endif %}
+  {% if '/statistics/' in request.path %}
+  <div class="sub-nav">
+    <a href="/statistics/" {% if request.path == '/statistics/' %}class="active"{% endif %}>Overview</a>
+    <a href="/statistics/timeline/" {% if '/statistics/timeline' in request.path %}class="active"{% endif %}>Timeline</a>
+  </div>
+  {% endif %}
+  {% if '/collectives/' in request.path %}
+  <div class="sub-nav">
+    <a href="/collectives/" {% if request.path == '/collectives/' %}class="active"{% endif %}>Dashboard</a>
+  </div>
+  {% endif %}
 </header>
 <main>
   {% if messages %}
