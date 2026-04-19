@@ -20,30 +20,32 @@
 
 <div class="sh"><h1>📊 LinkedIn Statistics – Timeline</h1></div>
 
+<!-- TOP 5 CHART -->
+<div class="cc">
+  <h2>📈 Top 5 Posts – Impressions nach Tagen seit Veröffentlichung</h2>
+  <canvas id="top5chart" height="100"></canvas>
 </div>
 
-<!-- ═══ ALLE POSTS (klickbar) ═══ -->
+<!-- ALLE POSTS -->
 <div class="cc" style="padding:0">
   <h2 style="padding:1rem 1.5rem .5rem">📋 Alle Posts (klicken für Tagesverlauf)</h2>
   {% if all_posts %}
   <table class="pt" id="posts-table">
-    <thead><tr><th>Post</th><th>Posting-Datum</th><th>Typ</th><th>Link</th></tr></thead>
+    <thead><tr><th>Post</th><th>Datum</th><th>Typ</th><th>Impressions</th><th>Link</th></tr></thead>
     <tbody>
     {% for p in all_posts %}
     <tr class="post-row" data-postid="{{ p.post_id }}" data-idx="{{ forloop.counter0 }}">
-      <td>
-        {{ p.title|truncatechars:60 }}
-        {% if forloop.counter <= 5 %}<span class="badge-top5">Top 5</span>{% endif %}
-      </td>
+      <td>{{ p.title|truncatechars:60 }}{% if forloop.counter <= 5 %}<span class="badge-top5">Top 5</span>{% endif %}</td>
       <td>{{ p.post_date|date:"d.m.Y"|default:"—" }}</td>
       <td>{{ p.content_type|default:"—" }}</td>
+      <td>{{ p.impressions|default:"0" }}</td>
       <td>{% if p.link %}<a href="{{ p.link }}" target="_blank" onclick="event.stopPropagation()">🔗</a>{% else %}—{% endif %}</td>
     </tr>
     <tr>
-      <td colspan="4" style="padding:0">
+      <td colspan="5" style="padding:0">
         <div class="post-chart-container" id="chart-container-{{ forloop.counter0 }}">
-          <canvas id="chart-{{ forloop.counter0 }}" height="200"></canvas>
           <div class="loading" id="loading-{{ forloop.counter0 }}">Lade Daten...</div>
+          <canvas id="chart-{{ forloop.counter0 }}" height="200"></canvas>
         </div>
       </td>
     </tr>
@@ -51,98 +53,63 @@
     </tbody>
   </table>
   {% else %}
-  <p style="text-align:center;color:#6c757d;padding:2rem">Keine Posts mit Posting-Datum gefunden.<br><small>Posts müssen in linkedin_posts_posted ein post_date haben.</small></p>
+  <p style="text-align:center;color:#6c757d;padding:2rem">Keine Posts gefunden.</p>
   {% endif %}
-</div>
-
-<!-- ═══ TOP 5 CHART: letzte 5 Posts ═══ -->
-<div class="cc">
-  <h2>📈 Letzte 5 Posts – Impressions nach Tagen</h2>
-  <canvas id="top5chart" height="100"></canvas>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
-// ═══ TOP 5 CHART ═══
+// TOP 5 CHART
 const top5Data = {{ top5_json|safe }};
 const colors = ['#2196F3','#e53935','#4CAF50','#FF9800','#9C27B0'];
+const maxDay = {{ max_days|default:30 }};
 
 if (top5Data.length > 0) {
-  // X-Achse: Tag 1 bis max
-  const maxDay = {{ max_days|default:30 }};
-  const labels = [];
-  for (let i = 1; i <= maxDay; i++) labels.push(i);
-
+  const labels = Array.from({length: maxDay}, (_, i) => i + 1);
   const datasets = top5Data.map((p, i) => {
-    // Sparse array: nur Tage wo Daten existieren
     const data = new Array(maxDay).fill(null);
     p.days.forEach((d, j) => { if (d >= 1 && d <= maxDay) data[d-1] = p.impressions[j]; });
     return {
-      label: p.title,
-      data: data,
+      label: p.title, data: data,
       borderColor: colors[i % colors.length],
-      borderWidth: 2,
-      tension: 0.3,
-      fill: false,
-      spanGaps: true,
-      pointRadius: 2,
-      pointBackgroundColor: colors[i % colors.length],
+      borderWidth: 2, tension: 0.3, fill: false, spanGaps: true, pointRadius: 2,
     };
   });
-
-  new Chart(document.getElementById('top5chart').getContext('2d'), {
+  new Chart(document.getElementById('top5chart'), {
     type: 'line',
-    data: { labels: labels, datasets: datasets },
+    data: { labels, datasets },
     options: {
       responsive: true,
       interaction: { mode: 'index', intersect: false },
-      plugins: {
-        legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 11 } } },
-        tooltip: {
-          callbacks: {
-            label: function(ctx) {
-              if (ctx.parsed.y === null) return null;
-              return ctx.dataset.label + ': ' + ctx.parsed.y.toLocaleString('de-DE');
-            }
-          }
-        }
-      },
+      plugins: { legend: { position: 'bottom' } },
       scales: {
-        x: { title: { display: true, text: 'Tag' } },
+        x: { title: { display: true, text: 'Tag seit Veröffentlichung' } },
         y: { title: { display: true, text: 'Impressions' }, beginAtZero: true }
       }
     }
   });
 } else {
-  document.getElementById('top5chart').parentElement.innerHTML += '<p style="text-align:center;color:#6c757d">Keine Daten für Chart.</p>';
+  document.getElementById('top5chart').insertAdjacentHTML('afterend', '<p style="text-align:center;color:#6c757d">Keine Daten.</p>');
 }
 
-// ═══ EINZELPOST per Klick ═══
+// EINZELPOST per Klick
 const chartInstances = {};
-
 document.querySelectorAll('.post-row').forEach(row => {
   row.addEventListener('click', function() {
     const idx = this.dataset.idx;
     const postId = this.dataset.postid;
     const container = document.getElementById('chart-container-' + idx);
-    const loading = document.getElementById('loading-' + idx);
+    const loading   = document.getElementById('loading-' + idx);
 
-    // Toggle
     if (container.classList.contains('open')) {
       container.classList.remove('open');
       return;
     }
     container.classList.add('open');
+    if (chartInstances[idx]) return;
 
-    // Schon geladen?
-    if (chartInstances[idx]) {
-      loading.style.display = 'none';
-      return;
-    }
-
-    // AJAX: Tagesverlauf laden
     loading.style.display = 'block';
-    fetch('{% url "linkedin_statistics:timeline" %}' + postId + '/')
+    fetch('/statistics/timeline/' + postId + '/')
       .then(r => r.json())
       .then(data => {
         loading.style.display = 'none';
@@ -151,21 +118,18 @@ document.querySelectorAll('.post-row').forEach(row => {
           loading.textContent = 'Keine Tagesdaten vorhanden.';
           return;
         }
-
-        const labels = data.daily.map(d => d.tag);
-        const canvas = document.getElementById('chart-' + idx);
-
-        chartInstances[idx] = new Chart(canvas.getContext('2d'), {
+        const labels = data.daily.map(d => 'Tag ' + d.tag);
+        chartInstances[idx] = new Chart(document.getElementById('chart-' + idx), {
           type: 'line',
           data: {
-            labels: labels,
+            labels,
             datasets: [
               { label: 'Impressions', data: data.daily.map(d => d.impressions), borderColor: '#2196F3', borderWidth: 2, tension: 0.3, fill: false, yAxisID: 'y' },
-              { label: 'Clicks', data: data.daily.map(d => d.clicks), borderColor: '#FF9800', borderWidth: 2, tension: 0.3, fill: false, yAxisID: 'y' },
-              { label: 'Likes', data: data.daily.map(d => d.likes), borderColor: '#4CAF50', borderWidth: 2, tension: 0.3, fill: false, yAxisID: 'y' },
-              { label: 'Comments', data: data.daily.map(d => d.comments), borderColor: '#9C27B0', borderWidth: 2, tension: 0.3, fill: false, yAxisID: 'y' },
-              { label: 'Shares', data: data.daily.map(d => d.shares), borderColor: '#607D8B', borderWidth: 2, tension: 0.3, fill: false, yAxisID: 'y' },
-              { label: 'Engagement %', data: data.daily.map(d => d.engagement_rate), borderColor: '#e53935', borderWidth: 2, borderDash: [5,5], tension: 0.3, fill: false, yAxisID: 'y1' },
+              { label: 'Clicks',      data: data.daily.map(d => d.clicks),      borderColor: '#FF9800', borderWidth: 2, tension: 0.3, fill: false, yAxisID: 'y' },
+              { label: 'Likes',       data: data.daily.map(d => d.likes),       borderColor: '#4CAF50', borderWidth: 2, tension: 0.3, fill: false, yAxisID: 'y' },
+              { label: 'Comments',    data: data.daily.map(d => d.comments),    borderColor: '#9C27B0', borderWidth: 2, tension: 0.3, fill: false, yAxisID: 'y' },
+              { label: 'Shares',      data: data.daily.map(d => d.shares),      borderColor: '#607D8B', borderWidth: 2, tension: 0.3, fill: false, yAxisID: 'y' },
+              { label: 'Engagement%', data: data.daily.map(d => d.engagement_rate), borderColor: '#e53935', borderWidth: 2, borderDash: [5,5], tension: 0.3, fill: false, yAxisID: 'y1' },
             ]
           },
           options: {
@@ -174,15 +138,13 @@ document.querySelectorAll('.post-row').forEach(row => {
             plugins: { legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 11 } } } },
             scales: {
               x: { title: { display: true, text: 'Tag' } },
-              y: { type: 'linear', position: 'left', title: { display: true, text: 'Anzahl' }, beginAtZero: true },
+              y:  { type: 'linear', position: 'left',  title: { display: true, text: 'Anzahl' }, beginAtZero: true },
               y1: { type: 'linear', position: 'right', title: { display: true, text: 'Engagement %' }, grid: { drawOnChartArea: false }, beginAtZero: true, max: 50 }
             }
           }
         });
       })
-      .catch(err => {
-        loading.textContent = 'Fehler beim Laden: ' + err;
-      });
+      .catch(err => { loading.textContent = 'Fehler: ' + err; });
   });
 });
 </script>

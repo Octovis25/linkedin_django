@@ -1,19 +1,9 @@
-"""linkedin_statistics/stat_views.py – COMPLETE FIX (2026-04-18)
-
-Layout:
-  1) KPI-Kacheln: IMMER letzter Stand + Datum (NICHT von Von/Bis abhaengig)
-  2) Von/Bis + Aggregation (beeinflusst NUR Charts)
-  3) Chart: Impressions + Engagement Rate (Combo)
-  4) Chart: Interaktionen absolut (Grouped Bar)
-  5) Top 5 nach Impressions
-  6) Top 5 nach Engagement
-"""
-
 import json
 from datetime import date, timedelta
 
 from django.contrib.auth.decorators import login_required
 from django.db import connection
+from django.http import JsonResponse
 from django.shortcuts import render
 
 
@@ -31,10 +21,8 @@ def _safe(cur, sql, params=None):
 
 def _period_fmt(group_by):
     group_by = (group_by or 'month').lower()
-    if group_by == 'day':
-        return '%Y-%m-%d'
-    if group_by == 'week':
-        return '%x-W%v'
+    if group_by == 'day':   return '%Y-%m-%d'
+    if group_by == 'week':  return '%x-W%v'
     return '%Y-%m'
 
 
@@ -44,7 +32,6 @@ def _agg_text(group_by):
 
 
 def _chart_series(d_from, d_to, group_by):
-    """SUM ueber linkedin_content_metrics, gruppiert nach Periode."""
     fmt = _period_fmt(group_by)
     sql = """
         SELECT DATE_FORMAT(metric_date, %s) AS period,
@@ -55,8 +42,7 @@ def _chart_series(d_from, d_to, group_by):
                COALESCE(SUM(shares_direct_total), 0)
         FROM linkedin_content_metrics
         WHERE metric_date BETWEEN %s AND %s
-        GROUP BY period
-        ORDER BY period
+        GROUP BY period ORDER BY period
     """
     with connection.cursor() as c:
         rows = _safe(c, sql, [fmt, d_from, d_to])
@@ -152,7 +138,7 @@ def _top5(cursor):
 def overview(request):
     df, dt = _defaults()
     d_from = request.GET.get('from', df)
-    d_to = request.GET.get('to', dt)
+    d_to   = request.GET.get('to', dt)
     group_by = request.GET.get('group_by', 'month')
 
     kpi = _kpi_snapshot()
@@ -165,29 +151,28 @@ def overview(request):
         'kpi': kpi,
         'top_posts_impressions': top_imp,
         'top_posts_engagement': top_eng,
-        'date_from': d_from,
-        'date_to': d_to,
-        'tab': 'overview',
-        'group_by': group_by,
+        'date_from': d_from, 'date_to': d_to,
+        'tab': 'overview', 'group_by': group_by,
         'agg_text': _agg_text(group_by),
-        'chart_labels_json': json.dumps(labels),
+        'chart_labels_json':     json.dumps(labels),
         'chart_impressions_json': json.dumps(imps),
-        'chart_engagement_json': json.dumps(eng_rate),
-        'chart_clicks_json': json.dumps(clicks),
-        'chart_reactions_json': json.dumps(reactions),
-        'chart_comments_json': json.dumps(comments),
-        'chart_shares_json': json.dumps(shares),
+        'chart_engagement_json':  json.dumps(eng_rate),
+        'chart_clicks_json':      json.dumps(clicks),
+        'chart_reactions_json':   json.dumps(reactions),
+        'chart_comments_json':    json.dumps(comments),
+        'chart_shares_json':      json.dumps(shares),
     })
 
 
 @login_required
 def timeline(request):
     df, dt = _defaults()
-    d_from = request.GET.get('from', df)
-    d_to = request.GET.get('to', dt)
+    d_from   = request.GET.get('from', df)
+    d_to     = request.GET.get('to', dt)
     group_by = request.GET.get('group_by', 'month')
 
-    posts = []
+    # Alle Posts laden
+    all_posts = []
     with connection.cursor() as c:
         rows = _safe(c, """
             SELECT lp.post_id, COALESCE(lp.post_title, lp.post_id),
@@ -206,34 +191,63 @@ def timeline(request):
         """)
         if rows:
             for r in rows:
-                posts.append({
+                all_posts.append({
                     'post_id': r[0], 'title': r[1], 'post_date': r[2],
                     'link': r[3] or '', 'content_type': r[4] or '',
                     'impressions': r[5], 'likes': r[6], 'comments': r[7],
                     'shares': r[8], 'clicks': r[9],
                 })
 
-    labels, imps, clicks, reactions, comments, shares, eng_rate = _chart_series(d_from, d_to, group_by)
+        # Top 5 nach Impressions für Chart
+        top5_raw = _safe(c, """
+            SELECT lp.post_id, COALESCE(lp.post_title, lp.post_id)
+            FROM linkedin_posts lp
+            LEFT JOIN linkedin_posts_posted pp ON lp.post_id = pp.post_id
+            INNER JOIN linkedin_posts_metrics m ON lp.post_id = m.post_id
+            WHERE m.metric_date = (
+                SELECT MAX(m2.metric_date) FROM linkedin_posts_metrics m2
+                WHERE m2.post_id = m.post_id)
+            ORDER BY m.impressions DESC LIMIT 5
+        """)
+
+        top5_json = []
+        max_days = 30
+        if top5_raw:
+            for post_id, title in top5_raw:
+                detail = _safe(c, """
+                    SELECT metric_date, impressions
+                    FROM linkedin_posts_metrics
+                    WHERE post_id = %s
+                    ORDER BY metric_date
+                """, [post_id])
+                if detail:
+                    first_date = detail[0][0]
+                    days, impressions = [], []
+                    for row in detail:
+                        day_nr = (row[0] - first_date).days + 1
+                        days.append(day_nr)
+                        impressions.append(int(row[1] or 0))
+                    max_days = max(max_days, max(days))
+                    top5_json.append({
+                        'title': title[:40],
+                        'days': days,
+                        'impressions': impressions,
+                    })
 
     return render(request, 'linkedin_statistics/stat_timeline.html', {
-        'posts': posts,
+        'all_posts': all_posts,
+        'top5_json': json.dumps(top5_json),
+        'max_days':  max_days,
         'date_from': d_from, 'date_to': d_to,
         'tab': 'timeline', 'group_by': group_by,
         'agg_text': _agg_text(group_by),
-        'chart_labels_json': json.dumps(labels),
-        'chart_impressions_json': json.dumps(imps),
-        'chart_engagement_json': json.dumps(eng_rate),
-        'chart_clicks_json': json.dumps(clicks),
-        'chart_reactions_json': json.dumps(reactions),
-        'chart_comments_json': json.dumps(comments),
-        'chart_shares_json': json.dumps(shares),
     })
 
 
 @login_required
 def timeline_detail(request, post_id):
-    """Detail-Chart fuer einen einzelnen Post (Tagesverlauf)."""
-    data = []
+    """Tagesverlauf für einen einzelnen Post – AJAX."""
+    daily = []
     with connection.cursor() as c:
         rows = _safe(c, """
             SELECT metric_date, impressions, clicks, likes, comments, direct_shares
@@ -242,15 +256,20 @@ def timeline_detail(request, post_id):
             ORDER BY metric_date
         """, [post_id])
         if rows:
+            first = rows[0][0]
             for r in rows:
-                data.append({
-                    'date': r[0].isoformat() if r[0] else '',
-                    'impressions': int(r[1] or 0),
-                    'clicks': int(r[2] or 0),
-                    'likes': int(r[3] or 0),
-                    'comments': int(r[4] or 0),
-                    'shares': int(r[5] or 0),
+                imp = int(r[1] or 0)
+                rea = int(r[3] or 0)
+                com = int(r[4] or 0)
+                sha = int(r[5] or 0)
+                eng = round(((rea + com + sha) / imp * 100) if imp else 0, 2)
+                daily.append({
+                    'tag':             (r[0] - first).days + 1,
+                    'impressions':     imp,
+                    'clicks':          int(r[2] or 0),
+                    'likes':           rea,
+                    'comments':        com,
+                    'shares':          sha,
+                    'engagement_rate': eng,
                 })
-
-    from django.http import JsonResponse
-    return JsonResponse({'series': data})
+    return JsonResponse({'daily': daily})
