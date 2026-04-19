@@ -59,6 +59,95 @@
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
+// TOP 5 CHART – letzte 5 Posts, Impressions auf Y2
+const top5Data = {{ top5_json|safe }};
+const colors = ['#2196F3','#e53935','#4CAF50','#FF9800','#9C27B0'];
+const maxDay = {{ max_days|default:30 }};
+
+if (top5Data.length > 0) {
+  const labels = Array.from({length: maxDay}, (_, i) => i + 1);
+  const datasets = top5Data.map((p, i) => {
+    const data = new Array(maxDay).fill(null);
+    p.days.forEach((d, j) => { if (d >= 1 && d <= maxDay) data[d-1] = p.impressions[j]; });
+    return {
+      label: p.title, data: data,
+      borderColor: colors[i % colors.length],
+      borderWidth: 2, tension: 0.3, fill: false, spanGaps: true, pointRadius: 2,
+    };
+  });
+  new Chart(document.getElementById('top5chart'), {
+    type: 'line',
+    data: { labels, datasets },
+    options: {
+      responsive: true,
+      interaction: { mode: 'index', intersect: false },
+      plugins: { legend: { position: 'bottom' } },
+      scales: {
+        x: { title: { display: true, text: 'Tag seit Veröffentlichung' } },
+        y: { title: { display: true, text: 'Impressions' }, beginAtZero: true }
+      }
+    }
+  });
+} else {
+  document.getElementById('top5chart').insertAdjacentHTML('afterend', '<p style="text-align:center;color:#6c757d">Keine Daten.</p>');
+}
+
+// EINZELPOST per Klick – Impressions rechts (Y2), Rest links (Y)
+const chartInstances = {};
+document.querySelectorAll('.post-row').forEach(row => {
+  row.addEventListener('click', function() {
+    const idx = this.dataset.idx;
+    const postId = this.dataset.postid;
+    const container = document.getElementById('chart-container-' + idx);
+    const loading   = document.getElementById('loading-' + idx);
+
+    if (container.classList.contains('open')) {
+      container.classList.remove('open');
+      return;
+    }
+    container.classList.add('open');
+    if (chartInstances[idx]) return;
+
+    loading.style.display = 'block';
+    fetch('/statistics/timeline/' + postId + '/')
+      .then(r => r.json())
+      .then(data => {
+        loading.style.display = 'none';
+        if (!data.daily || data.daily.length === 0) {
+          loading.style.display = 'block';
+          loading.textContent = 'Keine Tagesdaten vorhanden.';
+          return;
+        }
+        const labels = data.daily.map(d => 'Tag ' + d.tag);
+        chartInstances[idx] = new Chart(document.getElementById('chart-' + idx), {
+          type: 'line',
+          data: {
+            labels,
+            datasets: [
+              { label: 'Clicks',    data: data.daily.map(d => d.clicks),    borderColor: '#FF9800', borderWidth: 2, tension: 0.3, fill: false, yAxisID: 'y' },
+              { label: 'Likes',     data: data.daily.map(d => d.likes),     borderColor: '#4CAF50', borderWidth: 2, tension: 0.3, fill: false, yAxisID: 'y' },
+              { label: 'Comments',  data: data.daily.map(d => d.comments),  borderColor: '#9C27B0', borderWidth: 2, tension: 0.3, fill: false, yAxisID: 'y' },
+              { label: 'Shares',    data: data.daily.map(d => d.shares),    borderColor: '#607D8B', borderWidth: 2, tension: 0.3, fill: false, yAxisID: 'y' },
+              { label: 'Impressions', data: data.daily.map(d => d.impressions), borderColor: '#2196F3', borderWidth: 2, tension: 0.3, fill: false, yAxisID: 'y2' },
+            ]
+          },
+          options: {
+            responsive: true,
+            interaction: { mode: 'index', intersect: false },
+            plugins: { legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 11 } } } },
+            scales: {
+              x:  { title: { display: true, text: 'Tag' } },
+              y:  { type: 'linear', position: 'left',  title: { display: true, text: 'Clicks / Likes / Comments / Shares' }, beginAtZero: true },
+              y2: { type: 'linear', position: 'right', title: { display: true, text: 'Impressions' }, grid: { drawOnChartArea: false }, beginAtZero: true }
+            }
+          }
+        });
+      })
+      .catch(err => { loading.textContent = 'Fehler: ' + err; });
+  });
+});
+</script>
+<script>
 // TOP 5 CHART
 const top5Data = {{ top5_json|safe }};
 const colors = ['#2196F3','#e53935','#4CAF50','#FF9800','#9C27B0'];
