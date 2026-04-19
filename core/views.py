@@ -19,7 +19,7 @@ def is_staff(user):
     return user.is_staff
 
 def home_view(request):
-    return render(request, 'core/home.html')
+    return redirect("/statistics/")
 
 @login_required
 def upload_view(request):
