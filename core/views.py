@@ -19,7 +19,46 @@ def is_staff(user):
     return user.is_staff
 
 def home_view(request):
-    return redirect("/statistics/")
+    if not request.user.is_authenticated:
+        return redirect("/login/")
+    from django.db import connection
+    all_posts = []
+    with connection.cursor() as c:
+        sql = """
+            SELECT lp.post_id, COALESCE(pp.post_title, lp.post_title, lp.post_id),
+                   COALESCE(pp.post_date, lp.post_date),
+                   lp.post_url, lp.content_type,
+                   COALESCE(m.impressions,0), COALESCE(m.likes,0),
+                   COALESCE(m.comments,0), COALESCE(m.direct_shares,0),
+                   COALESCE(m.clicks,0), pp.post_image
+            FROM linkedin_posts lp
+            LEFT JOIN linkedin_posts_posted pp ON lp.post_id = pp.post_id
+            LEFT JOIN linkedin_posts_metrics m ON lp.post_id = m.post_id
+                AND m.metric_date = (
+                    SELECT MAX(m2.metric_date) FROM linkedin_posts_metrics m2
+                    WHERE m2.post_id = m.post_id)
+            ORDER BY COALESCE(pp.post_date, lp.post_date) DESC
+        """
+        try:
+            c.execute(sql)
+            rows = c.fetchall()
+            for r in rows:
+                all_posts.append({
+                    'post_id':      r[0],
+                    'title':        r[1],
+                    'post_date':    r[2],
+                    'link':         r[3] or "",
+                    'content_type': r[4] or "",
+                    'impressions':  r[5],
+                    'likes':        r[6],
+                    'comments':     r[7],
+                    'shares':       r[8],
+                    'clicks':       r[9],
+                    'has_image':    bool(r[10]),
+                })
+        except Exception:
+            pass
+    return render(request, "core/home.html", {"all_posts": all_posts})
 
 @login_required
 def upload_view(request):
