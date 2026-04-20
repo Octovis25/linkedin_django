@@ -1,5 +1,69 @@
 {% extends "core/base.html" %}
-{% block title %}Overview{% endblock %}
+{% block title %}Overview
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+const chartInstances = {};
+
+document.querySelectorAll('.tl-card').forEach(card => {
+  card.style.cursor = 'pointer';
+  card.addEventListener('click', function() {
+    const postId = this.dataset.postid;
+    const containerId = 'chart-' + postId;
+    let container = document.getElementById(containerId);
+
+    if (container) {
+      container.style.display = container.style.display === 'none' ? 'block' : 'none';
+      return;
+    }
+
+    // Chart container erstellen
+    container = document.createElement('div');
+    container.id = containerId;
+    container.style.cssText = 'padding:1rem 0;';
+    container.innerHTML = '<canvas id="canvas-' + postId + '" height="120"></canvas><p id="loading-' + postId + '" style="text-align:center;color:#6c757d;font-size:13px">Loading...</p>';
+    this.parentElement.insertAdjacentElement('afterend', container);
+
+    fetch('/statistics/timeline/' + postId + '/')
+      .then(r => r.json())
+      .then(data => {
+        document.getElementById('loading-' + postId).style.display = 'none';
+        if (!data.daily || data.daily.length === 0) {
+          document.getElementById('loading-' + postId).style.display = 'block';
+          document.getElementById('loading-' + postId).textContent = 'No data available.';
+          return;
+        }
+        const labels = data.daily.map(d => 'Day ' + d.tag);
+        new Chart(document.getElementById('canvas-' + postId), {
+          type: 'line',
+          data: {
+            labels,
+            datasets: [
+              { label: 'Clicks',    data: data.daily.map(d => d.clicks),    borderColor: '#FF9800', borderWidth: 2, tension: 0.3, fill: false, yAxisID: 'y' },
+              { label: 'Likes',     data: data.daily.map(d => d.likes),     borderColor: '#4CAF50', borderWidth: 2, tension: 0.3, fill: false, yAxisID: 'y' },
+              { label: 'Comments',  data: data.daily.map(d => d.comments),  borderColor: '#9C27B0', borderWidth: 2, tension: 0.3, fill: false, yAxisID: 'y' },
+              { label: 'Shares',    data: data.daily.map(d => d.shares),    borderColor: '#607D8B', borderWidth: 2, tension: 0.3, fill: false, yAxisID: 'y' },
+              { label: 'Impressions', data: data.daily.map(d => d.impressions), borderColor: '#2196F3', borderWidth: 2, tension: 0.3, fill: false, yAxisID: 'y2' },
+            ]
+          },
+          options: {
+            responsive: true,
+            interaction: { mode: 'index', intersect: false },
+            plugins: { legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 11 } } } },
+            scales: {
+              x:  { title: { display: true, text: 'Day' } },
+              y:  { type: 'linear', position: 'left',  title: { display: true, text: 'Clicks / Likes / Comments / Shares' }, beginAtZero: true, ticks: { stepSize: 1, precision: 0 } },
+              y2: { type: 'linear', position: 'right', title: { display: true, text: 'Impressions' }, grid: { drawOnChartArea: false }, beginAtZero: true, ticks: { precision: 0 }, suggestedMax: 100 }
+            }
+          }
+        });
+      })
+      .catch(err => {
+        document.getElementById('loading-' + postId).textContent = 'Error: ' + err;
+      });
+  });
+});
+</script>
+{% endblock %}
 {% block content %}
 <style>
 .tl-wrap{display:grid;grid-template-columns:80px 12px 1fr;gap:0 16px;align-items:stretch}
@@ -43,7 +107,7 @@
     <div class="tl-dot" style="background:{% if p.content_type == 'Video' %}#185FA5{% else %}#1D9E75{% endif %}"></div>
     <div class="tl-line"></div>
   </div>
-  <div class="tl-card">
+  <div class="tl-card" data-postid="{{ p.post_id }}">
     <div class="tl-thumb">
       {% if p.has_image %}
         <img src="/statistics/post-image/{{ p.post_id }}/" alt="" loading="lazy">
@@ -76,4 +140,68 @@
 {% empty %}
 <p style="text-align:center;color:#6c757d;padding:2rem">No posts found.</p>
 {% endfor %}
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+const chartInstances = {};
+
+document.querySelectorAll('.tl-card').forEach(card => {
+  card.style.cursor = 'pointer';
+  card.addEventListener('click', function() {
+    const postId = this.dataset.postid;
+    const containerId = 'chart-' + postId;
+    let container = document.getElementById(containerId);
+
+    if (container) {
+      container.style.display = container.style.display === 'none' ? 'block' : 'none';
+      return;
+    }
+
+    // Chart container erstellen
+    container = document.createElement('div');
+    container.id = containerId;
+    container.style.cssText = 'padding:1rem 0;';
+    container.innerHTML = '<canvas id="canvas-' + postId + '" height="120"></canvas><p id="loading-' + postId + '" style="text-align:center;color:#6c757d;font-size:13px">Loading...</p>';
+    this.parentElement.insertAdjacentElement('afterend', container);
+
+    fetch('/statistics/timeline/' + postId + '/')
+      .then(r => r.json())
+      .then(data => {
+        document.getElementById('loading-' + postId).style.display = 'none';
+        if (!data.daily || data.daily.length === 0) {
+          document.getElementById('loading-' + postId).style.display = 'block';
+          document.getElementById('loading-' + postId).textContent = 'No data available.';
+          return;
+        }
+        const labels = data.daily.map(d => 'Day ' + d.tag);
+        new Chart(document.getElementById('canvas-' + postId), {
+          type: 'line',
+          data: {
+            labels,
+            datasets: [
+              { label: 'Clicks',    data: data.daily.map(d => d.clicks),    borderColor: '#FF9800', borderWidth: 2, tension: 0.3, fill: false, yAxisID: 'y' },
+              { label: 'Likes',     data: data.daily.map(d => d.likes),     borderColor: '#4CAF50', borderWidth: 2, tension: 0.3, fill: false, yAxisID: 'y' },
+              { label: 'Comments',  data: data.daily.map(d => d.comments),  borderColor: '#9C27B0', borderWidth: 2, tension: 0.3, fill: false, yAxisID: 'y' },
+              { label: 'Shares',    data: data.daily.map(d => d.shares),    borderColor: '#607D8B', borderWidth: 2, tension: 0.3, fill: false, yAxisID: 'y' },
+              { label: 'Impressions', data: data.daily.map(d => d.impressions), borderColor: '#2196F3', borderWidth: 2, tension: 0.3, fill: false, yAxisID: 'y2' },
+            ]
+          },
+          options: {
+            responsive: true,
+            interaction: { mode: 'index', intersect: false },
+            plugins: { legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 11 } } } },
+            scales: {
+              x:  { title: { display: true, text: 'Day' } },
+              y:  { type: 'linear', position: 'left',  title: { display: true, text: 'Clicks / Likes / Comments / Shares' }, beginAtZero: true, ticks: { stepSize: 1, precision: 0 } },
+              y2: { type: 'linear', position: 'right', title: { display: true, text: 'Impressions' }, grid: { drawOnChartArea: false }, beginAtZero: true, ticks: { precision: 0 }, suggestedMax: 100 }
+            }
+          }
+        });
+      })
+      .catch(err => {
+        document.getElementById('loading-' + postId).textContent = 'Error: ' + err;
+      });
+  });
+});
+</script>
 {% endblock %}
