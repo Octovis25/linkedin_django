@@ -6,24 +6,47 @@
 .sh h1{margin:0;font-size:1.5rem}
 .cc{background:#fff;border-radius:.5rem;padding:1.5rem;box-shadow:0 1px 3px rgba(0,0,0,.1);margin-bottom:1.5rem}
 .cc h2{font-size:1.1rem;margin-bottom:1rem}
-.pt{width:100%;border-collapse:collapse;font-size:.85rem}
-.pt th{text-align:left;padding:.5rem;border-bottom:2px solid #dee2e6;font-weight:600;color:#495057}
-.pt td{padding:.5rem;border-bottom:1px solid #f0f0f0}
-.post-row{cursor:pointer;transition:background .15s}
-.post-row:hover{background:#f0f8ff}
-.post-chart-container{display:none;padding:1rem;background:#fafbfc;border-bottom:2px solid #e9ecef}
-.post-chart-container.open{display:block}
-.post-chart-container canvas{max-height:250px}
-.badge-top5{display:inline-block;background:#0077B5;color:#fff;font-size:.65rem;padding:.1rem .4rem;border-radius:.25rem;margin-left:.5rem;vertical-align:middle}
-.loading{text-align:center;color:#6c757d;padding:1rem;font-size:.85rem}
 </style>
 
 <div class="sh"><h1>📊 LinkedIn Statistics – Timeline</h1></div>
 
-<!-- TOP 5 CHART -->
 <div class="cc">
-  <h2>📈 Top 5 Posts – Impressions nach Tagen seit Veröffentlichung</h2>
-  <canvas id="top5chart" height="100"></canvas>
+  <h2>📈 Top 10 Posts – Impressions nach Tagen seit Veröffentlichung</h2>
+  <canvas id="top10chart" height="100"></canvas>
 </div>
 
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+const top5Data = {{ top5_json|safe }};
+const colors = ['#2196F3','#e53935','#4CAF50','#FF9800','#9C27B0','#607D8B','#00BCD4','#8BC34A','#FF5722','#795548'];
+const maxDay = {{ max_days|default:30 }};
+
+if (top5Data.length > 0) {
+  const labels = Array.from({length: maxDay}, (_, i) => i + 1);
+  const datasets = top5Data.map((p, i) => {
+    const data = new Array(maxDay).fill(null);
+    p.days.forEach((d, j) => { if (d >= 1 && d <= maxDay) data[d-1] = p.impressions[j]; });
+    return {
+      label: p.title, data: data,
+      borderColor: colors[i % colors.length],
+      borderWidth: 2, tension: 0.3, fill: false, spanGaps: true, pointRadius: 2,
+    };
+  });
+  new Chart(document.getElementById('top10chart'), {
+    type: 'line',
+    data: { labels, datasets },
+    options: {
+      responsive: true,
+      interaction: { mode: 'index', intersect: false },
+      plugins: { legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 11 } } } },
+      scales: {
+        x: { title: { display: true, text: 'Tag seit Veröffentlichung' } },
+        y: { title: { display: true, text: 'Impressions' }, beginAtZero: true, ticks: { precision: 0 } }
+      }
+    }
+  });
+} else {
+  document.getElementById('top10chart').insertAdjacentHTML('afterend', '<p style="text-align:center;color:#6c757d">Keine Daten.</p>');
+}
+</script>
 {% endblock %}

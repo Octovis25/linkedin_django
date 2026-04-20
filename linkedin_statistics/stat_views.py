@@ -207,7 +207,7 @@ def timeline(request):
             WHERE m.metric_date = (
                 SELECT MAX(m2.metric_date) FROM linkedin_posts_metrics m2
                 WHERE m2.post_id = m.post_id)
-            ORDER BY COALESCE(pp.post_date, lp.post_date) DESC LIMIT 5
+            ORDER BY COALESCE(pp.post_date, lp.post_date) DESC LIMIT 10
         """)
 
         top5_json = []
