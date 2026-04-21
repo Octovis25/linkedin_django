@@ -61,6 +61,7 @@ def planner_view(request):
         'topic_filter': topic_filter,
         'status_filter': status_filter,
         'statuses': ['Draft', 'Ready', 'Scheduled', 'Posted'],
+        'statuses': ['Draft', 'Ready', 'Scheduled', 'Posted'],
     })
 
 
