@@ -237,7 +237,7 @@ function toggleComment(postId) {
 
 async function saveComment(postId) {
   const val = document.getElementById('input-' + postId).value;
-  await fetch('/api/post-comment/', {
+  const r = await fetch('/api/post-comment/', {
     method: 'POST',
     headers: {'Content-Type':'application/json','X-CSRFToken': CSRF},
     body: JSON.stringify({post_id: postId, comment: val})
@@ -246,9 +246,21 @@ async function saveComment(postId) {
   if (val) {
     pencil.classList.add('has-comment');
     pencil.querySelectorAll('path').forEach(p => p.setAttribute('stroke','#633806'));
+    // Preview aktualisieren
+    let preview = document.getElementById('preview-' + postId);
+    if (!preview) {
+      preview = document.createElement('div');
+      preview.id = 'preview-' + postId;
+      preview.className = 'comment-preview';
+      document.getElementById('input-' + postId).parentElement.insertAdjacentElement('beforebegin', preview);
+    }
+    const short = val.length > 100 ? val.substring(0, 100) + '...' : val;
+    preview.innerHTML = short;
   } else {
     pencil.classList.remove('has-comment');
     pencil.querySelectorAll('path').forEach(p => p.setAttribute('stroke','#aaa'));
+    const preview = document.getElementById('preview-' + postId);
+    if (preview) preview.remove();
   }
 }
 
