@@ -23,8 +23,8 @@
 .badge-add{border:0.5px dashed #aaa;cursor:pointer}
 .pencil-btn{flex-shrink:0;cursor:pointer;width:30px;height:30px;border-radius:6px;border:0.5px solid #e0e0e0;display:flex;align-items:center;justify-content:center}
 .pencil-btn.has-comment{border-color:#FAEEDA;background:#FAEEDA}
-.comment-area{display:none;margin-top:8px;border-top:0.5px solid #e0e0e0;padding-top:8px}
-.comment-area.open{display:block}
+.comment-area{margin-top:8px;border-top:0.5px solid #e0e0e0;padding-top:8px}
+.comment-edit{display:none}.comment-edit.open{display:flex}
 .comment-preview{font-size:12px;color:#6c757d;margin-bottom:6px;line-height:1.5}
 .show-more{color:#008080;cursor:pointer;font-size:11px}
 .filter-bar{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
@@ -128,7 +128,7 @@
         {% endif %}
       </div>
       {% endif %}
-      <div style="display:flex;gap:8px">
+      <div class="comment-edit" id="edit-{{ p.post_id }}" style="gap:8px">
         <input type="text" id="input-{{ p.post_id }}" value="{{ p.comment }}" placeholder="Add a comment..."
                style="font-size:12px;flex:1;padding:3px 8px;border:0.5px solid #ced4da;border-radius:4px">
         <button onclick="saveComment('{{ p.post_id }}')"
@@ -231,8 +231,8 @@ async function selectStatus(postId, category) {
 }
 
 function toggleComment(postId) {
-  const area = document.getElementById('comment-' + postId);
-  area.classList.toggle('open');
+  const edit = document.getElementById('edit-' + postId);
+  edit.classList.toggle('open');
 }
 
 async function saveComment(postId) {
