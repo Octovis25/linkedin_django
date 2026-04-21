@@ -229,6 +229,7 @@ def custom_logout(request):
 @login_required
 def api_post_category(request):
     from django.http import JsonResponse
+    from django.db import connection
     if request.method == 'POST':
         import json
         data = json.loads(request.body)
@@ -243,6 +244,7 @@ def api_post_category(request):
 @login_required
 def api_post_comment(request):
     from django.http import JsonResponse
+    from django.db import connection
     if request.method == 'POST':
         import json
         data = json.loads(request.body)
