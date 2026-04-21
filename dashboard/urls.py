@@ -19,6 +19,9 @@ urlpatterns = [
     path("users/<int:user_id>/delete/", core_views.user_delete, name='user_delete'),
     path("login/", auth_views.LoginView.as_view(template_name="core/login.html"), name="login"),
     path("logout/", core_views.custom_logout, name="logout"),
+    path("api/post-category/", core_views.api_post_category, name='api_post_category'),
+    path("api/post-comment/", core_views.api_post_comment, name='api_post_comment'),
+    path("api/categories/", core_views.api_categories, name='api_categories'),
     path("change-password/", auth_views.PasswordChangeView.as_view(
         template_name="core/change_password.html", success_url="/"), name="change_password"),
 ]

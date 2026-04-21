@@ -1,101 +1,75 @@
 {% extends "core/base.html" %}
-{% block title %}Overview
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-<script>
-const chartInstances = {};
-
-document.querySelectorAll('.tl-card').forEach(card => {
-  card.style.cursor = 'pointer';
-  card.addEventListener('click', function() {
-    const postId = this.dataset.postid;
-    const containerId = 'chart-' + postId;
-    let container = document.getElementById(containerId);
-
-    if (container) {
-      container.style.display = container.style.display === 'none' ? 'block' : 'none';
-      return;
-    }
-
-    // Chart container erstellen
-    container = document.createElement('div');
-    container.id = containerId;
-    container.style.cssText = 'padding:1rem 0;';
-    container.innerHTML = '<canvas id="canvas-' + postId + '" height="120"></canvas><p id="loading-' + postId + '" style="text-align:center;color:#6c757d;font-size:13px">Loading...</p>';
-    this.parentElement.insertAdjacentElement('afterend', container);
-
-    fetch('/statistics/timeline/' + postId + '/')
-      .then(r => r.json())
-      .then(data => {
-        document.getElementById('loading-' + postId).style.display = 'none';
-        if (!data.daily || data.daily.length === 0) {
-          document.getElementById('loading-' + postId).style.display = 'block';
-          document.getElementById('loading-' + postId).textContent = 'No data available.';
-          return;
-        }
-        const labels = data.daily.map(d => 'Day ' + d.tag);
-        new Chart(document.getElementById('canvas-' + postId), {
-          type: 'line',
-          data: {
-            labels,
-            datasets: [
-              { label: 'Clicks',    data: data.daily.map(d => d.clicks),    borderColor: '#FF9800', borderWidth: 2, tension: 0.3, fill: false, yAxisID: 'y' },
-              { label: 'Likes',     data: data.daily.map(d => d.likes),     borderColor: '#4CAF50', borderWidth: 2, tension: 0.3, fill: false, yAxisID: 'y' },
-              { label: 'Comments',  data: data.daily.map(d => d.comments),  borderColor: '#9C27B0', borderWidth: 2, tension: 0.3, fill: false, yAxisID: 'y' },
-              { label: 'Shares',    data: data.daily.map(d => d.shares),    borderColor: '#607D8B', borderWidth: 2, tension: 0.3, fill: false, yAxisID: 'y' },
-              { label: 'Impressions', data: data.daily.map(d => d.impressions), borderColor: '#2196F3', borderWidth: 2, tension: 0.3, fill: false, yAxisID: 'y2' },
-            ]
-          },
-          options: {
-            responsive: true,
-            interaction: { mode: 'index', intersect: false },
-            plugins: { legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 11 } } } },
-            scales: {
-              x:  { title: { display: true, text: 'Day' } },
-              y:  { type: 'linear', position: 'left',  title: { display: true, text: 'Clicks / Likes / Comments / Shares' }, beginAtZero: true, ticks: { stepSize: 1, precision: 0 } },
-              y2: { type: 'linear', position: 'right', title: { display: true, text: 'Impressions' }, grid: { drawOnChartArea: false }, beginAtZero: true, ticks: { precision: 0 }, suggestedMax: 100 }
-            }
-          }
-        });
-      })
-      .catch(err => {
-        document.getElementById('loading-' + postId).textContent = 'Error: ' + err;
-      });
-  });
-});
-</script>
-{% endblock %}
+{% load static %}
+{% block title %}Overview{% endblock %}
 {% block content %}
 <style>
-.tl-wrap{display:grid;grid-template-columns:80px 12px 1fr;gap:0 16px;align-items:stretch}
-.tl-date{text-align:right;font-size:12px;color:#6c757d;padding-top:13px}
+.tl-wrap{display:grid;grid-template-columns:72px 10px 1fr;gap:0 14px}
+.tl-date{text-align:right;font-size:12px;color:#6c757d;padding-top:14px}
 .tl-spine{display:flex;flex-direction:column;align-items:center}
-.tl-dot{width:10px;height:10px;border-radius:50%;margin-top:13px;flex-shrink:0}
+.tl-dot{width:10px;height:10px;border-radius:50%;margin-top:14px;flex-shrink:0}
 .tl-line{width:1px;flex:1;background:#dee2e6;margin-top:2px}
-.tl-card{background:#fff;border:0.5px solid #e0e0e0;border-radius:.5rem;padding:10px 14px;margin-bottom:10px;display:flex;gap:12px;align-items:flex-start}
-.tl-thumb{width:56px;height:56px;border-radius:.375rem;background:#f5f5f5;flex-shrink:0;overflow:hidden;display:flex;align-items:center;justify-content:center}
-.tl-thumb img{width:56px;height:56px;object-fit:cover}
-.badge{font-size:11px;padding:2px 8px;border-radius:99px}
+.tl-card{background:#fff;border:0.5px solid #e0e0e0;border-radius:10px;padding:10px 14px;margin-bottom:10px}
+.tl-inner{display:flex;gap:10px;align-items:center}
+.tl-thumb{width:48px;height:48px;border-radius:6px;object-fit:cover;flex-shrink:0;background:#f5f5f5;display:flex;align-items:center;justify-content:center;overflow:hidden}
+.tl-thumb img{width:48px;height:48px;object-fit:cover}
+.badge{font-size:11px;padding:1px 8px;border-radius:99px;display:inline-flex;align-items:center;gap:3px}
 .badge-green{background:#E1F5EE;color:#0F6E56}
 .badge-blue{background:#E6F1FB;color:#185FA5}
 .badge-gray{background:#f5f5f5;color:#6c757d}
+.badge-amber{background:#FAEEDA;color:#633806}
+.badge-purple{background:#EEEDFE;color:#3C3489}
+.badge-red{background:#FCEBEB;color:#791F1F}
+.badge-status{cursor:pointer}
+.badge-add{border:0.5px dashed #aaa;cursor:pointer}
+.pencil-btn{flex-shrink:0;cursor:pointer;width:30px;height:30px;border-radius:6px;border:0.5px solid #e0e0e0;display:flex;align-items:center;justify-content:center}
+.pencil-btn.has-comment{border-color:#FAEEDA;background:#FAEEDA}
+.comment-area{display:none;margin-top:8px;border-top:0.5px solid #e0e0e0;padding-top:8px}
+.comment-area.open{display:block}
+.comment-preview{font-size:12px;color:#6c757d;margin-bottom:6px;line-height:1.5}
+.show-more{color:#008080;cursor:pointer;font-size:11px}
 .filter-bar{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
-.filter-bar select,.filter-bar input[type=date],.filter-bar input[type=text]{padding:.35rem .5rem;border:1px solid #ced4da;border-radius:.25rem;font-size:.85rem}
-.filter-bar button{padding:.35rem 1rem;background:#008080;color:#fff;border:none;border-radius:.25rem;font-size:.85rem;cursor:pointer}
+.filter-bar input,.filter-bar select{padding:.3rem .5rem;border:1px solid #ced4da;border-radius:.25rem;font-size:.85rem}
+.filter-bar button{padding:.3rem .75rem;background:#008080;color:#fff;border:none;border-radius:.25rem;font-size:.85rem;cursor:pointer}
+.cat-mgmt{background:#fff;border:0.5px solid #e0e0e0;border-radius:10px;padding:12px 16px;margin-bottom:1.5rem}
 </style>
 
-<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1.5rem;flex-wrap:wrap;gap:1rem">
+<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;flex-wrap:wrap;gap:8px">
   <h1 style="margin:0;font-size:1.5rem">📋 All Posts</h1>
   <form method="get" class="filter-bar">
     <input type="date" name="from" value="{{ date_from }}">
+    <span style="font-size:13px;color:#6c757d">–</span>
     <input type="date" name="to" value="{{ date_to }}">
     <select name="content_type">
       <option value="" {% if not content_type %}selected{% endif %}>All formats</option>
       <option value="video" {% if content_type == 'video' %}selected{% endif %}>Video</option>
       <option value="novideo" {% if content_type == 'novideo' %}selected{% endif %}>No video</option>
     </select>
+    <select name="category_filter" id="cat-filter">
+      <option value="">All categories</option>
+    </select>
     <input type="text" name="search" value="{{ search }}" placeholder="Search...">
     <button type="submit">Apply</button>
   </form>
+</div>
+
+<div class="cat-mgmt">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+    <span style="font-size:13px;font-weight:500;color:#212529">Content categories</span>
+    <button onclick="document.getElementById('add-cat').style.display=document.getElementById('add-cat').style.display==='none'?'flex':'none'" style="font-size:12px;padding:3px 10px;border:0.5px solid #ced4da;border-radius:4px;background:#fff;cursor:pointer">+ Add category</button>
+  </div>
+  <div id="cat-badges" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px"></div>
+  <div id="add-cat" style="display:none;gap:8px;align-items:center">
+    <input type="text" id="new-cat-name" placeholder="Category name..." style="font-size:12px;padding:3px 8px;border:0.5px solid #ced4da;border-radius:4px;flex:1">
+    <select id="new-cat-color" style="font-size:12px;padding:3px 8px;border:0.5px solid #ced4da;border-radius:4px">
+      <option value="green">Green</option>
+      <option value="blue">Blue</option>
+      <option value="amber">Amber</option>
+      <option value="purple">Purple</option>
+      <option value="red">Red</option>
+      <option value="gray">Gray</option>
+    </select>
+    <button onclick="addCategory()" style="font-size:12px;padding:3px 10px;background:#008080;color:#fff;border:none;border-radius:4px;cursor:pointer">Add</button>
+  </div>
 </div>
 
 <p style="font-size:.85rem;color:#6c757d;margin-bottom:1rem">{{ all_posts|length }} posts found</p>
@@ -107,32 +81,58 @@ document.querySelectorAll('.tl-card').forEach(card => {
     <div class="tl-dot" style="background:{% if p.content_type == 'Video' %}#185FA5{% else %}#1D9E75{% endif %}"></div>
     <div class="tl-line"></div>
   </div>
-  <div class="tl-card" data-postid="{{ p.post_id }}">
-    <div class="tl-thumb">
-      {% if p.has_image %}
-        <img src="/statistics/post-image/{{ p.post_id }}/" alt="" loading="lazy">
-      {% else %}
-        <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><rect x="3" y="3" width="18" height="18" rx="2" stroke="#ccc" stroke-width="1.5"/><path d="M3 9h18M9 9v12" stroke="#ccc" stroke-width="1.5"/></svg>
-      {% endif %}
-    </div>
-    <div style="flex:1;min-width:0">
-      <div style="font-size:13px;font-weight:500;color:#212529;margin-bottom:5px;line-height:1.4">
-        {% if p.link %}<a href="{{ p.link }}" target="_blank" style="color:#212529;text-decoration:none">{{ p.title|truncatechars:80 }}</a>{% else %}{{ p.title|truncatechars:80 }}{% endif %}
-      </div>
-      <div style="display:flex;gap:6px;margin-bottom:5px;flex-wrap:wrap">
-        <span class="badge badge-green">Organic</span>
-        {% if p.content_type == 'Video' %}
-          <span class="badge badge-blue">Video</span>
+  <div class="tl-card" id="card-{{ p.post_id }}">
+    <div class="tl-inner">
+      <div class="tl-thumb">
+        {% if p.has_image %}
+          <img src="/statistics/post-image/{{ p.post_id }}/" alt="" loading="lazy">
         {% else %}
-          <span class="badge badge-gray">No video</span>
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><rect x="3" y="3" width="18" height="18" rx="2" stroke="#ccc" stroke-width="1.5"/><path d="M3 9h18M9 9v12" stroke="#ccc" stroke-width="1.5"/></svg>
         {% endif %}
       </div>
-      <div style="display:flex;gap:12px;font-size:12px;color:#6c757d;flex-wrap:wrap">
-        <span>👁 {{ p.impressions }}</span>
-        <span>👆 {{ p.clicks }}</span>
-        <span>❤ {{ p.likes }}</span>
-        <span>💬 {{ p.comments }}</span>
-        <span>↗ {{ p.shares }}</span>
+      <div style="flex:1;min-width:0">
+        <div style="font-size:13px;font-weight:500;color:#212529;margin-bottom:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">
+          {% if p.link %}<a href="{{ p.link }}" target="_blank" style="color:#212529;text-decoration:none">{{ p.title|truncatechars:80 }}</a>{% else %}{{ p.title|truncatechars:80 }}{% endif %}
+        </div>
+        <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+          <span class="badge badge-green">Organic</span>
+          {% if p.content_type == 'Video' %}
+            <span class="badge badge-blue">Video</span>
+          {% else %}
+            <span class="badge badge-gray">No video</span>
+          {% endif %}
+          <span class="badge badge-status" id="status-{{ p.post_id }}"
+                data-postid="{{ p.post_id }}"
+                data-category="{{ p.category }}"
+                onclick="openStatusPicker('{{ p.post_id }}', this)">
+          </span>
+          <span style="font-size:11px;color:#6c757d">👁 {{ p.impressions }} · 👆 {{ p.clicks }} · ❤ {{ p.likes }}</span>
+        </div>
+      </div>
+      <div class="pencil-btn {% if p.comment %}has-comment{% endif %}"
+           onclick="toggleComment('{{ p.post_id }}')"
+           id="pencil-{{ p.post_id }}">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+          <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" stroke="{% if p.comment %}#633806{% else %}#aaa{% endif %}" stroke-width="1.8"/>
+          <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" stroke="{% if p.comment %}#633806{% else %}#aaa{% endif %}" stroke-width="1.8"/>
+        </svg>
+      </div>
+    </div>
+    <div class="comment-area" id="comment-{{ p.post_id }}">
+      {% if p.comment %}
+      <div class="comment-preview" id="preview-{{ p.post_id }}">
+        <span id="short-{{ p.post_id }}">{{ p.comment|truncatechars:100 }}</span>
+        {% if p.comment|length > 100 %}
+        <span id="full-{{ p.post_id }}" style="display:none">{{ p.comment }}</span>
+        <span class="show-more" onclick="document.getElementById('short-{{ p.post_id }}').style.display='none';document.getElementById('full-{{ p.post_id }}').style.display='inline';this.style.display='none'"> Show more</span>
+        {% endif %}
+      </div>
+      {% endif %}
+      <div style="display:flex;gap:8px">
+        <input type="text" id="input-{{ p.post_id }}" value="{{ p.comment }}" placeholder="Add a comment..."
+               style="font-size:12px;flex:1;padding:3px 8px;border:0.5px solid #ced4da;border-radius:4px">
+        <button onclick="saveComment('{{ p.post_id }}')"
+                style="font-size:12px;padding:3px 10px;background:#008080;color:#fff;border:none;border-radius:4px;cursor:pointer">Save</button>
       </div>
     </div>
   </div>
@@ -141,67 +141,145 @@ document.querySelectorAll('.tl-card').forEach(card => {
 <p style="text-align:center;color:#6c757d;padding:2rem">No posts found.</p>
 {% endfor %}
 
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<div id="status-picker" style="display:none;position:absolute;background:#fff;border:0.5px solid #e0e0e0;border-radius:8px;padding:8px;box-shadow:0 4px 12px rgba(0,0,0,.1);z-index:100;min-width:160px"></div>
+
 <script>
-const chartInstances = {};
+const CSRF = '{{ csrf_token }}';
+let categories = [];
+let currentPickerPostId = null;
 
-document.querySelectorAll('.tl-card').forEach(card => {
-  card.style.cursor = 'pointer';
-  card.addEventListener('click', function() {
-    const postId = this.dataset.postid;
-    const containerId = 'chart-' + postId;
-    let container = document.getElementById(containerId);
+async function loadCategories() {
+  const r = await fetch('/api/categories/');
+  const data = await r.json();
+  categories = data.categories;
+  renderCatBadges();
+  updateCatFilter();
+  updateAllStatusBadges();
+}
 
-    if (container) {
-      container.style.display = container.style.display === 'none' ? 'block' : 'none';
-      return;
-    }
+function colorClass(color) {
+  const map = {green:'badge-green',blue:'badge-blue',amber:'badge-amber',purple:'badge-purple',red:'badge-red',gray:'badge-gray'};
+  return map[color] || 'badge-gray';
+}
 
-    // Chart container erstellen
-    container = document.createElement('div');
-    container.id = containerId;
-    container.style.cssText = 'padding:1rem 0;';
-    container.innerHTML = '<canvas id="canvas-' + postId + '" height="120"></canvas><p id="loading-' + postId + '" style="text-align:center;color:#6c757d;font-size:13px">Loading...</p>';
-    this.parentElement.insertAdjacentElement('afterend', container);
+function renderCatBadges() {
+  const el = document.getElementById('cat-badges');
+  el.innerHTML = categories.map(c =>
+    `<span class="badge ${colorClass(c.color)}" style="cursor:default">${c.name}
+      <span onclick="deleteCategory(${c.id})" style="cursor:pointer;margin-left:4px">×</span>
+    </span>`
+  ).join('');
+}
 
-    fetch('/statistics/timeline/' + postId + '/')
-      .then(r => r.json())
-      .then(data => {
-        document.getElementById('loading-' + postId).style.display = 'none';
-        if (!data.daily || data.daily.length === 0) {
-          document.getElementById('loading-' + postId).style.display = 'block';
-          document.getElementById('loading-' + postId).textContent = 'No data available.';
-          return;
-        }
-        const labels = data.daily.map(d => 'Day ' + d.tag);
-        new Chart(document.getElementById('canvas-' + postId), {
-          type: 'line',
-          data: {
-            labels,
-            datasets: [
-              { label: 'Clicks',    data: data.daily.map(d => d.clicks),    borderColor: '#FF9800', borderWidth: 2, tension: 0.3, fill: false, yAxisID: 'y' },
-              { label: 'Likes',     data: data.daily.map(d => d.likes),     borderColor: '#4CAF50', borderWidth: 2, tension: 0.3, fill: false, yAxisID: 'y' },
-              { label: 'Comments',  data: data.daily.map(d => d.comments),  borderColor: '#9C27B0', borderWidth: 2, tension: 0.3, fill: false, yAxisID: 'y' },
-              { label: 'Shares',    data: data.daily.map(d => d.shares),    borderColor: '#607D8B', borderWidth: 2, tension: 0.3, fill: false, yAxisID: 'y' },
-              { label: 'Impressions', data: data.daily.map(d => d.impressions), borderColor: '#2196F3', borderWidth: 2, tension: 0.3, fill: false, yAxisID: 'y2' },
-            ]
-          },
-          options: {
-            responsive: true,
-            interaction: { mode: 'index', intersect: false },
-            plugins: { legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 11 } } } },
-            scales: {
-              x:  { title: { display: true, text: 'Day' } },
-              y:  { type: 'linear', position: 'left',  title: { display: true, text: 'Clicks / Likes / Comments / Shares' }, beginAtZero: true, ticks: { stepSize: 1, precision: 0 } },
-              y2: { type: 'linear', position: 'right', title: { display: true, text: 'Impressions' }, grid: { drawOnChartArea: false }, beginAtZero: true, ticks: { precision: 0 }, suggestedMax: 100 }
-            }
-          }
-        });
-      })
-      .catch(err => {
-        document.getElementById('loading-' + postId).textContent = 'Error: ' + err;
-      });
+function updateCatFilter() {
+  const sel = document.getElementById('cat-filter');
+  const cur = sel.value;
+  while(sel.options.length > 1) sel.remove(1);
+  categories.forEach(c => {
+    const o = new Option(c.name, c.name);
+    if(c.name === cur) o.selected = true;
+    sel.add(o);
   });
+}
+
+function updateAllStatusBadges() {
+  document.querySelectorAll('.badge-status').forEach(el => {
+    const postId = el.dataset.postid;
+    const cat = el.dataset.category;
+    renderStatusBadge(el, cat);
+  });
+}
+
+function renderStatusBadge(el, cat) {
+  if (!cat) {
+    el.className = 'badge badge-gray badge-add badge-status';
+    el.innerHTML = '+ Status <svg width="8" height="8" viewBox="0 0 10 6"><path d="M1 1l4 4 4-4" stroke="#6c757d" stroke-width="1.5" fill="none"/></svg>';
+  } else {
+    const found = categories.find(c => c.name === cat);
+    const cls = found ? colorClass(found.color) : 'badge-gray';
+    el.className = `badge ${cls} badge-status`;
+    el.innerHTML = `${cat} <svg width="8" height="8" viewBox="0 0 10 6"><path d="M1 1l4 4 4-4" stroke="currentColor" stroke-width="1.5" fill="none"/></svg>`;
+  }
+  el.dataset.category = cat || '';
+}
+
+function openStatusPicker(postId, badgeEl) {
+  currentPickerPostId = postId;
+  const picker = document.getElementById('status-picker');
+  const rect = badgeEl.getBoundingClientRect();
+  picker.style.top = (window.scrollY + rect.bottom + 4) + 'px';
+  picker.style.left = rect.left + 'px';
+  picker.innerHTML = [
+    `<div onclick="selectStatus('${postId}', '')" style="padding:6px 12px;cursor:pointer;font-size:13px;color:#6c757d;border-radius:4px" onmouseover="this.style.background='#f5f5f5'" onmouseout="this.style.background='none'">— remove —</div>`,
+    ...categories.map(c =>
+      `<div onclick="selectStatus('${postId}', '${c.name}')" style="padding:6px 12px;cursor:pointer;font-size:13px;border-radius:4px" onmouseover="this.style.background='#f5f5f5'" onmouseout="this.style.background='none'">${c.name}</div>`
+    )
+  ].join('');
+  picker.style.display = 'block';
+}
+
+async function selectStatus(postId, category) {
+  document.getElementById('status-picker').style.display = 'none';
+  await fetch('/api/post-category/', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json','X-CSRFToken': CSRF},
+    body: JSON.stringify({post_id: postId, category: category})
+  });
+  const el = document.getElementById('status-' + postId);
+  el.dataset.category = category;
+  renderStatusBadge(el, category);
+}
+
+function toggleComment(postId) {
+  const area = document.getElementById('comment-' + postId);
+  area.classList.toggle('open');
+}
+
+async function saveComment(postId) {
+  const val = document.getElementById('input-' + postId).value;
+  await fetch('/api/post-comment/', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json','X-CSRFToken': CSRF},
+    body: JSON.stringify({post_id: postId, comment: val})
+  });
+  const pencil = document.getElementById('pencil-' + postId);
+  if (val) {
+    pencil.classList.add('has-comment');
+    pencil.querySelectorAll('path').forEach(p => p.setAttribute('stroke','#633806'));
+  } else {
+    pencil.classList.remove('has-comment');
+    pencil.querySelectorAll('path').forEach(p => p.setAttribute('stroke','#aaa'));
+  }
+}
+
+async function addCategory() {
+  const name = document.getElementById('new-cat-name').value.trim();
+  const color = document.getElementById('new-cat-color').value;
+  if (!name) return;
+  await fetch('/api/categories/', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json','X-CSRFToken': CSRF},
+    body: JSON.stringify({action:'add', name, color})
+  });
+  document.getElementById('new-cat-name').value = '';
+  loadCategories();
+}
+
+async function deleteCategory(id) {
+  await fetch('/api/categories/', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json','X-CSRFToken': CSRF},
+    body: JSON.stringify({action:'delete', id})
+  });
+  loadCategories();
+}
+
+document.addEventListener('click', e => {
+  if (!e.target.closest('.badge-status') && !e.target.closest('#status-picker')) {
+    document.getElementById('status-picker').style.display = 'none';
+  }
 });
+
+loadCategories();
 </script>
 {% endblock %}

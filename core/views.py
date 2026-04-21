@@ -37,7 +37,7 @@ def home_view(request):
                    lp.post_url, lp.content_type,
                    COALESCE(m.impressions,0), COALESCE(m.likes,0),
                    COALESCE(m.comments,0), COALESCE(m.direct_shares,0),
-                   COALESCE(m.clicks,0), pp.post_image
+                   COALESCE(m.clicks,0), pp.post_image, pp.category, pp.comment
             FROM linkedin_posts lp
             LEFT JOIN linkedin_posts_posted pp ON lp.post_id = pp.post_id
             LEFT JOIN linkedin_posts_metrics m ON lp.post_id = m.post_id
@@ -71,6 +71,8 @@ def home_view(request):
                     'shares':       r[8],
                     'clicks':       r[9],
                     'has_image':    bool(r[10]),
+                    'category':     r[11] or '',
+                    'comment':      r[12] or '',
                 })
         except Exception as e:
             print("home_view error:", e)
@@ -222,3 +224,54 @@ from django.contrib.auth import logout as auth_logout
 def custom_logout(request):
     auth_logout(request)
     return redirect('/login/')
+
+
+@login_required
+def api_post_category(request):
+    from django.http import JsonResponse
+    if request.method == 'POST':
+        import json
+        data = json.loads(request.body)
+        post_id = data.get('post_id')
+        category = data.get('category')
+        with connection.cursor() as c:
+            c.execute("UPDATE linkedin_posts_posted SET category=%s WHERE post_id=%s", [category, post_id])
+        return JsonResponse({'ok': True})
+    return JsonResponse({'ok': False}, status=400)
+
+
+@login_required
+def api_post_comment(request):
+    from django.http import JsonResponse
+    if request.method == 'POST':
+        import json
+        data = json.loads(request.body)
+        post_id = data.get('post_id')
+        comment = data.get('comment')
+        with connection.cursor() as c:
+            c.execute("UPDATE linkedin_posts_posted SET comment=%s WHERE post_id=%s", [comment, post_id])
+        return JsonResponse({'ok': True})
+    return JsonResponse({'ok': False}, status=400)
+
+
+@login_required
+def api_categories(request):
+    from django.http import JsonResponse
+    from django.db import connection
+    if request.method == 'GET':
+        with connection.cursor() as c:
+            c.execute("SELECT id, name, color FROM linkedin_post_categories ORDER BY name")
+            cats = [{'id': r[0], 'name': r[1], 'color': r[2]} for r in c.fetchall()]
+        return JsonResponse({'categories': cats})
+    if request.method == 'POST':
+        import json
+        data = json.loads(request.body)
+        action = data.get('action')
+        with connection.cursor() as c:
+            if action == 'add':
+                c.execute("INSERT INTO linkedin_post_categories (name, color) VALUES (%s, %s)",
+                         [data.get('name'), data.get('color', 'gray')])
+            elif action == 'delete':
+                c.execute("DELETE FROM linkedin_post_categories WHERE id=%s", [data.get('id')])
+        return JsonResponse({'ok': True})
+    return JsonResponse({'ok': False}, status=400)
