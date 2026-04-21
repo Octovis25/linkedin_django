@@ -242,17 +242,19 @@ async function saveComment(postId) {
     headers: {'Content-Type':'application/json','X-CSRFToken': CSRF},
     body: JSON.stringify({post_id: postId, comment: val})
   });
+  // Einklappen
+  document.getElementById('edit-' + postId).classList.remove('open');
+
   const pencil = document.getElementById('pencil-' + postId);
   if (val) {
     pencil.classList.add('has-comment');
     pencil.querySelectorAll('path').forEach(p => p.setAttribute('stroke','#633806'));
-    // Preview aktualisieren
     let preview = document.getElementById('preview-' + postId);
     if (!preview) {
       preview = document.createElement('div');
       preview.id = 'preview-' + postId;
       preview.className = 'comment-preview';
-      document.getElementById('input-' + postId).parentElement.insertAdjacentElement('beforebegin', preview);
+      document.getElementById('edit-' + postId).insertAdjacentElement('beforebegin', preview);
     }
     const short = val.length > 100 ? val.substring(0, 100) + '...' : val;
     preview.innerHTML = short;
