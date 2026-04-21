@@ -20,6 +20,7 @@ INSTALLED_APPS = [
     "posts_posted",
     "collectives",
     "linkedin_statistics",
+    "planner",
 ]
 
 MIDDLEWARE = [

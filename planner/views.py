@@ -60,6 +60,7 @@ def planner_view(request):
         'ideas': [{'id': r[0], 'text': r[1]} for r in ideas],
         'topic_filter': topic_filter,
         'status_filter': status_filter,
+        'statuses': ['Draft', 'Ready', 'Scheduled', 'Posted'],
     })
 
 

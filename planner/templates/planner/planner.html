@@ -146,7 +146,7 @@ textarea{width:100%;min-height:100px;padding:8px;border:0.5px solid #ced4da;bord
             {% for t in topics %}<option value="{{ t.id }}" {% if t.id == p.topic_id %}selected{% endif %}>{{ t.name }}</option>{% endfor %}
           </select>
           <select id="estatus-{{ p.id }}" style="flex:1">
-            {% for s in 'Draft,Ready,Scheduled,Posted'|split:',' %}
+            {% for s in statuses %}
             <option {% if s == p.status %}selected{% endif %}>{{ s }}</option>
             {% endfor %}
           </select>
