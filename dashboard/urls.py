@@ -13,6 +13,7 @@ urlpatterns = [
     path("data/delete/<str:filename>/", core_views.delete_file_view, name='delete_file'),
     path("data/posts/", include("posts_posted.urls")),
     path("collectives/", include("collectives.urls")),
+    path("planner/", include("planner.urls")),
     path("statistics/", include("linkedin_statistics.stat_urls")),  # Statistics module
     path("users/", core_views.user_list, name='user_list'),
     path("users/new/", core_views.user_create, name='user_create'),

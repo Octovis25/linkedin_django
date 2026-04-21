@@ -1,0 +1,289 @@
+{% extends "core/base.html" %}
+{% load static %}
+{% block title %}Content Planner{% endblock %}
+{% block content %}
+<style>
+.pl-card{background:#fff;border:0.5px solid #e0e0e0;border-radius:10px;padding:1.25rem;margin-bottom:1rem}
+.pl-card.editing{border:2px solid #0077B5}
+.badge{font-size:11px;padding:2px 8px;border-radius:99px}
+.badge-blue{background:#E6F1FB;color:#185FA5}
+.badge-green{background:#E1F5EE;color:#0F6E56}
+.badge-amber{background:#FAEEDA;color:#633806}
+.badge-purple{background:#EEEDFE;color:#3C3489}
+.badge-red{background:#FCEBEB;color:#791F1F}
+.badge-gray{background:#f5f5f5;color:#6c757d}
+.badge-draft{background:#f5f5f5;color:#6c757d}
+.badge-ready{background:#E1F5EE;color:#0F6E56}
+.badge-scheduled{background:#E6F1FB;color:#185FA5}
+.badge-posted{background:#EEEDFE;color:#3C3489}
+.icon-btn{cursor:pointer;width:28px;height:28px;border-radius:6px;border:0.5px solid #e0e0e0;display:flex;align-items:center;justify-content:center;background:#fff}
+.filter-bar{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.filter-bar select{padding:.3rem .5rem;border:1px solid #ced4da;border-radius:.25rem;font-size:.85rem}
+textarea{width:100%;min-height:100px;padding:8px;border:0.5px solid #ced4da;border-radius:6px;resize:vertical;font-family:inherit;font-size:13px}
+.form-row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px}
+.form-row select,.form-row input{padding:.3rem .5rem;border:1px solid #ced4da;border-radius:.25rem;font-size:13px}
+.thumb{width:80px;height:80px;border-radius:8px;flex-shrink:0;object-fit:cover}
+.thumb-placeholder{width:80px;height:80px;border-radius:8px;flex-shrink:0;background:#f5f5f5;display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:pointer;border:0.5px dashed #ccc;gap:4px}
+</style>
+
+<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1.5rem;flex-wrap:wrap;gap:8px">
+  <h1 style="margin:0;font-size:1.5rem">📅 Content Planner</h1>
+  <div style="display:flex;gap:8px;align-items:center">
+    <form method="get" class="filter-bar">
+      <select name="topic" onchange="this.form.submit()">
+        <option value="">All topics</option>
+        {% for t in topics %}
+        <option value="{{ t.id }}" {% if topic_filter == t.id|stringformat:'s' %}selected{% endif %}>{{ t.name }}</option>
+        {% endfor %}
+      </select>
+      <select name="status" onchange="this.form.submit()">
+        <option value="">All status</option>
+        <option value="Draft" {% if status_filter == 'Draft' %}selected{% endif %}>Draft</option>
+        <option value="Ready" {% if status_filter == 'Ready' %}selected{% endif %}>Ready</option>
+        <option value="Scheduled" {% if status_filter == 'Scheduled' %}selected{% endif %}>Scheduled</option>
+        <option value="Posted" {% if status_filter == 'Posted' %}selected{% endif %}>Posted</option>
+      </select>
+    </form>
+    <button onclick="showNewForm()" style="padding:.35rem 1rem;background:#008080;color:#fff;border:none;border-radius:.25rem;font-size:.85rem;cursor:pointer">+ New post</button>
+  </div>
+</div>
+
+<div style="display:flex;gap:8px;margin-bottom:1.5rem;flex-wrap:wrap;align-items:center">
+  <span style="font-size:13px;color:#6c757d">Topics:</span>
+  {% for t in topics %}
+  <span class="badge badge-{{ t.color }}">{{ t.name }}
+    <span onclick="deleteTopic({{ t.id }})" style="cursor:pointer;margin-left:4px">×</span>
+  </span>
+  {% endfor %}
+  <button onclick="document.getElementById('add-topic').style.display='flex'" style="font-size:12px;padding:2px 10px;border:0.5px solid #ced4da;border-radius:4px;background:#fff;cursor:pointer">+ Add topic</button>
+  <div id="add-topic" style="display:none;gap:6px;align-items:center">
+    <input type="text" id="new-topic-name" placeholder="Topic name..." style="font-size:12px;padding:3px 8px;border:0.5px solid #ced4da;border-radius:4px">
+    <select id="new-topic-color" style="font-size:12px;padding:3px 6px;border:0.5px solid #ced4da;border-radius:4px">
+      <option value="blue">Blue</option>
+      <option value="green">Green</option>
+      <option value="amber">Amber</option>
+      <option value="purple">Purple</option>
+      <option value="red">Red</option>
+      <option value="gray">Gray</option>
+    </select>
+    <button onclick="addTopic()" style="font-size:12px;padding:3px 10px;background:#008080;color:#fff;border:none;border-radius:4px;cursor:pointer">Add</button>
+  </div>
+</div>
+
+<div id="new-form" style="display:none" class="pl-card editing">
+  <div style="font-size:12px;color:#0077B5;margin-bottom:12px;font-weight:500">New post</div>
+  <div style="display:flex;gap:12px;align-items:flex-start">
+    <div class="thumb-placeholder" onclick="document.getElementById('new-image-input').click()">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" stroke="#aaa" stroke-width="1.5"/><polyline points="17,8 12,3 7,8" stroke="#aaa" stroke-width="1.5"/><line x1="12" y1="3" x2="12" y2="15" stroke="#aaa" stroke-width="1.5"/></svg>
+      <span style="font-size:11px;color:#aaa">Image</span>
+      <input type="file" id="new-image-input" accept="image/*" style="display:none" onchange="previewImage(this,'new-thumb')">
+    </div>
+    <div style="flex:1;min-width:0">
+      <div class="form-row">
+        <select id="new-topic" style="flex:1">
+          <option value="">— Topic —</option>
+          {% for t in topics %}<option value="{{ t.id }}">{{ t.name }}</option>{% endfor %}
+        </select>
+        <select id="new-status" style="flex:1">
+          <option>Draft</option><option>Ready</option><option>Scheduled</option><option>Posted</option>
+        </select>
+        <div style="display:flex;align-items:center;gap:6px;flex:1.5">
+          <label style="font-size:12px;color:#6c757d;white-space:nowrap">Planned to post</label>
+          <input type="date" id="new-date" style="flex:1">
+        </div>
+      </div>
+      <input type="text" id="new-title" placeholder="Title (optional)..." style="width:100%;margin-bottom:8px;padding:6px 8px;border:0.5px solid #ced4da;border-radius:6px;font-size:13px">
+      <textarea id="new-content" placeholder="Post text hier einfügen..."></textarea>
+      <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:8px">
+        <button onclick="document.getElementById('new-form').style.display='none'" style="font-size:13px;padding:4px 12px;border:0.5px solid #ced4da;border-radius:4px;background:#fff;cursor:pointer">Cancel</button>
+        <button onclick="createPost()" style="font-size:13px;padding:4px 14px;background:#008080;color:#fff;border:none;border-radius:4px;cursor:pointer">Save</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% for p in posts %}
+<div class="pl-card" id="post-{{ p.id }}">
+  <div style="display:flex;gap:12px;align-items:flex-start">
+    {% if p.image %}
+    <img src="/media/{{ p.image }}" class="thumb" alt="">
+    {% else %}
+    <div class="thumb-placeholder" onclick="document.getElementById('img-{{ p.id }}').click()">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" stroke="#aaa" stroke-width="1.5"/><polyline points="17,8 12,3 7,8" stroke="#aaa" stroke-width="1.5"/><line x1="12" y1="3" x2="12" y2="15" stroke="#aaa" stroke-width="1.5"/></svg>
+      <span style="font-size:11px;color:#aaa">Image</span>
+      <input type="file" id="img-{{ p.id }}" accept="image/*" style="display:none" onchange="uploadImage(this,{{ p.id }})">
+    </div>
+    {% endif %}
+    <div style="flex:1;min-width:0">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px">
+        <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+          {% if p.topic_name %}<span class="badge badge-{{ p.topic_color }}">{{ p.topic_name }}</span>{% endif %}
+          <span class="badge badge-{{ p.status|lower }}">{{ p.status }}</span>
+          {% if p.planned_date %}
+          <span style="font-size:11px;color:#6c757d">Planned to post: {{ p.planned_date|date:"d.m.Y" }}</span>
+          {% else %}
+          <span style="font-size:11px;color:#aaa">Planned to post: —</span>
+          {% endif %}
+        </div>
+        <div style="display:flex;gap:6px">
+          <div class="icon-btn" onclick="editPost({{ p.id }})">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" stroke="#aaa" stroke-width="1.8"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" stroke="#aaa" stroke-width="1.8"/></svg>
+          </div>
+          <div class="icon-btn" onclick="deletePost({{ p.id }})">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><polyline points="3,6 5,6 21,6" stroke="#aaa" stroke-width="1.8"/><path d="M19 6l-1 14H6L5 6" stroke="#aaa" stroke-width="1.8"/><path d="M10 11v6M14 11v6" stroke="#aaa" stroke-width="1.8"/></svg>
+          </div>
+        </div>
+      </div>
+      {% if p.title %}<div style="font-size:13px;font-weight:500;color:#212529;margin-bottom:4px">{{ p.title }}</div>{% endif %}
+      <div style="font-size:13px;color:#212529;line-height:1.5;white-space:pre-wrap" id="content-{{ p.id }}">{{ p.content|truncatechars:200 }}</div>
+      {% if p.content|length > 200 %}
+      <span onclick="document.getElementById('content-{{ p.id }}').textContent='{{ p.content|escapejs }}';this.style.display='none'" style="font-size:11px;color:#008080;cursor:pointer">Show more</span>
+      {% endif %}
+      <div id="edit-{{ p.id }}" style="display:none;margin-top:12px;border-top:0.5px solid #e0e0e0;padding-top:12px">
+        <div class="form-row">
+          <select id="etopic-{{ p.id }}" style="flex:1">
+            <option value="">— Topic —</option>
+            {% for t in topics %}<option value="{{ t.id }}" {% if t.id == p.topic_id %}selected{% endif %}>{{ t.name }}</option>{% endfor %}
+          </select>
+          <select id="estatus-{{ p.id }}" style="flex:1">
+            {% for s in 'Draft,Ready,Scheduled,Posted'|split:',' %}
+            <option {% if s == p.status %}selected{% endif %}>{{ s }}</option>
+            {% endfor %}
+          </select>
+          <div style="display:flex;align-items:center;gap:6px;flex:1.5">
+            <label style="font-size:12px;color:#6c757d;white-space:nowrap">Planned to post</label>
+            <input type="date" id="edate-{{ p.id }}" value="{{ p.planned_date|date:'Y-m-d' }}" style="flex:1">
+          </div>
+        </div>
+        <input type="text" id="etitle-{{ p.id }}" value="{{ p.title }}" placeholder="Title..." style="width:100%;margin-bottom:8px;padding:6px 8px;border:0.5px solid #ced4da;border-radius:6px;font-size:13px">
+        <textarea id="econtent-{{ p.id }}">{{ p.content }}</textarea>
+        <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:8px">
+          <button onclick="document.getElementById('edit-{{ p.id }}').style.display='none'" style="font-size:13px;padding:4px 12px;border:0.5px solid #ced4da;border-radius:4px;background:#fff;cursor:pointer">Cancel</button>
+          <button onclick="updatePost({{ p.id }})" style="font-size:13px;padding:4px 14px;background:#008080;color:#fff;border:none;border-radius:4px;cursor:pointer">Save</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% empty %}
+<p style="text-align:center;color:#6c757d;padding:2rem">No posts yet. Click "+ New post" to start.</p>
+{% endfor %}
+
+<div style="background:#f8f9fa;border-radius:10px;padding:1.25rem;margin-top:1.5rem">
+  <div style="font-size:13px;font-weight:500;color:#212529;margin-bottom:12px">💡 Ideas</div>
+  {% for idea in ideas %}
+  <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
+    <div style="width:6px;height:6px;border-radius:50%;background:#888;flex-shrink:0"></div>
+    <span style="font-size:13px;flex:1">{{ idea.text }}</span>
+    <div class="icon-btn" onclick="deleteIdea({{ idea.id }})">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><polyline points="3,6 5,6 21,6" stroke="#aaa" stroke-width="1.8"/><path d="M19 6l-1 14H6L5 6" stroke="#aaa" stroke-width="1.8"/></svg>
+    </div>
+  </div>
+  {% endfor %}
+  <div style="display:flex;gap:8px;margin-top:8px">
+    <input type="text" id="new-idea" placeholder="New idea..." style="flex:1;padding:6px 8px;border:0.5px solid #ced4da;border-radius:6px;font-size:13px">
+    <button onclick="addIdea()" style="padding:4px 14px;background:#008080;color:#fff;border:none;border-radius:4px;font-size:13px;cursor:pointer">Add</button>
+  </div>
+</div>
+
+<script>
+const CSRF = '{{ csrf_token }}';
+
+function showNewForm() {
+  document.getElementById('new-form').style.display = 'block';
+  document.getElementById('new-form').scrollIntoView({behavior:'smooth'});
+}
+
+function previewImage(input, thumbId) {
+  if (input.files && input.files[0]) {
+    const reader = new FileReader();
+    reader.onload = e => {
+      const thumb = document.getElementById(thumbId);
+      if (thumb) thumb.src = e.target.result;
+    };
+    reader.readAsDataURL(input.files[0]);
+  }
+}
+
+async function post(url, data) {
+  const r = await fetch(url, {
+    method: 'POST',
+    headers: {'Content-Type':'application/json','X-CSRFToken':CSRF},
+    body: JSON.stringify(data)
+  });
+  return r.json();
+}
+
+async function createPost() {
+  const data = await post('/planner/api/post/', {
+    action: 'create',
+    topic_id: document.getElementById('new-topic').value || null,
+    status: document.getElementById('new-status').value,
+    planned_date: document.getElementById('new-date').value || null,
+    title: document.getElementById('new-title').value,
+    content: document.getElementById('new-content').value,
+  });
+  if (data.ok) location.reload();
+}
+
+async function updatePost(id) {
+  const data = await post('/planner/api/post/', {
+    action: 'update', id,
+    topic_id: document.getElementById('etopic-'+id).value || null,
+    status: document.getElementById('estatus-'+id).value,
+    planned_date: document.getElementById('edate-'+id).value || null,
+    title: document.getElementById('etitle-'+id).value,
+    content: document.getElementById('econtent-'+id).value,
+  });
+  if (data.ok) location.reload();
+}
+
+async function deletePost(id) {
+  if (!confirm('Delete this post?')) return;
+  await post('/planner/api/post/', {action:'delete', id});
+  location.reload();
+}
+
+function editPost(id) {
+  const el = document.getElementById('edit-'+id);
+  el.style.display = el.style.display === 'none' ? 'block' : 'none';
+}
+
+async function uploadImage(input, postId) {
+  const form = new FormData();
+  form.append('image', input.files[0]);
+  await fetch('/planner/api/image/'+postId+'/', {
+    method: 'POST',
+    headers: {'X-CSRFToken': CSRF},
+    body: form
+  });
+  location.reload();
+}
+
+async function addTopic() {
+  const name = document.getElementById('new-topic-name').value.trim();
+  const color = document.getElementById('new-topic-color').value;
+  if (!name) return;
+  await post('/planner/api/topic/', {action:'create', name, color});
+  location.reload();
+}
+
+async function deleteTopic(id) {
+  if (!confirm('Delete this topic?')) return;
+  await post('/planner/api/topic/', {action:'delete', id});
+  location.reload();
+}
+
+async function addIdea() {
+  const text = document.getElementById('new-idea').value.trim();
+  if (!text) return;
+  await post('/planner/api/idea/', {action:'create', text});
+  location.reload();
+}
+
+async function deleteIdea(id) {
+  await post('/planner/api/idea/', {action:'delete', id});
+  location.reload();
+}
+</script>
+{% endblock %}
