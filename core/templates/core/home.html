@@ -143,7 +143,9 @@ function colorClass(color) {
 }
 
 function renderCatBadges() {
+  // cat-badges nur aktualisieren wenn vorhanden
   const el = document.getElementById('cat-badges');
+  if (!el) return;
   el.innerHTML = categories.map(c =>
     `<span class="badge ${colorClass(c.color)}" style="cursor:default">${c.name}</span>`
   ).join('');
@@ -324,7 +326,7 @@ document.querySelectorAll('.tl-inner').forEach(inner => {
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
 // Chart per Klick auf Bild/Titel
-const chartInstances = {};
+;
 
 document.querySelectorAll('.tl-inner').forEach(inner => {
   const card = inner.closest('.tl-card');
