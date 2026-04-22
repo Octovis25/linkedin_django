@@ -43,6 +43,39 @@
   </div>
 </div>
 
+<div style="background:#fff;border:0.5px solid #e0e0e0;border-radius:10px;padding:12px 16px;margin-bottom:1rem">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+    <span style="font-size:13px;font-weight:500;color:#212529">Content categories</span>
+    <button onclick="document.getElementById('add-cat').style.display=document.getElementById('add-cat').style.display==='none'?'flex':'none'" style="font-size:12px;padding:3px 10px;border:0.5px solid #ced4da;border-radius:4px;background:#fff;cursor:pointer">+ Add category</button>
+  </div>
+  <div id="cat-badges" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px">
+    {% for t in topics %}
+    <span style="font-size:12px;padding:3px 10px;border-radius:99px;
+      {% if t.color == 'blue' %}background:#E6F1FB;color:#185FA5;
+      {% elif t.color == 'green' %}background:#E1F5EE;color:#0F6E56;
+      {% elif t.color == 'amber' %}background:#FAEEDA;color:#633806;
+      {% elif t.color == 'purple' %}background:#EEEDFE;color:#3C3489;
+      {% elif t.color == 'red' %}background:#FCEBEB;color:#791F1F;
+      {% else %}background:#f5f5f5;color:#6c757d;{% endif %}">
+      {{ t.name }}
+      <span onclick="deleteTopic({{ t.id }})" style="cursor:pointer;margin-left:4px">×</span>
+    </span>
+    {% endfor %}
+  </div>
+  <div id="add-cat" style="display:none;gap:8px;align-items:center">
+    <input type="text" id="new-cat-name" placeholder="Category name..." style="font-size:12px;padding:3px 8px;border:0.5px solid #ced4da;border-radius:4px;flex:1">
+    <select id="new-cat-color" style="font-size:12px;padding:3px 8px;border:0.5px solid #ced4da;border-radius:4px">
+      <option value="blue">Blue</option>
+      <option value="green">Green</option>
+      <option value="amber">Amber</option>
+      <option value="purple">Purple</option>
+      <option value="red">Red</option>
+      <option value="gray">Gray</option>
+    </select>
+    <button onclick="addCat()" style="font-size:12px;padding:3px 10px;background:#008080;color:#fff;border:none;border-radius:4px;cursor:pointer">Add</button>
+  </div>
+</div>
+
 <div class="kanban" id="kanban">
   {% for col in columns %}
   <div class="col" id="col-{{ col.topic.id }}" 
@@ -374,6 +407,14 @@ async function saveTopic() {
     name: document.getElementById('t-name').value,
     color: document.getElementById('t-color').value,
   });
+  location.reload();
+}
+
+async function addCat() {
+  const name = document.getElementById('new-cat-name').value.trim();
+  const color = document.getElementById('new-cat-color').value;
+  if (!name) return;
+  await p('/planner/api/topic/', {action:'create', name, color});
   location.reload();
 }
 

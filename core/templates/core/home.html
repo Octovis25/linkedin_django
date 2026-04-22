@@ -52,26 +52,6 @@
   </form>
 </div>
 
-<div class="cat-mgmt">
-  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-    <span style="font-size:13px;font-weight:500;color:#212529">Content categories</span>
-    <button onclick="document.getElementById('add-cat').style.display=document.getElementById('add-cat').style.display==='none'?'flex':'none'" style="font-size:12px;padding:3px 10px;border:0.5px solid #ced4da;border-radius:4px;background:#fff;cursor:pointer">+ Add category</button>
-  </div>
-  <div id="cat-badges" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px"></div>
-  <div id="add-cat" style="display:none;gap:8px;align-items:center">
-    <input type="text" id="new-cat-name" placeholder="Category name..." style="font-size:12px;padding:3px 8px;border:0.5px solid #ced4da;border-radius:4px;flex:1">
-    <select id="new-cat-color" style="font-size:12px;padding:3px 8px;border:0.5px solid #ced4da;border-radius:4px">
-      <option value="green">Green</option>
-      <option value="blue">Blue</option>
-      <option value="amber">Amber</option>
-      <option value="purple">Purple</option>
-      <option value="red">Red</option>
-      <option value="gray">Gray</option>
-    </select>
-    <button onclick="addCategory()" style="font-size:12px;padding:3px 10px;background:#008080;color:#fff;border:none;border-radius:4px;cursor:pointer">Add</button>
-  </div>
-</div>
-
 <p style="font-size:.85rem;color:#6c757d;margin-bottom:1rem">{{ all_posts|length }} posts found</p>
 
 {% for p in all_posts %}
@@ -165,9 +145,7 @@ function colorClass(color) {
 function renderCatBadges() {
   const el = document.getElementById('cat-badges');
   el.innerHTML = categories.map(c =>
-    `<span class="badge ${colorClass(c.color)}" style="cursor:default">${c.name}
-      <span onclick="deleteCategory(${c.id})" style="cursor:pointer;margin-left:4px">×</span>
-    </span>`
+    `<span class="badge ${colorClass(c.color)}" style="cursor:default">${c.name}</span>`
   ).join('');
 }
 
@@ -264,28 +242,6 @@ async function saveComment(postId) {
     const preview = document.getElementById('preview-' + postId);
     if (preview) preview.remove();
   }
-}
-
-async function addCategory() {
-  const name = document.getElementById('new-cat-name').value.trim();
-  const color = document.getElementById('new-cat-color').value;
-  if (!name) return;
-  await fetch('/api/categories/', {
-    method: 'POST',
-    headers: {'Content-Type':'application/json','X-CSRFToken': CSRF},
-    body: JSON.stringify({action:'add', name, color})
-  });
-  document.getElementById('new-cat-name').value = '';
-  loadCategories();
-}
-
-async function deleteCategory(id) {
-  await fetch('/api/categories/', {
-    method: 'POST',
-    headers: {'Content-Type':'application/json','X-CSRFToken': CSRF},
-    body: JSON.stringify({action:'delete', id})
-  });
-  loadCategories();
 }
 
 document.addEventListener('click', e => {
