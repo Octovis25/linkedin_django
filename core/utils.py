@@ -79,7 +79,7 @@ def import_to_db(file_path, file_type):
                     metrics_sheet = df
 
             stats = []
-            r1 = import_posts_from_content(posts_sheet) if posts_sheet is not None else None
+            r1 = import_posts_from_content(posts_sheet, file_path) if posts_sheet is not None else None
             r2 = import_kennzahlen(metrics_sheet) if metrics_sheet is not None else None
             if r1: stats.append(r1)
             if r2: stats.append(r2)
@@ -101,7 +101,7 @@ def import_to_db(file_path, file_type):
         return False
 
 
-def import_posts_from_content(df):
+def import_posts_from_content(df, file_path=""):
     """Importiert 'Alle Beiträge' Sheet → linkedin_posts (upsert)"""
     df.columns = [str(c).strip().lower() for c in df.columns]
     print(f"Alle Beiträge Spalten: {list(df.columns)}")
@@ -179,7 +179,16 @@ def import_posts_from_content(df):
 
                 # Post-Metriken als Snapshot eintragen
                 import datetime as _dt
-                today = _dt.date.today().isoformat()
+                import re as _re
+                # Export-Datum aus Dateiname extrahieren (timestamp in ms → date)
+                _fname = os.path.basename(file_path) if 'file_path' in dir() else ''
+                _ts_match = _re.search(r'_(\d{10,13})\.', _fname)
+                if _ts_match:
+                    _ts = int(_ts_match.group(1))
+                    if _ts > 1e12: _ts = _ts / 1000
+                    today = _dt.datetime.fromtimestamp(_ts).strftime('%Y-%m-%d')
+                else:
+                    today = _dt.date.today().isoformat()
                 def _gi(names):
                     for n in names:
                         for col in df.columns:
@@ -231,7 +240,16 @@ def import_posts_from_content(df):
 
                 # Post-Metriken als Snapshot eintragen
                 import datetime as _dt
-                today = _dt.date.today().isoformat()
+                import re as _re
+                # Export-Datum aus Dateiname extrahieren (timestamp in ms → date)
+                _fname = os.path.basename(file_path) if 'file_path' in dir() else ''
+                _ts_match = _re.search(r'_(\d{10,13})\.', _fname)
+                if _ts_match:
+                    _ts = int(_ts_match.group(1))
+                    if _ts > 1e12: _ts = _ts / 1000
+                    today = _dt.datetime.fromtimestamp(_ts).strftime('%Y-%m-%d')
+                else:
+                    today = _dt.date.today().isoformat()
                 def _gi(names):
                     for n in names:
                         for col in df.columns:
