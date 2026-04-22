@@ -8,7 +8,8 @@ from core import views as core_views
 urlpatterns = [
     path("admin/", admin.site.urls),
     path("", core_views.home_view, name='home'),
-    path("data/upload/", core_views.upload_view, name='upload'),
+    path("data/upload/", core_views.upload_import_view, name='upload_import'),
+    path("data/upload-old/", core_views.upload_view, name='upload'),
     path("data/import/", core_views.analyze_view, name='analyze'),
     path("data/delete/<str:filename>/", core_views.delete_file_view, name='delete_file'),
     path("data/posts/", include("posts_posted.urls")),

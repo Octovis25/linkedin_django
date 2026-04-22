@@ -143,6 +143,83 @@ def analyze_view(request):
     messages.info(request, f'{success_count} imported | {error_count} failed')
     return render(request, 'core/analyze.html', {'results': results, 'success_count': success_count, 'error_count': error_count})
 
+
+@login_required
+def upload_import_view(request):
+    import shutil
+    files = []
+    results = []
+    
+    if os.path.exists(UPLOAD_DIR):
+        for filename in sorted(os.listdir(UPLOAD_DIR)):
+            file_path = os.path.join(UPLOAD_DIR, filename)
+            if os.path.isfile(file_path) and not filename.startswith('.'):
+                file_size = os.path.getsize(file_path)
+                file_type = analyze_file(file_path)
+                files.append({
+                    'name': filename,
+                    'size': f"{file_size / 1024:.1f} KB",
+                    'type': file_type or 'Unknown',
+                })
+
+    if request.method == 'POST':
+        action = request.POST.get('action')
+        if action == 'upload':
+            uploaded_file = request.FILES.get('file')
+            if uploaded_file:
+                file_path = os.path.join(UPLOAD_DIR, uploaded_file.name)
+                with open(file_path, 'wb+') as destination:
+                    for chunk in uploaded_file.chunks():
+                        destination.write(chunk)
+                messages.success(request, f'File "{uploaded_file.name}" uploaded!')
+                return redirect('upload_import')
+        
+        elif action == 'import':
+            success_count = 0
+            error_count = 0
+            if os.path.exists(UPLOAD_DIR):
+                for filename in os.listdir(UPLOAD_DIR):
+                    file_path = os.path.join(UPLOAD_DIR, filename)
+                    if os.path.isfile(file_path) and not filename.startswith('.'):
+                        file_type = analyze_file(file_path)
+                        if file_type:
+                            stats = import_to_db(file_path, file_type)
+                            if stats:
+                                archive_path = os.path.join(ARCHIVE_DIR, filename)
+                                shutil.move(file_path, archive_path)
+                                results.append({
+                                    'file': filename,
+                                    'type': file_type,
+                                    'status': 'ok',
+                                    'stats': stats if isinstance(stats, list) else []
+                                })
+                                success_count += 1
+                            else:
+                                results.append({'file': filename, 'type': file_type, 'status': 'error', 'stats': []})
+                                error_count += 1
+                        else:
+                            results.append({'file': filename, 'type': 'Unknown', 'status': 'unrecognized', 'stats': []})
+                            error_count += 1
+            
+            # Dateiliste nach Import aktualisieren
+            files = []
+            if os.path.exists(UPLOAD_DIR):
+                for filename in sorted(os.listdir(UPLOAD_DIR)):
+                    file_path = os.path.join(UPLOAD_DIR, filename)
+                    if os.path.isfile(file_path) and not filename.startswith('.'):
+                        file_size = os.path.getsize(file_path)
+                        file_type = analyze_file(file_path)
+                        files.append({
+                            'name': filename,
+                            'size': f"{file_size / 1024:.1f} KB",
+                            'type': file_type or 'Unknown',
+                        })
+
+    return render(request, 'core/upload_import.html', {
+        'files': files,
+        'results': results,
+    })
+
 @login_required
 def delete_file_view(request, filename):
     file_path = os.path.join(UPLOAD_DIR, filename)

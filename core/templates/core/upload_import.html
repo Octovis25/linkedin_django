@@ -1,0 +1,137 @@
+{% extends 'core/base.html' %}
+{% load static %}
+{% block title %}Upload & Import{% endblock %}
+{% block content %}
+<style>
+.drop-zone{border:2px dashed #008080;border-radius:12px;padding:2.5rem;text-align:center;cursor:pointer;background:#f9f9f9;transition:background .2s}
+.drop-zone.over{background:#e8f5f3;border-color:#005f5f}
+.log-ok{background:#E1F5EE;border-left:3px solid #0F6E56;padding:10px 14px;border-radius:4px;margin-bottom:8px}
+.log-err{background:#FCEBEB;border-left:3px solid #A32D2D;padding:10px 14px;border-radius:4px;margin-bottom:8px}
+.log-warn{background:#FAEEDA;border-left:3px solid #633806;padding:10px 14px;border-radius:4px;margin-bottom:8px}
+.stat-row{display:flex;gap:8px;flex-wrap:wrap;margin-top:6px}
+.stat-badge{font-size:12px;background:rgba(0,0,0,0.06);padding:2px 8px;border-radius:4px}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{text-align:left;padding:8px;border-bottom:2px solid #dee2e6;font-weight:600;color:#495057}
+td{padding:8px;border-bottom:1px solid #f0f0f0}
+</style>
+
+<h1 style="margin-bottom:1.5rem;font-size:1.4rem">📤 Upload & Import</h1>
+
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:1.5rem;margin-bottom:1.5rem">
+
+  <!-- Upload -->
+  <div style="background:#fff;border:0.5px solid #e0e0e0;border-radius:10px;padding:1.25rem">
+    <h2 style="margin:0 0 1rem;font-size:15px">Upload file</h2>
+    <form method="post" enctype="multipart/form-data" id="upload-form">
+      {% csrf_token %}
+      <input type="hidden" name="action" value="upload">
+      <div class="drop-zone" id="drop-zone" onclick="document.getElementById('file-input').click()">
+        <div style="font-size:2rem">📂</div>
+        <p style="margin:.5rem 0;font-size:13px;color:#555">Drag & drop or click to select</p>
+        <p style="font-size:12px;color:#999">.xls, .xlsx or .csv</p>
+        <div id="drop-filename" style="font-weight:600;color:#008080;margin-top:.5rem"></div>
+      </div>
+      <input type="file" id="file-input" name="file" accept=".xls,.xlsx,.csv" style="display:none" onchange="handleFile(this)">
+      <button type="submit" id="upload-btn" disabled style="margin-top:1rem;width:100%;padding:8px;background:#008080;color:#fff;border:none;border-radius:6px;font-size:13px;cursor:pointer;opacity:.5">Upload</button>
+    </form>
+  </div>
+
+  <!-- Files ready to import -->
+  <div style="background:#fff;border:0.5px solid #e0e0e0;border-radius:10px;padding:1.25rem">
+    <h2 style="margin:0 0 1rem;font-size:15px">Files ready to import ({{ files|length }})</h2>
+    {% if files %}
+    <table>
+      <thead><tr><th>File</th><th>Size</th><th>Type</th><th></th></tr></thead>
+      <tbody>
+      {% for f in files %}
+      <tr>
+        <td style="font-size:12px">{{ f.name }}</td>
+        <td style="font-size:12px;color:#6c757d">{{ f.size }}</td>
+        <td><span style="font-size:11px;background:#E6F1FB;color:#185FA5;padding:1px 6px;border-radius:4px">{{ f.type }}</span></td>
+        <td><a href="/data/delete/{{ f.name }}/" style="font-size:11px;color:#A32D2D">Delete</a></td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    <form method="post" style="margin-top:1rem">
+      {% csrf_token %}
+      <input type="hidden" name="action" value="import">
+      <button type="submit" style="width:100%;padding:8px;background:#008080;color:#fff;border:none;border-radius:6px;font-size:13px;cursor:pointer">
+        🚀 Import all files
+      </button>
+    </form>
+    {% else %}
+    <p style="color:#6c757d;font-size:13px;text-align:center;padding:1rem">No files waiting. Upload a file first.</p>
+    {% endif %}
+  </div>
+</div>
+
+<!-- Import Log -->
+{% if results %}
+<div style="background:#fff;border:0.5px solid #e0e0e0;border-radius:10px;padding:1.25rem">
+  <h2 style="margin:0 0 1rem;font-size:15px">Import log</h2>
+  {% for r in results %}
+    {% if r.status == 'ok' %}
+    <div class="log-ok">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <span style="font-size:13px;font-weight:500;color:#0F6E56">✅ {{ r.file }}</span>
+        <span style="font-size:11px;background:#E1F5EE;color:#0F6E56;padding:1px 8px;border-radius:4px">{{ r.type }}</span>
+      </div>
+      {% if r.stats %}
+      <div class="stat-row">
+        {% for stat in r.stats %}
+        <span class="stat-badge">
+          {% if stat.table %}📋 {{ stat.table }}{% endif %}
+          {% if stat.inserted %} +{{ stat.inserted }} new{% endif %}
+          {% if stat.updated %} ↑{{ stat.updated }} updated{% endif %}
+          {% if stat.skipped %} ⏭ {{ stat.skipped }} skipped{% endif %}
+        </span>
+        {% endfor %}
+      </div>
+      {% endif %}
+    </div>
+    {% elif r.status == 'error' %}
+    <div class="log-err">
+      <span style="font-size:13px;font-weight:500;color:#A32D2D">❌ {{ r.file }}</span>
+      <span style="font-size:12px;color:#A32D2D;margin-left:8px">Import failed</span>
+    </div>
+    {% else %}
+    <div class="log-warn">
+      <span style="font-size:13px;font-weight:500;color:#633806">⚠️ {{ r.file }}</span>
+      <span style="font-size:12px;color:#633806;margin-left:8px">File type not recognized</span>
+    </div>
+    {% endif %}
+  {% endfor %}
+</div>
+{% endif %}
+
+{% if messages %}
+{% for message in messages %}
+<div style="margin-top:1rem;padding:10px 14px;background:#E1F5EE;border-radius:6px;color:#0F6E56;font-size:13px">{{ message }}</div>
+{% endfor %}
+{% endif %}
+
+<script>
+const dz = document.getElementById('drop-zone');
+dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('over'); });
+dz.addEventListener('dragleave', () => dz.classList.remove('over'));
+dz.addEventListener('drop', e => {
+  e.preventDefault(); dz.classList.remove('over');
+  const file = e.dataTransfer.files[0];
+  if (file) {
+    document.getElementById('file-input').files = e.dataTransfer.files;
+    handleFile({files: [file]});
+  }
+});
+
+function handleFile(input) {
+  const file = input.files[0];
+  if (file) {
+    document.getElementById('drop-filename').textContent = file.name;
+    const btn = document.getElementById('upload-btn');
+    btn.disabled = false;
+    btn.style.opacity = '1';
+  }
+}
+</script>
+{% endblock %}

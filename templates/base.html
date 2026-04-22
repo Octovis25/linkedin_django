@@ -254,7 +254,7 @@
   {% if '/data/' in request.path %}
   <div class="sub-nav">
     <a href="/data/posts/" {% if request.path == '/data/posts/' %}class="active"{% endif %}>Posts Posted</a>
-    <a href="/data/upload/" {% if request.path == '/data/upload/' %}class="active"{% endif %}>Upload Data</a>
+    <a href="/data/upload/" {% if '/data/upload/' in request.path %}class="active"{% endif %}>Upload</a>
   </div>
   {% endif %}
 
