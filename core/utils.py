@@ -281,7 +281,20 @@ def import_kennzahlen(df):
                     gf(['engagement-rate (gesponsert)']),
                     gf(['engagement-rate (insgesamt)']),
                 ])
-                inserted += 1
+                if cur.rowcount == 1:
+                    inserted += 1
+                    # Werte nochmal lesen für new_rows
+                    imp = gi(['impressions (insgesamt)'])
+                    cli = gi(['klicks (insgesamt)'])
+                    rea = gi(['reaktionen (insgesamt)'])
+                    new_rows.append({
+                        'date': metric_date,
+                        'impressions': imp or 0,
+                        'clicks': cli or 0,
+                        'reactions': rea or 0,
+                    })
+                elif cur.rowcount == 2:
+                    pass  # update
             except Exception as e:
                 print(f"Kennzahlen error: {e}")
                 skipped += 1
