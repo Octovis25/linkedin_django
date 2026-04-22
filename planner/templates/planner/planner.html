@@ -8,26 +8,26 @@
 .sub-tabs a.active{color:#008080;border-bottom-color:#008080;font-weight:500}
 .kanban{display:flex;gap:12px;align-items:flex-start;overflow-x:auto;padding-bottom:1rem}
 .col{width:260px;flex-shrink:0;border-radius:10px;overflow:hidden;background:#f8f9fa}
-.col-header{padding:10px 12px;display:flex;justify-content:space-between;align-items:center}
 .col-body{padding:8px;display:flex;flex-direction:column;gap:6px;min-height:100px}
 .col-footer{padding:8px;border-top:0.5px solid #dee2e6}
 .card{background:#fff;border:0.5px solid #e0e0e0;border-radius:8px;padding:10px;cursor:grab}
-.card:active{cursor:grabbing;opacity:0.8}
-.card.dragging{opacity:0.4}
-.drop-zone{border:1.5px dashed #dee2e6;border-radius:8px;padding:12px;text-align:center;font-size:12px;color:#6c757d;transition:all .2s}
+.drop-zone{border:1.5px dashed #dee2e6;border-radius:8px;padding:12px;text-align:center;font-size:12px;color:#6c757d}
 .drop-zone.over{border-color:#008080;background:#f0faf8;color:#008080}
-.serie-container{border:1.5px solid #dee2e6;border-radius:8px;overflow:hidden}
-.serie-header{padding:8px 10px;display:flex;justify-content:space-between;align-items:center;cursor:pointer}
+.serie-box{border:1.5px solid #dee2e6;border-radius:8px;overflow:hidden}
+.serie-head{padding:8px 10px;display:flex;justify-content:space-between;align-items:center;cursor:pointer}
 .serie-body{padding:6px;display:flex;flex-direction:column;gap:4px}
-.badge{font-size:10px;padding:1px 6px;border-radius:99px}
-.badge-draft{background:#f5f5f5;color:#6c757d}
-.badge-ready{background:#E1F5EE;color:#0F6E56}
-.badge-scheduled{background:#E6F1FB;color:#185FA5}
-.icon-btn{cursor:pointer;width:22px;height:22px;border-radius:4px;border:0.5px solid #e0e0e0;display:inline-flex;align-items:center;justify-content:center;background:#fff;font-size:11px}
-.pipeline-col{width:160px;flex-shrink:0;border-radius:10px;overflow:hidden;background:#F1EFE8;opacity:0.9}
-.modal-overlay{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.4);z-index:1000;align-items:center;justify-content:center}
-.modal-overlay.open{display:flex}
-.modal{background:#fff;border-radius:12px;padding:1.5rem;width:480px;max-width:90vw}
+.bdg{font-size:10px;padding:1px 6px;border-radius:99px}
+.bdg-draft{background:#f5f5f5;color:#6c757d}
+.bdg-ready{background:#E1F5EE;color:#0F6E56}
+.bdg-scheduled{background:#E6F1FB;color:#185FA5}
+.ib{cursor:pointer;width:22px;height:22px;border-radius:4px;border:0.5px solid #e0e0e0;display:inline-flex;align-items:center;justify-content:center;background:#fff}
+.modal-bg{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.4);z-index:1000;align-items:center;justify-content:center}
+.modal-bg.open{display:flex}
+.modal{background:#fff;border-radius:12px;padding:1.5rem;width:500px;max-width:95vw}
+.finput{width:100%;font-size:13px;padding:6px 8px;border:0.5px solid #ced4da;border-radius:4px;box-sizing:border-box;margin-bottom:8px}
+.fselect{font-size:13px;padding:6px 8px;border:0.5px solid #ced4da;border-radius:4px}
+.color-dot{width:20px;height:20px;border-radius:50%;cursor:pointer;border:2px solid transparent;display:inline-block}
+.color-dot.selected{border-color:#333}
 </style>
 
 <div class="sub-tabs">
@@ -35,146 +35,116 @@
   <a href="/planner/pipeline/">Pipeline</a>
 </div>
 
-<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;flex-wrap:wrap;gap:8px">
+<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem">
   <h1 style="margin:0;font-size:1.4rem">📅 Content Planner</h1>
-  <div style="display:flex;gap:8px">
-    <button onclick="openTopicModal()" style="font-size:12px;padding:4px 10px;border:0.5px solid #ced4da;border-radius:4px;background:#fff;cursor:pointer">+ Topic</button>
-    <button onclick="openPostModal()" style="font-size:13px;padding:4px 14px;background:#008080;color:#fff;border:none;border-radius:4px;cursor:pointer">+ New post</button>
-  </div>
+  <button onclick="openModal('post-modal')" style="font-size:13px;padding:4px 14px;background:#008080;color:#fff;border:none;border-radius:4px;cursor:pointer">+ New post</button>
 </div>
 
+<!-- Category Management -->
 <div style="background:#fff;border:0.5px solid #e0e0e0;border-radius:10px;padding:12px 16px;margin-bottom:1rem">
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-    <span style="font-size:13px;font-weight:500;color:#212529">Content categories</span>
-    <button onclick="document.getElementById('add-cat').style.display=document.getElementById('add-cat').style.display==='none'?'flex':'none'" style="font-size:12px;padding:3px 10px;border:0.5px solid #ced4da;border-radius:4px;background:#fff;cursor:pointer">+ Add category</button>
-  <div id="add-cat" style="display:none;gap:8px;align-items:center;margin-top:8px">
-    <input type="text" id="new-cat-name" placeholder="Category name..." style="font-size:12px;padding:3px 8px;border:0.5px solid #ced4da;border-radius:4px;flex:1">
-    <select id="new-cat-color" style="font-size:12px;padding:3px 8px;border:0.5px solid #ced4da;border-radius:4px">
-      <option value="blue">Blue</option>
-      <option value="green">Green</option>
-      <option value="amber">Amber</option>
-      <option value="purple">Purple</option>
-      <option value="red">Red</option>
-      <option value="gray">Gray</option>
-    </select>
-    <button onclick="addCat()" style="font-size:12px;padding:3px 10px;background:#008080;color:#fff;border:none;border-radius:4px;cursor:pointer">Add</button>
+    <span style="font-size:13px;font-weight:500">Content categories</span>
+    <button onclick="toggleAddCat()" style="font-size:12px;padding:3px 10px;border:0.5px solid #ced4da;border-radius:4px;background:#fff;cursor:pointer">+ Add category</button>
   </div>
-  </div>
-  <div id="cat-badges" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px">
+  <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px">
     {% for t in topics %}
     <span style="font-size:12px;padding:3px 10px;border-radius:99px;
-      {% if t.color == 'blue' %}background:#E6F1FB;color:#185FA5;
-      {% elif t.color == 'green' %}background:#E1F5EE;color:#0F6E56;
-      {% elif t.color == 'amber' %}background:#FAEEDA;color:#633806;
-      {% elif t.color == 'purple' %}background:#EEEDFE;color:#3C3489;
-      {% elif t.color == 'red' %}background:#FCEBEB;color:#791F1F;
-      {% else %}background:#f5f5f5;color:#6c757d;{% endif %}">
-      {{ t.name }}
-      <span onclick="deleteTopic({{ t.id }})" style="cursor:pointer;margin-left:4px">×</span>
+      {% if t.color == 'blue' %}background:#E6F1FB;color:#185FA5{% elif t.color == 'green' %}background:#E1F5EE;color:#0F6E56{% elif t.color == 'amber' %}background:#FAEEDA;color:#633806{% elif t.color == 'purple' %}background:#EEEDFE;color:#3C3489{% elif t.color == 'red' %}background:#FCEBEB;color:#791F1F{% else %}background:#f5f5f5;color:#6c757d{% endif %}">
+      {{ t.name }} <span onclick="deleteTopic({{ t.id }})" style="cursor:pointer;margin-left:4px">×</span>
     </span>
     {% endfor %}
   </div>
-  <div id="add-cat" style="display:none;gap:8px;align-items:center">
-    <input type="text" id="new-cat-name" placeholder="Category name..." style="font-size:12px;padding:3px 8px;border:0.5px solid #ced4da;border-radius:4px;flex:1">
-    <select id="new-cat-color" style="font-size:12px;padding:3px 8px;border:0.5px solid #ced4da;border-radius:4px">
-      <option value="blue">Blue</option>
-      <option value="green">Green</option>
-      <option value="amber">Amber</option>
-      <option value="purple">Purple</option>
-      <option value="red">Red</option>
-      <option value="gray">Gray</option>
-    </select>
-    <button onclick="addCat()" style="font-size:12px;padding:3px 10px;background:#008080;color:#fff;border:none;border-radius:4px;cursor:pointer">Add</button>
+  <div id="add-cat-form" style="display:none;gap:8px;align-items:center;flex-wrap:wrap">
+    <input type="text" id="new-cat-name" placeholder="Category name..." style="font-size:13px;padding:5px 8px;border:0.5px solid #ced4da;border-radius:4px;flex:1;min-width:150px">
+    <div style="display:flex;gap:6px;align-items:center">
+      <span class="color-dot selected" style="background:#185FA5" data-color="blue" onclick="selectColor(this)"></span>
+      <span class="color-dot" style="background:#0F6E56" data-color="green" onclick="selectColor(this)"></span>
+      <span class="color-dot" style="background:#BA7517" data-color="amber" onclick="selectColor(this)"></span>
+      <span class="color-dot" style="background:#534AB7" data-color="purple" onclick="selectColor(this)"></span>
+      <span class="color-dot" style="background:#A32D2D" data-color="red" onclick="selectColor(this)"></span>
+      <span class="color-dot" style="background:#888780" data-color="gray" onclick="selectColor(this)"></span>
+    </div>
+    <input type="hidden" id="new-cat-color" value="blue">
+    <button onclick="addCat()" style="font-size:13px;padding:5px 12px;background:#008080;color:#fff;border:none;border-radius:4px;cursor:pointer">Add</button>
   </div>
 </div>
 
+<!-- Kanban -->
 <div class="kanban" id="kanban">
   {% for col in columns %}
-  <div class="col" id="col-{{ col.topic.id }}" 
+  <div class="col" id="col-{{ col.topic.id }}"
        ondragover="event.preventDefault();this.querySelector('.drop-zone').classList.add('over')"
        ondragleave="this.querySelector('.drop-zone').classList.remove('over')"
-       ondrop="dropPost(event, {{ col.topic.id }})">
-    <div class="col-header" style="background:{{ col.topic.bg }}">
+       ondrop="dropPost(event,{{ col.topic.id }})">
+    <div style="padding:10px 12px;display:flex;justify-content:space-between;align-items:center;background:{{ col.topic.bg }}">
       <span style="font-size:13px;font-weight:500;color:{{ col.topic.fg }}">{{ col.topic.name }}</span>
-      <div style="display:flex;gap:4px;align-items:center">
-        <span style="font-size:11px;padding:1px 6px;border-radius:99px;background:rgba(0,0,0,0.1);color:{{ col.topic.fg }}">{{ col.posts|length|add:col.series|length }}</span>
-        <span onclick="deleteTopic({{ col.topic.id }})" style="cursor:pointer;font-size:14px;color:{{ col.topic.fg }};opacity:.6">×</span>
-      </div>
+      <span onclick="deleteTopic({{ col.topic.id }})" style="cursor:pointer;font-size:16px;color:{{ col.topic.fg }};opacity:.6">×</span>
     </div>
     <div class="col-body">
       {% for s in col.series %}
-      <div class="serie-container" style="border-color:{{ col.topic.fg }}">
-        <div class="serie-header" style="background:{{ col.topic.bg }}" onclick="toggleSerie({{ s.id }})">
-          <div style="display:flex;align-items:center;gap:6px">
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M3 6h18M3 12h18M3 18h18" stroke="{{ col.topic.fg }}" stroke-width="2"/></svg>
-            <span style="font-size:12px;font-weight:500;color:{{ col.topic.fg }}">{{ s.name }}</span>
-          </div>
-          <div style="display:flex;align-items:center;gap:4px">
+      <div class="serie-box" style="border-color:{{ col.topic.fg }}">
+        <div class="serie-head" style="background:{{ col.topic.bg }}" onclick="toggleSerie({{ s.id }})">
+          <span style="font-size:12px;font-weight:500;color:{{ col.topic.fg }}">{{ s.name }}</span>
+          <div style="display:flex;gap:4px;align-items:center">
             <span style="font-size:10px;padding:1px 5px;border-radius:99px;background:rgba(0,0,0,0.1);color:{{ col.topic.fg }}">{{ s.parts|length }}</span>
-            <span onclick="event.stopPropagation();deleteSerie({{ s.id }})" style="cursor:pointer;font-size:14px;color:{{ col.topic.fg }};opacity:.6">×</span>
+            <span onclick="event.stopPropagation();deleteSerie({{ s.id }})" style="cursor:pointer;color:{{ col.topic.fg }}">×</span>
           </div>
         </div>
         <div class="serie-body" id="serie-{{ s.id }}">
           {% for p in s.parts %}
-          <div class="card" draggable="true" id="post-{{ p.id }}"
-               ondragstart="dragStart(event, {{ p.id }})">
+          <div class="card" draggable="true" id="post-{{ p.id }}" ondragstart="dragStart(event,{{ p.id }})">
             <div style="display:flex;justify-content:space-between;margin-bottom:4px">
-              <div style="display:flex;gap:4px;align-items:center">
+              <div style="display:flex;gap:4px">
                 <span style="font-size:10px;color:{{ col.topic.fg }};font-weight:500">Part {{ forloop.counter }}</span>
-                <span class="badge badge-{{ p.status|lower }}">{{ p.status }}</span>
+                <span class="bdg bdg-{{ p.status|lower }}">{{ p.status }}</span>
               </div>
-              <div style="display:flex;gap:3px;align-items:center">
-                <span style="font-size:16px;color:#aaa;cursor:grab">⠿</span>
-                <span class="icon-btn" onclick="openEditModal({{ p.id }}, '{{ p.title|escapejs }}', '{{ p.content|escapejs }}', '{{ p.status }}', '{{ p.planned_date|date:'Y-m-d' }}')">✏️</span>
-                <span class="icon-btn" onclick="toPipeline({{ p.id }})">→</span>
-                <span class="icon-btn" onclick="deletePost({{ p.id }})">🗑</span>
+              <div style="display:flex;gap:2px">
+                <span class="ib" onclick="openEditModal({{ p.id }},'{{ p.title|escapejs }}','{{ p.content|escapejs }}','{{ p.status }}','{{ p.planned_date|date:'Y-m-d' }}')">✏️</span>
+                <span class="ib" onclick="toPipeline({{ p.id }})">→</span>
+                <span class="ib" onclick="deletePost({{ p.id }})">🗑</span>
               </div>
             </div>
-            <p style="font-size:12px;color:#212529;margin:0;line-height:1.4">{{ p.title|default:p.content|truncatechars:60 }}</p>
+            <p style="font-size:12px;margin:0;line-height:1.4">{{ p.title|default:p.content|truncatechars:60 }}</p>
             {% if p.planned_date %}<p style="font-size:11px;color:#6c757d;margin:3px 0 0">📅 {{ p.planned_date|date:"d.m.Y" }}</p>{% endif %}
           </div>
           {% endfor %}
-          <button onclick="openPostModal({{ col.topic.id }}, {{ s.id }})" style="font-size:11px;padding:3px;border:0.5px dashed #ced4da;border-radius:4px;background:#fff;cursor:pointer;color:#6c757d;width:100%">+ Add part</button>
+          <button onclick="openPostModal({{ col.topic.id }},{{ s.id }})" style="font-size:11px;padding:3px;border:0.5px dashed #ced4da;border-radius:4px;background:#fff;cursor:pointer;color:#6c757d;width:100%">+ Add part</button>
         </div>
       </div>
       {% endfor %}
 
       {% for p in col.posts %}
-      <div class="card" draggable="true" id="post-{{ p.id }}"
-           ondragstart="dragStart(event, {{ p.id }})">
+      <div class="card" draggable="true" id="post-{{ p.id }}" ondragstart="dragStart(event,{{ p.id }})">
         <div style="display:flex;justify-content:space-between;margin-bottom:4px">
-          <span class="badge badge-{{ p.status|lower }}">{{ p.status }}</span>
-          <div style="display:flex;gap:3px;align-items:center">
-            <span style="font-size:16px;color:#aaa;cursor:grab">⠿</span>
-            <span class="icon-btn" onclick="openEditModal({{ p.id }}, '{{ p.title|escapejs }}', '{{ p.content|escapejs }}', '{{ p.status }}', '{{ p.planned_date|date:'Y-m-d' }}')">✏️</span>
-            <span class="icon-btn" onclick="toPipeline({{ p.id }})">→</span>
-            <span class="icon-btn" onclick="deletePost({{ p.id }})">🗑</span>
+          <span class="bdg bdg-{{ p.status|lower }}">{{ p.status }}</span>
+          <div style="display:flex;gap:2px">
+            <span class="ib" onclick="openEditModal({{ p.id }},'{{ p.title|escapejs }}','{{ p.content|escapejs }}','{{ p.status }}','{{ p.planned_date|date:'Y-m-d' }}')">✏️</span>
+            <span class="ib" onclick="toPipeline({{ p.id }})">→</span>
+            <span class="ib" onclick="deletePost({{ p.id }})">🗑</span>
           </div>
         </div>
-        <p style="font-size:12px;color:#212529;margin:0;line-height:1.4">{{ p.title|default:p.content|truncatechars:60 }}</p>
+        <p style="font-size:12px;margin:0;line-height:1.4">{{ p.title|default:p.content|truncatechars:60 }}</p>
         {% if p.planned_date %}<p style="font-size:11px;color:#6c757d;margin:3px 0 0">📅 {{ p.planned_date|date:"d.m.Y" }}</p>{% endif %}
       </div>
       {% endfor %}
 
       <div class="drop-zone">Drop here</div>
-
       <div style="display:flex;gap:4px">
         <button onclick="openPostModal({{ col.topic.id }})" style="font-size:11px;padding:3px 8px;border:0.5px solid #ced4da;border-radius:4px;background:#fff;cursor:pointer;color:#6c757d;flex:1">+ Post</button>
         <button onclick="openSerieModal({{ col.topic.id }})" style="font-size:11px;padding:3px 8px;border:0.5px solid {{ col.topic.fg }};border-radius:4px;background:#fff;cursor:pointer;color:{{ col.topic.fg }};flex:1">+ Serie</button>
       </div>
     </div>
-
     <div class="col-footer">
       <div style="font-size:11px;font-weight:500;color:{{ col.topic.fg }};margin-bottom:4px">💡 Ideas</div>
       {% for idea in col.ideas %}
       <div style="display:flex;gap:4px;align-items:center;padding:2px 0">
-        <span style="font-size:12px;flex:1;color:#212529">{{ idea.text }}</span>
+        <span style="font-size:12px;flex:1">{{ idea.text }}</span>
         <span onclick="deleteIdea({{ idea.id }})" style="cursor:pointer;font-size:12px;color:#aaa">×</span>
       </div>
       {% empty %}
-      <p style="font-size:12px;color:#aaa;font-style:italic;margin:0">No ideas yet.</p>
+      <p style="font-size:12px;color:#aaa;font-style:italic;margin:0 0 4px">No ideas yet.</p>
       {% endfor %}
-      <div style="display:flex;gap:4px;margin-top:6px">
+      <div style="display:flex;gap:4px;margin-top:4px">
         <input type="text" id="idea-{{ col.topic.id }}" placeholder="Add idea..." style="font-size:12px;flex:1;padding:3px 6px;border:0.5px solid #ced4da;border-radius:4px">
         <button onclick="addIdea({{ col.topic.id }})" style="font-size:12px;padding:3px 8px;background:#008080;color:#fff;border:none;border-radius:4px;cursor:pointer">+</button>
       </div>
@@ -182,11 +152,11 @@
   </div>
   {% endfor %}
 
-  <div class="pipeline-col"
+  <div style="width:160px;flex-shrink:0;border-radius:10px;overflow:hidden;background:#F1EFE8"
        ondragover="event.preventDefault();this.style.background='#e8e4dc'"
        ondragleave="this.style.background='#F1EFE8'"
        ondrop="dropToPipeline(event)">
-    <div style="background:#D3D1C7;padding:10px 12px;display:flex;justify-content:space-between">
+    <div style="background:#D3D1C7;padding:10px 12px">
       <span style="font-size:13px;font-weight:500;color:#444441">→ Pipeline</span>
     </div>
     <div style="padding:12px;min-height:100px;display:flex;align-items:center;justify-content:center">
@@ -195,24 +165,25 @@
   </div>
 </div>
 
-<div class="modal-overlay" id="post-modal">
+<!-- Modals -->
+<div class="modal-bg" id="post-modal">
   <div class="modal">
     <h3 style="margin:0 0 1rem;font-size:15px">New Post</h3>
     <input type="hidden" id="m-topic-id">
     <input type="hidden" id="m-series-id">
-    <div style="display:flex;gap:8px;margin-bottom:8px;flex-wrap:wrap">
-      <select id="m-topic" style="font-size:13px;flex:1;padding:6px;border:0.5px solid #ced4da;border-radius:4px">
+    <div style="display:flex;gap:8px;margin-bottom:8px">
+      <select id="m-topic" class="fselect" style="flex:1">
         {% for t in topics %}<option value="{{ t.id }}">{{ t.name }}</option>{% endfor %}
       </select>
-      <select id="m-status" style="font-size:13px;flex:1;padding:6px;border:0.5px solid #ced4da;border-radius:4px">
+      <select id="m-status" class="fselect" style="flex:1">
         {% for s in statuses %}<option>{{ s }}</option>{% endfor %}
       </select>
     </div>
     <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
       <label style="font-size:12px;color:#6c757d;white-space:nowrap">Planned to post</label>
-      <input type="date" id="m-date" style="font-size:13px;flex:1;padding:6px;border:0.5px solid #ced4da;border-radius:4px">
+      <input type="date" id="m-date" class="fselect" style="flex:1">
     </div>
-    <input type="text" id="m-title" placeholder="Title..." style="width:100%;font-size:13px;padding:6px 8px;border:0.5px solid #ced4da;border-radius:4px;margin-bottom:8px;box-sizing:border-box">
+    <input type="text" id="m-title" placeholder="Title (optional)..." class="finput">
     <textarea id="m-content" placeholder="Post text..." style="width:100%;min-height:120px;font-size:13px;padding:8px;border:0.5px solid #ced4da;border-radius:4px;resize:vertical;box-sizing:border-box"></textarea>
     <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:12px">
       <button onclick="closeModal('post-modal')" style="font-size:13px;padding:5px 14px;border:0.5px solid #ced4da;border-radius:4px;background:#fff;cursor:pointer">Cancel</button>
@@ -221,20 +192,17 @@
   </div>
 </div>
 
-<div class="modal-overlay" id="edit-modal">
+<div class="modal-bg" id="edit-modal">
   <div class="modal">
     <h3 style="margin:0 0 1rem;font-size:15px">Edit Post</h3>
     <input type="hidden" id="e-id">
-    <div style="display:flex;gap:8px;margin-bottom:8px;flex-wrap:wrap">
-      <select id="e-status" style="font-size:13px;flex:1;padding:6px;border:0.5px solid #ced4da;border-radius:4px">
+    <div style="display:flex;gap:8px;margin-bottom:8px">
+      <select id="e-status" class="fselect" style="flex:1">
         {% for s in statuses %}<option>{{ s }}</option>{% endfor %}
       </select>
-      <div style="display:flex;align-items:center;gap:6px;flex:1">
-        <label style="font-size:12px;color:#6c757d;white-space:nowrap">Planned to post</label>
-        <input type="date" id="e-date" style="font-size:13px;flex:1;padding:6px;border:0.5px solid #ced4da;border-radius:4px">
-      </div>
+      <input type="date" id="e-date" class="fselect" style="flex:1">
     </div>
-    <input type="text" id="e-title" placeholder="Title..." style="width:100%;font-size:13px;padding:6px 8px;border:0.5px solid #ced4da;border-radius:4px;margin-bottom:8px;box-sizing:border-box">
+    <input type="text" id="e-title" placeholder="Title..." class="finput">
     <textarea id="e-content" style="width:100%;min-height:120px;font-size:13px;padding:8px;border:0.5px solid #ced4da;border-radius:4px;resize:vertical;box-sizing:border-box"></textarea>
     <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:12px">
       <button onclick="closeModal('edit-modal')" style="font-size:13px;padding:5px 14px;border:0.5px solid #ced4da;border-radius:4px;background:#fff;cursor:pointer">Cancel</button>
@@ -243,35 +211,14 @@
   </div>
 </div>
 
-<div class="modal-overlay" id="serie-modal">
+<div class="modal-bg" id="serie-modal">
   <div class="modal">
     <h3 style="margin:0 0 1rem;font-size:15px">New Serie</h3>
     <input type="hidden" id="s-topic-id">
-    <input type="text" id="s-name" placeholder="Serie name..." style="width:100%;font-size:13px;padding:6px 8px;border:0.5px solid #ced4da;border-radius:4px;box-sizing:border-box">
-    <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:12px">
+    <input type="text" id="s-name" placeholder="Serie name..." class="finput">
+    <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:4px">
       <button onclick="closeModal('serie-modal')" style="font-size:13px;padding:5px 14px;border:0.5px solid #ced4da;border-radius:4px;background:#fff;cursor:pointer">Cancel</button>
       <button onclick="saveSerie()" style="font-size:13px;padding:5px 14px;background:#008080;color:#fff;border:none;border-radius:4px;cursor:pointer">Create</button>
-    </div>
-  </div>
-</div>
-
-<div class="modal-overlay" id="topic-modal">
-  <div class="modal">
-    <h3 style="margin:0 0 1rem;font-size:15px">New Topic</h3>
-    <div style="display:flex;gap:8px">
-      <input type="text" id="t-name" placeholder="Topic name..." style="font-size:13px;flex:1;padding:6px 8px;border:0.5px solid #ced4da;border-radius:4px">
-      <select id="t-color" style="font-size:13px;padding:6px;border:0.5px solid #ced4da;border-radius:4px">
-        <option value="blue">Blue</option>
-        <option value="green">Green</option>
-        <option value="amber">Amber</option>
-        <option value="purple">Purple</option>
-        <option value="red">Red</option>
-        <option value="gray">Gray</option>
-      </select>
-    </div>
-    <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:12px">
-      <button onclick="closeModal('topic-modal')" style="font-size:13px;padding:5px 14px;border:0.5px solid #ced4da;border-radius:4px;background:#fff;cursor:pointer">Cancel</button>
-      <button onclick="saveTopic()" style="font-size:13px;padding:5px 14px;background:#008080;color:#fff;border:none;border-radius:4px;cursor:pointer">Create</button>
     </div>
   </div>
 </div>
@@ -279,22 +226,37 @@
 <script>
 const CSRF = '{{ csrf_token }}';
 let draggedId = null;
+let selectedColor = 'blue';
 
-function p(url, data) {
-  return fetch(url, {
-    method: 'POST',
-    headers: {'Content-Type':'application/json','X-CSRFToken':CSRF},
-    body: JSON.stringify(data)
-  }).then(r => r.json());
+function api(url, data) {
+  return fetch(url, {method:'POST', headers:{'Content-Type':'application/json','X-CSRFToken':CSRF}, body:JSON.stringify(data)}).then(r=>r.json());
 }
 
-function dragStart(e, id) { draggedId = id; e.currentTarget.classList.add('dragging'); }
+function toggleAddCat() {
+  const f = document.getElementById('add-cat-form');
+  f.style.display = f.style.display === 'none' ? 'flex' : 'none';
+}
+
+function selectColor(el) {
+  document.querySelectorAll('.color-dot').forEach(d => d.classList.remove('selected'));
+  el.classList.add('selected');
+  selectedColor = el.dataset.color;
+}
+
+async function addCat() {
+  const name = document.getElementById('new-cat-name').value.trim();
+  if (!name) return;
+  await api('/planner/api/topic/', {action:'create', name, color: selectedColor});
+  location.reload();
+}
+
+function dragStart(e, id) { draggedId = id; }
 
 async function dropPost(e, topicId) {
   e.preventDefault();
   e.currentTarget.querySelector('.drop-zone').classList.remove('over');
   if (!draggedId) return;
-  await p('/planner/api/post/', {action:'update_topic', id:draggedId, topic_id:topicId});
+  await api('/planner/api/post/', {action:'update_topic', id:draggedId, topic_id:topicId});
   location.reload();
 }
 
@@ -306,37 +268,37 @@ async function dropToPipeline(e) {
 }
 
 async function toPipeline(id) {
-  await p('/planner/api/post/', {action:'to_pipeline', id});
+  await api('/planner/api/post/', {action:'to_pipeline', id});
   location.reload();
 }
 
 async function deletePost(id) {
-  if (!confirm('Delete this post?')) return;
-  await p('/planner/api/post/', {action:'delete', id});
+  if (!confirm('Delete?')) return;
+  await api('/planner/api/post/', {action:'delete', id});
+  location.reload();
+}
+
+async function deleteTopic(id) {
+  if (!confirm('Delete topic and all its posts?')) return;
+  await api('/planner/api/topic/', {action:'delete', id});
+  location.reload();
+}
+
+async function deleteSerie(id) {
+  if (!confirm('Delete serie and all parts?')) return;
+  await api('/planner/api/series/', {action:'delete', id});
   location.reload();
 }
 
 async function deleteIdea(id) {
-  await p('/planner/api/idea/', {action:'delete', id});
+  await api('/planner/api/idea/', {action:'delete', id});
   location.reload();
 }
 
 async function addIdea(topicId) {
   const text = document.getElementById('idea-'+topicId).value.trim();
   if (!text) return;
-  await p('/planner/api/idea/', {action:'create', text, topic_id:topicId});
-  location.reload();
-}
-
-async function deleteTopic(id) {
-  if (!confirm('Delete this topic and all its posts?')) return;
-  await p('/planner/api/topic/', {action:'delete', id});
-  location.reload();
-}
-
-async function deleteSerie(id) {
-  if (!confirm('Delete this serie and all its parts?')) return;
-  await p('/planner/api/series/', {action:'delete', id});
+  await api('/planner/api/idea/', {action:'create', text, topic_id:topicId});
   location.reload();
 }
 
@@ -360,9 +322,8 @@ function openPostModal(topicId, serieId) {
 
 async function savePost() {
   const topicId = document.getElementById('m-topic-id').value || document.getElementById('m-topic').value;
-  await p('/planner/api/post/', {
-    action:'create',
-    topic_id: topicId,
+  await api('/planner/api/post/', {
+    action:'create', topic_id:topicId,
     series_id: document.getElementById('m-series-id').value || null,
     status: document.getElementById('m-status').value,
     planned_date: document.getElementById('m-date').value || null,
@@ -382,9 +343,8 @@ function openEditModal(id, title, content, status, date) {
 }
 
 async function updatePost() {
-  await p('/planner/api/post/', {
-    action:'update',
-    id: document.getElementById('e-id').value,
+  await api('/planner/api/post/', {
+    action:'update', id: document.getElementById('e-id').value,
     title: document.getElementById('e-title').value,
     content: document.getElementById('e-content').value,
     status: document.getElementById('e-status').value,
@@ -400,7 +360,7 @@ function openSerieModal(topicId) {
 }
 
 async function saveSerie() {
-  await p('/planner/api/series/', {
+  await api('/planner/api/series/', {
     action:'create',
     name: document.getElementById('s-name').value,
     topic_id: document.getElementById('s-topic-id').value,
@@ -408,30 +368,8 @@ async function saveSerie() {
   location.reload();
 }
 
-function openTopicModal() {
-  document.getElementById('t-name').value = '';
-  openModal('topic-modal');
-}
-
-async function saveTopic() {
-  await p('/planner/api/topic/', {
-    action:'create',
-    name: document.getElementById('t-name').value,
-    color: document.getElementById('t-color').value,
-  });
-  location.reload();
-}
-
-async function addCat() {
-  const name = document.getElementById('new-cat-name').value.trim();
-  const color = document.getElementById('new-cat-color').value;
-  if (!name) return;
-  await p('/planner/api/topic/', {action:'create', name, color});
-  location.reload();
-}
-
-document.querySelectorAll('.modal-overlay').forEach(m => {
-  m.addEventListener('click', e => { if (e.target === m) m.classList.remove('open'); });
+document.querySelectorAll('.modal-bg').forEach(m => {
+  m.addEventListener('click', e => { if(e.target===m) m.classList.remove('open'); });
 });
 </script>
 {% endblock %}
