@@ -102,9 +102,10 @@ def import_to_db(file_path, file_type):
 
 
 def import_posts_from_content(df, file_path=""):
-    """Importiert 'Alle Beiträge' Sheet → linkedin_posts (upsert)"""
+    """Importiert 'Alle Beiträge' Sheet → linkedin_posts + linkedin_posts_metrics"""
+    import datetime as dt
+
     df.columns = [str(c).strip().lower() for c in df.columns]
-    print(f"Alle Beiträge Spalten: {list(df.columns)}")
 
     def find_col(names):
         for n in names:
@@ -113,6 +114,16 @@ def import_posts_from_content(df, file_path=""):
                     return c
         return None
 
+    # Export-Datum aus Dateiname extrahieren
+    export_date = dt.date.today().isoformat()
+    if file_path:
+        m = re.search(r'_(\d{10,13})\.', os.path.basename(file_path))
+        if m:
+            ts = int(m.group(1))
+            if ts > 1e12: ts = ts / 1000
+            export_date = dt.datetime.fromtimestamp(ts).strftime('%Y-%m-%d')
+
+    # Spalten mappen
     col_map = {
         'post_url':        ['link veröffentlichen', 'post link', 'post url', 'url'],
         'created_at':      ['erstellt am', 'datum', 'date', 'created'],
@@ -124,15 +135,41 @@ def import_posts_from_content(df, file_path=""):
         'audience':        ['zielgruppe', 'audience'],
     }
     mapped = {k: find_col(v) for k, v in col_map.items()}
-    print(f"Gemappte Spalten: {mapped}")
 
-    inserted = updated = skipped = 0
+    # Existierende IDs und Metriken vorab laden
+    with connection.cursor() as c:
+        c.execute("SELECT post_id FROM linkedin_posts")
+        existing_post_ids = {r[0] for r in c.fetchall()}
+        c.execute("SELECT post_id, metric_date FROM linkedin_posts_metrics")
+        existing_metrics = {(r[0], str(r[1])) for r in c.fetchall()}
+
+    inserted = skipped = 0
+    metrics_inserted = 0
     new_rows = []
 
-    # Alle existierenden post_ids vorab laden
-    with connection.cursor() as _c:
-        _c.execute("SELECT post_id FROM linkedin_posts")
-        existing_ids = {r[0] for r in _c.fetchall()}
+    def get_str(key, maxlen=None):
+        col = mapped.get(key)
+        val = str(row.get(col, '') or '') if col else ''
+        val = val.strip()
+        return val[:maxlen] if maxlen else val
+
+    def get_int(names):
+        col = find_col(names)
+        if col:
+            val = row.get(col)
+            if val is not None and str(val).strip() not in ('', 'nan'):
+                try: return int(float(val))
+                except: pass
+        return None
+
+    def get_float(names):
+        col = find_col(names)
+        if col:
+            val = row.get(col)
+            if val is not None and str(val).strip() not in ('', 'nan'):
+                try: return float(val)
+                except: pass
+        return None
 
     with connection.cursor() as cur:
         for _, row in df.iterrows():
@@ -148,15 +185,10 @@ def import_posts_from_content(df, file_path=""):
                     created_at = pd.to_datetime(row[mapped['created_at']]).strftime('%Y-%m-%d %H:%M:%S')
                 except: pass
 
-            def g(k, maxlen=None):
-                col = mapped.get(k)
-                val = str(row.get(col, '') or '') if col else ''
-                val = val.strip()
-                return val[:maxlen] if maxlen else val
-
-            title_raw = g('post_title_raw')
+            title_raw = get_str('post_title_raw')
             title = re.sub(r'\s+', ' ', title_raw).strip()[:500]
 
+            # 1. Post in linkedin_posts upsert
             try:
                 cur.execute("""
                     INSERT INTO linkedin_posts
@@ -174,148 +206,64 @@ def import_posts_from_content(df, file_path=""):
                         published_by=COALESCE(VALUES(published_by),published_by),
                         audience=COALESCE(VALUES(audience),audience)
                 """, [post_id, post_url, created_at, title_raw, title,
-                      g('post_distribution',100), g('content_type',100),
-                      g('campaign_name',255), g('published_by',255), g('audience')])
-
-                # Post-Metriken als Snapshot eintragen
-                import datetime as _dt
-                import re as _re
-                # Export-Datum aus Dateiname extrahieren (timestamp in ms → date)
-                _fname = os.path.basename(file_path) if 'file_path' in dir() else ''
-                _ts_match = _re.search(r'_(\d{10,13})\.', _fname)
-                if _ts_match:
-                    _ts = int(_ts_match.group(1))
-                    if _ts > 1e12: _ts = _ts / 1000
-                    today = _dt.datetime.fromtimestamp(_ts).strftime('%Y-%m-%d')
-                else:
-                    today = _dt.date.today().isoformat()
-                def _gi(names):
-                    for n in names:
-                        for col in df.columns:
-                            if n.lower() in str(col).lower():
-                                val = row.get(col)
-                                if val is not None and str(val).strip() not in ('', 'nan'):
-                                    try: return int(float(val))
-                                    except: pass
-                    return None
-                def _gf(names):
-                    for n in names:
-                        for col in df.columns:
-                            if n.lower() in str(col).lower():
-                                val = row.get(col)
-                                if val is not None and str(val).strip() not in ('', 'nan'):
-                                    try: return float(val)
-                                    except: pass
-                    return None
-                try:
-                    cur.execute("""
-                        INSERT INTO linkedin_posts_metrics
-                            (post_id, metric_date, captured_at,
-                             impressions, views, offsite_views,
-                             clicks, ctr, likes, comments,
-                             direct_shares, followers, engagement_rate)
-                        VALUES (%s,%s,NOW(),%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
-                        ON DUPLICATE KEY UPDATE
-                            impressions=VALUES(impressions),
-                            clicks=VALUES(clicks),
-                            likes=VALUES(likes),
-                            comments=VALUES(comments),
-                            direct_shares=VALUES(direct_shares),
-                            engagement_rate=VALUES(engagement_rate)
-                    """, [
-                        post_id, today,
-                        _gi(['impressions']),
-                        _gi(['aufrufe', 'views']),
-                        _gi(['offsite']),
-                        _gi(['klicks', 'clicks']),
-                        _gf(['klickrate', 'ctr']),
-                        _gi(['likes']),
-                        _gi(['kommentare', 'comments']),
-                        _gi(['direkt geteilte', 'shares']),
-                        _gi(['follower']),
-                        _gf(['engagement rate', 'engagement_rate']),
-                    ])
-                except Exception as em:
-                    print(f"Metrics error {post_id}: {em}")
-
-                # Post-Metriken als Snapshot eintragen
-                import datetime as _dt
-                import re as _re
-                # Export-Datum aus Dateiname extrahieren (timestamp in ms → date)
-                _fname = os.path.basename(file_path) if 'file_path' in dir() else ''
-                _ts_match = _re.search(r'_(\d{10,13})\.', _fname)
-                if _ts_match:
-                    _ts = int(_ts_match.group(1))
-                    if _ts > 1e12: _ts = _ts / 1000
-                    today = _dt.datetime.fromtimestamp(_ts).strftime('%Y-%m-%d')
-                else:
-                    today = _dt.date.today().isoformat()
-                def _gi(names):
-                    for n in names:
-                        for col in df.columns:
-                            if n.lower() in str(col).lower():
-                                val = row.get(col)
-                                if val is not None and str(val).strip() not in ('', 'nan'):
-                                    try: return int(float(val))
-                                    except: pass
-                    return None
-                def _gf(names):
-                    for n in names:
-                        for col in df.columns:
-                            if n.lower() in str(col).lower():
-                                val = row.get(col)
-                                if val is not None and str(val).strip() not in ('', 'nan'):
-                                    try: return float(val)
-                                    except: pass
-                    return None
-                try:
-                    cur.execute("""
-                        INSERT INTO linkedin_posts_metrics
-                            (post_id, metric_date, captured_at,
-                             impressions, views, offsite_views,
-                             clicks, ctr, likes, comments,
-                             direct_shares, followers, engagement_rate)
-                        VALUES (%s,%s,NOW(),%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
-                        ON DUPLICATE KEY UPDATE
-                            impressions=VALUES(impressions),
-                            clicks=VALUES(clicks),
-                            likes=VALUES(likes),
-                            comments=VALUES(comments),
-                            direct_shares=VALUES(direct_shares),
-                            engagement_rate=VALUES(engagement_rate)
-                    """, [
-                        post_id, today,
-                        _gi(['impressions']),
-                        _gi(['aufrufe', 'views']),
-                        _gi(['offsite']),
-                        _gi(['klicks', 'clicks']),
-                        _gf(['klickrate', 'ctr']),
-                        _gi(['likes']),
-                        _gi(['kommentare', 'comments']),
-                        _gi(['direkt geteilte', 'shares']),
-                        _gi(['follower']),
-                        _gf(['engagement rate', 'engagement_rate']),
-                    ])
-                except Exception as em:
-                    print(f"Metrics error {post_id}: {em}")
-
-                if post_id not in existing_ids:
-                    inserted += 1
-                    existing_ids.add(post_id)
-                    new_rows.append({
-                        'post_id': post_id,
-                        'title': title[:60] + '...' if len(title) > 60 else title,
-                        'created_at': created_at,
-                        'content_type': g('content_type', 100),
-                    })
-                else:
-                    skipped += 1
+                      get_str('post_distribution',100), get_str('content_type',100),
+                      get_str('campaign_name',255), get_str('published_by',255), get_str('audience')])
             except Exception as e:
-                print(f"Error post_id {post_id}: {e}")
+                print(f"Post error {post_id}: {e}")
+                skipped += 1
+                continue
+
+            # 2. Metriken-Snapshot: nur eintragen wenn fuer dieses Datum noch keiner existiert
+            if (post_id, export_date) not in existing_metrics:
+                try:
+                    cur.execute("""
+                        INSERT INTO linkedin_posts_metrics
+                            (post_id, metric_date, captured_at,
+                             impressions, views, offsite_views,
+                             clicks, ctr, likes, comments,
+                             direct_shares, followers, engagement_rate)
+                        VALUES (%s,%s,NOW(),%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                    """, [
+                        post_id, export_date,
+                        get_int(['impressions']),
+                        get_int(['aufrufe', 'views']),
+                        get_int(['offsite']),
+                        get_int(['klicks', 'clicks']),
+                        get_float(['klickrate', 'ctr']),
+                        get_int(['likes']),
+                        get_int(['kommentare', 'comments']),
+                        get_int(['direkt geteilte', 'shares']),
+                        get_int(['follower']),
+                        get_float(['engagement rate', 'engagement_rate']),
+                    ])
+                    existing_metrics.add((post_id, export_date))
+                    metrics_inserted += 1
+                except Exception as em:
+                    print(f"Metrics error {post_id}: {em}")
+
+            # 3. Zählen
+            if post_id not in existing_post_ids:
+                inserted += 1
+                existing_post_ids.add(post_id)
+                new_rows.append({
+                    'post_id': post_id,
+                    'title': title[:60] + '...' if len(title) > 60 else title,
+                    'created_at': created_at,
+                    'content_type': get_str('content_type', 100),
+                })
+            else:
                 skipped += 1
 
-    print(f"Alle Beiträge Import: {inserted} inserted, {updated} updated, {skipped} skipped")
-    return {'table': 'linkedin_posts', 'inserted': inserted, 'updated': updated, 'skipped': skipped, 'new_rows': new_rows}
+    print(f"Posts: {inserted} new, {skipped} unchanged. Metrics: {metrics_inserted} snapshots added for {export_date}")
+    return {
+        'table': 'linkedin_posts',
+        'inserted': inserted,
+        'updated': 0,
+        'skipped': skipped,
+        'new_rows': new_rows,
+        'metrics_inserted': metrics_inserted,
+        'export_date': export_date,
+    }
 
 
 def import_kennzahlen(df):
