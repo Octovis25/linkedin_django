@@ -82,12 +82,11 @@ td{padding:8px;border-bottom:1px solid #f0f0f0}
         {% for stat in r.stats %}
         <span class="stat-badge">
           {% if stat.table %}📋 {{ stat.table }}{% endif %}
-{% if stat.inserted %} +{{ stat.inserted }} new{% endif %}{% if stat.updated %} · {{ stat.updated }} updated{% endif %}{% if stat.skipped %} · {{ stat.skipped }} unchanged{% endif %}
+{% if stat.inserted %}+{{ stat.inserted }} new{% else %}0 new{% endif %}{% if stat.skipped %} · {{ stat.skipped }} unchanged{% endif %}
         </span>
         {% endfor %}
       </div>
       {% for stat in r.stats %}
-        {% if stat.new_rows %}
         <div style="margin-top:8px">
           <div onclick="var d=document.getElementById('rows-{{ forloop.parentloop.counter }}-{{ forloop.counter }}');d.style.display=d.style.display==='none'?'block':'none'"
                style="display:flex;justify-content:space-between;align-items:center;cursor:pointer;padding:4px 0">
@@ -95,6 +94,7 @@ td{padding:8px;border-bottom:1px solid #f0f0f0}
             <svg width="12" height="12" viewBox="0 0 10 6"><path d="M1 1l4 4 4-4" stroke="#0F6E56" stroke-width="1.5" fill="none"/></svg>
           </div>
           <div id="rows-{{ forloop.parentloop.counter }}-{{ forloop.counter }}" style="display:none;max-height:200px;overflow-y:auto;border:0.5px solid #9FE1CB;border-radius:6px">
+            {% if not stat.new_rows %}<p style="text-align:center;color:#0F6E56;font-size:12px;padding:8px">All rows already exist – nothing new.</p>{% endif %}
             <table style="width:100%;border-collapse:collapse;font-size:12px">
               <thead>
                 <tr style="background:#9FE1CB;position:sticky;top:0">
@@ -129,7 +129,6 @@ td{padding:8px;border-bottom:1px solid #f0f0f0}
             </table>
           </div>
         </div>
-        {% endif %}
       {% endfor %}
       {% endif %}
     </div>
