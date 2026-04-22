@@ -229,6 +229,58 @@ def import_posts_from_content(df):
                 except Exception as em:
                     print(f"Metrics error {post_id}: {em}")
 
+                # Post-Metriken als Snapshot eintragen
+                import datetime as _dt
+                today = _dt.date.today().isoformat()
+                def _gi(names):
+                    for n in names:
+                        for col in df.columns:
+                            if n.lower() in str(col).lower():
+                                val = row.get(col)
+                                if val is not None and str(val).strip() not in ('', 'nan'):
+                                    try: return int(float(val))
+                                    except: pass
+                    return None
+                def _gf(names):
+                    for n in names:
+                        for col in df.columns:
+                            if n.lower() in str(col).lower():
+                                val = row.get(col)
+                                if val is not None and str(val).strip() not in ('', 'nan'):
+                                    try: return float(val)
+                                    except: pass
+                    return None
+                try:
+                    cur.execute("""
+                        INSERT INTO linkedin_posts_metrics
+                            (post_id, metric_date, captured_at,
+                             impressions, views, offsite_views,
+                             clicks, ctr, likes, comments,
+                             direct_shares, followers, engagement_rate)
+                        VALUES (%s,%s,NOW(),%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                        ON DUPLICATE KEY UPDATE
+                            impressions=VALUES(impressions),
+                            clicks=VALUES(clicks),
+                            likes=VALUES(likes),
+                            comments=VALUES(comments),
+                            direct_shares=VALUES(direct_shares),
+                            engagement_rate=VALUES(engagement_rate)
+                    """, [
+                        post_id, today,
+                        _gi(['impressions']),
+                        _gi(['aufrufe', 'views']),
+                        _gi(['offsite']),
+                        _gi(['klicks', 'clicks']),
+                        _gf(['klickrate', 'ctr']),
+                        _gi(['likes']),
+                        _gi(['kommentare', 'comments']),
+                        _gi(['direkt geteilte', 'shares']),
+                        _gi(['follower']),
+                        _gf(['engagement rate', 'engagement_rate']),
+                    ])
+                except Exception as em:
+                    print(f"Metrics error {post_id}: {em}")
+
                 if post_id not in existing_ids:
                     inserted += 1
                     existing_ids.add(post_id)
