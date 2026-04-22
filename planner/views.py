@@ -177,6 +177,11 @@ def api_series(request):
 
 @login_required
 def api_topic(request):
+    if request.method == 'GET':
+        with connection.cursor() as c:
+            cats = [{'id': r[0], 'name': r[1], 'color': r[2]}
+                    for r in _q(c, "SELECT id, name, color FROM planner_topics ORDER BY name")]
+        return JsonResponse({'categories': cats})
     if request.method != 'POST':
         return JsonResponse({'ok': False}, status=400)
     data = json.loads(request.body)

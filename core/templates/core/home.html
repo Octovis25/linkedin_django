@@ -129,7 +129,7 @@ let categories = [];
 let currentPickerPostId = null;
 
 async function loadCategories() {
-  const r = await fetch('/api/categories/');
+  const r = await fetch('/planner/api/topic/?action=list');
   const data = await r.json();
   categories = data.categories;
   renderCatBadges();
