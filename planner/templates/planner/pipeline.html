@@ -1,0 +1,104 @@
+{% extends "core/base.html" %}
+{% block title %}Pipeline{% endblock %}
+{% block content %}
+<style>
+.sub-tabs{display:flex;gap:0;border-bottom:0.5px solid #dee2e6;margin-bottom:1.5rem}
+.sub-tabs a{padding:8px 16px;font-size:13px;color:#6c757d;text-decoration:none;border-bottom:2px solid transparent}
+.sub-tabs a.active{color:#008080;border-bottom-color:#008080;font-weight:500}
+.badge-ready{background:#E1F5EE;color:#0F6E56}
+.badge-scheduled{background:#E6F1FB;color:#185FA5}
+.badge-posted{background:#EEEDFE;color:#3C3489}
+</style>
+
+<div class="sub-tabs">
+  <a href="/planner/">Planner</a>
+  <a href="/planner/pipeline/" class="active">Pipeline</a>
+</div>
+
+<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1.25rem;flex-wrap:wrap;gap:8px">
+  <h1 style="margin:0;font-size:1.4rem">→ Pipeline</h1>
+  <form method="get" style="display:flex;gap:8px;flex-wrap:wrap">
+    <select name="topic" onchange="this.form.submit()" style="font-size:13px;padding:4px 8px;border:0.5px solid #ced4da;border-radius:4px">
+      <option value="">All topics</option>
+      {% for t in topics %}<option value="{{ t.id }}" {% if topic_filter == t.id|stringformat:'s' %}selected{% endif %}>{{ t.name }}</option>{% endfor %}
+    </select>
+  </form>
+</div>
+
+<p style="font-size:13px;color:#6c757d;margin-bottom:1rem">{{ posts|length }} posts in pipeline</p>
+
+<div style="display:flex;flex-direction:column;gap:8px">
+{% for p in posts %}
+<div style="background:#fff;border:0.5px solid #e0e0e0;border-radius:10px;padding:12px 14px">
+  <div style="display:flex;gap:10px;align-items:center">
+    {% if p.image %}
+    <img src="/media/{{ p.image }}" style="width:56px;height:56px;border-radius:6px;object-fit:cover;flex-shrink:0">
+    {% else %}
+    <div style="width:56px;height:56px;border-radius:6px;background:{{ p.bg }};flex-shrink:0;display:flex;align-items:center;justify-content:center">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><rect x="3" y="3" width="18" height="18" rx="2" stroke="{{ p.fg }}" stroke-width="1.5"/></svg>
+    </div>
+    {% endif %}
+    <div style="flex:1;min-width:0">
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:4px">
+        <span style="font-size:11px;padding:1px 8px;border-radius:99px;background:{{ p.bg }};color:{{ p.fg }}">{{ p.topic_name }}</span>
+        <span style="font-size:11px;padding:1px 8px;border-radius:99px" class="badge-{{ p.status|lower }}">{{ p.status }}</span>
+        {% if p.planned_date %}<span style="font-size:11px;color:#6c757d">📅 {{ p.planned_date|date:"d.m.Y" }}</span>{% endif %}
+      </div>
+      <p style="font-size:13px;color:#212529;margin:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ p.title|default:p.content|truncatechars:80 }}</p>
+    </div>
+    <div style="display:flex;gap:6px;flex-shrink:0">
+      <button onclick="toggleUpdate({{ p.id }})" style="font-size:12px;padding:3px 10px;border:0.5px solid #008080;border-radius:4px;background:#fff;cursor:pointer;color:#008080">Update</button>
+      <button onclick="backToPlanner({{ p.id }})" style="font-size:12px;padding:3px 10px;border:0.5px solid #ced4da;border-radius:4px;background:#fff;cursor:pointer;color:#6c757d">← Back</button>
+    </div>
+  </div>
+  <div id="upd-{{ p.id }}" style="display:none;margin-top:10px;border-top:0.5px solid #e0e0e0;padding-top:10px">
+    <div style="display:flex;gap:8px;margin-bottom:8px;flex-wrap:wrap">
+      <select id="us-{{ p.id }}" style="font-size:12px;padding:3px 6px;border:0.5px solid #ced4da;border-radius:4px">
+        {% for s in statuses %}<option {% if s == p.status %}selected{% endif %}>{{ s }}</option>{% endfor %}
+      </select>
+      <div style="display:flex;align-items:center;gap:6px">
+        <label style="font-size:12px;color:#6c757d;white-space:nowrap">Planned to post</label>
+        <input type="date" id="ud-{{ p.id }}" value="{{ p.planned_date|date:'Y-m-d' }}" style="font-size:12px;padding:3px 6px;border:0.5px solid #ced4da;border-radius:4px">
+      </div>
+    </div>
+    <textarea id="uc-{{ p.id }}" style="width:100%;min-height:100px;font-size:13px;padding:8px;border:0.5px solid #ced4da;border-radius:6px;resize:vertical;box-sizing:border-box">{{ p.content }}</textarea>
+    <div style="display:flex;justify-content:flex-end;gap:6px;margin-top:6px">
+      <button onclick="toggleUpdate({{ p.id }})" style="font-size:12px;padding:3px 10px;border:0.5px solid #ced4da;border-radius:4px;background:#fff;cursor:pointer">Cancel</button>
+      <button onclick="saveUpdate({{ p.id }})" style="font-size:12px;padding:3px 10px;background:#008080;color:#fff;border:none;border-radius:4px;cursor:pointer">Save</button>
+    </div>
+  </div>
+</div>
+{% empty %}
+<p style="text-align:center;color:#6c757d;padding:2rem">No posts in pipeline yet. Drag posts from the Planner!</p>
+{% endfor %}
+</div>
+
+<script>
+const CSRF = '{{ csrf_token }}';
+
+function p(url, data) {
+  return fetch(url, {method:'POST', headers:{'Content-Type':'application/json','X-CSRFToken':CSRF}, body:JSON.stringify(data)}).then(r=>r.json());
+}
+
+function toggleUpdate(id) {
+  const el = document.getElementById('upd-'+id);
+  el.style.display = el.style.display === 'none' ? 'block' : 'none';
+}
+
+async function saveUpdate(id) {
+  await p('/planner/api/post/', {
+    action: 'update',
+    id: id,
+    status: document.getElementById('us-'+id).value,
+    planned_date: document.getElementById('ud-'+id).value || null,
+    content: document.getElementById('uc-'+id).value,
+  });
+  location.reload();
+}
+
+async function backToPlanner(id) {
+  await p('/planner/api/post/', {action:'from_pipeline', id});
+  location.reload();
+}
+</script>
+{% endblock %}
