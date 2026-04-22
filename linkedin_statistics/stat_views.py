@@ -256,7 +256,14 @@ def timeline_detail(request, post_id):
             ORDER BY metric_date
         """, [post_id])
         if rows:
-            first = rows[0][0]
+            # Tag 1 = Post-Erstelldatum aus linkedin_posts
+            c.execute("SELECT created_at FROM linkedin_posts WHERE post_id = %s", [post_id])
+            created = c.fetchone()
+            if created and created[0]:
+                import datetime
+                first = created[0].date() if isinstance(created[0], datetime.datetime) else created[0]
+            else:
+                first = rows[0][0]
             for r in rows:
                 imp = int(r[1] or 0)
                 rea = int(r[3] or 0)
