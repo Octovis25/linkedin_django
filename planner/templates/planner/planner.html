@@ -183,7 +183,16 @@
       <label style="font-size:12px;color:#6c757d;white-space:nowrap">Planned to post</label>
       <input type="date" id="m-date" class="fselect" style="flex:1">
     </div>
-    <input type="text" id="m-title" placeholder="Title (optional)..." class="finput">
+    <div style="display:flex;gap:12px;align-items:flex-start;margin-bottom:8px">
+      <div id="m-thumb" onclick="document.getElementById('m-img-input').click()"
+           style="width:80px;height:80px;border-radius:8px;border:0.5px dashed #ced4da;flex-shrink:0;display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:pointer;gap:4px;background:#f8f9fa">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" stroke="#aaa" stroke-width="1.5"/><polyline points="17,8 12,3 7,8" stroke="#aaa" stroke-width="1.5"/><line x1="12" y1="3" x2="12" y2="15" stroke="#aaa" stroke-width="1.5"/></svg>
+        <span style="font-size:11px;color:#aaa">Image</span>
+      </div>
+      <input type="file" id="m-img-input" accept="image/*" style="display:none"
+             onchange="previewNewImg(this)">
+      <input type="text" id="m-title" placeholder="Title (optional)..." class="finput" style="margin-bottom:0;flex:1">
+    </div>
     <textarea id="m-content" placeholder="Post text..." style="width:100%;min-height:120px;font-size:13px;padding:8px;border:0.5px solid #ced4da;border-radius:4px;resize:vertical;box-sizing:border-box"></textarea>
     <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:12px">
       <button onclick="closeModal('post-modal')" style="font-size:13px;padding:5px 14px;border:0.5px solid #ced4da;border-radius:4px;background:#fff;cursor:pointer">Cancel</button>
@@ -230,6 +239,17 @@ let selectedColor = 'blue';
 
 function api(url, data) {
   return fetch(url, {method:'POST', headers:{'Content-Type':'application/json','X-CSRFToken':CSRF}, body:JSON.stringify(data)}).then(r=>r.json());
+}
+
+function previewNewImg(input) {
+  if (input.files && input.files[0]) {
+    const reader = new FileReader();
+    reader.onload = e => {
+      const thumb = document.getElementById('m-thumb');
+      thumb.innerHTML = `<img src="${e.target.result}" style="width:80px;height:80px;object-fit:cover;border-radius:8px">`;
+    };
+    reader.readAsDataURL(input.files[0]);
+  }
 }
 
 function toggleAddCat() {
@@ -322,7 +342,7 @@ function openPostModal(topicId, serieId) {
 
 async function savePost() {
   const topicId = document.getElementById('m-topic-id').value || document.getElementById('m-topic').value;
-  await api('/planner/api/post/', {
+  const result = await api('/planner/api/post/', {
     action:'create', topic_id:topicId,
     series_id: document.getElementById('m-series-id').value || null,
     status: document.getElementById('m-status').value,
@@ -330,6 +350,15 @@ async function savePost() {
     title: document.getElementById('m-title').value,
     content: document.getElementById('m-content').value,
   });
+  // Bild hochladen falls vorhanden
+  const imgInput = document.getElementById('m-img-input');
+  if (result.id && imgInput.files && imgInput.files[0]) {
+    const form = new FormData();
+    form.append('image', imgInput.files[0]);
+    await fetch('/planner/api/image/'+result.id+'/', {
+      method:'POST', headers:{'X-CSRFToken':CSRF}, body:form
+    });
+  }
   location.reload();
 }
 
