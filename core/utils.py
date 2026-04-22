@@ -187,7 +187,7 @@ def import_posts_from_content(df):
                         'content_type': g('content_type', 100),
                     })
                 else:
-                    updated += 1
+                    skipped += 1
             except Exception as e:
                 print(f"Error post_id {post_id}: {e}")
                 skipped += 1
