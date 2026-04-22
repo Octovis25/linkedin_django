@@ -180,7 +180,10 @@ def import_posts_from_content(df):
                         'created_at': created_at,
                         'content_type': g('content_type', 100),
                     })
-                elif cur.rowcount == 2: updated += 1
+                elif cur.rowcount == 2:
+                    updated += 1
+                else:
+                    skipped += 1  # rowcount==0: keine Änderung
             except Exception as e:
                 print(f"Error post_id {post_id}: {e}")
                 skipped += 1
@@ -283,7 +286,6 @@ def import_kennzahlen(df):
                 ])
                 if cur.rowcount == 1:
                     inserted += 1
-                    # Werte nochmal lesen für new_rows
                     imp = gi(['impressions (insgesamt)'])
                     cli = gi(['klicks (insgesamt)'])
                     rea = gi(['reaktionen (insgesamt)'])
@@ -294,7 +296,9 @@ def import_kennzahlen(df):
                         'reactions': rea or 0,
                     })
                 elif cur.rowcount == 2:
-                    pass  # update
+                    updated += 1
+                else:
+                    skipped += 1  # rowcount==0: keine Änderung
             except Exception as e:
                 print(f"Kennzahlen error: {e}")
                 skipped += 1

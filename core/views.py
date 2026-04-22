@@ -167,11 +167,19 @@ def upload_import_view(request):
         if action == 'upload':
             uploaded_file = request.FILES.get('file')
             if uploaded_file:
-                file_path = os.path.join(UPLOAD_DIR, uploaded_file.name)
-                with open(file_path, 'wb+') as destination:
+                # Duplikat-Check: schon im Archiv?
+                archive_path = os.path.join(ARCHIVE_DIR, uploaded_file.name)
+                upload_path = os.path.join(UPLOAD_DIR, uploaded_file.name)
+                if os.path.exists(archive_path):
+                    messages.warning(request, f'File "{uploaded_file.name}" was already imported before! Skipped.')
+                    return redirect('upload_import')
+                if os.path.exists(upload_path):
+                    messages.warning(request, f'File "{uploaded_file.name}" is already waiting to be imported!')
+                    return redirect('upload_import')
+                with open(upload_path, 'wb+') as destination:
                     for chunk in uploaded_file.chunks():
                         destination.write(chunk)
-                messages.success(request, f'File "{uploaded_file.name}" uploaded!')
+                messages.success(request, f'File "{uploaded_file.name}" uploaded successfully!')
                 return redirect('upload_import')
         
         elif action == 'import':

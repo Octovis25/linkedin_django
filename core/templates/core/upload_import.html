@@ -82,9 +82,7 @@ td{padding:8px;border-bottom:1px solid #f0f0f0}
         {% for stat in r.stats %}
         <span class="stat-badge">
           {% if stat.table %}📋 {{ stat.table }}{% endif %}
-          {% if stat.inserted %} +{{ stat.inserted }} new{% endif %}
-          {% if stat.updated %} ↑{{ stat.updated }} updated{% endif %}
-          {% if stat.skipped %} ⏭ {{ stat.skipped }} skipped{% endif %}
+          {% if stat.inserted %} +{{ stat.inserted }} new{% endif %}{% if stat.updated %} · {{ stat.updated }} updated{% endif %}{% if stat.skipped %} · {{ stat.skipped }} unchanged{% endif %}
         </span>
         {% endfor %}
       </div>
