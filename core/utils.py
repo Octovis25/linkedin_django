@@ -178,7 +178,7 @@ def import_posts_from_content(df):
                 skipped += 1
 
     print(f"Alle Beiträge Import: {inserted} inserted, {updated} updated, {skipped} skipped")
-    return True
+    return {'table': 'linkedin_posts', 'inserted': inserted, 'updated': updated, 'skipped': skipped}
 
 
 def import_kennzahlen(df):
@@ -195,7 +195,7 @@ def import_kennzahlen(df):
     date_col = find_col(['datum', 'date'])
     if not date_col:
         print("Kein Datum in Kennzahlen gefunden")
-        return True
+        return {'table': 'linkedin_content_metrics', 'inserted': 0, 'updated': 0, 'skipped': 0}
 
     inserted = skipped = 0
     with connection.cursor() as cur:
@@ -278,7 +278,7 @@ def import_kennzahlen(df):
                 skipped += 1
 
     print(f"Kennzahlen Import: {inserted} inserted, {skipped} skipped")
-    return True
+    return {'table': 'linkedin_content_metrics', 'inserted': inserted, 'updated': 0, 'skipped': skipped}
 
 
 def import_posts(df):
@@ -308,4 +308,4 @@ def import_posts(df):
                 print(f"Error: {e}"); skipped += 1
 
     print(f"Posts Import: {inserted} inserted, {skipped} skipped")
-    return True
+    return {'table': 'linkedin_posts_posted', 'inserted': inserted, 'updated': 0, 'skipped': skipped}
