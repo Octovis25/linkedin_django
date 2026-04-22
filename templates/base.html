@@ -256,12 +256,12 @@
   </div>
   {% endif %}
 
-  {% elif '/planner/' in request.path %}
+  {% endif %}{% if '/planner/' in request.path %}
   <div class="sub-nav">
     <a href="/planner/" {% if request.path == '/planner/' %}class="active"{% endif %}>Planner</a>
     <a href="/planner/pipeline/" {% if '/pipeline/' in request.path %}class="active"{% endif %}>Pipeline</a>
   </div>
-  {% elif '/statistics/' in request.path %}
+  {% endif %}{% if '/statistics/' in request.path %}
   <div class="sub-nav">
     <a href="/statistics/" {% if request.path == '/statistics/' %}class="active"{% endif %}>General</a>
     <a href="/statistics/timeline/" {% if '/statistics/timeline' in request.path %}class="active"{% endif %}>Timeline</a>
