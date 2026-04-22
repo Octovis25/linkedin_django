@@ -26,6 +26,8 @@ def home_view(request):
 
     content_type = request.GET.get('content_type', '')
     search = request.GET.get('search', '')
+    category_filter = request.GET.get('category', '')
+    category_filter = request.GET.get('category', '')
     d_from = request.GET.get('from', (date.today() - timedelta(days=365)).isoformat())
     d_to   = request.GET.get('to', date.today().isoformat())
 
@@ -47,6 +49,12 @@ def home_view(request):
             WHERE COALESCE(pp.post_date, lp.post_date) BETWEEN %s AND %s
         """
         params = [d_from, d_to]
+        if category_filter:
+            sql += " AND pp.category = %s"
+            params.append(category_filter)
+        if category_filter:
+            sql += " AND pp.category = %s"
+            params.append(category_filter)
         if content_type == 'video':
             sql += " AND lp.content_type = 'Video'"
         elif content_type == 'novideo':
@@ -79,6 +87,8 @@ def home_view(request):
     return render(request, "core/home.html", {
         "all_posts":    all_posts,
         "content_type": content_type,
+        "category_filter": category_filter,
+        "category_filter": category_filter,
         "search":       search,
         "date_from":    d_from,
         "date_to":      d_to,
