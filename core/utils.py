@@ -129,6 +129,11 @@ def import_posts_from_content(df):
     inserted = updated = skipped = 0
     new_rows = []
 
+    # Alle existierenden post_ids vorab laden
+    with connection.cursor() as _c:
+        _c.execute("SELECT post_id FROM linkedin_posts")
+        existing_ids = {r[0] for r in _c.fetchall()}
+
     with connection.cursor() as cur:
         for _, row in df.iterrows():
             post_url = row.get(mapped['post_url']) if mapped['post_url'] else None
@@ -172,18 +177,17 @@ def import_posts_from_content(df):
                       g('post_distribution',100), g('content_type',100),
                       g('campaign_name',255), g('published_by',255), g('audience')])
 
-                if cur.rowcount == 1:
+                if post_id not in existing_ids:
                     inserted += 1
+                    existing_ids.add(post_id)
                     new_rows.append({
                         'post_id': post_id,
                         'title': title[:60] + '...' if len(title) > 60 else title,
                         'created_at': created_at,
                         'content_type': g('content_type', 100),
                     })
-                elif cur.rowcount == 2:
-                    updated += 1
                 else:
-                    skipped += 1  # rowcount==0: keine Änderung
+                    updated += 1
             except Exception as e:
                 print(f"Error post_id {post_id}: {e}")
                 skipped += 1
@@ -210,6 +214,12 @@ def import_kennzahlen(df):
 
     inserted = skipped = 0
     new_rows = []
+
+    # Existierende metric_dates vorab laden
+    with connection.cursor() as _c:
+        _c.execute("SELECT metric_date FROM linkedin_content_metrics")
+        existing_dates = {str(r[0]) for r in _c.fetchall()}
+
     with connection.cursor() as cur:
         for _, row in df.iterrows():
             try:
@@ -284,8 +294,9 @@ def import_kennzahlen(df):
                     gf(['engagement-rate (gesponsert)']),
                     gf(['engagement-rate (insgesamt)']),
                 ])
-                if cur.rowcount == 1:
+                if metric_date not in existing_dates:
                     inserted += 1
+                    existing_dates.add(metric_date)
                     imp = gi(['impressions (insgesamt)'])
                     cli = gi(['klicks (insgesamt)'])
                     rea = gi(['reaktionen (insgesamt)'])
@@ -295,10 +306,8 @@ def import_kennzahlen(df):
                         'clicks': cli or 0,
                         'reactions': rea or 0,
                     })
-                elif cur.rowcount == 2:
-                    updated += 1
                 else:
-                    skipped += 1  # rowcount==0: keine Änderung
+                    skipped += 1
             except Exception as e:
                 print(f"Kennzahlen error: {e}")
                 skipped += 1
@@ -319,6 +328,12 @@ def import_posts(df):
 
     inserted = skipped = 0
     new_rows = []
+
+    # Existierende metric_dates vorab laden
+    with connection.cursor() as _c:
+        _c.execute("SELECT metric_date FROM linkedin_content_metrics")
+        existing_dates = {str(r[0]) for r in _c.fetchall()}
+
     with connection.cursor() as cur:
         for _, row in df.iterrows():
             post_url = row.get(url_col)
