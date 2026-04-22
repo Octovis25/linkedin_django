@@ -127,6 +127,7 @@ def import_posts_from_content(df):
     print(f"Gemappte Spalten: {mapped}")
 
     inserted = updated = skipped = 0
+    new_rows = []
 
     with connection.cursor() as cur:
         for _, row in df.iterrows():
@@ -171,14 +172,21 @@ def import_posts_from_content(df):
                       g('post_distribution',100), g('content_type',100),
                       g('campaign_name',255), g('published_by',255), g('audience')])
 
-                if cur.rowcount == 1: inserted += 1
+                if cur.rowcount == 1:
+                    inserted += 1
+                    new_rows.append({
+                        'post_id': post_id,
+                        'title': title[:60] + '...' if len(title) > 60 else title,
+                        'created_at': created_at,
+                        'content_type': g('content_type', 100),
+                    })
                 elif cur.rowcount == 2: updated += 1
             except Exception as e:
                 print(f"Error post_id {post_id}: {e}")
                 skipped += 1
 
     print(f"Alle Beiträge Import: {inserted} inserted, {updated} updated, {skipped} skipped")
-    return {'table': 'linkedin_posts', 'inserted': inserted, 'updated': updated, 'skipped': skipped}
+    return {'table': 'linkedin_posts', 'inserted': inserted, 'updated': updated, 'skipped': skipped, 'new_rows': new_rows}
 
 
 def import_kennzahlen(df):
@@ -198,6 +206,7 @@ def import_kennzahlen(df):
         return {'table': 'linkedin_content_metrics', 'inserted': 0, 'updated': 0, 'skipped': 0}
 
     inserted = skipped = 0
+    new_rows = []
     with connection.cursor() as cur:
         for _, row in df.iterrows():
             try:
@@ -278,7 +287,7 @@ def import_kennzahlen(df):
                 skipped += 1
 
     print(f"Kennzahlen Import: {inserted} inserted, {skipped} skipped")
-    return {'table': 'linkedin_content_metrics', 'inserted': inserted, 'updated': 0, 'skipped': skipped}
+    return {'table': 'linkedin_content_metrics', 'inserted': inserted, 'updated': 0, 'skipped': skipped, 'new_rows': new_rows}
 
 
 def import_posts(df):
@@ -292,6 +301,7 @@ def import_posts(df):
         print("Keine URL-Spalte gefunden"); return False
 
     inserted = skipped = 0
+    new_rows = []
     with connection.cursor() as cur:
         for _, row in df.iterrows():
             post_url = row.get(url_col)

@@ -88,6 +88,51 @@ td{padding:8px;border-bottom:1px solid #f0f0f0}
         </span>
         {% endfor %}
       </div>
+      {% for stat in r.stats %}
+        {% if stat.new_rows %}
+        <div style="margin-top:8px">
+          <div onclick="var d=document.getElementById('rows-{{ forloop.parentloop.counter }}-{{ forloop.counter }}');d.style.display=d.style.display==='none'?'block':'none'"
+               style="display:flex;justify-content:space-between;align-items:center;cursor:pointer;padding:4px 0">
+            <span style="font-size:12px;font-weight:500;color:#085041">{{ stat.inserted }} new rows in {{ stat.table }}</span>
+            <svg width="12" height="12" viewBox="0 0 10 6"><path d="M1 1l4 4 4-4" stroke="#0F6E56" stroke-width="1.5" fill="none"/></svg>
+          </div>
+          <div id="rows-{{ forloop.parentloop.counter }}-{{ forloop.counter }}" style="display:none;max-height:200px;overflow-y:auto;border:0.5px solid #9FE1CB;border-radius:6px">
+            <table style="width:100%;border-collapse:collapse;font-size:12px">
+              <thead>
+                <tr style="background:#9FE1CB;position:sticky;top:0">
+                  {% if stat.table == 'linkedin_posts' %}
+                  <th style="padding:6px 10px;text-align:left;color:#085041;font-weight:500">Title</th>
+                  <th style="padding:6px 10px;text-align:left;color:#085041;font-weight:500;white-space:nowrap">Created</th>
+                  <th style="padding:6px 10px;text-align:left;color:#085041;font-weight:500">Type</th>
+                  {% else %}
+                  <th style="padding:6px 10px;text-align:left;color:#085041;font-weight:500">Date</th>
+                  <th style="padding:6px 10px;text-align:left;color:#085041;font-weight:500">Impressions</th>
+                  <th style="padding:6px 10px;text-align:left;color:#085041;font-weight:500">Clicks</th>
+                  <th style="padding:6px 10px;text-align:left;color:#085041;font-weight:500">Reactions</th>
+                  {% endif %}
+                </tr>
+              </thead>
+              <tbody>
+                {% for row in stat.new_rows %}
+                <tr style="border-bottom:0.5px solid #E1F5EE;{% if forloop.counter|divisibleby:2 %}background:#f0faf8{% endif %}">
+                  {% if stat.table == 'linkedin_posts' %}
+                  <td style="padding:6px 10px;color:#085041">{{ row.title }}</td>
+                  <td style="padding:6px 10px;color:#085041;white-space:nowrap">{{ row.created_at }}</td>
+                  <td style="padding:6px 10px;color:#085041">{{ row.content_type }}</td>
+                  {% else %}
+                  <td style="padding:6px 10px;color:#085041;white-space:nowrap">{{ row.date }}</td>
+                  <td style="padding:6px 10px;color:#085041">{{ row.impressions }}</td>
+                  <td style="padding:6px 10px;color:#085041">{{ row.clicks }}</td>
+                  <td style="padding:6px 10px;color:#085041">{{ row.reactions }}</td>
+                  {% endif %}
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </div>
+        {% endif %}
+      {% endfor %}
       {% endif %}
     </div>
     {% elif r.status == 'error' %}
