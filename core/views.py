@@ -131,7 +131,10 @@ def analyze_view(request):
                     stats = import_to_db(file_path, file_type)
                     if stats:
                         archive_path = os.path.join(ARCHIVE_DIR, filename)
-                        shutil.move(file_path, archive_path)
+                        try:
+                            shutil.move(file_path, archive_path)
+                        except Exception as mv_err:
+                            print(f"Move error: {mv_err}")
                         results.append({'file': filename, 'type': file_type, 'status': 'ok', 'stats': stats if isinstance(stats, list) else []})
                         success_count += 1
                     else:
