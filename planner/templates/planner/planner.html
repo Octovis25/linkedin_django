@@ -47,6 +47,18 @@
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
     <span style="font-size:13px;font-weight:500;color:#212529">Content categories</span>
     <button onclick="document.getElementById('add-cat').style.display=document.getElementById('add-cat').style.display==='none'?'flex':'none'" style="font-size:12px;padding:3px 10px;border:0.5px solid #ced4da;border-radius:4px;background:#fff;cursor:pointer">+ Add category</button>
+  <div id="add-cat" style="display:none;gap:8px;align-items:center;margin-top:8px">
+    <input type="text" id="new-cat-name" placeholder="Category name..." style="font-size:12px;padding:3px 8px;border:0.5px solid #ced4da;border-radius:4px;flex:1">
+    <select id="new-cat-color" style="font-size:12px;padding:3px 8px;border:0.5px solid #ced4da;border-radius:4px">
+      <option value="blue">Blue</option>
+      <option value="green">Green</option>
+      <option value="amber">Amber</option>
+      <option value="purple">Purple</option>
+      <option value="red">Red</option>
+      <option value="gray">Gray</option>
+    </select>
+    <button onclick="addCat()" style="font-size:12px;padding:3px 10px;background:#008080;color:#fff;border:none;border-radius:4px;cursor:pointer">Add</button>
+  </div>
   </div>
   <div id="cat-badges" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px">
     {% for t in topics %}
