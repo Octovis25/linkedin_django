@@ -1,18 +1,18 @@
 {% extends "core/base.html" %}
-{% block title %}Scheduled{% endblock %}
+{% block title %}{{ page_title }}{% endblock %}
 {% block content %}
 
 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1.25rem;flex-wrap:wrap;gap:8px">
-  <h1 style="margin:0;font-size:1.4rem">📅 Scheduled</h1>
+  <h1 style="margin:0;font-size:1.4rem">{{ page_title }}</h1>
   <form method="get" style="display:flex;gap:8px">
     <select name="topic" onchange="this.form.submit()" style="font-size:13px;padding:4px 8px;border:0.5px solid #ced4da;border-radius:4px">
       <option value="">All topics</option>
-      {% for t in topics %}<option value="{{ t.id }}" {% if topic_filter == t.id|stringformat:'s' %}selected{% endif %}>{{ t.name }}</option>{% endfor %}
+      {% for t in topics %}<option value="{{ t.id }}" {% if topic_filter == t.id|stringformat:"s" %}selected{% endif %}>{{ t.name }}</option>{% endfor %}
     </select>
   </form>
 </div>
 
-<p style="font-size:13px;color:#6c757d;margin-bottom:1rem">{{ posts|length }} scheduled posts</p>
+<p style="font-size:13px;color:#6c757d;margin-bottom:1rem">{{ posts|length }} posts</p>
 
 <div style="display:flex;flex-direction:column;gap:8px">
 {% for p in posts %}
@@ -28,35 +28,28 @@
     <div style="flex:1;min-width:0">
       <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:4px">
         <span style="font-size:11px;padding:1px 8px;border-radius:99px;background:{{ p.bg }};color:{{ p.fg }}">{{ p.topic_name }}</span>
-        <span style="font-size:11px;background:#E6F1FB;color:#185FA5;padding:1px 8px;border-radius:99px">Scheduled</span>
         {% if p.planned_date %}<span style="font-size:11px;color:#6c757d">📅 {{ p.planned_date|date:"d.m.Y" }}</span>{% endif %}
       </div>
       <p style="font-size:13px;color:#212529;margin:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ p.title|default:p.content|truncatechars:80 }}</p>
       {% if p.comment %}<p style="font-size:12px;color:#6c757d;margin:3px 0 0;font-style:italic">{{ p.comment }}</p>{% endif %}
     </div>
-    <div style="display:flex;gap:6px;flex-shrink:0">
-      <button onclick="markPosted({{ p.id }})" style="font-size:12px;padding:3px 10px;border:0.5px solid #3C3489;border-radius:4px;background:#fff;cursor:pointer;color:#3C3489">✓ Posted</button>
-      <button onclick="backToReady({{ p.id }})" style="font-size:12px;padding:3px 10px;border:0.5px solid #ced4da;border-radius:4px;background:#fff;cursor:pointer;color:#6c757d">← Ready</button>
-    </div>
+    <select onchange="setStatus({{ p.id }}, this.value)" style="font-size:12px;padding:3px 6px;border:0.5px solid #ced4da;border-radius:4px;flex-shrink:0">
+      {% for s in statuses %}<option {% if s == p.status %}selected{% endif %}>{{ s }}</option>{% endfor %}
+    </select>
   </div>
 </div>
 {% empty %}
-<p style="text-align:center;color:#6c757d;padding:2rem">No scheduled posts yet.</p>
+<p style="text-align:center;color:#6c757d;padding:2rem">No posts here yet.</p>
 {% endfor %}
 </div>
 
 <script>
-const CSRF = '{{ csrf_token }}';
+const CSRF = "{{ csrf_token }}";
 function api(url, data) {
-  return fetch(url, {method:'POST', headers:{'Content-Type':'application/json','X-CSRFToken':CSRF}, body:JSON.stringify(data)}).then(r=>r.json());
+  return fetch(url, {method:"POST", headers:{"Content-Type":"application/json","X-CSRFToken":CSRF}, body:JSON.stringify(data)}).then(r=>r.json());
 }
-async function markPosted(id) {
-  if (!confirm('Mark as Posted and move to Archive?')) return;
-  await api('/planner/api/post/', {action:'to_archive', id});
-  location.reload();
-}
-async function backToReady(id) {
-  await api('/planner/api/post/', {action:'set_status', id, status:'Ready'});
+async function setStatus(id, status) {
+  await api("/planner/api/post/", {action:"set_status", id, status});
   location.reload();
 }
 </script>

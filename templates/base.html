@@ -259,8 +259,8 @@
   {% if '/planner/' in request.path %}
   <div class="sub-nav">
     <a href="/planner/" {% if request.path == '/planner/' %}class="active"{% endif %}>Planner</a>
-    <a href="/planner/pipeline/" {% if '/pipeline/' in request.path %}class="active"{% endif %}>Pipeline</a>
-    <a href="/planner/ready/" {% if '/ready/' in request.path %}class="active"{% endif %}>Ready to post</a>
+    <a href="/planner/pipeline/" {% if '/pipeline/' in request.path %}class="active"{% endif %}>All</a>
+    <a href="/planner/ready/" {% if '/ready/' in request.path %}class="active"{% endif %}>Ready</a>
     <a href="/planner/scheduled/" {% if '/scheduled/' in request.path %}class="active"{% endif %}>Scheduled</a>
     <a href="/planner/archive/" {% if '/archive/' in request.path %}class="active"{% endif %}>Archive</a>
   </div>
