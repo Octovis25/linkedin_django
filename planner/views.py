@@ -316,12 +316,16 @@ def api_post(request):
                  data.get('comment') or None])
             return JsonResponse({'ok': True, 'id': c.lastrowid})
         elif action == 'update':
+            status = data.get('status')
+            in_pipeline = 0 if status == 'Draft' else 1
+            if 'in_pipeline' in data:
+                in_pipeline = data.get('in_pipeline')
             c.execute("""UPDATE planner_posts SET topic_id=%s, title=%s, content=%s,
-                        status=%s, planned_date=%s, comment=%s WHERE id=%s""",
+                        status=%s, planned_date=%s, comment=%s, in_pipeline=%s WHERE id=%s""",
                 [data.get('topic_id') or None, data.get('title'),
-                 data.get('content'), data.get('status'),
+                 data.get('content'), status,
                  data.get('planned_date') or None,
-                 data.get('comment') or None, data.get('id')])
+                 data.get('comment') or None, in_pipeline, data.get('id')])
             return JsonResponse({'ok': True})
         elif action == 'delete':
             c.execute("DELETE FROM planner_posts WHERE id=%s", [data.get('id')])
