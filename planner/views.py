@@ -126,20 +126,22 @@ def api_post(request):
     with connection.cursor() as c:
         if action == 'create':
             c.execute("""INSERT INTO planner_posts
-                        (topic_id, title, content, status, planned_date, series_id, series_order)
-                        VALUES (%s,%s,%s,%s,%s,%s,%s)""",
+                        (topic_id, title, content, status, planned_date, series_id, series_order, comment)
+                        VALUES (%s,%s,%s,%s,%s,%s,%s,%s)""",
                 [data.get('topic_id') or None, data.get('title'),
                  data.get('content'), data.get('status', 'Draft'),
                  data.get('planned_date') or None,
                  data.get('series_id') or None,
-                 data.get('series_order', 0)])
+                 data.get('series_order', 0),
+                 data.get('comment') or None])
             return JsonResponse({'ok': True, 'id': c.lastrowid})
         elif action == 'update':
             c.execute("""UPDATE planner_posts SET topic_id=%s, title=%s, content=%s,
-                        status=%s, planned_date=%s WHERE id=%s""",
+                        status=%s, planned_date=%s, comment=%s WHERE id=%s""",
                 [data.get('topic_id') or None, data.get('title'),
                  data.get('content'), data.get('status'),
-                 data.get('planned_date') or None, data.get('id')])
+                 data.get('planned_date') or None,
+                 data.get('comment') or None, data.get('id')])
             return JsonResponse({'ok': True})
         elif action == 'delete':
             c.execute("DELETE FROM planner_posts WHERE id=%s", [data.get('id')])
@@ -208,6 +210,9 @@ def api_idea(request):
             c.execute("INSERT INTO planner_ideas (text, topic_id) VALUES (%s,%s)",
                       [data.get('text'), data.get('topic_id') or None])
             return JsonResponse({'ok': True, 'id': c.lastrowid})
+        elif action == 'update':
+            c.execute("UPDATE planner_ideas SET text=%s WHERE id=%s", [data.get('text'), data.get('id')])
+            return JsonResponse({'ok': True})
         elif action == 'delete':
             c.execute("DELETE FROM planner_ideas WHERE id=%s", [data.get('id')])
             return JsonResponse({'ok': True})

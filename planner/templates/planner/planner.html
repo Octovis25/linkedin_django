@@ -30,11 +30,6 @@
 .color-dot.selected{border-color:#333}
 </style>
 
-<div class="sub-tabs">
-  <a href="/planner/" class="active">Planner</a>
-  <a href="/planner/pipeline/">Pipeline</a>
-</div>
-
 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem">
   <h1 style="margin:0;font-size:1.4rem">📅 Content Planner</h1>
   <button onclick="openModal('post-modal')" style="font-size:13px;padding:4px 14px;background:#008080;color:#fff;border:none;border-radius:4px;cursor:pointer">+ New post</button>
@@ -137,8 +132,9 @@
     <div class="col-footer">
       <div style="font-size:11px;font-weight:500;color:{{ col.topic.fg }};margin-bottom:4px">💡 Ideas</div>
       {% for idea in col.ideas %}
-      <div style="display:flex;gap:4px;align-items:center;padding:2px 0">
-        <span style="font-size:12px;flex:1">{{ idea.text }}</span>
+      <div style="display:flex;gap:4px;align-items:center;padding:2px 0" id="idea-row-{{ idea.id }}">
+        <span style="font-size:12px;flex:1" id="idea-text-{{ idea.id }}">{{ idea.text }}</span>
+        <span onclick="editIdea({{ idea.id }}, '{{ idea.text|escapejs }}')" style="cursor:pointer;font-size:11px;color:#aaa">✏️</span>
         <span onclick="deleteIdea({{ idea.id }})" style="cursor:pointer;font-size:12px;color:#aaa">×</span>
       </div>
       {% empty %}
@@ -193,7 +189,8 @@
              onchange="previewNewImg(this)">
       <input type="text" id="m-title" placeholder="Title (optional)..." class="finput" style="margin-bottom:0;flex:1">
     </div>
-    <textarea id="m-content" placeholder="Post text..." style="width:100%;min-height:120px;font-size:13px;padding:8px;border:0.5px solid #ced4da;border-radius:4px;resize:vertical;box-sizing:border-box"></textarea>
+    <textarea id="m-content" placeholder="Post text..." style="width:100%;min-height:100px;font-size:13px;padding:8px;border:0.5px solid #ced4da;border-radius:4px;resize:vertical;box-sizing:border-box;margin-bottom:8px"></textarea>
+    <textarea id="m-comment" placeholder="Internal comment / notes..." style="width:100%;min-height:60px;font-size:13px;padding:8px;border:0.5px solid #ced4da;border-radius:4px;resize:vertical;box-sizing:border-box;background:#fffef0"></textarea>
     <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:12px">
       <button onclick="closeModal('post-modal')" style="font-size:13px;padding:5px 14px;border:0.5px solid #ced4da;border-radius:4px;background:#fff;cursor:pointer">Cancel</button>
       <button onclick="savePost()" style="font-size:13px;padding:5px 14px;background:#008080;color:#fff;border:none;border-radius:4px;cursor:pointer">Save</button>
@@ -212,7 +209,8 @@
       <input type="date" id="e-date" class="fselect" style="flex:1">
     </div>
     <input type="text" id="e-title" placeholder="Title..." class="finput">
-    <textarea id="e-content" style="width:100%;min-height:120px;font-size:13px;padding:8px;border:0.5px solid #ced4da;border-radius:4px;resize:vertical;box-sizing:border-box"></textarea>
+    <textarea id="e-content" style="width:100%;min-height:100px;font-size:13px;padding:8px;border:0.5px solid #ced4da;border-radius:4px;resize:vertical;box-sizing:border-box;margin-bottom:8px"></textarea>
+    <textarea id="e-comment" placeholder="Internal comment / notes..." style="width:100%;min-height:60px;font-size:13px;padding:8px;border:0.5px solid #ced4da;border-radius:4px;resize:vertical;box-sizing:border-box;background:#fffef0"></textarea>
     <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:12px">
       <button onclick="closeModal('edit-modal')" style="font-size:13px;padding:5px 14px;border:0.5px solid #ced4da;border-radius:4px;background:#fff;cursor:pointer">Cancel</button>
       <button onclick="updatePost()" style="font-size:13px;padding:5px 14px;background:#008080;color:#fff;border:none;border-radius:4px;cursor:pointer">Save</button>
@@ -310,6 +308,13 @@ async function deleteSerie(id) {
   location.reload();
 }
 
+async function editIdea(id, text) {
+  const newText = prompt('Edit idea:', text);
+  if (newText === null || newText.trim() === '') return;
+  await api('/planner/api/idea/', {action:'update', id, text: newText.trim()});
+  location.reload();
+}
+
 async function deleteIdea(id) {
   await api('/planner/api/idea/', {action:'delete', id});
   location.reload();
@@ -349,6 +354,7 @@ async function savePost() {
     planned_date: document.getElementById('m-date').value || null,
     title: document.getElementById('m-title').value,
     content: document.getElementById('m-content').value,
+    comment: document.getElementById('m-comment').value,
   });
   // Bild hochladen falls vorhanden
   const imgInput = document.getElementById('m-img-input');
@@ -362,12 +368,13 @@ async function savePost() {
   location.reload();
 }
 
-function openEditModal(id, title, content, status, date) {
+function openEditModal(id, title, content, status, date, comment) {
   document.getElementById('e-id').value = id;
   document.getElementById('e-title').value = title;
   document.getElementById('e-content').value = content;
   document.getElementById('e-status').value = status;
   document.getElementById('e-date').value = date || '';
+  document.getElementById('e-comment').value = comment || '';
   openModal('edit-modal');
 }
 
@@ -376,6 +383,7 @@ async function updatePost() {
     action:'update', id: document.getElementById('e-id').value,
     title: document.getElementById('e-title').value,
     content: document.getElementById('e-content').value,
+    comment: document.getElementById('e-comment').value,
     status: document.getElementById('e-status').value,
     planned_date: document.getElementById('e-date').value || null,
   });
