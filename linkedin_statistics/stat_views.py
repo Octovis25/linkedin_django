@@ -221,12 +221,26 @@ def timeline(request):
                     ORDER BY metric_date
                 """, [post_id])
                 if detail:
-                    first_date = detail[0][0]
+                    # Tag 1 = Post-Erstelldatum aus linkedin_posts
+                    post_date_row = _safe(c, """
+                        SELECT COALESCE(DATE(lp.created_at), pp.post_date)
+                        FROM linkedin_posts lp
+                        LEFT JOIN linkedin_posts_posted pp ON lp.post_id = pp.post_id
+                        WHERE lp.post_id = %s
+                    """, [post_id])
+                    import datetime
+                    if post_date_row and post_date_row[0][0]:
+                        first_date = post_date_row[0][0]
+                        if isinstance(first_date, datetime.datetime):
+                            first_date = first_date.date()
+                    else:
+                        first_date = detail[0][0]
                     days, impressions = [], []
                     for row in detail:
                         day_nr = (row[0] - first_date).days + 1
-                        days.append(day_nr)
-                        impressions.append(int(row[1] or 0))
+                        if day_nr > 0:
+                            days.append(day_nr)
+                            impressions.append(int(row[1] or 0))
                     max_days = max(max_days, max(days))
                     top5_json.append({
                         'title': title[:40],
