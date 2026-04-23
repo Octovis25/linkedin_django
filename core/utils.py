@@ -146,6 +146,7 @@ def import_posts_from_content(df, file_path=""):
     inserted = skipped = 0
     metrics_inserted = 0
     metrics_updated = 0
+    metrics_updated = 0
     new_rows = []
 
     def get_str(key, maxlen=None):
@@ -241,6 +242,8 @@ def import_posts_from_content(df, file_path=""):
                     metrics_inserted += 1
                 except Exception as em:
                     print(f"Metrics error {post_id}: {em}")
+            else:
+                metrics_updated += 1
             else:
                 metrics_updated += 1
 
