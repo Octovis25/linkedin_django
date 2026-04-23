@@ -211,7 +211,13 @@ def timeline(request):
         """)
 
         top5_json = []
-        max_days = 30
+        # max_days = Tage seit ältestem Post bis heute
+        import datetime
+        oldest = _safe(c, "SELECT MIN(DATE(created_at)) FROM linkedin_posts WHERE created_at IS NOT NULL")
+        if oldest and oldest[0][0]:
+            max_days = (datetime.date.today() - oldest[0][0]).days + 1
+        else:
+            max_days = 30
         if top5_raw:
             for post_id, title in top5_raw:
                 detail = _safe(c, """
@@ -236,11 +242,21 @@ def timeline(request):
                     else:
                         first_date = detail[0][0]
                     days, impressions = [], []
+                    import datetime
+                    today_day = (datetime.date.today() - first_date).days + 1
                     for row in detail:
                         day_nr = (row[0] - first_date).days + 1
-                        if day_nr > 0:
+                        if day_nr >= 1:
                             days.append(day_nr)
                             impressions.append(int(row[1] or 0))
+                    # Ersten Wert auch an Tag 1 setzen damit Linie von Tag 1 startet
+                    if days and days[0] > 1:
+                        days.insert(0, 1)
+                        impressions.insert(0, impressions[0])
+                    # Letzten Wert bis heute verlängern
+                    if days and days[-1] < today_day:
+                        days.append(today_day)
+                        impressions.append(impressions[-1])
                     max_days = max(max_days, max(days))
                     top5_json.append({
                         'title': title[:40],
