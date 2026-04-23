@@ -287,6 +287,35 @@ async function deleteImage() {
   document.getElementById('e-del-img').style.display = 'none';
 }
 
+function dropImgEdit(e) {
+  e.preventDefault();
+  const file = e.dataTransfer.files[0];
+  if (!file || !file.type.startsWith('image/')) return;
+  const dt = new DataTransfer();
+  dt.items.add(file);
+  document.getElementById('e-img-input').files = dt.files;
+  previewEditImg({files: [file]});
+}
+
+function previewEditImg(input) {
+  const file = input.files ? input.files[0] : input;
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    const thumb = document.getElementById('e-thumb');
+    thumb.innerHTML = `<img src="${e.target.result}" style="width:80px;height:80px;object-fit:cover;border-radius:8px">`;
+    document.getElementById('e-del-img').style.display = 'block';
+  };
+  reader.readAsDataURL(file instanceof File ? file : file);
+}
+
+async function deleteImage() {
+  const id = document.getElementById('e-id').value;
+  await api('/planner/api/post/', {action:'delete_image', id});
+  document.getElementById('e-thumb').innerHTML = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" stroke="#aaa" stroke-width="1.5"/><polyline points="17,8 12,3 7,8" stroke="#aaa" stroke-width="1.5"/><line x1="12" y1="3" x2="12" y2="15" stroke="#aaa" stroke-width="1.5"/></svg><span style="font-size:10px;color:#aaa">Drop or click</span>`;
+  document.getElementById('e-del-img').style.display = 'none';
+}
+
 function dropImg(e) {
   e.preventDefault();
   const thumb = document.getElementById('m-thumb');
@@ -299,6 +328,35 @@ function dropImg(e) {
   dt.items.add(file);
   document.getElementById('m-img-input').files = dt.files;
   previewNewImg({files: [file]});
+}
+
+function dropImgEdit(e) {
+  e.preventDefault();
+  const file = e.dataTransfer.files[0];
+  if (!file || !file.type.startsWith('image/')) return;
+  const dt = new DataTransfer();
+  dt.items.add(file);
+  document.getElementById('e-img-input').files = dt.files;
+  previewEditImg({files: [file]});
+}
+
+function previewEditImg(input) {
+  const file = input.files ? input.files[0] : input;
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    const thumb = document.getElementById('e-thumb');
+    thumb.innerHTML = `<img src="${e.target.result}" style="width:80px;height:80px;object-fit:cover;border-radius:8px">`;
+    document.getElementById('e-del-img').style.display = 'block';
+  };
+  reader.readAsDataURL(file instanceof File ? file : file);
+}
+
+async function deleteImage() {
+  const id = document.getElementById('e-id').value;
+  await api('/planner/api/post/', {action:'delete_image', id});
+  document.getElementById('e-thumb').innerHTML = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" stroke="#aaa" stroke-width="1.5"/><polyline points="17,8 12,3 7,8" stroke="#aaa" stroke-width="1.5"/><line x1="12" y1="3" x2="12" y2="15" stroke="#aaa" stroke-width="1.5"/></svg><span style="font-size:10px;color:#aaa">Drop or click</span>`;
+  document.getElementById('e-del-img').style.display = 'none';
 }
 
 function dropImg(e) {

@@ -227,6 +227,9 @@ def api_post(request):
         elif action == 'delete_image':
             c.execute("UPDATE planner_posts SET image=NULL WHERE id=%s", [data.get('id')])
             return JsonResponse({'ok': True})
+        elif action == 'delete_image':
+            c.execute("UPDATE planner_posts SET image=NULL WHERE id=%s", [data.get('id')])
+            return JsonResponse({'ok': True})
         elif action == 'from_pipeline':
             c.execute("UPDATE planner_posts SET in_pipeline=0 WHERE id=%s", [data.get('id')])
             return JsonResponse({'ok': True})
