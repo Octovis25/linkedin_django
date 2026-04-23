@@ -301,6 +301,20 @@ function dropImg(e) {
   previewNewImg({files: [file]});
 }
 
+function dropImg(e) {
+  e.preventDefault();
+  const thumb = document.getElementById('m-thumb');
+  thumb.style.borderColor = '#ced4da';
+  thumb.style.background = '#f8f9fa';
+  const file = e.dataTransfer.files[0];
+  if (!file || !file.type.startsWith('image/')) return;
+  // DataTransfer in file input setzen
+  const dt = new DataTransfer();
+  dt.items.add(file);
+  document.getElementById('m-img-input').files = dt.files;
+  previewNewImg({files: [file]});
+}
+
 function previewNewImg(input) {
   if (input.files && input.files[0]) {
     const reader = new FileReader();
