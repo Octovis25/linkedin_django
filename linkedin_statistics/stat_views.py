@@ -198,7 +198,7 @@ def timeline(request):
                     'shares': r[8], 'clicks': r[9],
                 })
 
-        # Top 5 nach Impressions für Chart
+        # Top 10 aktuellste Posts
         top5_raw = _safe(c, """
             SELECT lp.post_id, COALESCE(lp.post_title, lp.post_id)
             FROM linkedin_posts lp
@@ -208,6 +208,16 @@ def timeline(request):
                 SELECT MAX(m2.metric_date) FROM linkedin_posts_metrics m2
                 WHERE m2.post_id = m.post_id)
             ORDER BY COALESCE(pp.post_date, lp.post_date) DESC LIMIT 10
+        """)
+        # Top 10 nach Impressionen
+        top_imp_raw = _safe(c, """
+            SELECT lp.post_id, COALESCE(lp.post_title, lp.post_id)
+            FROM linkedin_posts lp
+            INNER JOIN linkedin_posts_metrics m ON lp.post_id = m.post_id
+            WHERE m.metric_date = (
+                SELECT MAX(m2.metric_date) FROM linkedin_posts_metrics m2
+                WHERE m2.post_id = m.post_id)
+            ORDER BY m.impressions DESC LIMIT 10
         """)
 
         top5_json = []
@@ -264,9 +274,49 @@ def timeline(request):
                         'impressions': impressions,
                     })
 
+        # Top Impressions Chart Daten aufbauen
+        top_imp_json = []
+        if top_imp_raw:
+            for post_id, title in top_imp_raw:
+                detail = _safe(c, """
+                    SELECT metric_date, impressions
+                    FROM linkedin_posts_metrics
+                    WHERE post_id = %s
+                    ORDER BY metric_date
+                """, [post_id])
+                if detail:
+                    post_date_row = _safe(c, """
+                        SELECT COALESCE(DATE(lp.created_at), pp.post_date)
+                        FROM linkedin_posts lp
+                        LEFT JOIN linkedin_posts_posted pp ON lp.post_id = pp.post_id
+                        WHERE lp.post_id = %s
+                    """, [post_id])
+                    import datetime
+                    if post_date_row and post_date_row[0][0]:
+                        first = post_date_row[0][0]
+                        if isinstance(first, datetime.datetime):
+                            first = first.date()
+                    else:
+                        first = detail[0][0]
+                    days, impressions = [], []
+                    today_day = (datetime.date.today() - first).days + 1
+                    for row in detail:
+                        day_nr = (row[0] - first).days + 1
+                        if day_nr >= 1:
+                            days.append(day_nr)
+                            impressions.append(int(row[1] or 0))
+                    if days and days[0] > 1:
+                        days.insert(0, 1)
+                        impressions.insert(0, impressions[0])
+                    if days and days[-1] < today_day:
+                        days.append(today_day)
+                        impressions.append(impressions[-1])
+                    top_imp_json.append({'title': title[:40], 'days': days, 'impressions': impressions})
+
     return render(request, 'linkedin_statistics/stat_timeline.html', {
         'all_posts': all_posts,
         'top5_json': json.dumps(top5_json),
+        'top_impressions_json': json.dumps(top_imp_json),
         'max_days':  max_days,
         'date_from': d_from, 'date_to': d_to,
         'tab': 'timeline', 'group_by': group_by,
