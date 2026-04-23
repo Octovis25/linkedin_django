@@ -47,17 +47,17 @@ def planner_view(request):
 
             series_list = []
             for s in series:
-                parts = _q(c, """SELECT id, title, content, status, planned_date, image, series_order
+                parts = _q(c, """SELECT id, title, content, status, planned_date, image, series_order, COALESCE(comment,'') as comment
                                  FROM planner_posts WHERE series_id=%s AND in_pipeline=0
                                  ORDER BY series_order""", [s[0]])
                 series_list.append({
                     'id': s[0], 'name': s[1],
                     'parts': [{'id': r[0], 'title': r[1] or '', 'content': r[2] or '',
                                'status': r[3], 'planned_date': r[4],
-                               'image': r[5] or '', 'order': r[6]} for r in parts]
+                               'image': r[5] or '', 'order': r[6], 'comment': r[7] or ''} for r in parts]
                 })
 
-            posts = _q(c, """SELECT id, title, content, status, planned_date, image
+            posts = _q(c, """SELECT id, title, content, status, planned_date, image, COALESCE(comment,'') as comment
                              FROM planner_posts
                              WHERE topic_id=%s AND series_id IS NULL AND in_pipeline=0
                              ORDER BY COALESCE(planned_date,'9999-12-31'), created_at""", [t['id']])
@@ -223,6 +223,9 @@ def api_post(request):
         elif action == 'update_topic':
             c.execute("UPDATE planner_posts SET topic_id=%s WHERE id=%s",
                       [data.get('topic_id'), data.get('id')])
+            return JsonResponse({'ok': True})
+        elif action == 'delete_image':
+            c.execute("UPDATE planner_posts SET image=NULL WHERE id=%s", [data.get('id')])
             return JsonResponse({'ok': True})
         elif action == 'from_pipeline':
             c.execute("UPDATE planner_posts SET in_pipeline=0 WHERE id=%s", [data.get('id')])

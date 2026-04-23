@@ -94,7 +94,7 @@
                 <span class="bdg bdg-{{ p.status|lower }}">{{ p.status }}</span>
               </div>
               <div style="display:flex;gap:2px">
-                <span class="ib" onclick="openEditModal({{ p.id }},'{{ p.title|escapejs }}','{{ p.content|escapejs }}','{{ p.status }}','{{ p.planned_date|date:'Y-m-d' }}')">✏️</span>
+<span class="ib" onclick="openEditModal({{ p.id }},'{{ p.title|escapejs }}','{{ p.content|escapejs }}','{{ p.status }}','{{ p.planned_date|date:'Y-m-d' }}','{{ p.comment|escapejs }}','{{ p.image|escapejs }}')">✏️</span>
                 <span class="ib" onclick="toPipeline({{ p.id }})">→</span>
                 <span class="ib" onclick="deletePost({{ p.id }})">🗑</span>
               </div>
@@ -212,7 +212,22 @@
       </select>
       <input type="date" id="e-date" class="fselect" style="flex:1">
     </div>
-    <input type="text" id="e-title" placeholder="Title..." class="finput">
+    <div style="display:flex;gap:12px;align-items:flex-start;margin-bottom:8px">
+      <div style="display:flex;flex-direction:column;gap:4px;align-items:center">
+        <div id="e-thumb"
+             onclick="document.getElementById('e-img-input').click()"
+             ondragover="event.preventDefault();this.style.borderColor='#008080'"
+             ondragleave="this.style.borderColor='#ced4da'"
+             ondrop="dropImgEdit(event)"
+             style="width:80px;height:80px;border-radius:8px;border:1.5px dashed #ced4da;display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:pointer;gap:4px;background:#f8f9fa;transition:all .2s">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" stroke="#aaa" stroke-width="1.5"/><polyline points="17,8 12,3 7,8" stroke="#aaa" stroke-width="1.5"/><line x1="12" y1="3" x2="12" y2="15" stroke="#aaa" stroke-width="1.5"/></svg>
+          <span style="font-size:10px;color:#aaa;text-align:center">Drop or click</span>
+        </div>
+        <button onclick="deleteImage()" id="e-del-img" style="display:none;font-size:11px;padding:2px 6px;border:0.5px solid #A32D2D;border-radius:4px;background:#fff;cursor:pointer;color:#A32D2D">🗑 Remove</button>
+      </div>
+      <input type="file" id="e-img-input" accept="image/*" style="display:none" onchange="previewEditImg(this)">
+      <input type="text" id="e-title" placeholder="Title..." class="finput" style="margin-bottom:0;flex:1">
+    </div>
     <textarea id="e-content" style="width:100%;min-height:100px;font-size:13px;padding:8px;border:0.5px solid #ced4da;border-radius:4px;resize:vertical;box-sizing:border-box;margin-bottom:8px"></textarea>
     <textarea id="e-comment" placeholder="Internal comment / notes..." style="width:100%;min-height:60px;font-size:13px;padding:8px;border:0.5px solid #ced4da;border-radius:4px;resize:vertical;box-sizing:border-box;background:#fffef0"></textarea>
     <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:12px">
@@ -241,6 +256,35 @@ let selectedColor = 'blue';
 
 function api(url, data) {
   return fetch(url, {method:'POST', headers:{'Content-Type':'application/json','X-CSRFToken':CSRF}, body:JSON.stringify(data)}).then(r=>r.json());
+}
+
+function dropImgEdit(e) {
+  e.preventDefault();
+  const file = e.dataTransfer.files[0];
+  if (!file || !file.type.startsWith('image/')) return;
+  const dt = new DataTransfer();
+  dt.items.add(file);
+  document.getElementById('e-img-input').files = dt.files;
+  previewEditImg({files: [file]});
+}
+
+function previewEditImg(input) {
+  const file = input.files ? input.files[0] : input;
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    const thumb = document.getElementById('e-thumb');
+    thumb.innerHTML = `<img src="${e.target.result}" style="width:80px;height:80px;object-fit:cover;border-radius:8px">`;
+    document.getElementById('e-del-img').style.display = 'block';
+  };
+  reader.readAsDataURL(file instanceof File ? file : file);
+}
+
+async function deleteImage() {
+  const id = document.getElementById('e-id').value;
+  await api('/planner/api/post/', {action:'delete_image', id});
+  document.getElementById('e-thumb').innerHTML = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" stroke="#aaa" stroke-width="1.5"/><polyline points="17,8 12,3 7,8" stroke="#aaa" stroke-width="1.5"/><line x1="12" y1="3" x2="12" y2="15" stroke="#aaa" stroke-width="1.5"/></svg><span style="font-size:10px;color:#aaa">Drop or click</span>`;
+  document.getElementById('e-del-img').style.display = 'none';
 }
 
 function dropImg(e) {
@@ -386,25 +430,44 @@ async function savePost() {
   location.reload();
 }
 
-function openEditModal(id, title, content, status, date, comment) {
+function openEditModal(id, title, content, status, date, comment, image) {
   document.getElementById('e-id').value = id;
   document.getElementById('e-title').value = title;
   document.getElementById('e-content').value = content;
   document.getElementById('e-status').value = status;
   document.getElementById('e-date').value = date || '';
   document.getElementById('e-comment').value = comment || '';
+  document.getElementById('e-img-input').value = '';
+  const thumb = document.getElementById('e-thumb');
+  const delBtn = document.getElementById('e-del-img');
+  if (image) {
+    thumb.innerHTML = `<img src="/media/${image}" style="width:80px;height:80px;object-fit:cover;border-radius:8px">`;
+    delBtn.style.display = 'block';
+  } else {
+    thumb.innerHTML = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" stroke="#aaa" stroke-width="1.5"/><polyline points="17,8 12,3 7,8" stroke="#aaa" stroke-width="1.5"/><line x1="12" y1="3" x2="12" y2="15" stroke="#aaa" stroke-width="1.5"/></svg><span style="font-size:10px;color:#aaa;text-align:center">Drop or click</span>`;
+    delBtn.style.display = 'none';
+  }
   openModal('edit-modal');
 }
 
 async function updatePost() {
+  const id = document.getElementById('e-id').value;
   await api('/planner/api/post/', {
-    action:'update', id: document.getElementById('e-id').value,
+    action:'update', id,
     title: document.getElementById('e-title').value,
     content: document.getElementById('e-content').value,
     comment: document.getElementById('e-comment').value,
     status: document.getElementById('e-status').value,
     planned_date: document.getElementById('e-date').value || null,
   });
+  const imgInput = document.getElementById('e-img-input');
+  if (imgInput.files && imgInput.files[0]) {
+    const form = new FormData();
+    form.append('image', imgInput.files[0]);
+    await fetch('/planner/api/image/'+id+'/', {
+      method:'POST', headers:{'X-CSRFToken':CSRF}, body:form
+    });
+  }
   location.reload();
 }
 
