@@ -3,9 +3,6 @@
 {% block title %}Content Planner{% endblock %}
 {% block content %}
 <style>
-.sub-tabs{display:flex;gap:0;border-bottom:0.5px solid #dee2e6;margin-bottom:1.5rem}
-.sub-tabs a{padding:8px 16px;font-size:13px;color:#6c757d;text-decoration:none;border-bottom:2px solid transparent}
-.sub-tabs a.active{color:#008080;border-bottom-color:#008080;font-weight:500}
 .kanban{display:flex;gap:12px;align-items:flex-start;overflow-x:auto;padding-bottom:1rem}
 .col{width:260px;flex-shrink:0;border-radius:10px;overflow:hidden;background:#f8f9fa}
 .col-body{padding:8px;display:flex;flex-direction:column;gap:6px;min-height:100px}
@@ -20,14 +17,17 @@
 .bdg-draft{background:#f5f5f5;color:#6c757d}
 .bdg-ready{background:#E1F5EE;color:#0F6E56}
 .bdg-scheduled{background:#E6F1FB;color:#185FA5}
+.bdg-posted{background:#EEEDFE;color:#3C3489}
 .ib{cursor:pointer;width:22px;height:22px;border-radius:4px;border:0.5px solid #e0e0e0;display:inline-flex;align-items:center;justify-content:center;background:#fff}
 .modal-bg{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.4);z-index:1000;align-items:center;justify-content:center}
 .modal-bg.open{display:flex}
-.modal{background:#fff;border-radius:12px;padding:1.5rem;width:500px;max-width:95vw}
+.modal{background:#fff;border-radius:12px;padding:1.5rem;width:520px;max-width:95vw;max-height:90vh;overflow-y:auto}
 .finput{width:100%;font-size:13px;padding:6px 8px;border:0.5px solid #ced4da;border-radius:4px;box-sizing:border-box;margin-bottom:8px}
 .fselect{font-size:13px;padding:6px 8px;border:0.5px solid #ced4da;border-radius:4px}
 .color-dot{width:20px;height:20px;border-radius:50%;cursor:pointer;border:2px solid transparent;display:inline-block}
 .color-dot.selected{border-color:#333}
+.img-drop{width:80px;height:80px;border-radius:8px;border:1.5px dashed #ced4da;flex-shrink:0;display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:pointer;gap:4px;background:#f8f9fa;transition:all .2s;overflow:hidden}
+.img-drop:hover{border-color:#008080;background:#f0faf8}
 </style>
 
 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem">
@@ -35,7 +35,7 @@
   <button onclick="openModal('post-modal')" style="font-size:13px;padding:4px 14px;background:#008080;color:#fff;border:none;border-radius:4px;cursor:pointer">+ New post</button>
 </div>
 
-<!-- Category Management -->
+<!-- Categories -->
 <div style="background:#fff;border:0.5px solid #e0e0e0;border-radius:10px;padding:12px 16px;margin-bottom:1rem">
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
     <span style="font-size:13px;font-weight:500">Content categories</span>
@@ -43,8 +43,7 @@
   </div>
   <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px">
     {% for t in topics %}
-    <span style="font-size:12px;padding:3px 10px;border-radius:99px;
-      {% if t.color == 'blue' %}background:#E6F1FB;color:#185FA5{% elif t.color == 'green' %}background:#E1F5EE;color:#0F6E56{% elif t.color == 'amber' %}background:#FAEEDA;color:#633806{% elif t.color == 'purple' %}background:#EEEDFE;color:#3C3489{% elif t.color == 'red' %}background:#FCEBEB;color:#791F1F{% else %}background:#f5f5f5;color:#6c757d{% endif %}">
+    <span style="font-size:12px;padding:3px 10px;border-radius:99px;{% if t.color == 'blue' %}background:#E6F1FB;color:#185FA5{% elif t.color == 'green' %}background:#E1F5EE;color:#0F6E56{% elif t.color == 'amber' %}background:#FAEEDA;color:#633806{% elif t.color == 'purple' %}background:#EEEDFE;color:#3C3489{% elif t.color == 'red' %}background:#FCEBEB;color:#791F1F{% else %}background:#f5f5f5;color:#6c757d{% endif %}">
       {{ t.name }} <span onclick="deleteTopic({{ t.id }})" style="cursor:pointer;margin-left:4px">×</span>
     </span>
     {% endfor %}
@@ -65,7 +64,7 @@
 </div>
 
 <!-- Kanban -->
-<div class="kanban" id="kanban">
+<div class="kanban">
   {% for col in columns %}
   <div class="col" id="col-{{ col.topic.id }}"
        ondragover="event.preventDefault();this.querySelector('.drop-zone').classList.add('over')"
@@ -94,7 +93,7 @@
                 <span class="bdg bdg-{{ p.status|lower }}">{{ p.status }}</span>
               </div>
               <div style="display:flex;gap:2px">
-<span class="ib" onclick="openEditModal({{ p.id }},'{{ p.title|escapejs }}','{{ p.content|escapejs }}','{{ p.status }}','{{ p.planned_date|date:'Y-m-d' }}','{{ p.comment|escapejs }}','{{ p.image|escapejs }}')">✏️</span>
+                <span class="ib" onclick="openEditModal({{ p.id }},'{{ p.title|escapejs }}','{{ p.content|escapejs }}','{{ p.status }}','{{ p.planned_date|date:'Y-m-d' }}','{{ p.comment|escapejs }}','{{ p.image|escapejs }}')">✏️</span>
                 <span class="ib" onclick="toPipeline({{ p.id }})">→</span>
                 <span class="ib" onclick="deletePost({{ p.id }})">🗑</span>
               </div>
@@ -113,7 +112,7 @@
         <div style="display:flex;justify-content:space-between;margin-bottom:4px">
           <span class="bdg bdg-{{ p.status|lower }}">{{ p.status }}</span>
           <div style="display:flex;gap:2px">
-            <span class="ib" onclick="openEditModal({{ p.id }},'{{ p.title|escapejs }}','{{ p.content|escapejs }}','{{ p.status }}','{{ p.planned_date|date:'Y-m-d' }}')">✏️</span>
+            <span class="ib" onclick="openEditModal({{ p.id }},'{{ p.title|escapejs }}','{{ p.content|escapejs }}','{{ p.status }}','{{ p.planned_date|date:'Y-m-d' }}','{{ p.comment|escapejs }}','{{ p.image|escapejs }}')">✏️</span>
             <span class="ib" onclick="toPipeline({{ p.id }})">→</span>
             <span class="ib" onclick="deletePost({{ p.id }})">🗑</span>
           </div>
@@ -132,9 +131,9 @@
     <div class="col-footer">
       <div style="font-size:11px;font-weight:500;color:{{ col.topic.fg }};margin-bottom:4px">💡 Ideas</div>
       {% for idea in col.ideas %}
-      <div style="display:flex;gap:4px;align-items:center;padding:2px 0" id="idea-row-{{ idea.id }}">
-        <span style="font-size:12px;flex:1" id="idea-text-{{ idea.id }}">{{ idea.text }}</span>
-        <span onclick="editIdea({{ idea.id }}, '{{ idea.text|escapejs }}')" style="cursor:pointer;font-size:11px;color:#aaa">✏️</span>
+      <div style="display:flex;gap:4px;align-items:center;padding:2px 0">
+        <span style="font-size:12px;flex:1">{{ idea.text }}</span>
+        <span onclick="editIdea({{ idea.id }},'{{ idea.text|escapejs }}')" style="cursor:pointer;font-size:11px;color:#aaa">✏️</span>
         <span onclick="deleteIdea({{ idea.id }})" style="cursor:pointer;font-size:12px;color:#aaa">×</span>
       </div>
       {% empty %}
@@ -161,7 +160,7 @@
   </div>
 </div>
 
-<!-- Modals -->
+<!-- New Post Modal -->
 <div class="modal-bg" id="post-modal">
   <div class="modal">
     <h3 style="margin:0 0 1rem;font-size:15px">New Post</h3>
@@ -180,21 +179,21 @@
       <input type="date" id="m-date" class="fselect" style="flex:1">
     </div>
     <div style="display:flex;gap:12px;align-items:flex-start;margin-bottom:8px">
-      <div id="m-thumb"
-           onclick="document.getElementById('m-img-input').click()"
-           ondragover="event.preventDefault();this.style.borderColor='#008080';this.style.background='#f0faf8'"
-           ondragleave="this.style.borderColor='#ced4da';this.style.background='#f8f9fa'"
-           ondrop="dropImg(event)"
-           style="width:80px;height:80px;border-radius:8px;border:1.5px dashed #ced4da;flex-shrink:0;display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:pointer;gap:4px;background:#f8f9fa;transition:all .2s">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" stroke="#aaa" stroke-width="1.5"/><polyline points="17,8 12,3 7,8" stroke="#aaa" stroke-width="1.5"/><line x1="12" y1="3" x2="12" y2="15" stroke="#aaa" stroke-width="1.5"/></svg>
-        <span style="font-size:10px;color:#aaa;text-align:center">Drop or click</span>
+      <div style="display:flex;flex-direction:column;gap:4px;align-items:center">
+        <div class="img-drop" id="m-thumb"
+             onclick="document.getElementById('m-img-input').click()"
+             ondragover="event.preventDefault();this.style.borderColor='#008080'"
+             ondragleave="this.style.borderColor='#ced4da'"
+             ondrop="handleImgDrop(event,'m')">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" stroke="#aaa" stroke-width="1.5"/><polyline points="17,8 12,3 7,8" stroke="#aaa" stroke-width="1.5"/><line x1="12" y1="3" x2="12" y2="15" stroke="#aaa" stroke-width="1.5"/></svg>
+          <span style="font-size:10px;color:#aaa;text-align:center">Drop or click</span>
+        </div>
       </div>
-      <input type="file" id="m-img-input" accept="image/*" style="display:none"
-             onchange="previewNewImg(this)">
+      <input type="file" id="m-img-input" accept="image/*" style="display:none" onchange="previewImg('m',this)">
       <input type="text" id="m-title" placeholder="Title (optional)..." class="finput" style="margin-bottom:0;flex:1">
     </div>
     <textarea id="m-content" placeholder="Post text..." style="width:100%;min-height:100px;font-size:13px;padding:8px;border:0.5px solid #ced4da;border-radius:4px;resize:vertical;box-sizing:border-box;margin-bottom:8px"></textarea>
-    <textarea id="m-comment" placeholder="Internal comment / notes..." style="width:100%;min-height:60px;font-size:13px;padding:8px;border:0.5px solid #ced4da;border-radius:4px;resize:vertical;box-sizing:border-box;background:#fffef0"></textarea>
+    <textarea id="m-comment" placeholder="Internal comment / notes..." style="width:100%;min-height:50px;font-size:13px;padding:8px;border:0.5px solid #ced4da;border-radius:4px;resize:vertical;box-sizing:border-box;background:#fffef0"></textarea>
     <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:12px">
       <button onclick="closeModal('post-modal')" style="font-size:13px;padding:5px 14px;border:0.5px solid #ced4da;border-radius:4px;background:#fff;cursor:pointer">Cancel</button>
       <button onclick="savePost()" style="font-size:13px;padding:5px 14px;background:#008080;color:#fff;border:none;border-radius:4px;cursor:pointer">Save</button>
@@ -202,6 +201,7 @@
   </div>
 </div>
 
+<!-- Edit Modal -->
 <div class="modal-bg" id="edit-modal">
   <div class="modal">
     <h3 style="margin:0 0 1rem;font-size:15px">Edit Post</h3>
@@ -214,22 +214,21 @@
     </div>
     <div style="display:flex;gap:12px;align-items:flex-start;margin-bottom:8px">
       <div style="display:flex;flex-direction:column;gap:4px;align-items:center">
-        <div id="e-thumb"
+        <div class="img-drop" id="e-thumb"
              onclick="document.getElementById('e-img-input').click()"
              ondragover="event.preventDefault();this.style.borderColor='#008080'"
              ondragleave="this.style.borderColor='#ced4da'"
-             ondrop="dropImgEdit(event)"
-             style="width:80px;height:80px;border-radius:8px;border:1.5px dashed #ced4da;display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:pointer;gap:4px;background:#f8f9fa;transition:all .2s">
+             ondrop="handleImgDrop(event,'e')">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" stroke="#aaa" stroke-width="1.5"/><polyline points="17,8 12,3 7,8" stroke="#aaa" stroke-width="1.5"/><line x1="12" y1="3" x2="12" y2="15" stroke="#aaa" stroke-width="1.5"/></svg>
           <span style="font-size:10px;color:#aaa;text-align:center">Drop or click</span>
         </div>
-        <button onclick="deleteImage()" id="e-del-img" style="display:none;font-size:11px;padding:2px 6px;border:0.5px solid #A32D2D;border-radius:4px;background:#fff;cursor:pointer;color:#A32D2D">🗑 Remove</button>
+        <button onclick="removeImg()" id="e-del-img" style="display:none;font-size:11px;padding:2px 6px;border:0.5px solid #A32D2D;border-radius:4px;background:#fff;cursor:pointer;color:#A32D2D">🗑 Remove</button>
       </div>
-      <input type="file" id="e-img-input" accept="image/*" style="display:none" onchange="previewEditImg(this)">
+      <input type="file" id="e-img-input" accept="image/*" style="display:none" onchange="previewImg('e',this)">
       <input type="text" id="e-title" placeholder="Title..." class="finput" style="margin-bottom:0;flex:1">
     </div>
     <textarea id="e-content" style="width:100%;min-height:100px;font-size:13px;padding:8px;border:0.5px solid #ced4da;border-radius:4px;resize:vertical;box-sizing:border-box;margin-bottom:8px"></textarea>
-    <textarea id="e-comment" placeholder="Internal comment / notes..." style="width:100%;min-height:60px;font-size:13px;padding:8px;border:0.5px solid #ced4da;border-radius:4px;resize:vertical;box-sizing:border-box;background:#fffef0"></textarea>
+    <textarea id="e-comment" placeholder="Internal comment / notes..." style="width:100%;min-height:50px;font-size:13px;padding:8px;border:0.5px solid #ced4da;border-radius:4px;resize:vertical;box-sizing:border-box;background:#fffef0"></textarea>
     <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:12px">
       <button onclick="closeModal('edit-modal')" style="font-size:13px;padding:5px 14px;border:0.5px solid #ced4da;border-radius:4px;background:#fff;cursor:pointer">Cancel</button>
       <button onclick="updatePost()" style="font-size:13px;padding:5px 14px;background:#008080;color:#fff;border:none;border-radius:4px;cursor:pointer">Save</button>
@@ -237,6 +236,7 @@
   </div>
 </div>
 
+<!-- Serie Modal -->
 <div class="modal-bg" id="serie-modal">
   <div class="modal">
     <h3 style="margin:0 0 1rem;font-size:15px">New Serie</h3>
@@ -258,152 +258,62 @@ function api(url, data) {
   return fetch(url, {method:'POST', headers:{'Content-Type':'application/json','X-CSRFToken':CSRF}, body:JSON.stringify(data)}).then(r=>r.json());
 }
 
-function dropImgEdit(e) {
+// Image handling - unified
+function handleImgDrop(e, prefix) {
   e.preventDefault();
+  document.getElementById(prefix+'-thumb').style.borderColor = '#ced4da';
   const file = e.dataTransfer.files[0];
   if (!file || !file.type.startsWith('image/')) return;
   const dt = new DataTransfer();
   dt.items.add(file);
-  document.getElementById('e-img-input').files = dt.files;
-  previewEditImg({files: [file]});
+  document.getElementById(prefix+'-img-input').files = dt.files;
+  previewImg(prefix, {files: [file]});
 }
 
-function previewEditImg(input) {
-  const file = input.files ? input.files[0] : input;
+function previewImg(prefix, input) {
+  const file = input.files ? input.files[0] : null;
   if (!file) return;
   const reader = new FileReader();
-  reader.onload = e => {
-    const thumb = document.getElementById('e-thumb');
-    thumb.innerHTML = `<img src="${e.target.result}" style="width:80px;height:80px;object-fit:cover;border-radius:8px">`;
-    document.getElementById('e-del-img').style.display = 'block';
+  reader.onload = ev => {
+    document.getElementById(prefix+'-thumb').innerHTML =
+      `<img src="${ev.target.result}" style="width:80px;height:80px;object-fit:cover;border-radius:6px">`;
+    if (prefix === 'e') document.getElementById('e-del-img').style.display = 'block';
   };
-  reader.readAsDataURL(file instanceof File ? file : file);
+  reader.readAsDataURL(file);
 }
 
-async function deleteImage() {
+async function removeImg() {
   const id = document.getElementById('e-id').value;
   await api('/planner/api/post/', {action:'delete_image', id});
-  document.getElementById('e-thumb').innerHTML = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" stroke="#aaa" stroke-width="1.5"/><polyline points="17,8 12,3 7,8" stroke="#aaa" stroke-width="1.5"/><line x1="12" y1="3" x2="12" y2="15" stroke="#aaa" stroke-width="1.5"/></svg><span style="font-size:10px;color:#aaa">Drop or click</span>`;
+  document.getElementById('e-thumb').innerHTML =
+    `<svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" stroke="#aaa" stroke-width="1.5"/><polyline points="17,8 12,3 7,8" stroke="#aaa" stroke-width="1.5"/><line x1="12" y1="3" x2="12" y2="15" stroke="#aaa" stroke-width="1.5"/></svg><span style="font-size:10px;color:#aaa;text-align:center">Drop or click</span>`;
   document.getElementById('e-del-img').style.display = 'none';
 }
 
-function dropImgEdit(e) {
-  e.preventDefault();
-  const file = e.dataTransfer.files[0];
-  if (!file || !file.type.startsWith('image/')) return;
-  const dt = new DataTransfer();
-  dt.items.add(file);
-  document.getElementById('e-img-input').files = dt.files;
-  previewEditImg({files: [file]});
-}
-
-function previewEditImg(input) {
-  const file = input.files ? input.files[0] : input;
-  if (!file) return;
-  const reader = new FileReader();
-  reader.onload = e => {
-    const thumb = document.getElementById('e-thumb');
-    thumb.innerHTML = `<img src="${e.target.result}" style="width:80px;height:80px;object-fit:cover;border-radius:8px">`;
-    document.getElementById('e-del-img').style.display = 'block';
-  };
-  reader.readAsDataURL(file instanceof File ? file : file);
-}
-
-async function deleteImage() {
-  const id = document.getElementById('e-id').value;
-  await api('/planner/api/post/', {action:'delete_image', id});
-  document.getElementById('e-thumb').innerHTML = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" stroke="#aaa" stroke-width="1.5"/><polyline points="17,8 12,3 7,8" stroke="#aaa" stroke-width="1.5"/><line x1="12" y1="3" x2="12" y2="15" stroke="#aaa" stroke-width="1.5"/></svg><span style="font-size:10px;color:#aaa">Drop or click</span>`;
-  document.getElementById('e-del-img').style.display = 'none';
-}
-
-function dropImg(e) {
-  e.preventDefault();
-  const thumb = document.getElementById('m-thumb');
-  thumb.style.borderColor = '#ced4da';
-  thumb.style.background = '#f8f9fa';
-  const file = e.dataTransfer.files[0];
-  if (!file || !file.type.startsWith('image/')) return;
-  // DataTransfer in file input setzen
-  const dt = new DataTransfer();
-  dt.items.add(file);
-  document.getElementById('m-img-input').files = dt.files;
-  previewNewImg({files: [file]});
-}
-
-function dropImgEdit(e) {
-  e.preventDefault();
-  const file = e.dataTransfer.files[0];
-  if (!file || !file.type.startsWith('image/')) return;
-  const dt = new DataTransfer();
-  dt.items.add(file);
-  document.getElementById('e-img-input').files = dt.files;
-  previewEditImg({files: [file]});
-}
-
-function previewEditImg(input) {
-  const file = input.files ? input.files[0] : input;
-  if (!file) return;
-  const reader = new FileReader();
-  reader.onload = e => {
-    const thumb = document.getElementById('e-thumb');
-    thumb.innerHTML = `<img src="${e.target.result}" style="width:80px;height:80px;object-fit:cover;border-radius:8px">`;
-    document.getElementById('e-del-img').style.display = 'block';
-  };
-  reader.readAsDataURL(file instanceof File ? file : file);
-}
-
-async function deleteImage() {
-  const id = document.getElementById('e-id').value;
-  await api('/planner/api/post/', {action:'delete_image', id});
-  document.getElementById('e-thumb').innerHTML = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" stroke="#aaa" stroke-width="1.5"/><polyline points="17,8 12,3 7,8" stroke="#aaa" stroke-width="1.5"/><line x1="12" y1="3" x2="12" y2="15" stroke="#aaa" stroke-width="1.5"/></svg><span style="font-size:10px;color:#aaa">Drop or click</span>`;
-  document.getElementById('e-del-img').style.display = 'none';
-}
-
-function dropImg(e) {
-  e.preventDefault();
-  const thumb = document.getElementById('m-thumb');
-  thumb.style.borderColor = '#ced4da';
-  thumb.style.background = '#f8f9fa';
-  const file = e.dataTransfer.files[0];
-  if (!file || !file.type.startsWith('image/')) return;
-  // DataTransfer in file input setzen
-  const dt = new DataTransfer();
-  dt.items.add(file);
-  document.getElementById('m-img-input').files = dt.files;
-  previewNewImg({files: [file]});
-}
-
-function previewNewImg(input) {
-  if (input.files && input.files[0]) {
-    const reader = new FileReader();
-    reader.onload = e => {
-      const thumb = document.getElementById('m-thumb');
-      thumb.innerHTML = `<img src="${e.target.result}" style="width:80px;height:80px;object-fit:cover;border-radius:8px">`;
-    };
-    reader.readAsDataURL(input.files[0]);
-  }
-}
-
+// Category
 function toggleAddCat() {
   const f = document.getElementById('add-cat-form');
   f.style.display = f.style.display === 'none' ? 'flex' : 'none';
 }
-
 function selectColor(el) {
   document.querySelectorAll('.color-dot').forEach(d => d.classList.remove('selected'));
   el.classList.add('selected');
   selectedColor = el.dataset.color;
 }
-
 async function addCat() {
   const name = document.getElementById('new-cat-name').value.trim();
   if (!name) return;
-  await api('/planner/api/topic/', {action:'create', name, color: selectedColor});
+  await api('/planner/api/topic/', {action:'create', name, color:selectedColor});
+  location.reload();
+}
+async function deleteTopic(id) {
+  if (!confirm('Delete topic and all its posts?')) return;
+  await api('/planner/api/topic/', {action:'delete', id});
   location.reload();
 }
 
+// Drag & Drop
 function dragStart(e, id) { draggedId = id; }
-
 async function dropPost(e, topicId) {
   e.preventDefault();
   e.currentTarget.querySelector('.drop-zone').classList.remove('over');
@@ -411,49 +321,47 @@ async function dropPost(e, topicId) {
   await api('/planner/api/post/', {action:'update_topic', id:draggedId, topic_id:topicId});
   location.reload();
 }
-
 async function dropToPipeline(e) {
   e.preventDefault();
   e.currentTarget.style.background = '#F1EFE8';
   if (!draggedId) return;
-  await toPipeline(draggedId);
+  await api('/planner/api/post/', {action:'to_pipeline', id:draggedId});
+  location.reload();
 }
-
 async function toPipeline(id) {
   await api('/planner/api/post/', {action:'to_pipeline', id});
   location.reload();
 }
 
+// Post CRUD
 async function deletePost(id) {
   if (!confirm('Delete?')) return;
   await api('/planner/api/post/', {action:'delete', id});
   location.reload();
 }
 
-async function deleteTopic(id) {
-  if (!confirm('Delete topic and all its posts?')) return;
-  await api('/planner/api/topic/', {action:'delete', id});
-  location.reload();
+// Serie
+function toggleSerie(id) {
+  const el = document.getElementById('serie-'+id);
+  el.style.display = el.style.display === 'none' ? 'flex' : 'none';
 }
-
 async function deleteSerie(id) {
   if (!confirm('Delete serie and all parts?')) return;
   await api('/planner/api/series/', {action:'delete', id});
   location.reload();
 }
 
+// Ideas
 async function editIdea(id, text) {
-  const newText = prompt('Edit idea:', text);
-  if (newText === null || newText.trim() === '') return;
-  await api('/planner/api/idea/', {action:'update', id, text: newText.trim()});
+  const t = prompt('Edit idea:', text);
+  if (t === null || !t.trim()) return;
+  await api('/planner/api/idea/', {action:'update', id, text:t.trim()});
   location.reload();
 }
-
 async function deleteIdea(id) {
   await api('/planner/api/idea/', {action:'delete', id});
   location.reload();
 }
-
 async function addIdea(topicId) {
   const text = document.getElementById('idea-'+topicId).value.trim();
   if (!text) return;
@@ -461,11 +369,7 @@ async function addIdea(topicId) {
   location.reload();
 }
 
-function toggleSerie(id) {
-  const el = document.getElementById('serie-'+id);
-  el.style.display = el.style.display === 'none' ? 'flex' : 'none';
-}
-
+// Modals
 function openModal(id) { document.getElementById(id).classList.add('open'); }
 function closeModal(id) { document.getElementById(id).classList.remove('open'); }
 
@@ -475,7 +379,11 @@ function openPostModal(topicId, serieId) {
   if (topicId) document.getElementById('m-topic').value = topicId;
   document.getElementById('m-title').value = '';
   document.getElementById('m-content').value = '';
+  document.getElementById('m-comment').value = '';
   document.getElementById('m-date').value = '';
+  document.getElementById('m-img-input').value = '';
+  document.getElementById('m-thumb').innerHTML =
+    `<svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" stroke="#aaa" stroke-width="1.5"/><polyline points="17,8 12,3 7,8" stroke="#aaa" stroke-width="1.5"/><line x1="12" y1="3" x2="12" y2="15" stroke="#aaa" stroke-width="1.5"/></svg><span style="font-size:10px;color:#aaa;text-align:center">Drop or click</span>`;
   openModal('post-modal');
 }
 
@@ -490,7 +398,6 @@ async function savePost() {
     content: document.getElementById('m-content').value,
     comment: document.getElementById('m-comment').value,
   });
-  // Bild hochladen falls vorhanden
   const imgInput = document.getElementById('m-img-input');
   if (result.id && imgInput.files && imgInput.files[0]) {
     const form = new FormData();
@@ -513,7 +420,7 @@ function openEditModal(id, title, content, status, date, comment, image) {
   const thumb = document.getElementById('e-thumb');
   const delBtn = document.getElementById('e-del-img');
   if (image) {
-    thumb.innerHTML = `<img src="/media/${image}" style="width:80px;height:80px;object-fit:cover;border-radius:8px">`;
+    thumb.innerHTML = `<img src="/media/${image}" style="width:80px;height:80px;object-fit:cover;border-radius:6px">`;
     delBtn.style.display = 'block';
   } else {
     thumb.innerHTML = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" stroke="#aaa" stroke-width="1.5"/><polyline points="17,8 12,3 7,8" stroke="#aaa" stroke-width="1.5"/><line x1="12" y1="3" x2="12" y2="15" stroke="#aaa" stroke-width="1.5"/></svg><span style="font-size:10px;color:#aaa;text-align:center">Drop or click</span>`;
@@ -548,7 +455,6 @@ function openSerieModal(topicId) {
   document.getElementById('s-name').value = '';
   openModal('serie-modal');
 }
-
 async function saveSerie() {
   await api('/planner/api/series/', {
     action:'create',
