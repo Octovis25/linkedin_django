@@ -76,7 +76,7 @@ def planner_view(request):
     return render(request, 'planner/planner.html', {
         'columns': columns,
         'topics': topics,
-        'statuses': ['Draft', 'Ready', 'Scheduled', 'Posted'],
+        'statuses': ['Draft', 'In Progress', 'Ready', 'Scheduled', 'Posted'],
         'tab': 'planner',
     })
 
@@ -108,7 +108,7 @@ def pipeline_view(request):
             'topic_id': r[8], 'bg': bg, 'fg': fg,
         })
 
-    return render(request, 'planner/pipeline.html', {'posts': posts_list, 'topics': topics, 'topic_filter': topic_filter, 'statuses': ['Draft', 'Ready', 'Scheduled', 'Posted'], 'tab': 'pipeline', 'page_title': '→ Pipeline'})
+    return render(request, 'planner/pipeline.html', {'posts': posts_list, 'topics': topics, 'topic_filter': topic_filter, 'statuses': ['Draft', 'In Progress', 'Ready', 'Scheduled', 'Posted'], 'tab': 'pipeline', 'page_title': '→ Pipeline'})
 
 
 @login_required
@@ -138,7 +138,7 @@ def ready_view(request):
             'topic_id': r[8], 'comment': r[9] or '', 'bg': bg, 'fg': fg,
         })
 
-    return render(request, 'planner/ready.html', {'posts': posts_list, 'topics': topics, 'topic_filter': topic_filter, 'statuses': ['Draft', 'Ready', 'Scheduled', 'Posted'], 'tab': 'ready', 'page_title': '🚀 Ready to post'})
+    return render(request, 'planner/ready.html', {'posts': posts_list, 'topics': topics, 'topic_filter': topic_filter, 'statuses': ['Draft', 'In Progress', 'Ready', 'Scheduled', 'Posted'], 'tab': 'ready', 'page_title': '🚀 Ready to post'})
 
 
 @login_required
@@ -168,7 +168,7 @@ def scheduled_view(request):
             'topic_id': r[8], 'comment': r[9] or '', 'bg': bg, 'fg': fg,
         })
 
-    return render(request, 'planner/scheduled.html', {'posts': posts_list, 'topics': topics, 'topic_filter': topic_filter, 'statuses': ['Draft', 'Ready', 'Scheduled', 'Posted'], 'tab': 'scheduled', 'page_title': '📅 Scheduled'})
+    return render(request, 'planner/scheduled.html', {'posts': posts_list, 'topics': topics, 'topic_filter': topic_filter, 'statuses': ['Draft', 'In Progress', 'Ready', 'Scheduled', 'Posted'], 'tab': 'scheduled', 'page_title': '📅 Scheduled'})
 
 
 @login_required
@@ -198,7 +198,7 @@ def scheduled_view(request):
             'topic_id': r[8], 'comment': r[9] or '', 'bg': bg, 'fg': fg,
         })
 
-    return render(request, 'planner/scheduled.html', {'posts': posts_list, 'topics': topics, 'topic_filter': topic_filter, 'statuses': ['Draft', 'Ready', 'Scheduled', 'Posted'], 'tab': 'scheduled', 'page_title': '📅 Scheduled'})
+    return render(request, 'planner/scheduled.html', {'posts': posts_list, 'topics': topics, 'topic_filter': topic_filter, 'statuses': ['Draft', 'In Progress', 'Ready', 'Scheduled', 'Posted'], 'tab': 'scheduled', 'page_title': '📅 Scheduled'})
 
 
 @login_required
@@ -228,7 +228,7 @@ def scheduled_view(request):
             'topic_id': r[8], 'comment': r[9] or '', 'bg': bg, 'fg': fg,
         })
 
-    return render(request, 'planner/scheduled.html', {'posts': posts_list, 'topics': topics, 'topic_filter': topic_filter, 'statuses': ['Draft', 'Ready', 'Scheduled', 'Posted'], 'tab': 'scheduled', 'page_title': '📅 Scheduled'})
+    return render(request, 'planner/scheduled.html', {'posts': posts_list, 'topics': topics, 'topic_filter': topic_filter, 'statuses': ['Draft', 'In Progress', 'Ready', 'Scheduled', 'Posted'], 'tab': 'scheduled', 'page_title': '📅 Scheduled'})
 
 
 @login_required
@@ -258,7 +258,7 @@ def archive_view(request):
             'topic_id': r[8], 'comment': r[9] or '', 'bg': bg, 'fg': fg,
         })
 
-    return render(request, 'planner/archive.html', {'posts': posts_list, 'topics': topics, 'topic_filter': topic_filter, 'statuses': ['Draft', 'Ready', 'Scheduled', 'Posted'], 'tab': 'archive', 'page_title': '📦 Archive'})
+    return render(request, 'planner/archive.html', {'posts': posts_list, 'topics': topics, 'topic_filter': topic_filter, 'statuses': ['Draft', 'In Progress', 'Ready', 'Scheduled', 'Posted'], 'tab': 'archive', 'page_title': '📦 Archive'})
 
 
 @login_required
@@ -292,7 +292,7 @@ def all_view(request):
         'posts': posts_list,
         'topics': topics,
         'topic_filter': topic_filter,
-        'statuses': ['Draft', 'Ready', 'Scheduled', 'Posted'],
+        'statuses': ['Draft', 'In Progress', 'Ready', 'Scheduled', 'Posted'],
         'tab': 'all',
     })
 
@@ -368,7 +368,12 @@ def api_post(request):
             return JsonResponse({'ok': True})
         elif action == 'set_status':
             status = data.get('status')
-            in_pipeline = 0 if status == 'Draft' else 1
+            if status == 'Draft':
+                in_pipeline = 0
+            elif status == 'In Progress':
+                in_pipeline = 1
+            else:
+                in_pipeline = 1
             c.execute("UPDATE planner_posts SET status=%s, in_pipeline=%s WHERE id=%s",
                       [status, in_pipeline, data.get('id')])
             return JsonResponse({'ok': True})

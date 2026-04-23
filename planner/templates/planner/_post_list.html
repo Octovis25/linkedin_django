@@ -32,6 +32,7 @@
     <div style="display:flex;gap:6px;flex-shrink:0;align-items:center">
       <select onchange="setStatus({{ p.id }}, this.value)" style="font-size:12px;padding:3px 6px;border:0.5px solid #ced4da;border-radius:4px;cursor:pointer">
         <option {% if p.status == 'Draft' %}selected{% endif %} value="Draft">Draft</option>
+        <option {% if p.status == 'In Progress' %}selected{% endif %} value="In Progress">In Progress</option>
         <option {% if p.status == 'Ready' %}selected{% endif %} value="Ready">Ready</option>
         <option {% if p.status == 'Scheduled' %}selected{% endif %} value="Scheduled">Scheduled</option>
         <option {% if p.status == 'Posted' %}selected{% endif %} value="Posted">Posted</option>
@@ -59,7 +60,7 @@
         {% for t in topics %}<option value="{{ t.id }}">{{ t.name }}</option>{% endfor %}
       </select>
       <select id="pe-status" style="font-size:13px;flex:1;padding:6px 8px;border:0.5px solid #ced4da;border-radius:4px">
-        <option>Draft</option><option>Ready</option><option>Scheduled</option><option>Posted</option>
+        <option>Draft</option><option>In Progress</option><option>Ready</option><option>Scheduled</option><option>Posted</option>
       </select>
     </div>
     <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
