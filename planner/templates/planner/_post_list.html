@@ -3,7 +3,7 @@
   <form method="get" style="display:flex;gap:8px">
     <select name="topic" onchange="this.form.submit()" style="font-size:13px;padding:4px 8px;border:0.5px solid #ced4da;border-radius:4px">
       <option value="">All topics</option>
-      {% for t in topics %}<option value="{{ t.id }}" {% if topic_filter == t.id|stringformat:'s' %}selected{% endif %}>{{ t.name }}</option>{% endfor %}
+      {% for t in topics %}<option value="{{ t.id }}" {% if topic_filter == t.id|stringformat:"s" %}selected{% endif %}>{{ t.name }}</option>{% endfor %}
     </select>
   </form>
 </div>
@@ -31,11 +31,12 @@
     </div>
     <div style="display:flex;gap:6px;flex-shrink:0;align-items:center">
       <select onchange="setStatus({{ p.id }}, this.value)" style="font-size:12px;padding:3px 6px;border:0.5px solid #ced4da;border-radius:4px">
-        <option {% if p.status == 'Draft' %}selected{% endif %}>Draft</option>
-        <option {% if p.status == 'Ready' %}selected{% endif %}>Ready</option>
-        <option {% if p.status == 'Scheduled' %}selected{% endif %}>Scheduled</option>
-        <option {% if p.status == 'Posted' %}selected{% endif %}>Posted</option>
+        <option {% if p.status == "Draft" %}selected{% endif %}>Draft</option>
+        <option {% if p.status == "Ready" %}selected{% endif %}>Ready</option>
+        <option {% if p.status == "Scheduled" %}selected{% endif %}>Scheduled</option>
+        <option {% if p.status == "Posted" %}selected{% endif %}>Posted</option>
       </select>
+      <button onclick="openEdit({{ p.id }},'{{ p.title|escapejs }}','{{ p.content|escapejs }}','{{ p.status }}','{{ p.planned_date|date:"Y-m-d" }}','{{ p.comment|escapejs }}','{{ p.image|escapejs }}',{{ p.topic_id|default:0 }})" style="font-size:12px;padding:3px 8px;border:0.5px solid #008080;border-radius:4px;background:#fff;cursor:pointer;color:#008080">Edit</button>
     </div>
   </div>
 </div>
@@ -44,14 +45,139 @@
 {% endfor %}
 </div>
 
+<!-- Edit Modal -->
+<div id="edit-modal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.4);z-index:1000;align-items:center;justify-content:center">
+  <div style="background:#fff;border-radius:12px;padding:1.5rem;width:520px;max-width:95vw;max-height:90vh;overflow-y:auto">
+    <h3 style="margin:0 0 1rem;font-size:15px">Edit Post</h3>
+    <input type="hidden" id="e-id">
+    <div style="display:flex;gap:8px;margin-bottom:8px">
+      <select id="e-topic" style="font-size:13px;flex:1;padding:6px 8px;border:0.5px solid #ced4da;border-radius:4px">
+        {% for t in topics %}<option value="{{ t.id }}">{{ t.name }}</option>{% endfor %}
+      </select>
+      <select id="e-status" style="font-size:13px;flex:1;padding:6px 8px;border:0.5px solid #ced4da;border-radius:4px">
+        <option>Draft</option><option>Ready</option><option>Scheduled</option><option>Posted</option>
+      </select>
+    </div>
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+      <label style="font-size:12px;color:#6c757d;white-space:nowrap">Planned to post</label>
+      <input type="date" id="e-date" style="font-size:13px;flex:1;padding:6px 8px;border:0.5px solid #ced4da;border-radius:4px">
+    </div>
+    <div style="display:flex;gap:12px;align-items:flex-start;margin-bottom:8px">
+      <div style="display:flex;flex-direction:column;gap:4px;align-items:center">
+        <div id="e-thumb"
+             onclick="document.getElementById('e-img-input').click()"
+             ondragover="event.preventDefault();this.style.borderColor='#008080'"
+             ondragleave="this.style.borderColor='#ced4da'"
+             ondrop="handleDrop(event)"
+             style="width:80px;height:80px;border-radius:8px;border:1.5px dashed #ced4da;display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:pointer;gap:4px;background:#f8f9fa;overflow:hidden">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" stroke="#aaa" stroke-width="1.5"/><polyline points="17,8 12,3 7,8" stroke="#aaa" stroke-width="1.5"/><line x1="12" y1="3" x2="12" y2="15" stroke="#aaa" stroke-width="1.5"/></svg>
+          <span style="font-size:10px;color:#aaa">Drop or click</span>
+        </div>
+        <button onclick="removeImg()" id="e-del-img" style="display:none;font-size:11px;padding:2px 6px;border:0.5px solid #A32D2D;border-radius:4px;background:#fff;cursor:pointer;color:#A32D2D">🗑 Remove</button>
+      </div>
+      <input type="file" id="e-img-input" accept="image/*" style="display:none" onchange="previewImg(this)">
+      <input type="text" id="e-title" placeholder="Title..." style="font-size:13px;flex:1;padding:6px 8px;border:0.5px solid #ced4da;border-radius:4px;box-sizing:border-box">
+    </div>
+    <textarea id="e-content" style="width:100%;min-height:100px;font-size:13px;padding:8px;border:0.5px solid #ced4da;border-radius:4px;resize:vertical;box-sizing:border-box;margin-bottom:8px"></textarea>
+    <textarea id="e-comment" placeholder="Internal comment..." style="width:100%;min-height:50px;font-size:13px;padding:8px;border:0.5px solid #ced4da;border-radius:4px;resize:vertical;box-sizing:border-box;background:#fffef0"></textarea>
+    <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:12px">
+      <button onclick="closeEdit()" style="font-size:13px;padding:5px 14px;border:0.5px solid #ced4da;border-radius:4px;background:#fff;cursor:pointer">Cancel</button>
+      <button onclick="saveEdit()" style="font-size:13px;padding:5px 14px;background:#008080;color:#fff;border:none;border-radius:4px;cursor:pointer">Save</button>
+    </div>
+  </div>
+</div>
+
 <script>
-const CSRF = '{{ csrf_token }}';
+const CSRF = document.cookie.match(/csrftoken=([^;]+)/)?.[1] || \'{{ csrf_token }}\';
+
 async function setStatus(id, status) {
-  await fetch('/planner/api/post/', {
-    method:'POST',
-    headers:{'Content-Type':'application/json','X-CSRFToken':CSRF},
-    body:JSON.stringify({action:'set_status', id, status})
+  await fetch(\'/planner/api/post/\', {
+    method:\'POST\',
+    headers:{\'Content-Type\':\'application/json\',\'X-CSRFToken\':CSRF},
+    body:JSON.stringify({action:\'set_status\', id, status})
   });
   location.reload();
 }
+
+function openEdit(id, title, content, status, date, comment, image, topicId) {
+  document.getElementById(\'e-id\').value = id;
+  document.getElementById(\'e-title\').value = title;
+  document.getElementById(\'e-content\').value = content;
+  document.getElementById(\'e-status\').value = status;
+  document.getElementById(\'e-date\').value = date || \'\';
+  document.getElementById(\'e-comment\').value = comment || \'\';
+  document.getElementById(\'e-img-input\').value = \'\';
+  if (topicId) document.getElementById(\'e-topic\').value = topicId;
+  const thumb = document.getElementById(\'e-thumb\');
+  const delBtn = document.getElementById(\'e-del-img\');
+  if (image) {
+    thumb.innerHTML = `<img src="/media/${image}" style="width:80px;height:80px;object-fit:cover;border-radius:6px">`;
+    delBtn.style.display = \'block\';
+  } else {
+    thumb.innerHTML = \'<svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" stroke="#aaa" stroke-width="1.5"/><polyline points="17,8 12,3 7,8" stroke="#aaa" stroke-width="1.5"/><line x1="12" y1="3" x2="12" y2="15" stroke="#aaa" stroke-width="1.5"/></svg><span style="font-size:10px;color:#aaa">Drop or click</span>\';
+    delBtn.style.display = \'none\';
+  }
+  document.getElementById(\'edit-modal\').style.display = \'flex\';
+}
+
+function closeEdit() { document.getElementById(\'edit-modal\').style.display = \'none\'; }
+
+function handleDrop(e) {
+  e.preventDefault();
+  const file = e.dataTransfer.files[0];
+  if (!file || !file.type.startsWith(\'image/\')) return;
+  const dt = new DataTransfer();
+  dt.items.add(file);
+  document.getElementById(\'e-img-input\').files = dt.files;
+  previewImg({files:[file]});
+}
+
+function previewImg(input) {
+  const file = input.files ? input.files[0] : null;
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = ev => {
+    document.getElementById(\'e-thumb\').innerHTML = `<img src="${ev.target.result}" style="width:80px;height:80px;object-fit:cover;border-radius:6px">`;
+    document.getElementById(\'e-del-img\').style.display = \'block\';
+  };
+  reader.readAsDataURL(file);
+}
+
+async function removeImg() {
+  const id = document.getElementById(\'e-id\').value;
+  await fetch(\'/planner/api/post/\', {method:\'POST\', headers:{\'Content-Type\':\'application/json\',\'X-CSRFToken\':CSRF}, body:JSON.stringify({action:\'delete_image\', id})});
+  document.getElementById(\'e-thumb\').innerHTML = \'<svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" stroke="#aaa" stroke-width="1.5"/><polyline points="17,8 12,3 7,8" stroke="#aaa" stroke-width="1.5"/><line x1="12" y1="3" x2="12" y2="15" stroke="#aaa" stroke-width="1.5"/></svg><span style="font-size:10px;color:#aaa">Drop or click</span>\';
+  document.getElementById(\'e-del-img\').style.display = \'none\';
+}
+
+async function saveEdit() {
+  const id = document.getElementById(\'e-id\').value;
+  const status = document.getElementById(\'e-status\').value;
+  const in_pipeline = status === \'Draft\' ? 0 : 1;
+  await fetch(\'/planner/api/post/\', {
+    method:\'POST\',
+    headers:{\'Content-Type\':\'application/json\',\'X-CSRFToken\':CSRF},
+    body:JSON.stringify({
+      action:\'update\', id,
+      topic_id: document.getElementById(\'e-topic\').value,
+      title: document.getElementById(\'e-title\').value,
+      content: document.getElementById(\'e-content\').value,
+      comment: document.getElementById(\'e-comment\').value,
+      status,
+      planned_date: document.getElementById(\'e-date\').value || null,
+      in_pipeline,
+    })
+  });
+  const imgInput = document.getElementById(\'e-img-input\');
+  if (imgInput.files && imgInput.files[0]) {
+    const form = new FormData();
+    form.append(\'image\', imgInput.files[0]);
+    await fetch(\'/planner/api/image/\'+id+\'/\', {method:\'POST\', headers:{\'X-CSRFToken\':CSRF}, body:form});
+  }
+  location.reload();
+}
+
+document.getElementById(\'edit-modal\').addEventListener(\'click\', function(e) {
+  if (e.target === this) closeEdit();
+});
 </script>
