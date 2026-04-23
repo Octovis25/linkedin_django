@@ -76,7 +76,7 @@ def planner_view(request):
     return render(request, 'planner/planner.html', {
         'columns': columns,
         'topics': topics,
-        'statuses': ['Draft', 'Ready', 'Scheduled'],
+        'statuses': ['Draft', 'Ready', 'Scheduled', 'Posted'],
         'tab': 'planner',
     })
 
@@ -114,6 +114,42 @@ def pipeline_view(request):
         'topic_filter': topic_filter,
         'statuses': ['Ready', 'Scheduled', 'Posted'],
         'tab': 'pipeline',
+    })
+
+
+@login_required
+def archive_view(request):
+    topic_filter = request.GET.get('topic', '')
+    with connection.cursor() as c:
+        topics = _topics(c)
+        sql = """SELECT p.id, p.title, p.content, p.status, p.planned_date,
+                        p.image, t.name, t.color, p.topic_id, p.comment
+                 FROM planner_posts p
+                 LEFT JOIN planner_topics t ON p.topic_id = t.id
+                 WHERE p.status = 'Posted' AND p.in_pipeline = 1"""
+        params = []
+        if topic_filter:
+            sql += " AND p.topic_id=%s"
+            params.append(topic_filter)
+        sql += " ORDER BY COALESCE(p.planned_date,'9999-12-31') DESC, p.created_at DESC"
+        posts = _q(c, sql, params)
+
+    posts_list = []
+    for r in posts:
+        bg, fg = COLOR_MAP.get(r[7] or 'gray', ('#f5f5f5', '#6c757d'))
+        posts_list.append({
+            'id': r[0], 'title': r[1] or '', 'content': r[2] or '',
+            'status': r[3], 'planned_date': r[4], 'image': r[5] or '',
+            'topic_name': r[6] or '', 'topic_color': r[7] or 'gray',
+            'topic_id': r[8], 'comment': r[9] or '', 'bg': bg, 'fg': fg,
+        })
+
+    return render(request, 'planner/archive.html', {
+        'posts': posts_list,
+        'topics': topics,
+        'topic_filter': topic_filter,
+        'statuses': ['Ready', 'Scheduled', 'Posted'],
+        'tab': 'archive',
     })
 
 

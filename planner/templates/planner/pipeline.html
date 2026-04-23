@@ -42,6 +42,7 @@
       <p style="font-size:13px;color:#212529;margin:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ p.title|default:p.content|truncatechars:80 }}</p>
     </div>
     <div style="display:flex;gap:6px;flex-shrink:0">
+      <button onclick="toArchive({{ p.id }})" style="font-size:12px;padding:3px 10px;border:0.5px solid #3C3489;border-radius:4px;background:#fff;cursor:pointer;color:#3C3489">✓ Posted</button>
       <button onclick="toggleUpdate({{ p.id }})" style="font-size:12px;padding:3px 10px;border:0.5px solid #008080;border-radius:4px;background:#fff;cursor:pointer;color:#008080">Update</button>
       <button onclick="backToPlanner({{ p.id }})" style="font-size:12px;padding:3px 10px;border:0.5px solid #ced4da;border-radius:4px;background:#fff;cursor:pointer;color:#6c757d">← Back</button>
     </div>
@@ -88,6 +89,12 @@ async function saveUpdate(id) {
     planned_date: document.getElementById('ud-'+id).value || null,
     content: document.getElementById('uc-'+id).value,
   });
+  location.reload();
+}
+
+async function toArchive(id) {
+  if (!confirm('Mark as Posted and move to Archive?')) return;
+  await p('/planner/api/post/', {action:'to_archive', id});
   location.reload();
 }
 
