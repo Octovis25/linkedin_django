@@ -180,10 +180,14 @@
       <input type="date" id="m-date" class="fselect" style="flex:1">
     </div>
     <div style="display:flex;gap:12px;align-items:flex-start;margin-bottom:8px">
-      <div id="m-thumb" onclick="document.getElementById('m-img-input').click()"
-           style="width:80px;height:80px;border-radius:8px;border:0.5px dashed #ced4da;flex-shrink:0;display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:pointer;gap:4px;background:#f8f9fa">
+      <div id="m-thumb"
+           onclick="document.getElementById('m-img-input').click()"
+           ondragover="event.preventDefault();this.style.borderColor='#008080';this.style.background='#f0faf8'"
+           ondragleave="this.style.borderColor='#ced4da';this.style.background='#f8f9fa'"
+           ondrop="dropImg(event)"
+           style="width:80px;height:80px;border-radius:8px;border:1.5px dashed #ced4da;flex-shrink:0;display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:pointer;gap:4px;background:#f8f9fa;transition:all .2s">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" stroke="#aaa" stroke-width="1.5"/><polyline points="17,8 12,3 7,8" stroke="#aaa" stroke-width="1.5"/><line x1="12" y1="3" x2="12" y2="15" stroke="#aaa" stroke-width="1.5"/></svg>
-        <span style="font-size:11px;color:#aaa">Image</span>
+        <span style="font-size:10px;color:#aaa;text-align:center">Drop or click</span>
       </div>
       <input type="file" id="m-img-input" accept="image/*" style="display:none"
              onchange="previewNewImg(this)">
@@ -237,6 +241,20 @@ let selectedColor = 'blue';
 
 function api(url, data) {
   return fetch(url, {method:'POST', headers:{'Content-Type':'application/json','X-CSRFToken':CSRF}, body:JSON.stringify(data)}).then(r=>r.json());
+}
+
+function dropImg(e) {
+  e.preventDefault();
+  const thumb = document.getElementById('m-thumb');
+  thumb.style.borderColor = '#ced4da';
+  thumb.style.background = '#f8f9fa';
+  const file = e.dataTransfer.files[0];
+  if (!file || !file.type.startsWith('image/')) return;
+  // DataTransfer in file input setzen
+  const dt = new DataTransfer();
+  dt.items.add(file);
+  document.getElementById('m-img-input').files = dt.files;
+  previewNewImg({files: [file]});
 }
 
 function previewNewImg(input) {
