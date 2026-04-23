@@ -90,7 +90,7 @@ def pipeline_view(request):
                         p.image, t.name, t.color, p.topic_id
                  FROM planner_posts p
                  LEFT JOIN planner_topics t ON p.topic_id = t.id
-                 WHERE p.in_pipeline=1"""
+                 WHERE p.in_pipeline=1 AND p.status != 'Ready' AND p.status != 'Posted'"""
         params = []
         if topic_filter:
             sql += " AND p.topic_id=%s"
@@ -126,7 +126,7 @@ def ready_view(request):
                         p.image, t.name, t.color, p.topic_id, p.comment
                  FROM planner_posts p
                  LEFT JOIN planner_topics t ON p.topic_id = t.id
-                 WHERE p.status = 'Scheduled' AND p.in_pipeline = 1"""
+                 WHERE p.status IN ('Ready', 'Scheduled') AND p.in_pipeline = 1"""
         params = []
         if topic_filter:
             sql += " AND p.topic_id=%s"
