@@ -2,37 +2,43 @@
 {% block title %}Statistics – Timeline{% endblock %}
 {% block content %}
 <style>
-.sh{display:flex;justify-content:space-between;align-items:center;margin-bottom:1.5rem;flex-wrap:wrap;gap:1rem}
-.sh h1{margin:0;font-size:1.5rem}
 .cc{background:#fff;border-radius:.5rem;padding:1.5rem;box-shadow:0 1px 3px rgba(0,0,0,.1);margin-bottom:1.5rem}
-.cc h2{font-size:1.1rem;margin-bottom:1rem}
+.cc h2{font-size:1.1rem;margin-bottom:1rem;color:var(--octo-petrol)}
 </style>
 
-<div class="sh"><h1>📊 LinkedIn Statistics – Timeline</h1></div>
+<h1 style="margin-bottom:1.5rem">📊 LinkedIn Statistics – Timeline</h1>
 
 <div class="cc">
-  <h2>📈 Top 10 Posts – Impressions nach Tagen seit Veröffentlichung</h2>
-  <canvas id="top10chart" height="100"></canvas>
+  <h2>📈 Top 10 aktuellste Posts – Impressions nach Tagen seit Veröffentlichung</h2>
+  <canvas id="chart-recent" height="100"></canvas>
+</div>
+
+<div class="cc">
+  <h2>🏆 Top 10 nach Impressionen – Verlauf seit Veröffentlichung</h2>
+  <canvas id="chart-top" height="100"></canvas>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
-const top5Data = {{ top5_json|safe }};
 const colors = ['#2196F3','#e53935','#4CAF50','#FF9800','#9C27B0','#607D8B','#00BCD4','#8BC34A','#FF5722','#795548'];
-const maxDay = {{ max_days|default:30 }};
 
-if (top5Data.length > 0) {
+function buildChart(canvasId, data) {
+  if (!data || !data.length) {
+    document.getElementById(canvasId).insertAdjacentHTML('afterend','<p style="text-align:center;color:#6c757d;padding:1rem">Keine Daten.</p>');
+    return;
+  }
+  const maxDay = Math.max(...data.flatMap(p => p.days), 30);
   const labels = Array.from({length: maxDay}, (_, i) => i + 1);
-  const datasets = top5Data.map((p, i) => {
-    const data = new Array(maxDay).fill(null);
-    p.days.forEach((d, j) => { if (d >= 1 && d <= maxDay) data[d-1] = p.impressions[j]; });
+  const datasets = data.map((p, i) => {
+    const d = new Array(maxDay).fill(null);
+    p.days.forEach((day, j) => { if (day >= 1 && day <= maxDay) d[day-1] = p.impressions[j]; });
     return {
-      label: p.title, data: data,
+      label: p.title, data: d,
       borderColor: colors[i % colors.length],
-      borderWidth: 2, tension: 0.3, fill: false, spanGaps: true, pointRadius: 2,
+      borderWidth: 2, tension: 0.3, fill: false, spanGaps: true, pointRadius: 3,
     };
   });
-  new Chart(document.getElementById('top10chart'), {
+  new Chart(document.getElementById(canvasId), {
     type: 'line',
     data: { labels, datasets },
     options: {
@@ -40,13 +46,14 @@ if (top5Data.length > 0) {
       interaction: { mode: 'index', intersect: false },
       plugins: { legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 11 } } } },
       scales: {
-        x: { title: { display: true, text: 'Tag seit Veröffentlichung' } },
+        x: { title: { display: true, text: 'Tag seit Veröffentlichung' }, ticks: { maxTicksLimit: 20 } },
         y: { title: { display: true, text: 'Impressions' }, beginAtZero: true, ticks: { precision: 0 } }
       }
     }
   });
-} else {
-  document.getElementById('top10chart').insertAdjacentHTML('afterend', '<p style="text-align:center;color:#6c757d">Keine Daten.</p>');
 }
+
+buildChart('chart-recent', {{ top5_json|safe }});
+buildChart('chart-top', {{ top_impressions_json|safe }});
 </script>
 {% endblock %}
