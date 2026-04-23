@@ -145,6 +145,7 @@ def import_posts_from_content(df, file_path=""):
 
     inserted = skipped = 0
     metrics_inserted = 0
+    metrics_updated = 0
     new_rows = []
 
     def get_str(key, maxlen=None):
@@ -240,6 +241,8 @@ def import_posts_from_content(df, file_path=""):
                     metrics_inserted += 1
                 except Exception as em:
                     print(f"Metrics error {post_id}: {em}")
+            else:
+                metrics_updated += 1
 
             # 3. Zählen
             if post_id not in existing_post_ids:
@@ -262,6 +265,7 @@ def import_posts_from_content(df, file_path=""):
         'skipped': skipped,
         'new_rows': new_rows,
         'metrics_inserted': metrics_inserted,
+        'metrics_updated': metrics_updated,
         'export_date': export_date,
     }
 
