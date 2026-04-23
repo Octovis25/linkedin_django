@@ -64,3 +64,28 @@ def upload_excel_to_nextcloud(file_path, file_type):
     except Exception as e:
         print(f"Nextcloud Upload Exception: {e}")
         return False
+
+
+def upload_image_to_nextcloud(file_path, filename):
+    """Lädt ein Post-Bild in Post-Bilder/image_ready/ hoch"""
+    nc_url, username, password = _get_nc_credentials()
+    if not all([nc_url, username, password]):
+        print("Nextcloud: keine Zugangsdaten")
+        return False
+    try:
+        nc_folder = "Marketing & Design/LinkedIn/Statistics/data/Post-Bilder/image_ready"
+        _ensure_folder(nc_url, username, password, nc_folder)
+        nc_path = "{}/{}".format(nc_folder, filename)
+        upload_url = "{}/remote.php/dav/files/{}/{}".format(
+            nc_url, username, quote(nc_path))
+        with open(file_path, 'rb') as f:
+            r = requests.put(upload_url, data=f,
+                auth=(username, password), timeout=30)
+        if r.status_code in (200, 201, 204):
+            print(f"Nextcloud Bild Upload OK: {nc_path}")
+            return True
+        print(f"Nextcloud Bild Fehler: {r.status_code}")
+        return False
+    except Exception as e:
+        print(f"Nextcloud Bild Exception: {e}")
+        return False
