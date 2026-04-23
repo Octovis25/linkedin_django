@@ -298,6 +298,26 @@ def all_view(request):
 
 
 @login_required
+def planner_image(request, post_id):
+    """Proxy: lädt Planner-Bild von Nextcloud"""
+    from django.http import HttpResponse, Http404
+    from posts_posted.nc_storage import download_image_from_nextcloud
+    with connection.cursor() as c:
+        rows = _q(c, "SELECT image FROM planner_posts WHERE id=%s", [post_id])
+    if not rows or not rows[0][0]:
+        raise Http404
+    nc_path = rows[0][0]
+    # Wenn lokaler Pfad (planner/...) → Nextcloud Pfad bauen
+    if not nc_path.startswith('Marketing'):
+        filename = nc_path.split('/')[-1]
+        nc_path = f"Marketing & Design/LinkedIn/Statistics/data/Post-Bilder/image_ready/{filename}"
+    content, ct = download_image_from_nextcloud(nc_path)
+    if not content:
+        raise Http404
+    return HttpResponse(content, content_type=ct or 'image/jpeg')
+
+
+@login_required
 def api_post(request):
     if request.method != 'POST':
         return JsonResponse({'ok': False}, status=400)
@@ -423,21 +443,15 @@ def api_image(request, post_id):
     if request.method == 'POST':
         image = request.FILES.get('image')
         if image:
-            upload_dir = os.path.join(settings.MEDIA_ROOT, 'planner')
-            os.makedirs(upload_dir, exist_ok=True)
             filename = f"post_{post_id}_{image.name}"
-            path = os.path.join(upload_dir, filename)
-            with open(path, 'wb+') as f:
-                for chunk in image.chunks():
-                    f.write(chunk)
-            rel_path = f"planner/{filename}"
-            with connection.cursor() as c:
-                c.execute("UPDATE planner_posts SET image=%s WHERE id=%s", [rel_path, post_id])
-            # Auch in Nextcloud hochladen
             try:
-                from core.nc_storage import upload_image_to_nextcloud
-                upload_image_to_nextcloud(path, filename)
+                from posts_posted.nc_storage import upload_image_to_nextcloud
+                nc_path = upload_image_to_nextcloud(image, filename)
+                if nc_path:
+                    with connection.cursor() as c:
+                        c.execute("UPDATE planner_posts SET image=%s WHERE id=%s", [nc_path, post_id])
+                    return JsonResponse({'ok': True, 'image': nc_path})
             except Exception as e:
                 print(f"NC image upload error: {e}")
-            return JsonResponse({'ok': True, 'image': rel_path})
+            return JsonResponse({'ok': False, 'error': 'Upload failed'}, status=500)
     return JsonResponse({'ok': False}, status=400)
