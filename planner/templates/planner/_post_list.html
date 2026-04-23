@@ -1,3 +1,16 @@
+<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1.25rem;flex-wrap:wrap;gap:8px">
+  <h1 style="margin:0;font-size:1.4rem">{{ title }}</h1>
+  <form method="get" style="display:flex;gap:8px">
+    <select name="topic" onchange="this.form.submit()" style="font-size:13px;padding:4px 8px;border:0.5px solid #ced4da;border-radius:4px">
+      <option value="">All topics</option>
+      {% for t in topics %}<option value="{{ t.id }}" {% if topic_filter == t.id|stringformat:'s' %}selected{% endif %}>{{ t.name }}</option>{% endfor %}
+    </select>
+  </form>
+</div>
+
+<p style="font-size:13px;color:#6c757d;margin-bottom:1rem">{{ posts|length }} posts</p>
+
+<div style="display:flex;flex-direction:column;gap:8px">
 {% for p in posts %}
 <div style="background:#fff;border:0.5px solid #e0e0e0;border-radius:10px;padding:12px 14px">
   <div style="display:flex;gap:10px;align-items:center">
@@ -18,11 +31,27 @@
     </div>
     <div style="display:flex;gap:6px;flex-shrink:0;align-items:center">
       <select onchange="setStatus({{ p.id }}, this.value)" style="font-size:12px;padding:3px 6px;border:0.5px solid #ced4da;border-radius:4px">
-        {% for s in statuses %}<option {% if s == p.status %}selected{% endif %}>{{ s }}</option>{% endfor %}
+        <option {% if p.status == 'Draft' %}selected{% endif %}>Draft</option>
+        <option {% if p.status == 'Ready' %}selected{% endif %}>Ready</option>
+        <option {% if p.status == 'Scheduled' %}selected{% endif %}>Scheduled</option>
+        <option {% if p.status == 'Posted' %}selected{% endif %}>Posted</option>
       </select>
     </div>
   </div>
 </div>
 {% empty %}
-<p style="text-align:center;color:#6c757d;padding:2rem">No posts here yet.</p>
+<p style="text-align:center;color:#6c757d;padding:2rem">No posts found.</p>
 {% endfor %}
+</div>
+
+<script>
+const CSRF = '{{ csrf_token }}';
+async function setStatus(id, status) {
+  await fetch('/planner/api/post/', {
+    method:'POST',
+    headers:{'Content-Type':'application/json','X-CSRFToken':CSRF},
+    body:JSON.stringify({action:'set_status', id, status})
+  });
+  location.reload();
+}
+</script>

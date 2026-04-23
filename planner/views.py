@@ -262,6 +262,42 @@ def archive_view(request):
 
 
 @login_required
+def all_view(request):
+    topic_filter = request.GET.get('topic', '')
+    with connection.cursor() as c:
+        topics = _topics(c)
+        sql = """SELECT p.id, p.title, p.content, p.status, p.planned_date,
+                        p.image, t.name, t.color, p.topic_id, p.comment
+                 FROM planner_posts p
+                 LEFT JOIN planner_topics t ON p.topic_id = t.id
+                 WHERE 1=1"""
+        params = []
+        if topic_filter:
+            sql += " AND p.topic_id=%s"
+            params.append(topic_filter)
+        sql += " ORDER BY COALESCE(p.planned_date,'9999-12-31'), p.created_at"
+        posts = _q(c, sql, params)
+
+    posts_list = []
+    for r in posts:
+        bg, fg = COLOR_MAP.get(r[7] or 'gray', ('#f5f5f5', '#6c757d'))
+        posts_list.append({
+            'id': r[0], 'title': r[1] or '', 'content': r[2] or '',
+            'status': r[3], 'planned_date': r[4], 'image': r[5] or '',
+            'topic_name': r[6] or '', 'topic_color': r[7] or 'gray',
+            'topic_id': r[8], 'comment': r[9] or '', 'bg': bg, 'fg': fg,
+        })
+
+    return render(request, 'planner/all_posts.html', {
+        'posts': posts_list,
+        'topics': topics,
+        'topic_filter': topic_filter,
+        'statuses': ['Draft', 'Ready', 'Scheduled', 'Posted'],
+        'tab': 'all',
+    })
+
+
+@login_required
 def api_post(request):
     if request.method != 'POST':
         return JsonResponse({'ok': False}, status=400)
@@ -307,8 +343,10 @@ def api_post(request):
             c.execute("UPDATE planner_posts SET status='Scheduled', in_pipeline=1 WHERE id=%s", [data.get('id')])
             return JsonResponse({'ok': True})
         elif action == 'set_status':
-            c.execute("UPDATE planner_posts SET status=%s WHERE id=%s",
-                      [data.get('status'), data.get('id')])
+            status = data.get('status')
+            in_pipeline = 0 if status == 'Draft' else 1
+            c.execute("UPDATE planner_posts SET status=%s, in_pipeline=%s WHERE id=%s",
+                      [status, in_pipeline, data.get('id')])
             return JsonResponse({'ok': True})
         elif action == 'from_pipeline':
             c.execute("UPDATE planner_posts SET in_pipeline=0 WHERE id=%s", [data.get('id')])
