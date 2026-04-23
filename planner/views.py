@@ -227,8 +227,15 @@ def api_post(request):
         elif action == 'delete_image':
             c.execute("UPDATE planner_posts SET image=NULL WHERE id=%s", [data.get('id')])
             return JsonResponse({'ok': True})
-        elif action == 'delete_image':
-            c.execute("UPDATE planner_posts SET image=NULL WHERE id=%s", [data.get('id')])
+        elif action == 'to_archive':
+            c.execute("UPDATE planner_posts SET status='Posted', in_pipeline=1 WHERE id=%s", [data.get('id')])
+            return JsonResponse({'ok': True})
+        elif action == 'from_archive':
+            c.execute("UPDATE planner_posts SET status='Scheduled', in_pipeline=1 WHERE id=%s", [data.get('id')])
+            return JsonResponse({'ok': True})
+        elif action == 'set_status':
+            c.execute("UPDATE planner_posts SET status=%s WHERE id=%s",
+                      [data.get('status'), data.get('id')])
             return JsonResponse({'ok': True})
         elif action == 'from_pipeline':
             c.execute("UPDATE planner_posts SET in_pipeline=0 WHERE id=%s", [data.get('id')])

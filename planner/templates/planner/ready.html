@@ -95,7 +95,7 @@ async function markPosted(id) {
 }
 
 async function backToPipeline(id) {
-  await api('/planner/api/post/', {action:'update', id, status:'Scheduled'});
+  await api('/planner/api/post/', {action:'set_status', id, status:'Scheduled'});
   location.reload();
 }
 

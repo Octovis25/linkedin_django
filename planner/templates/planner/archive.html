@@ -51,7 +51,7 @@ function p(url, data) {
   return fetch(url, {method:'POST', headers:{'Content-Type':'application/json','X-CSRFToken':CSRF}, body:JSON.stringify(data)}).then(r=>r.json());
 }
 async function backToPipeline(id) {
-  await p('/planner/api/post/', {action:'from_archive', id});
+  await p('/planner/api/post/', {action:'set_status', id, status:'Scheduled'});
   location.reload();
 }
 </script>
