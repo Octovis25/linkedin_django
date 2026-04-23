@@ -4,7 +4,7 @@
 
 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1.25rem;flex-wrap:wrap;gap:8px">
   <h1 style="margin:0;font-size:1.4rem">📅 Scheduled</h1>
-  <form method="get" style="display:flex;gap:8px">
+  <form method="get" style="display:flex;gap:8px;flex-wrap:wrap">
     <select name="topic" onchange="this.form.submit()" style="font-size:13px;padding:4px 8px;border:0.5px solid #ced4da;border-radius:4px">
       <option value="">All topics</option>
       {% for t in topics %}<option value="{{ t.id }}" {% if topic_filter == t.id|stringformat:'s' %}selected{% endif %}>{{ t.name }}</option>{% endfor %}
@@ -37,7 +37,7 @@
     <div style="display:flex;gap:6px;flex-shrink:0">
       <button onclick="markPosted({{ p.id }})" style="font-size:12px;padding:3px 10px;border:0.5px solid #3C3489;border-radius:4px;background:#fff;cursor:pointer;color:#3C3489">✓ Posted</button>
       <button onclick="openEdit({{ p.id }},'{{ p.title|escapejs }}','{{ p.content|escapejs }}','{{ p.status }}','{{ p.planned_date|date:'Y-m-d' }}','{{ p.comment|escapejs }}','{{ p.image|escapejs }}')" style="font-size:12px;padding:3px 10px;border:0.5px solid #008080;border-radius:4px;background:#fff;cursor:pointer;color:#008080">Edit</button>
-      <button onclick="backToPlanner({{ p.id }})" style="font-size:12px;padding:3px 10px;border:0.5px solid #ced4da;border-radius:4px;background:#fff;cursor:pointer;color:#6c757d">← Planner</button>
+      <button onclick="backToPipeline({{ p.id }})" style="font-size:12px;padding:3px 10px;border:0.5px solid #ced4da;border-radius:4px;background:#fff;cursor:pointer;color:#6c757d">← Ready to post</button>
     </div>
   </div>
 </div>
@@ -59,7 +59,8 @@
     </div>
     <div style="display:flex;gap:12px;align-items:flex-start;margin-bottom:8px">
       <div style="display:flex;flex-direction:column;gap:4px;align-items:center">
-        <div id="e-thumb" onclick="document.getElementById('e-img-input').click()"
+        <div id="e-thumb"
+             onclick="document.getElementById('e-img-input').click()"
              ondragover="event.preventDefault();this.style.borderColor='#008080'"
              ondragleave="this.style.borderColor='#ced4da'"
              ondrop="handleDrop(event)"
@@ -86,15 +87,18 @@ const CSRF = '{{ csrf_token }}';
 function api(url, data) {
   return fetch(url, {method:'POST', headers:{'Content-Type':'application/json','X-CSRFToken':CSRF}, body:JSON.stringify(data)}).then(r=>r.json());
 }
+
 async function markPosted(id) {
-  if (!confirm('Mark as Posted?')) return;
+  if (!confirm('Mark as Posted and move to Archive?')) return;
   await api('/planner/api/post/', {action:'to_archive', id});
   location.reload();
 }
-async function backToPlanner(id) {
-  await api('/planner/api/post/', {action:'from_pipeline', id});
+
+async function backToPipeline(id) {
+  await api('/planner/api/post/', {action:'set_status', id, status:'Ready'});
   location.reload();
 }
+
 function openEdit(id, title, content, status, date, comment, image) {
   document.getElementById('e-id').value = id;
   document.getElementById('e-title').value = title;
@@ -114,7 +118,9 @@ function openEdit(id, title, content, status, date, comment, image) {
   }
   document.getElementById('edit-modal').style.display = 'flex';
 }
+
 function closeEdit() { document.getElementById('edit-modal').style.display = 'none'; }
+
 function handleDrop(e) {
   e.preventDefault();
   const file = e.dataTransfer.files[0];
@@ -124,6 +130,7 @@ function handleDrop(e) {
   document.getElementById('e-img-input').files = dt.files;
   previewImg({files:[file]});
 }
+
 function previewImg(input) {
   const file = input.files ? input.files[0] : null;
   if (!file) return;
@@ -134,12 +141,14 @@ function previewImg(input) {
   };
   reader.readAsDataURL(file);
 }
+
 async function removeImg() {
   const id = document.getElementById('e-id').value;
   await api('/planner/api/post/', {action:'delete_image', id});
   document.getElementById('e-thumb').innerHTML = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" stroke="#aaa" stroke-width="1.5"/><polyline points="17,8 12,3 7,8" stroke="#aaa" stroke-width="1.5"/><line x1="12" y1="3" x2="12" y2="15" stroke="#aaa" stroke-width="1.5"/></svg><span style="font-size:10px;color:#aaa">Drop or click</span>`;
   document.getElementById('e-del-img').style.display = 'none';
 }
+
 async function saveEdit() {
   const id = document.getElementById('e-id').value;
   await api('/planner/api/post/', {
@@ -160,6 +169,7 @@ async function saveEdit() {
   }
   location.reload();
 }
+
 document.getElementById('edit-modal').addEventListener('click', function(e) {
   if (e.target === this) closeEdit();
 });
