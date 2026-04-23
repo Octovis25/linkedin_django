@@ -244,8 +244,6 @@ def import_posts_from_content(df, file_path=""):
                     print(f"Metrics error {post_id}: {em}")
             else:
                 metrics_updated += 1
-            else:
-                metrics_updated += 1
 
             # 3. Zählen
             if post_id not in existing_post_ids:
