@@ -1,3 +1,27 @@
+<style>
+.pe-editor-wrap{border:0.5px solid #ced4da;border-radius:4px;overflow:hidden;margin-bottom:8px}
+.pe-toolbar{display:flex;gap:2px;padding:4px 6px;background:#f8f9fa;border-bottom:0.5px solid #e0e0e0;flex-wrap:wrap}
+.pe-toolbar button{padding:2px 7px;font-size:12px;border:0.5px solid #ced4da;border-radius:3px;background:#fff;cursor:pointer;line-height:1.4;color:#333}
+.pe-toolbar button:hover{background:#e8f5f5;border-color:#008080}
+.pe-toolbar .tb-sep{width:1px;background:#dee2e6;margin:2px 3px}
+.pe-tb-mark{background:#FFF176 !important;font-weight:600;color:#7a5c00 !important;border-color:#e6d800 !important}
+.pe-editor{min-height:180px;max-height:340px;overflow-y:auto;padding:8px 10px;font-size:13px;line-height:1.6;outline:none;color:#212529;white-space:pre-wrap;word-break:break-word}
+.pe-editor:empty:before{content:'Post text...';color:#aaa;pointer-events:none}
+.pe-editor:focus{background:#fafffe}
+.pe-editor mark{background:#FFF176;border-radius:2px;padding:0 1px}
+.pe-img-prev{display:none;position:relative;width:100%;margin-bottom:8px;border-radius:6px;overflow:hidden;border:0.5px solid #ced4da;background:#f8f9fa;cursor:zoom-in}
+.pe-img-prev img{width:100%;max-height:220px;object-fit:contain;display:block}
+.pe-img-bar{position:absolute;bottom:0;left:0;right:0;display:flex;justify-content:space-between;padding:4px 8px;background:rgba(0,0,0,0.45);opacity:0;transition:opacity .15s}
+.pe-img-prev:hover .pe-img-bar{opacity:1}
+.pe-img-bar span{font-size:12px;color:#fff;cursor:pointer;padding:2px 6px;border-radius:3px;background:rgba(255,255,255,0.15)}
+.pe-img-bar span:hover{background:rgba(255,255,255,0.3)}
+#pe-lightbox{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.82);z-index:10000;align-items:center;justify-content:center;cursor:zoom-out}
+#pe-lightbox.open{display:flex}
+#pe-lightbox img{max-width:90vw;max-height:88vh;border-radius:8px;object-fit:contain}
+#pe-lightbox-close{position:absolute;top:16px;right:20px;color:#fff;font-size:28px;cursor:pointer;opacity:.8;line-height:1}
+#pe-lightbox-close:hover{opacity:1}
+</style>
+
 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1.25rem;flex-wrap:wrap;gap:8px">
   <h1 style="margin:0;font-size:1.4rem">{{ title }}</h1>
   <form method="get" style="display:flex;gap:8px">
@@ -15,7 +39,7 @@
 <div style="background:#fff;border:0.5px solid #e0e0e0;border-radius:10px;padding:12px 14px">
   <div style="display:flex;gap:10px;align-items:center">
     {% if p.image %}
-    <img src="/planner/image/{{ p.id }}/" style="width:56px;height:56px;border-radius:6px;object-fit:cover;flex-shrink:0">
+    <img src="/planner/image/{{ p.id }}/" style="width:56px;height:56px;border-radius:6px;object-fit:cover;flex-shrink:0;cursor:zoom-in" onclick="peLightbox('/planner/image/{{ p.id }}/')">
     {% else %}
     <div style="width:56px;height:56px;border-radius:6px;background:{{ p.bg }};flex-shrink:0;display:flex;align-items:center;justify-content:center">
       <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><rect x="3" y="3" width="18" height="18" rx="2" stroke="{{ p.fg }}" stroke-width="1.5"/></svg>
@@ -67,29 +91,52 @@
       <label style="font-size:12px;color:#6c757d;white-space:nowrap">Planned to post</label>
       <input type="date" id="pe-date" style="font-size:13px;flex:1;padding:6px 8px;border:0.5px solid #ced4da;border-radius:4px">
     </div>
-    <div style="display:flex;gap:12px;align-items:flex-start;margin-bottom:8px">
-      <div style="display:flex;flex-direction:column;gap:4px;align-items:center">
-        <div id="pe-thumb"
-             onclick="document.getElementById('pe-img-input').click()"
-             ondragover="event.preventDefault();this.style.borderColor='#008080'"
-             ondragleave="this.style.borderColor='#ced4da'"
-             ondrop="peDropImg(event)"
-             style="width:80px;height:80px;border-radius:8px;border:1.5px dashed #ced4da;display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:pointer;gap:4px;background:#f8f9fa;overflow:hidden">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" stroke="#aaa" stroke-width="1.5"/><polyline points="17,8 12,3 7,8" stroke="#aaa" stroke-width="1.5"/><line x1="12" y1="3" x2="12" y2="15" stroke="#aaa" stroke-width="1.5"/></svg>
-          <span style="font-size:10px;color:#aaa">Drop or click</span>
-        </div>
-        <button type="button" onclick="peRemoveImg()" id="pe-del-img" style="display:none;font-size:11px;padding:2px 6px;border:0.5px solid #A32D2D;border-radius:4px;background:#fff;cursor:pointer;color:#A32D2D">🗑 Remove</button>
+    <!-- Upload zone + Title -->
+    <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
+      <div id="pe-thumb"
+           onclick="document.getElementById('pe-img-input').click()"
+           ondragover="event.preventDefault();this.style.borderColor='#008080'"
+           ondragleave="this.style.borderColor='#ced4da'"
+           ondrop="peDropImg(event)"
+           style="width:44px;height:44px;border-radius:6px;border:1.5px dashed #ced4da;display:flex;align-items:center;justify-content:center;cursor:pointer;background:#f8f9fa;flex-shrink:0;overflow:hidden">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" stroke="#aaa" stroke-width="1.5"/><polyline points="17,8 12,3 7,8" stroke="#aaa" stroke-width="1.5"/><line x1="12" y1="3" x2="12" y2="15" stroke="#aaa" stroke-width="1.5"/></svg>
       </div>
       <input type="file" id="pe-img-input" accept="image/*" style="display:none" onchange="pePreviewImg(this)">
       <input type="text" id="pe-title" placeholder="Title..." style="font-size:13px;flex:1;padding:6px 8px;border:0.5px solid #ced4da;border-radius:4px;box-sizing:border-box">
     </div>
-    <textarea id="pe-content" style="width:100%;min-height:100px;font-size:13px;padding:8px;border:0.5px solid #ced4da;border-radius:4px;resize:vertical;box-sizing:border-box;margin-bottom:8px"></textarea>
+    <!-- Rich text editor -->
+    <div class="pe-editor-wrap">
+      <div class="pe-toolbar">
+        <button type="button" onmousedown="event.preventDefault();peFmt('bold')" title="Bold"><b>B</b></button>
+        <button type="button" onmousedown="event.preventDefault();peFmt('italic')" title="Italic"><i>I</i></button>
+        <button type="button" onmousedown="event.preventDefault();peFmt('underline')" title="Underline"><u>U</u></button>
+        <div class="tb-sep"></div>
+        <button type="button" class="pe-tb-mark" onmousedown="event.preventDefault();peMark()" title="Mark for revision">🟡 Mark</button>
+        <button type="button" onmousedown="event.preventDefault();peFmt('removeFormat')" style="font-size:11px;color:#888">✕ Clear</button>
+      </div>
+      <div id="pe-content" contenteditable="true" class="pe-editor"></div>
+    </div>
+    <!-- Image preview below text -->
+    <div class="pe-img-prev" id="pe-img-preview" onclick="peLightbox(document.getElementById('pe-img-preview-img').src)">
+      <img id="pe-img-preview-img" src="" alt="">
+      <div class="pe-img-bar">
+        <span onclick="event.stopPropagation();document.getElementById('pe-img-input').click()">🔄 Replace</span>
+        <span onclick="event.stopPropagation();peLightbox(document.getElementById('pe-img-preview-img').src)">🔍 Full size</span>
+        <span onclick="event.stopPropagation();peRemoveImg()" style="color:#ffb3b3">🗑 Remove</span>
+      </div>
+    </div>
     <textarea id="pe-comment" placeholder="Internal comment..." style="width:100%;min-height:50px;font-size:13px;padding:8px;border:0.5px solid #ced4da;border-radius:4px;resize:vertical;box-sizing:border-box;background:#fffef0"></textarea>
     <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:12px">
       <button type="button" onclick="closeEdit()" style="font-size:13px;padding:5px 14px;border:0.5px solid #ced4da;border-radius:4px;background:#fff;cursor:pointer">Cancel</button>
       <button type="button" onclick="saveEdit()" style="font-size:13px;padding:5px 14px;background:#008080;color:#fff;border:none;border-radius:4px;cursor:pointer">Save</button>
     </div>
   </div>
+</div>
+
+<!-- Lightbox -->
+<div id="pe-lightbox" onclick="peLightboxClose()">
+  <span id="pe-lightbox-close" onclick="peLightboxClose()">×</span>
+  <img id="pe-lightbox-img" src="" alt="Preview">
 </div>
 
 <script>
@@ -103,6 +150,49 @@ function peApi(data) {
   }).then(r=>r.json());
 }
 
+/* ── Editor ── */
+function peFmt(cmd) {
+  document.getElementById('pe-content').focus();
+  document.execCommand(cmd, false, null);
+}
+function peMark() {
+  const el = document.getElementById('pe-content');
+  el.focus();
+  const sel = window.getSelection();
+  if (sel && !sel.isCollapsed) document.execCommand('hiliteColor', false, '#FFF176');
+}
+
+/* ── Image preview ── */
+function peShowPreview(src) {
+  const prev = document.getElementById('pe-img-preview');
+  document.getElementById('pe-img-preview-img').src = src;
+  prev.style.display = 'block';
+  const thumb = document.getElementById('pe-thumb');
+  thumb.style.borderColor = '#008080';
+  thumb.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none"><polyline points="20,6 9,17 4,12" stroke="#008080" stroke-width="2"/></svg>';
+}
+function peClearPreview() {
+  document.getElementById('pe-img-preview').style.display = 'none';
+  document.getElementById('pe-img-preview-img').src = '';
+  document.getElementById('pe-img-input').value = '';
+  const thumb = document.getElementById('pe-thumb');
+  thumb.style.borderColor = '#ced4da';
+  thumb.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" stroke="#aaa" stroke-width="1.5"/><polyline points="17,8 12,3 7,8" stroke="#aaa" stroke-width="1.5"/><line x1="12" y1="3" x2="12" y2="15" stroke="#aaa" stroke-width="1.5"/></svg>';
+}
+
+/* ── Lightbox ── */
+function peLightbox(src) {
+  if (!src) return;
+  document.getElementById('pe-lightbox-img').src = src;
+  document.getElementById('pe-lightbox').classList.add('open');
+  document.body.style.overflow = 'hidden';
+}
+function peLightboxClose() {
+  document.getElementById('pe-lightbox').classList.remove('open');
+  document.body.style.overflow = '';
+}
+document.addEventListener('keydown', e => { if (e.key === 'Escape') peLightboxClose(); });
+
 async function setStatus(id, status) {
   await peApi({action:'set_status', id, status});
   location.reload();
@@ -111,20 +201,16 @@ async function setStatus(id, status) {
 function openEdit(id, title, content, status, date, comment, image, topicId) {
   document.getElementById('pe-id').value = id;
   document.getElementById('pe-title').value = title;
-  document.getElementById('pe-content').value = content;
+  document.getElementById('pe-content').innerHTML = content || '';
   document.getElementById('pe-status').value = status;
   document.getElementById('pe-date').value = date || '';
   document.getElementById('pe-comment').value = comment || '';
   document.getElementById('pe-img-input').value = '';
   if (topicId) document.getElementById('pe-topic').value = topicId;
-  const thumb = document.getElementById('pe-thumb');
-  const delBtn = document.getElementById('pe-del-img');
   if (image) {
-    thumb.innerHTML = `<img src="/media/${image}" style="width:80px;height:80px;object-fit:cover;border-radius:6px">`;
-    delBtn.style.display = 'block';
+    peShowPreview(`/media/${image}`);
   } else {
-    thumb.innerHTML = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" stroke="#aaa" stroke-width="1.5"/><polyline points="17,8 12,3 7,8" stroke="#aaa" stroke-width="1.5"/><line x1="12" y1="3" x2="12" y2="15" stroke="#aaa" stroke-width="1.5"/></svg><span style="font-size:10px;color:#aaa">Drop or click</span>';
-    delBtn.style.display = 'none';
+    peClearPreview();
   }
   document.getElementById('post-edit-modal').style.display = 'flex';
 }
@@ -145,29 +231,25 @@ function pePreviewImg(input) {
   const file = input.files ? input.files[0] : null;
   if (!file) return;
   const reader = new FileReader();
-  reader.onload = ev => {
-    document.getElementById('pe-thumb').innerHTML = `<img src="${ev.target.result}" style="width:80px;height:80px;object-fit:cover;border-radius:6px">`;
-    document.getElementById('pe-del-img').style.display = 'block';
-  };
+  reader.onload = ev => peShowPreview(ev.target.result);
   reader.readAsDataURL(file);
 }
 
 async function peRemoveImg() {
-  await peApi({action:'delete_image', id:document.getElementById('pe-id').value});
-  document.getElementById('pe-thumb').innerHTML = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" stroke="#aaa" stroke-width="1.5"/><polyline points="17,8 12,3 7,8" stroke="#aaa" stroke-width="1.5"/><line x1="12" y1="3" x2="12" y2="15" stroke="#aaa" stroke-width="1.5"/></svg><span style="font-size:10px;color:#aaa">Drop or click</span>';
-  document.getElementById('pe-del-img').style.display = 'none';
+  const id = document.getElementById('pe-id').value;
+  if (id) await peApi({action:'delete_image', id});
+  peClearPreview();
 }
 
 async function saveEdit() {
   const id = document.getElementById('pe-id').value;
-  const status = document.getElementById('pe-status').value;
   await peApi({
     action:'update', id,
     topic_id: document.getElementById('pe-topic').value,
     title: document.getElementById('pe-title').value,
-    content: document.getElementById('pe-content').value,
+    content: document.getElementById('pe-content').innerHTML,
     comment: document.getElementById('pe-comment').value,
-    status,
+    status: document.getElementById('pe-status').value,
     planned_date: document.getElementById('pe-date').value || null,
   });
   const imgInput = document.getElementById('pe-img-input');

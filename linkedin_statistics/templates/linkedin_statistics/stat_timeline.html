@@ -2,58 +2,345 @@
 {% block title %}Statistics – Timeline{% endblock %}
 {% block content %}
 <style>
-.cc{background:#fff;border-radius:.5rem;padding:1.5rem;box-shadow:0 1px 3px rgba(0,0,0,.1);margin-bottom:1.5rem}
-.cc h2{font-size:1.1rem;margin-bottom:1rem;color:var(--octo-petrol)}
+/* ── Layout ── */
+.tl-page { max-width: 1200px; margin: 0 auto; }
+
+/* ── Filter bar ── */
+.filter-card {
+  background: #fff;
+  border-radius: .5rem;
+  padding: 1rem 1.5rem;
+  box-shadow: 0 1px 3px rgba(0,0,0,.08);
+  margin-bottom: 2rem;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 1.25rem;
+  border-left: 4px solid var(--octo-petrol);
+}
+.filter-card h1 {
+  font-size: 1.25rem;
+  color: var(--octo-petrol);
+  margin: 0;
+  white-space: nowrap;
+}
+.filter-fields {
+  display: flex;
+  align-items: center;
+  gap: .6rem;
+  flex-wrap: wrap;
+  margin-left: auto;
+}
+.filter-label {
+  font-size: .8rem;
+  font-weight: 600;
+  color: #495057;
+  text-transform: uppercase;
+  letter-spacing: .4px;
+}
+.filter-fields input[type=date],
+.filter-fields select {
+  padding: .3rem .6rem;
+  border: 1px solid #ced4da;
+  border-radius: .3rem;
+  font-size: .85rem;
+  width: auto;
+  color: #212529;
+  background: #f8f9fa;
+}
+.filter-fields input[type=date]:focus,
+.filter-fields select:focus {
+  border-color: var(--octo-petrol);
+  background: #fff;
+  outline: none;
+}
+.filter-btn {
+  padding: .3rem 1.1rem;
+  background: var(--octo-petrol);
+  color: #fff;
+  border: none;
+  border-radius: .3rem;
+  font-size: .85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background .2s;
+}
+.filter-btn:hover { background: var(--octo-dark-petrol); }
+
+/* ── Section header ── */
+.section-divider {
+  display: flex;
+  align-items: center;
+  gap: .75rem;
+  margin: 2rem 0 1rem;
+}
+.section-divider span {
+  font-size: .7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: #fff;
+  background: var(--octo-petrol);
+  padding: .25rem .7rem;
+  border-radius: 99px;
+  white-space: nowrap;
+}
+.section-divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: #dee2e6;
+}
+
+/* ── Chart cards ── */
+.chart-card {
+  background: #fff;
+  border-radius: .5rem;
+  box-shadow: 0 1px 4px rgba(0,0,0,.08);
+  margin-bottom: 1.25rem;
+  overflow: hidden;
+}
+.chart-card-header {
+  display: flex;
+  align-items: baseline;
+  gap: .75rem;
+  padding: 1rem 1.5rem .75rem;
+  border-bottom: 1px solid #f0f0f0;
+}
+.chart-card-header h2 {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--octo-petrol);
+  margin: 0;
+}
+.chart-badge {
+  font-size: .7rem;
+  font-weight: 600;
+  padding: .15rem .55rem;
+  border-radius: 99px;
+  text-transform: uppercase;
+  letter-spacing: .3px;
+}
+.badge-blue   { background: #E6F1FB; color: #185FA5; }
+.badge-orange { background: #FEF0E8; color: #C04A0A; }
+.badge-teal   { background: #E1F5EE; color: #0F6E56; }
+.badge-purple { background: #F3EEFF; color: #6B21A8; }
+
+.chart-card-body { padding: 1.25rem 1.5rem 1rem; }
+.chart-note {
+  font-size: .78rem;
+  color: #868e96;
+  margin-top: .75rem;
+  padding-top: .5rem;
+  border-top: 1px solid #f5f5f5;
+}
+
+/* ── Two-col chart grid ── */
+.chart-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.25rem;
+  margin-bottom: 0;
+}
+@media (max-width: 860px) {
+  .chart-grid { grid-template-columns: 1fr; }
+}
 </style>
 
-<h1 style="margin-bottom:1.5rem">📊 LinkedIn Statistics – Timeline</h1>
+<div class="tl-page">
 
-<div class="cc">
-  <h2>📈 Top 10 aktuellste Posts – Impressions nach Tagen seit Veröffentlichung</h2>
-  <canvas id="chart-recent" height="100"></canvas>
+<!-- ── Filter bar ── -->
+<div class="filter-card">
+  <h1>📊 Timeline &amp; Trends</h1>
+  <form method="get" class="filter-fields">
+    <span class="filter-label">From</span>
+    <input type="date" name="from" value="{{ date_from }}">
+    <span class="filter-label">To</span>
+    <input type="date" name="to" value="{{ date_to }}">
+    <span class="filter-label">Group by</span>
+    <select name="group_by">
+      <option value="day"   {% if group_by == 'day'   %}selected{% endif %}>Day</option>
+      <option value="week"  {% if group_by == 'week'  %}selected{% endif %}>Week</option>
+      <option value="month" {% if group_by == 'month' %}selected{% endif %}>Month</option>
+    </select>
+    <button type="submit" class="filter-btn">Apply</button>
+  </form>
 </div>
 
-<div class="cc">
-  <h2>🏆 Top 10 nach Impressionen – Verlauf seit Veröffentlichung</h2>
-  <canvas id="chart-top" height="100"></canvas>
+<!-- ══════════════ AGGREGATE TRENDS ══════════════ -->
+<div class="section-divider"><span>Aggregate Trends</span></div>
+
+<!-- Content Metrics -->
+<div class="chart-card">
+  <div class="chart-card-header">
+    <h2>📈 Content Metrics</h2>
+    <span class="chart-badge badge-blue">Impressions</span>
+    <span class="chart-badge badge-orange">Eng. Rate</span>
+  </div>
+  <div class="chart-card-body">
+    <canvas id="contentMetrics" height="100"></canvas>
+    <p class="chart-note">Impressions as bars · Engagement Rate (%) as line · Right axis capped at 45%</p>
+  </div>
 </div>
+
+<!-- Interactions -->
+<div class="chart-card">
+  <div class="chart-card-header">
+    <h2>📊 Interactions</h2>
+    <span class="chart-badge badge-teal">{{ agg_text }}</span>
+  </div>
+  <div class="chart-card-body">
+    <canvas id="interaktionen" height="100"></canvas>
+    <p class="chart-note">Latest snapshot per post · grouped by publish date</p>
+  </div>
+</div>
+
+<!-- ══════════════ POST GROWTH CURVES ══════════════ -->
+<div class="section-divider"><span>Post Growth Curves</span></div>
+
+<!-- Top 10 recent -->
+<div class="chart-card">
+  <div class="chart-card-header">
+    <h2>🕐 Top 10 Most Recent Posts</h2>
+    <span class="chart-badge badge-blue">Days since publication</span>
+  </div>
+  <div class="chart-card-body">
+    <canvas id="chart-recent" height="90"></canvas>
+    <p class="chart-note">Impressions by day since publication — most recently published posts</p>
+  </div>
+</div>
+
+<!-- Top 10 by impressions -->
+<div class="chart-card">
+  <div class="chart-card-header">
+    <h2>🏆 Top 10 by Total Impressions</h2>
+    <span class="chart-badge badge-orange">Growth curve</span>
+  </div>
+  <div class="chart-card-body">
+    <canvas id="chart-top" height="90"></canvas>
+    <p class="chart-note">Impressions growth since publication — posts with the highest total reach</p>
+  </div>
+</div>
+
+</div><!-- /.tl-page -->
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
-const colors = ['#2196F3','#e53935','#4CAF50','#FF9800','#9C27B0','#607D8B','#00BCD4','#8BC34A','#FF5722','#795548'];
+/* ── Data ── */
+const labels          = {{ chart_labels_json|safe }};
+const impressionsData = {{ chart_impressions_json|safe }};
+const engagementData  = {{ chart_engagement_json|safe }};
+const clicksData      = {{ chart_clicks_json|safe }};
+const reactionsData   = {{ chart_reactions_json|safe }};
+const commentsData    = {{ chart_comments_json|safe }};
+const sharesData      = {{ chart_shares_json|safe }};
+const viewsData       = {{ chart_views_json|safe }};
 
-function buildChart(canvasId, data) {
-  if (!data || !data.length) {
-    document.getElementById(canvasId).insertAdjacentHTML('afterend','<p style="text-align:center;color:#6c757d;padding:1rem">Keine Daten.</p>');
-    return;
-  }
-  const maxDay = Math.max(...data.flatMap(p => p.days), 30);
-  const labels = Array.from({length: maxDay}, (_, i) => i + 1);
-  const datasets = data.map((p, i) => {
-    const d = new Array(maxDay).fill(null);
-    p.days.forEach((day, j) => { if (day >= 1 && day <= maxDay) d[day-1] = p.impressions[j]; });
-    return {
-      label: p.title, data: d,
-      borderColor: colors[i % colors.length],
-      borderWidth: 2, tension: 0.3, fill: false, spanGaps: true, pointRadius: 3,
-    };
-  });
-  new Chart(document.getElementById(canvasId), {
-    type: 'line',
-    data: { labels, datasets },
+/* shared axis style */
+const axisStyle = { grid: { color: 'rgba(0,0,0,.05)' }, ticks: { color: '#6c757d', font: { size: 11 } } };
+
+/* ── 1. Content Metrics ── */
+if (labels && labels.length) {
+  new Chart(document.getElementById('contentMetrics').getContext('2d'), {
+    data: {
+      labels,
+      datasets: [
+        { type:'bar',  label:'Impressions',       data:impressionsData,
+          backgroundColor:'rgba(0,119,181,0.55)', borderColor:'rgba(0,119,181,0.8)',
+          borderWidth:1, yAxisID:'y', order:2 },
+        { type:'line', label:'Engagement Rate (%)', data:engagementData,
+          borderColor:'rgba(245,110,40,1)', backgroundColor:'rgba(245,110,40,0.1)',
+          borderWidth:2, pointRadius:3, tension:0.35, fill:true, yAxisID:'y1', order:1 }
+      ]
+    },
     options: {
-      responsive: true,
-      interaction: { mode: 'index', intersect: false },
-      plugins: { legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 11 } } } },
+      responsive:true,
+      interaction:{ mode:'index', intersect:false },
+      plugins:{ legend:{ position:'top', labels:{ boxWidth:12, font:{ size:11 } } } },
       scales: {
-        x: { title: { display: true, text: 'Tag seit Veröffentlichung' }, ticks: { maxTicksLimit: 20 } },
-        y: { title: { display: true, text: 'Impressions' }, beginAtZero: true, ticks: { precision: 0 } }
+        x: { ...axisStyle, ticks:{ ...axisStyle.ticks, maxRotation:45, minRotation:0 } },
+        y:  { ...axisStyle, title:{ display:true, text:'Impressions', color:'#495057', font:{size:11} },
+              beginAtZero:true, position:'left' },
+        y1: { ...axisStyle, title:{ display:true, text:'Eng. Rate %', color:'#495057', font:{size:11} },
+              beginAtZero:true, max:45, position:'right', grid:{ drawOnChartArea:false } }
       }
     }
   });
 }
 
-buildChart('chart-recent', {{ top5_json|safe }});
-buildChart('chart-top', {{ top_impressions_json|safe }});
+/* ── 2. Interactions ── */
+const hasViews = viewsData && viewsData.some(v => v > 0);
+if (labels && labels.length) {
+  const ds = [
+    { label:'Clicks',          data:clicksData,    backgroundColor:'rgba(59,130,200,0.75)',  borderWidth:0 },
+    { label:'Likes/Reactions', data:reactionsData, backgroundColor:'rgba(210,60,70,0.75)',   borderWidth:0 },
+    { label:'Comments',        data:commentsData,  backgroundColor:'rgba(240,140,50,0.75)',  borderWidth:0 },
+    { label:'Shares',          data:sharesData,    backgroundColor:'rgba(29,158,117,0.75)',  borderWidth:0 },
+  ];
+  if (hasViews) ds.push({ label:'Views', data:viewsData, backgroundColor:'rgba(120,80,200,0.7)', borderWidth:0 });
+  new Chart(document.getElementById('interaktionen').getContext('2d'), {
+    type:'bar',
+    data:{ labels, datasets:ds },
+    options: {
+      responsive:true,
+      interaction:{ mode:'index', intersect:false },
+      plugins:{ legend:{ position:'top', labels:{ boxWidth:12, font:{ size:11 } } } },
+      scales: {
+        x: { ...axisStyle, ticks:{ ...axisStyle.ticks, maxRotation:45, minRotation:0 } },
+        y: { ...axisStyle, title:{ display:true, text:'Count', color:'#495057', font:{size:11} }, beginAtZero:true }
+      }
+    }
+  });
+}
+
+/* ── 3 & 4. Per-post growth curves ── */
+const postColors = ['#0077B5','#e53935','#1D9E75','#F56E28','#9C27B0','#607D8B','#00ACC1','#7CB342','#FF7043','#795548'];
+
+function buildGrowthChart(canvasId, data) {
+  const el = document.getElementById(canvasId);
+  if (!data || !data.length) {
+    el.insertAdjacentHTML('afterend','<p style="text-align:center;color:#6c757d;padding:1.5rem 0;font-size:.85rem">No data available.</p>');
+    el.remove();
+    return;
+  }
+  const maxDay = Math.max(...data.flatMap(p => p.days), 30);
+  const dayLabels = Array.from({length: maxDay}, (_, i) => i + 1);
+  const datasets = data.map((p, i) => {
+    const d = new Array(maxDay).fill(null);
+    p.days.forEach((day, j) => { if (day >= 1 && day <= maxDay) d[day-1] = p.impressions[j]; });
+    return {
+      label: p.title,
+      data: d,
+      borderColor: postColors[i % postColors.length],
+      backgroundColor: postColors[i % postColors.length] + '18',
+      borderWidth: 2,
+      tension: 0.35,
+      fill: false,
+      spanGaps: true,
+      pointRadius: 2,
+      pointHoverRadius: 5,
+    };
+  });
+  new Chart(el, {
+    type:'line',
+    data:{ labels:dayLabels, datasets },
+    options: {
+      responsive:true,
+      interaction:{ mode:'index', intersect:false },
+      plugins:{ legend:{ position:'bottom', labels:{ boxWidth:10, font:{ size:10 }, padding:12 } } },
+      scales: {
+        x: { ...axisStyle,
+             title:{ display:true, text:'Days since publication', color:'#495057', font:{size:11} },
+             ticks:{ ...axisStyle.ticks, maxTicksLimit:20 } },
+        y: { ...axisStyle,
+             title:{ display:true, text:'Impressions', color:'#495057', font:{size:11} },
+             beginAtZero:true, ticks:{ ...axisStyle.ticks, precision:0 } }
+      }
+    }
+  });
+}
+
+buildGrowthChart('chart-recent', {{ top5_json|safe }});
+buildGrowthChart('chart-top',    {{ top_impressions_json|safe }});
 </script>
 {% endblock %}

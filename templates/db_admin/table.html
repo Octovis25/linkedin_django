@@ -1,0 +1,5 @@
+{% extends "base.html" %}
+{% block title %}DB: {{ table_name }}{% endblock %}
+{% block content %}
+{% include "db_admin/_layout.html" with active_table=table_name content_type="table" %}
+{% endblock %}

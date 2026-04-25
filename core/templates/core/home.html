@@ -58,7 +58,7 @@
 <div class="tl-wrap">
   <div class="tl-date">{{ p.post_date|date:"d.m.Y"|default:"—" }}</div>
   <div class="tl-spine">
-    <div class="tl-dot" style="background:{% if p.content_type == 'Video' %}#185FA5{% else %}#1D9E75{% endif %}"></div>
+    <div class="tl-dot" style="background:{% if p.content_type == 'Video' %}#F56E28{% else %}#1D9E75{% endif %}"></div>
     <div class="tl-line"></div>
   </div>
   <div class="tl-card" id="card-{{ p.post_id }}">
@@ -86,7 +86,7 @@
                 data-category="{{ p.category }}"
                 onclick="openStatusPicker('{{ p.post_id }}', this)">
           </span>
-          <span style="font-size:11px;color:#6c757d">👁 {{ p.impressions }} · 👆 {{ p.clicks }} · ❤ {{ p.likes }}</span>
+          <span style="font-size:11px;color:#6c757d">👁 {{ p.impressions }}{% if p.views %} · ▶ {{ p.views }}{% endif %} · 👆 {{ p.clicks }} · ❤ {{ p.likes }}</span>
         </div>
       </div>
       <div class="pencil-btn {% if p.comment %}has-comment{% endif %}"
@@ -293,18 +293,20 @@ document.querySelectorAll('.tl-inner').forEach(inner => {
           return;
         }
         const labels = data.daily.map(d => 'Day ' + d.tag);
+        const hasViews = data.daily.some(d => d.views !== null && d.views > 0);
+        const datasets = [
+          { label: 'Clicks',      data: data.daily.map(d => d.clicks),      borderColor: '#FF9800', borderWidth: 2, tension: 0.3, fill: false, yAxisID: 'y' },
+          { label: 'Likes',       data: data.daily.map(d => d.likes),       borderColor: '#4CAF50', borderWidth: 2, tension: 0.3, fill: false, yAxisID: 'y' },
+          { label: 'Comments',    data: data.daily.map(d => d.comments),    borderColor: '#9C27B0', borderWidth: 2, tension: 0.3, fill: false, yAxisID: 'y' },
+          { label: 'Shares',      data: data.daily.map(d => d.shares),      borderColor: '#607D8B', borderWidth: 2, tension: 0.3, fill: false, yAxisID: 'y' },
+          { label: 'Impressions', data: data.daily.map(d => d.impressions), borderColor: '#2196F3', borderWidth: 2, tension: 0.3, fill: false, yAxisID: 'y2' },
+        ];
+        if (hasViews) {
+          datasets.push({ label: 'Views', data: data.daily.map(d => d.views), borderColor: '#E91E63', borderWidth: 2, tension: 0.3, fill: false, yAxisID: 'y2', borderDash: [4,3] });
+        }
         chartInstances[postId] = new Chart(document.getElementById('canvas-' + postId), {
           type: 'line',
-          data: {
-            labels,
-            datasets: [
-              { label: 'Clicks',    data: data.daily.map(d => d.clicks),      borderColor: '#FF9800', borderWidth: 2, tension: 0.3, fill: false, yAxisID: 'y' },
-              { label: 'Likes',     data: data.daily.map(d => d.likes),       borderColor: '#4CAF50', borderWidth: 2, tension: 0.3, fill: false, yAxisID: 'y' },
-              { label: 'Comments',  data: data.daily.map(d => d.comments),    borderColor: '#9C27B0', borderWidth: 2, tension: 0.3, fill: false, yAxisID: 'y' },
-              { label: 'Shares',    data: data.daily.map(d => d.shares),      borderColor: '#607D8B', borderWidth: 2, tension: 0.3, fill: false, yAxisID: 'y' },
-              { label: 'Impressions', data: data.daily.map(d => d.impressions), borderColor: '#2196F3', borderWidth: 2, tension: 0.3, fill: false, yAxisID: 'y2' },
-            ]
-          },
+          data: { labels, datasets },
           options: {
             responsive: true,
             interaction: { mode: 'index', intersect: false },
@@ -312,7 +314,7 @@ document.querySelectorAll('.tl-inner').forEach(inner => {
             scales: {
               x:  { title: { display: true, text: 'Day' } },
               y:  { type: 'linear', position: 'left',  title: { display: true, text: 'Clicks / Likes / Comments / Shares' }, beginAtZero: true, ticks: { stepSize: 1, precision: 0 } },
-              y2: { type: 'linear', position: 'right', title: { display: true, text: 'Impressions' }, grid: { drawOnChartArea: false }, beginAtZero: true, ticks: { precision: 0 }, suggestedMax: 100 }
+              y2: { type: 'linear', position: 'right', title: { display: true, text: hasViews ? 'Impressions / Views' : 'Impressions' }, grid: { drawOnChartArea: false }, beginAtZero: true, ticks: { precision: 0 }, suggestedMax: 100 }
             }
           }
         });

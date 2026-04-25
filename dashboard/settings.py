@@ -21,6 +21,7 @@ INSTALLED_APPS = [
     "collectives",
     "linkedin_statistics",
     "planner",
+    "db_admin",
 ]
 
 MIDDLEWARE = [

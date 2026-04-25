@@ -39,7 +39,8 @@ def home_view(request):
                    lp.post_url, lp.content_type,
                    COALESCE(m.impressions,0), COALESCE(m.likes,0),
                    COALESCE(m.comments,0), COALESCE(m.direct_shares,0),
-                   COALESCE(m.clicks,0), pp.post_image, pp.category, pp.comment
+                   COALESCE(m.clicks,0), pp.post_image, pp.category, pp.comment,
+                   m.views
             FROM linkedin_posts lp
             LEFT JOIN linkedin_posts_posted pp ON lp.post_id = pp.post_id
             LEFT JOIN linkedin_posts_metrics m ON lp.post_id = m.post_id
@@ -81,6 +82,7 @@ def home_view(request):
                     'has_image':    bool(r[10]),
                     'category':     r[11] or '',
                     'comment':      r[12] or '',
+                    'views':        r[13],
                 })
         except Exception as e:
             print("home_view error:", e)

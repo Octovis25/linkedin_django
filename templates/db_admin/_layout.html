@@ -1,0 +1,425 @@
+<style>
+  /* ══ 3-Spalten-Layout ══ */
+  .db3 {
+    display: grid;
+    grid-template-columns: 220px 1fr;
+    gap: 1rem;
+    align-items: flex-start;
+    min-height: calc(100vh - 160px);
+  }
+
+  /* ── Linke Spalte: Tabellenliste ── */
+  .db-left {
+    background: var(--octo-white);
+    border: 1px solid var(--octo-light-gray);
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.07);
+    position: sticky;
+    top: 1rem;
+    max-height: calc(100vh - 120px);
+    display: flex;
+    flex-direction: column;
+  }
+  .db-left-header {
+    background: var(--octo-petrol);
+    color: var(--octo-white);
+    padding: 0.6rem 0.9rem;
+    font-weight: 700;
+    font-size: 0.82rem;
+    letter-spacing: 0.03em;
+    flex-shrink: 0;
+  }
+  .db-left-search {
+    padding: 0.4rem 0.6rem;
+    border-bottom: 1px solid var(--octo-light-gray);
+    flex-shrink: 0;
+  }
+  .db-left-search input {
+    width: 100%;
+    padding: 0.3rem 0.5rem;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    font-size: 0.8rem;
+  }
+  .db-left-list {
+    overflow-y: auto;
+    flex: 1;
+  }
+  .db-left-list a {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.38rem 0.9rem;
+    color: var(--octo-text);
+    text-decoration: none;
+    font-size: 0.82rem;
+    border-left: 3px solid transparent;
+    transition: background 0.12s;
+    white-space: nowrap;
+    overflow: hidden;
+  }
+  .db-left-list a:hover { background: #f0fafa; color: var(--octo-petrol); border-left-color: var(--octo-turquoise); }
+  .db-left-list a.active { background: #e3f6f7; color: var(--octo-petrol); border-left-color: var(--octo-petrol); font-weight: 600; }
+  .db-left-list a .cnt { font-size: 0.75rem; color: var(--octo-orange); font-weight: 700; margin-left: 4px; flex-shrink: 0; }
+  .db-left-list a.active .cnt { color: var(--octo-petrol); }
+
+  /* ── Mittlere Spalte: Inhalt ── */
+  .db-mid { min-width: 0; }
+
+  /* Welcome */
+  .db-welcome {
+    background: var(--octo-white);
+    border: 1px solid var(--octo-light-gray);
+    border-radius: 8px;
+    padding: 2.5rem 2rem;
+    text-align: center;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.07);
+  }
+  .db-welcome h2 { font-size: 1.4rem; margin-bottom: 0.4rem; }
+  .db-welcome .big { font-size: 2.5rem; font-weight: 700; color: var(--octo-orange); line-height: 1; }
+  .db-welcome p { color: #666; font-size: 0.9rem; margin-top: 0.3rem; }
+
+  /* Toolbar */
+  .db-toolbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-bottom: 0.6rem;
+  }
+  .db-toolbar h1 { margin: 0; font-size: 1.05rem; }
+  .db-search-form { display: flex; gap: 0.35rem; }
+  .db-search-form input[type=text] {
+    padding: 0.3rem 0.6rem;
+    border: 1.5px solid var(--octo-light-gray);
+    border-radius: 5px;
+    font-size: 0.82rem;
+    width: 170px;
+  }
+  .db-search-form input:focus { outline: none; border-color: var(--octo-petrol); }
+
+  .db-meta { font-size: 0.8rem; color: #888; margin-bottom: 0.5rem; }
+
+  /* Spalteninfo */
+  .col-toggle { font-size: 0.78rem; color: var(--octo-petrol); cursor: pointer; text-decoration: underline dotted; }
+  .col-panel { display: none; background: var(--octo-light-gray); border-radius: 6px; padding: 0.6rem; margin-bottom: 0.6rem; font-size: 0.78rem; }
+  .col-panel.open { display: block; }
+  .col-panel table { box-shadow: none; font-size: 0.78rem; }
+  .col-panel thead { background: var(--octo-dark-petrol); }
+
+  /* Datentabelle */
+  .db-table-wrap {
+    overflow: auto;
+    max-height: calc(100vh - 260px);
+    border: 1px solid var(--octo-light-gray);
+    border-radius: 6px;
+  }
+  .db-data-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.8rem;
+    background: var(--octo-white);
+    box-shadow: 0 1px 4px rgba(0,0,0,0.07);
+    border-radius: 6px;
+    overflow: hidden;
+  }
+  .db-data-table thead { background: var(--octo-petrol); color: var(--octo-white); }
+  .db-data-table thead th { padding: 0.5rem 0.65rem; white-space: nowrap; cursor: pointer; user-select: none; font-size: 0.79rem; position: sticky; top: 0; z-index: 2; background: var(--octo-petrol); }
+  .db-data-table thead th a { color: var(--octo-white); text-decoration: none; display: flex; align-items: center; gap: 3px; }
+  .db-data-table thead th a:hover { color: #ffe; }
+  .sort-arr { opacity: 0.4; font-size: 0.68rem; }
+  .sort-arr.on { opacity: 1; }
+  .db-data-table tbody tr:nth-child(even) { background: #f9fafb; }
+  .db-data-table tbody tr:hover { background: #e5f5f6; }
+  .db-data-table td { padding: 0.38rem 0.65rem; border-bottom: 1px solid #eee; white-space: nowrap; max-width: 280px; overflow: hidden; text-overflow: ellipsis; }
+  .db-data-table td.nv { color: #bbb; font-style: italic; }
+
+  /* Pagination */
+  .db-pag { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 0.4rem; margin-top: 0.6rem; }
+  .db-pag-btns { display: flex; gap: 3px; }
+  .pbt {
+    padding: 0.25rem 0.55rem; border-radius: 4px; font-size: 0.78rem;
+    text-decoration: none; color: var(--octo-petrol);
+    border: 1px solid var(--octo-light-gray); background: var(--octo-white);
+    transition: all 0.12s;
+  }
+  .pbt:hover { background: var(--octo-petrol); color: var(--octo-white); border-color: var(--octo-petrol); }
+  .pbt.cur { background: var(--octo-petrol); color: var(--octo-white); border-color: var(--octo-petrol); font-weight: 700; }
+  .pbt.off { opacity: 0.35; pointer-events: none; }
+  .db-pp { font-size: 0.78rem; color: #777; display: flex; gap: 0.4rem; align-items: center; }
+  .db-pp select { padding: 0.2rem 0.4rem; border: 1px solid #ccc; border-radius: 4px; font-size: 0.78rem; }
+
+  /* ── Rechte Spalte ── */
+  .db-right {
+    position: sticky;
+    top: 1rem;
+    max-height: calc(100vh - 120px);
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+
+  /* Zeilenanzahl-Panel */
+  .db-counts {
+    background: var(--octo-white);
+    border: 1px solid var(--octo-light-gray);
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.07);
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+  }
+  .db-panel-header {
+    background: var(--octo-dark-petrol);
+    color: var(--octo-white);
+    padding: 0.5rem 0.9rem;
+    font-weight: 700;
+    font-size: 0.8rem;
+    flex-shrink: 0;
+  }
+  .db-counts-list { overflow-y: auto; flex: 1; }
+  .db-counts-list .row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.3rem 0.9rem;
+    border-bottom: 1px solid #f0f0f0;
+    font-size: 0.78rem;
+  }
+  .db-counts-list .row:hover { background: #f5fafa; }
+  .db-counts-list .row .tname { color: var(--octo-text); }
+  .db-counts-list .row .tname.active { color: var(--octo-petrol); font-weight: 600; }
+  .db-counts-list .row .tcount { color: var(--octo-orange); font-weight: 700; font-size: 0.76rem; }
+
+  /* SQL-Panel */
+  .db-sql-panel {
+    background: var(--octo-white);
+    border: 1px solid var(--octo-light-gray);
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.07);
+    flex-shrink: 0;
+  }
+  .db-sql-panel textarea {
+    width: 100%;
+    height: 110px;
+    padding: 0.5rem 0.7rem;
+    border: none;
+    border-bottom: 1px solid var(--octo-light-gray);
+    font-family: 'Courier New', monospace;
+    font-size: 0.78rem;
+    resize: vertical;
+    outline: none;
+    color: var(--octo-text);
+  }
+  .db-sql-panel textarea:focus { border-bottom-color: var(--octo-petrol); }
+  .db-sql-actions { display: flex; gap: 0.4rem; padding: 0.4rem 0.6rem; background: var(--octo-light-gray); }
+  .db-sql-result { max-height: 220px; overflow: auto; padding: 0.5rem 0.7rem; font-size: 0.75rem; }
+  .db-sql-result table { font-size: 0.73rem; }
+  .db-sql-result .err { color: #c0392b; }
+  .db-sql-result .ok  { color: #27ae60; font-weight: 600; }
+</style>
+
+<div class="db3">
+
+  <!-- ── LINKS: Tabellenliste ── -->
+  <div class="db-left">
+    <div class="db-left-header">🗄 Tabellen ({{ tables|length }})</div>
+    <div class="db-left-search">
+      <input type="text" id="tableFilter" placeholder="Filtern…" oninput="filterTables(this.value)" />
+    </div>
+    <div class="db-left-list" id="tableList">
+      {% for t in tables %}
+      <a href="/db-admin/{{ t.name }}/"
+         class="{% if t.name == active_table %}active{% endif %}"
+         data-name="{{ t.name }}">
+        <span style="overflow:hidden;text-overflow:ellipsis;">{{ t.name }}</span>
+        <span class="cnt">{{ t.rows }}</span>
+      </a>
+      {% endfor %}
+    </div>
+  </div>
+
+  <!-- ── MITTE: Inhalt ── -->
+  <div class="db-mid">
+    {% if content_type == "welcome" %}
+    <div class="db-welcome">
+      <h2>🛢 DB Verwaltung</h2>
+      <p>Wähle links eine Tabelle aus.</p>
+      <div class="big">{{ tables|length }}</div>
+      <p>Tabellen in der Datenbank</p>
+    </div>
+
+    {% else %}
+    <!-- Toolbar -->
+    <div class="db-toolbar">
+      <h1>📋 <strong>{{ table_name }}</strong>
+        <span style="font-size:0.8rem;color:#888;font-weight:400;">– {{ total_rows }} Zeilen</span>
+      </h1>
+      <div style="display:flex;gap:0.4rem;align-items:center;flex-wrap:wrap;">
+        <form class="db-search-form" method="get">
+          <input type="text" name="search" value="{{ search }}" placeholder="Suche…" />
+          <input type="hidden" name="per_page" value="{{ per_page }}" />
+          <button class="btn btn-primary btn-sm" type="submit">🔍</button>
+          {% if search %}<a href="?per_page={{ per_page }}" class="btn btn-secondary btn-sm">✕</a>{% endif %}
+        </form>
+        <span class="col-toggle" onclick="document.getElementById('colpanel').classList.toggle('open')">Spalteninfo</span>
+      </div>
+    </div>
+
+    <!-- Spalteninfo -->
+    <div class="col-panel" id="colpanel">
+      <table>
+        <thead><tr><th>Spalte</th><th>Typ</th><th>Null</th><th>Key</th><th>Default</th></tr></thead>
+        <tbody>
+          {% for col in columns %}
+          <tr><td>{{ col.name }}</td><td>{{ col.type }}</td><td>{{ col.null }}</td><td>{{ col.key }}</td><td>{{ col.default|default:"—" }}</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Datentabelle -->
+    <div class="db-table-wrap">
+      <table class="db-data-table">
+        <thead><tr>
+          {% for col in columns %}
+          <th>
+            {% if sort_col == col.name %}
+              {% if sort_dir == "asc" %}
+                <a href="?search={{ search }}&sort={{ col.name }}&dir=desc&page=1&per_page={{ per_page }}">{{ col.name }}<span class="sort-arr on">▲</span></a>
+              {% else %}
+                <a href="?search={{ search }}&sort={{ col.name }}&dir=asc&page=1&per_page={{ per_page }}">{{ col.name }}<span class="sort-arr on">▼</span></a>
+              {% endif %}
+            {% else %}
+              <a href="?search={{ search }}&sort={{ col.name }}&dir=asc&page=1&per_page={{ per_page }}">{{ col.name }}<span class="sort-arr">⇅</span></a>
+            {% endif %}
+          </th>
+          {% endfor %}
+        </tr></thead>
+        <tbody>
+          {% for row in rows %}
+          <tr>
+            {% for cell in row %}
+            <td {% if cell is None %}class="nv"{% endif %} title="{{ cell|default:'' }}">{% if cell is None %}NULL{% else %}{{ cell }}{% endif %}</td>
+            {% endfor %}
+          </tr>
+          {% empty %}
+          <tr><td colspan="{{ columns|length }}" style="text-align:center;padding:1.5rem;color:#aaa;">Keine Daten.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Pagination -->
+    <div class="db-pag">
+      <div class="db-pag-btns">
+        {% if page > 1 %}
+          <a class="pbt" href="?search={{ search }}&sort={{ sort_col }}&dir={{ sort_dir }}&page=1&per_page={{ per_page }}">«</a>
+          <a class="pbt" href="?search={{ search }}&sort={{ sort_col }}&dir={{ sort_dir }}&page={{ page|add:'-1' }}&per_page={{ per_page }}">‹</a>
+        {% else %}
+          <span class="pbt off">«</span><span class="pbt off">‹</span>
+        {% endif %}
+        {% for p in page_range %}
+          {% if p == page %}<span class="pbt cur">{{ p }}</span>
+          {% else %}<a class="pbt" href="?search={{ search }}&sort={{ sort_col }}&dir={{ sort_dir }}&page={{ p }}&per_page={{ per_page }}">{{ p }}</a>{% endif %}
+        {% endfor %}
+        {% if page < total_pages %}
+          <a class="pbt" href="?search={{ search }}&sort={{ sort_col }}&dir={{ sort_dir }}&page={{ page|add:'1' }}&per_page={{ per_page }}">›</a>
+          <a class="pbt" href="?search={{ search }}&sort={{ sort_col }}&dir={{ sort_dir }}&page={{ total_pages }}&per_page={{ per_page }}">»</a>
+        {% else %}
+          <span class="pbt off">›</span><span class="pbt off">»</span>
+        {% endif %}
+      </div>
+      <div class="db-pp">
+        Seite <strong>{{ page }}</strong>/{{ total_pages }} &nbsp;|&nbsp;
+        <form method="get" style="display:inline">
+          <input type="hidden" name="search" value="{{ search }}" />
+          <input type="hidden" name="sort" value="{{ sort_col }}" />
+          <input type="hidden" name="dir" value="{{ sort_dir }}" />
+          <input type="hidden" name="page" value="1" />
+          <select name="per_page" onchange="this.form.submit()">
+            <option value="25"  {% if per_page == 25  %}selected{% endif %}>25</option>
+            <option value="50"  {% if per_page == 50  %}selected{% endif %}>50</option>
+            <option value="100" {% if per_page == 100 %}selected{% endif %}>100</option>
+            <option value="200" {% if per_page == 200 %}selected{% endif %}>200</option>
+          </select>
+        </form>
+        pro Seite
+      </div>
+    </div>
+    <!-- SQL-Abfragefeld -->
+    <div class="db-sql-panel" style="margin-top:1rem;">
+      <div class="db-panel-header">⚡ SQL-Abfrage <span style="font-weight:400;font-size:0.75rem;opacity:0.8;">— Strg+Enter zum Ausführen</span></div>
+      <textarea id="sqlInput" placeholder="SELECT * FROM tabelle LIMIT 10;"></textarea>
+      <div class="db-sql-actions">
+        <button class="btn btn-primary btn-sm" onclick="runSQL()">▶ Ausführen</button>
+        <button class="btn btn-sm" style="background:#eee;color:#555;" onclick="document.getElementById('sqlInput').value='';document.getElementById('sqlResult').innerHTML=''">✕ Leeren</button>
+      </div>
+      <div class="db-sql-result" id="sqlResult"></div>
+    </div>
+
+    {% endif %}
+  </div>
+</div>
+
+<script>
+  // Tabellen-Filter (links)
+  function filterTables(val) {
+    const q = val.toLowerCase();
+    document.querySelectorAll('#tableList a').forEach(a => {
+      a.style.display = a.dataset.name.includes(q) ? '' : 'none';
+    });
+  }
+
+  // SQL ausführen
+  function runSQL() {
+    const sql = document.getElementById('sqlInput').value.trim();
+    const res = document.getElementById('sqlResult');
+    if (!sql) return;
+    res.innerHTML = '<span style="color:#888">Wird ausgeführt…</span>';
+
+    fetch('/db-admin/sql/', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRFToken': '{{ csrf_token }}'
+      },
+      body: JSON.stringify({ sql })
+    })
+    .then(r => r.json())
+    .then(data => {
+      if (data.error) {
+        res.innerHTML = `<span class="err">❌ ${data.error}</span>`;
+      } else if (data.type === 'select') {
+        if (data.rows.length === 0) {
+          res.innerHTML = '<span class="ok">✓ Keine Zeilen zurückgegeben.</span>';
+          return;
+        }
+        let html = `<div class="ok" style="margin-bottom:4px">✓ ${data.count} Zeile(n)</div>`;
+        html += '<div style="overflow-x:auto"><table><thead><tr>';
+        data.columns.forEach(c => html += `<th>${c}</th>`);
+        html += '</tr></thead><tbody>';
+        data.rows.forEach(row => {
+          html += '<tr>';
+          row.forEach(cell => html += `<td>${cell === null ? '<span style="color:#bbb;font-style:italic">NULL</span>' : cell}</td>`);
+          html += '</tr>';
+        });
+        html += '</tbody></table></div>';
+        res.innerHTML = html;
+      } else {
+        res.innerHTML = `<span class="ok">✓ ${data.rows_affected} Zeile(n) betroffen.</span>`;
+      }
+    })
+    .catch(e => res.innerHTML = `<span class="err">❌ Fehler: ${e}</span>`);
+  }
+
+  // SQL mit Ctrl+Enter ausführen
+  document.getElementById('sqlInput').addEventListener('keydown', e => {
+    if (e.ctrlKey && e.key === 'Enter') runSQL();
+  });
+</script>

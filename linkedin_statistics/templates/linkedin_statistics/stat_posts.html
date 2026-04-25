@@ -42,7 +42,7 @@
 <div class="tl-wrap">
   <div class="tl-date">{{ p.post_date|date:"d.m.Y"|default:"—" }}</div>
   <div class="tl-spine">
-    <div class="tl-dot" style="background:{% if p.content_type == 'Video' %}#185FA5{% else %}#1D9E75{% endif %}"></div>
+    <div class="tl-dot" style="background:{% if p.content_type == 'Video' %}#F56E28{% else %}#1D9E75{% endif %}"></div>
     <div class="tl-line"></div>
   </div>
   <div class="tl-card">
@@ -67,6 +67,7 @@
       </div>
       <div class="tl-stats">
         <span>👁 {{ p.impressions }}</span>
+        {% if p.views %}<span>▶ {{ p.views }}</span>{% endif %}
         <span>👆 {{ p.clicks }}</span>
         <span>❤ {{ p.likes }}</span>
         <span>💬 {{ p.comments }}</span>

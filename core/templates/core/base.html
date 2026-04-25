@@ -83,6 +83,9 @@
     <a href="/collectives/" {% if '/collectives/' in request.path %}class="active"{% endif %}>Collectives</a>
     <a href="/planner/" {% if '/planner/' in request.path %}class="active"{% endif %}>Create Posts</a>
     <a href="/statistics/" {% if '/statistics/' in request.path %}class="active"{% endif %}>Statistics</a>
+    {% if user.is_superuser %}
+    <a href="/db-admin/" {% if '/db-admin/' in request.path %}class="active"{% endif %}>DB Verwaltung</a>
+    {% endif %}
   </nav>
   {% if '/data/' in request.path %}
   <div class="sub-nav">

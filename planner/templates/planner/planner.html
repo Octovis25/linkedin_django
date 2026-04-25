@@ -30,6 +30,31 @@
 .color-dot.selected{border-color:#333}
 .img-drop{width:80px;height:80px;border-radius:8px;border:1.5px dashed #ced4da;flex-shrink:0;display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:pointer;gap:4px;background:#f8f9fa;transition:all .2s;overflow:hidden}
 .img-drop:hover{border-color:#008080;background:#f0faf8}
+/* image preview under text */
+.img-preview{display:none;position:relative;width:100%;margin-bottom:8px;border-radius:6px;overflow:hidden;border:0.5px solid #ced4da;background:#f8f9fa;cursor:zoom-in}
+.img-preview img{width:100%;max-height:220px;object-fit:contain;display:block}
+.img-preview-bar{position:absolute;bottom:0;left:0;right:0;display:flex;justify-content:space-between;align-items:center;padding:4px 8px;background:rgba(0,0,0,0.45);opacity:0;transition:opacity .15s}
+.img-preview:hover .img-preview-bar{opacity:1}
+.img-preview-bar span{font-size:12px;color:#fff;cursor:pointer;padding:2px 6px;border-radius:3px;background:rgba(255,255,255,0.15)}
+.img-preview-bar span:hover{background:rgba(255,255,255,0.3)}
+/* Lightbox */
+#img-lightbox{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.82);z-index:9999;align-items:center;justify-content:center;cursor:zoom-out}
+#img-lightbox.open{display:flex}
+#img-lightbox img{max-width:90vw;max-height:88vh;border-radius:8px;box-shadow:0 8px 40px rgba(0,0,0,.6);object-fit:contain}
+#img-lightbox-close{position:absolute;top:16px;right:20px;color:#fff;font-size:28px;cursor:pointer;line-height:1;opacity:.8}
+#img-lightbox-close:hover{opacity:1}
+
+/* ── Rich text editor ── */
+.editor-wrap{border:0.5px solid #ced4da;border-radius:4px;overflow:hidden;margin-bottom:8px}
+.editor-toolbar{display:flex;gap:2px;padding:4px 6px;background:#f8f9fa;border-bottom:0.5px solid #e0e0e0;flex-wrap:wrap}
+.editor-toolbar button{padding:2px 7px;font-size:12px;border:0.5px solid #ced4da;border-radius:3px;background:#fff;cursor:pointer;line-height:1.4;color:#333;transition:background .15s}
+.editor-toolbar button:hover{background:#e8f5f5;border-color:#008080}
+.editor-toolbar .tb-sep{width:1px;background:#dee2e6;margin:2px 3px}
+.tb-highlight{background:#FFF176 !important;font-weight:600;color:#7a5c00 !important;border-color:#e6d800 !important}
+.tb-highlight:hover{background:#FFEE00 !important}
+.content-editor{min-height:180px;max-height:340px;overflow-y:auto;padding:8px 10px;font-size:13px;line-height:1.6;outline:none;color:#212529;white-space:pre-wrap;word-break:break-word}
+.content-editor:focus{background:#fafffe}
+.content-editor mark{background:#FFF176;border-radius:2px;padding:0 1px}
 </style>
 
 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem">
@@ -180,21 +205,38 @@
       <label style="font-size:12px;color:#6c757d;white-space:nowrap">Planned to post</label>
       <input type="date" id="m-date" class="fselect" style="flex:1">
     </div>
-    <div style="display:flex;gap:12px;align-items:flex-start;margin-bottom:8px">
-      <div style="display:flex;flex-direction:column;gap:4px;align-items:center">
-        <div class="img-drop" id="m-thumb"
-             onclick="document.getElementById('m-img-input').click()"
-             ondragover="event.preventDefault();this.style.borderColor='#008080'"
-             ondragleave="this.style.borderColor='#ced4da'"
-             ondrop="handleImgDrop(event,'m')">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" stroke="#aaa" stroke-width="1.5"/><polyline points="17,8 12,3 7,8" stroke="#aaa" stroke-width="1.5"/><line x1="12" y1="3" x2="12" y2="15" stroke="#aaa" stroke-width="1.5"/></svg>
-          <span style="font-size:10px;color:#aaa;text-align:center">Drop or click</span>
-        </div>
+    <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
+      <div class="img-drop" id="m-thumb"
+           onclick="document.getElementById('m-img-input').click()"
+           ondragover="event.preventDefault();this.style.borderColor='#008080'"
+           ondragleave="this.style.borderColor='#ced4da'"
+           ondrop="handleImgDrop(event,'m')"
+           style="width:44px;height:44px;flex-shrink:0">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" stroke="#aaa" stroke-width="1.5"/><polyline points="17,8 12,3 7,8" stroke="#aaa" stroke-width="1.5"/><line x1="12" y1="3" x2="12" y2="15" stroke="#aaa" stroke-width="1.5"/></svg>
       </div>
       <input type="file" id="m-img-input" accept="image/*" style="display:none" onchange="previewImg('m',this)">
       <input type="text" id="m-title" placeholder="Title (optional)..." class="finput" style="margin-bottom:0;flex:1">
     </div>
-    <textarea id="m-content" placeholder="Post text..." style="width:100%;min-height:100px;font-size:13px;padding:8px;border:0.5px solid #ced4da;border-radius:4px;resize:vertical;box-sizing:border-box;margin-bottom:8px"></textarea>
+    <div class="editor-wrap">
+      <div class="editor-toolbar">
+        <button type="button" onmousedown="event.preventDefault();fmt('m','bold')" title="Bold"><b>B</b></button>
+        <button type="button" onmousedown="event.preventDefault();fmt('m','italic')" title="Italic"><i>I</i></button>
+        <button type="button" onmousedown="event.preventDefault();fmt('m','underline')" title="Underline"><u>U</u></button>
+        <div class="tb-sep"></div>
+        <button type="button" class="tb-highlight" onmousedown="event.preventDefault();fmtMark('m')" title="Mark for revision — needs to be changed before posting">🟡 Mark</button>
+        <button type="button" onmousedown="event.preventDefault();fmt('m','removeFormat')" title="Remove all formatting" style="font-size:11px;color:#888">✕ Clear</button>
+      </div>
+      <div id="m-content" contenteditable="true" class="content-editor" data-placeholder="Post text..."></div>
+    </div>
+    <!-- Image preview under text -->
+    <div class="img-preview" id="m-img-preview" onclick="openLightbox(this.querySelector('img').src)">
+      <img id="m-img-preview-img" src="" alt="">
+      <div class="img-preview-bar">
+        <span onclick="event.stopPropagation();document.getElementById('m-img-input').click()">🔄 Replace</span>
+        <span onclick="event.stopPropagation();openLightbox(document.getElementById('m-img-preview-img').src)">🔍 Full size</span>
+        <span onclick="event.stopPropagation();clearImgPreview('m')" style="color:#ffb3b3">🗑 Remove</span>
+      </div>
+    </div>
     <textarea id="m-comment" placeholder="Internal comment / notes..." style="width:100%;min-height:50px;font-size:13px;padding:8px;border:0.5px solid #ced4da;border-radius:4px;resize:vertical;box-sizing:border-box;background:#fffef0"></textarea>
     <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:12px">
       <button onclick="closeModal('post-modal')" style="font-size:13px;padding:5px 14px;border:0.5px solid #ced4da;border-radius:4px;background:#fff;cursor:pointer">Cancel</button>
@@ -214,28 +256,50 @@
       </select>
       <input type="date" id="e-date" class="fselect" style="flex:1">
     </div>
-    <div style="display:flex;gap:12px;align-items:flex-start;margin-bottom:8px">
-      <div style="display:flex;flex-direction:column;gap:4px;align-items:center">
-        <div class="img-drop" id="e-thumb"
-             onclick="document.getElementById('e-img-input').click()"
-             ondragover="event.preventDefault();this.style.borderColor='#008080'"
-             ondragleave="this.style.borderColor='#ced4da'"
-             ondrop="handleImgDrop(event,'e')">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" stroke="#aaa" stroke-width="1.5"/><polyline points="17,8 12,3 7,8" stroke="#aaa" stroke-width="1.5"/><line x1="12" y1="3" x2="12" y2="15" stroke="#aaa" stroke-width="1.5"/></svg>
-          <span style="font-size:10px;color:#aaa;text-align:center">Drop or click</span>
-        </div>
-        <button onclick="removeImg()" id="e-del-img" style="display:none;font-size:11px;padding:2px 6px;border:0.5px solid #A32D2D;border-radius:4px;background:#fff;cursor:pointer;color:#A32D2D">🗑 Remove</button>
+    <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
+      <div class="img-drop" id="e-thumb"
+           onclick="document.getElementById('e-img-input').click()"
+           ondragover="event.preventDefault();this.style.borderColor='#008080'"
+           ondragleave="this.style.borderColor='#ced4da'"
+           ondrop="handleImgDrop(event,'e')"
+           style="width:44px;height:44px;flex-shrink:0">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" stroke="#aaa" stroke-width="1.5"/><polyline points="17,8 12,3 7,8" stroke="#aaa" stroke-width="1.5"/><line x1="12" y1="3" x2="12" y2="15" stroke="#aaa" stroke-width="1.5"/></svg>
       </div>
       <input type="file" id="e-img-input" accept="image/*" style="display:none" onchange="previewImg('e',this)">
       <input type="text" id="e-title" placeholder="Title..." class="finput" style="margin-bottom:0;flex:1">
     </div>
-    <textarea id="e-content" style="width:100%;min-height:100px;font-size:13px;padding:8px;border:0.5px solid #ced4da;border-radius:4px;resize:vertical;box-sizing:border-box;margin-bottom:8px"></textarea>
+    <div class="editor-wrap">
+      <div class="editor-toolbar">
+        <button type="button" onmousedown="event.preventDefault();fmt('e','bold')" title="Bold"><b>B</b></button>
+        <button type="button" onmousedown="event.preventDefault();fmt('e','italic')" title="Italic"><i>I</i></button>
+        <button type="button" onmousedown="event.preventDefault();fmt('e','underline')" title="Underline"><u>U</u></button>
+        <div class="tb-sep"></div>
+        <button type="button" class="tb-highlight" onmousedown="event.preventDefault();fmtMark('e')" title="Mark for revision — needs to be changed before posting">🟡 Mark</button>
+        <button type="button" onmousedown="event.preventDefault();fmt('e','removeFormat')" title="Remove all formatting" style="font-size:11px;color:#888">✕ Clear</button>
+      </div>
+      <div id="e-content" contenteditable="true" class="content-editor" data-placeholder="Post text..."></div>
+    </div>
+    <!-- Image preview under text -->
+    <div class="img-preview" id="e-img-preview" onclick="openLightbox(this.querySelector('img').src)">
+      <img id="e-img-preview-img" src="" alt="">
+      <div class="img-preview-bar">
+        <span onclick="event.stopPropagation();document.getElementById('e-img-input').click()">🔄 Replace</span>
+        <span onclick="event.stopPropagation();openLightbox(document.getElementById('e-img-preview-img').src)">🔍 Full size</span>
+        <span onclick="event.stopPropagation();removeImg()" style="color:#ffb3b3">🗑 Remove</span>
+      </div>
+    </div>
     <textarea id="e-comment" placeholder="Internal comment / notes..." style="width:100%;min-height:50px;font-size:13px;padding:8px;border:0.5px solid #ced4da;border-radius:4px;resize:vertical;box-sizing:border-box;background:#fffef0"></textarea>
     <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:12px">
       <button onclick="closeModal('edit-modal')" style="font-size:13px;padding:5px 14px;border:0.5px solid #ced4da;border-radius:4px;background:#fff;cursor:pointer">Cancel</button>
       <button onclick="updatePost()" style="font-size:13px;padding:5px 14px;background:#008080;color:#fff;border:none;border-radius:4px;cursor:pointer">Save</button>
     </div>
   </div>
+</div>
+
+<!-- Lightbox -->
+<div id="img-lightbox" onclick="closeLightbox()">
+  <span id="img-lightbox-close" onclick="closeLightbox()">×</span>
+  <img id="img-lightbox-img" src="" alt="Preview">
 </div>
 
 <!-- Serie Modal -->
@@ -255,6 +319,42 @@
 const CSRF = '{{ csrf_token }}';
 let draggedId = null;
 let selectedColor = 'blue';
+
+/* ── Editor helpers ── */
+function fmt(prefix, cmd) {
+  const el = document.getElementById(prefix + '-content');
+  el.focus();
+  document.execCommand(cmd, false, null);
+}
+function fmtMark(prefix) {
+  const el = document.getElementById(prefix + '-content');
+  el.focus();
+  // toggle yellow highlight
+  const sel = window.getSelection();
+  if (!sel || sel.isCollapsed) return;
+  document.execCommand('hiliteColor', false, '#FFF176');
+}
+function getEditorText(prefix) {
+  return document.getElementById(prefix + '-content').innerHTML;
+}
+function setEditorText(prefix, html) {
+  const el = document.getElementById(prefix + '-content');
+  // plain text (old posts) → show as-is; HTML (new posts) → render
+  el.innerHTML = html || '';
+}
+function clearEditor(prefix) {
+  document.getElementById(prefix + '-content').innerHTML = '';
+}
+
+/* Placeholder behaviour for contenteditable */
+document.addEventListener('DOMContentLoaded', () => {
+  document.querySelectorAll('.content-editor[data-placeholder]').forEach(el => {
+    const ph = el.dataset.placeholder;
+    const style = document.createElement('style');
+    style.textContent = `#${el.id}:empty:before{content:attr(data-placeholder);color:#aaa;pointer-events:none}`;
+    document.head.appendChild(style);
+  });
+});
 
 function api(url, data) {
   return fetch(url, {method:'POST', headers:{'Content-Type':'application/json','X-CSRFToken':CSRF}, body:JSON.stringify(data)}).then(r=>r.json());
@@ -277,19 +377,47 @@ function previewImg(prefix, input) {
   if (!file) return;
   const reader = new FileReader();
   reader.onload = ev => {
-    document.getElementById(prefix+'-thumb').innerHTML =
-      `<img src="${ev.target.result}" style="width:80px;height:80px;object-fit:cover;border-radius:6px">`;
-    if (prefix === 'e') document.getElementById('e-del-img').style.display = 'block';
+    showImgPreview(prefix, ev.target.result);
   };
   reader.readAsDataURL(file);
 }
 
+function showImgPreview(prefix, src) {
+  const previewDiv = document.getElementById(prefix+'-img-preview');
+  const previewImg = document.getElementById(prefix+'-img-preview-img');
+  previewImg.src = src;
+  previewDiv.style.display = 'block';
+  // small thumb: show a tick to indicate image loaded
+  const thumb = document.getElementById(prefix+'-thumb');
+  thumb.style.borderColor = '#008080';
+  thumb.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none"><polyline points="20,6 9,17 4,12" stroke="#008080" stroke-width="2"/></svg>';
+}
+
+function clearImgPreview(prefix) {
+  const previewDiv = document.getElementById(prefix+'-img-preview');
+  previewDiv.style.display = 'none';
+  document.getElementById(prefix+'-img-preview-img').src = '';
+  document.getElementById(prefix+'-img-input').value = '';
+  const thumb = document.getElementById(prefix+'-thumb');
+  thumb.style.borderColor = '#ced4da';
+  thumb.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" stroke="#aaa" stroke-width="1.5"/><polyline points="17,8 12,3 7,8" stroke="#aaa" stroke-width="1.5"/><line x1="12" y1="3" x2="12" y2="15" stroke="#aaa" stroke-width="1.5"/></svg>';
+}
+
+function openLightbox(src) {
+  if (!src) return;
+  document.getElementById('img-lightbox-img').src = src;
+  document.getElementById('img-lightbox').classList.add('open');
+  document.body.style.overflow = 'hidden';
+}
+function closeLightbox() {
+  document.getElementById('img-lightbox').classList.remove('open');
+  document.body.style.overflow = '';
+}
+
 async function removeImg() {
   const id = document.getElementById('e-id').value;
-  await api('/planner/api/post/', {action:'delete_image', id});
-  document.getElementById('e-thumb').innerHTML =
-    `<svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" stroke="#aaa" stroke-width="1.5"/><polyline points="17,8 12,3 7,8" stroke="#aaa" stroke-width="1.5"/><line x1="12" y1="3" x2="12" y2="15" stroke="#aaa" stroke-width="1.5"/></svg><span style="font-size:10px;color:#aaa;text-align:center">Drop or click</span>`;
-  document.getElementById('e-del-img').style.display = 'none';
+  if (id) await api('/planner/api/post/', {action:'delete_image', id});
+  clearImgPreview('e');
 }
 
 // Category
@@ -380,12 +508,10 @@ function openPostModal(topicId, serieId) {
   document.getElementById('m-series-id').value = serieId || '';
   if (topicId) document.getElementById('m-topic').value = topicId;
   document.getElementById('m-title').value = '';
-  document.getElementById('m-content').value = '';
+  clearEditor('m');
   document.getElementById('m-comment').value = '';
   document.getElementById('m-date').value = '';
-  document.getElementById('m-img-input').value = '';
-  document.getElementById('m-thumb').innerHTML =
-    `<svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" stroke="#aaa" stroke-width="1.5"/><polyline points="17,8 12,3 7,8" stroke="#aaa" stroke-width="1.5"/><line x1="12" y1="3" x2="12" y2="15" stroke="#aaa" stroke-width="1.5"/></svg><span style="font-size:10px;color:#aaa;text-align:center">Drop or click</span>`;
+  clearImgPreview('m');
   openModal('post-modal');
 }
 
@@ -397,7 +523,7 @@ async function savePost() {
     status: document.getElementById('m-status').value,
     planned_date: document.getElementById('m-date').value || null,
     title: document.getElementById('m-title').value,
-    content: document.getElementById('m-content').value,
+    content: getEditorText('m'),
     comment: document.getElementById('m-comment').value,
   });
   const imgInput = document.getElementById('m-img-input');
@@ -414,19 +540,15 @@ async function savePost() {
 function openEditModal(id, title, content, status, date, comment, image) {
   document.getElementById('e-id').value = id;
   document.getElementById('e-title').value = title;
-  document.getElementById('e-content').value = content;
+  setEditorText('e', content);
   document.getElementById('e-status').value = status;
   document.getElementById('e-date').value = date || '';
   document.getElementById('e-comment').value = comment || '';
   document.getElementById('e-img-input').value = '';
-  const thumb = document.getElementById('e-thumb');
-  const delBtn = document.getElementById('e-del-img');
   if (image) {
-    thumb.innerHTML = `<img src="/media/${image}" style="width:80px;height:80px;object-fit:cover;border-radius:6px">`;
-    delBtn.style.display = 'block';
+    showImgPreview('e', `/media/${image}`);
   } else {
-    thumb.innerHTML = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" stroke="#aaa" stroke-width="1.5"/><polyline points="17,8 12,3 7,8" stroke="#aaa" stroke-width="1.5"/><line x1="12" y1="3" x2="12" y2="15" stroke="#aaa" stroke-width="1.5"/></svg><span style="font-size:10px;color:#aaa;text-align:center">Drop or click</span>`;
-    delBtn.style.display = 'none';
+    clearImgPreview('e');
   }
   openModal('edit-modal');
 }
@@ -436,7 +558,7 @@ async function updatePost() {
   await api('/planner/api/post/', {
     action:'update', id,
     title: document.getElementById('e-title').value,
-    content: document.getElementById('e-content').value,
+    content: getEditorText('e'),
     comment: document.getElementById('e-comment').value,
     status: document.getElementById('e-status').value,
     planned_date: document.getElementById('e-date').value || null,
@@ -468,6 +590,9 @@ async function saveSerie() {
 
 document.querySelectorAll('.modal-bg').forEach(m => {
   m.addEventListener('click', e => { if(e.target===m) m.classList.remove('open'); });
+});
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') closeLightbox();
 });
 </script>
 {% endblock %}

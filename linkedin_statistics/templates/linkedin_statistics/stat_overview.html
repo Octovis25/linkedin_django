@@ -23,7 +23,7 @@
   <div style="display:grid;grid-template-columns:80px 12px 1fr;gap:0 16px;align-items:stretch">
     <div style="text-align:right;font-size:12px;color:#6c757d;padding-top:13px">{{ p.post_date|date:"d.m.Y"|default:"—" }}</div>
     <div style="display:flex;flex-direction:column;align-items:center">
-      <div style="width:10px;height:10px;border-radius:50%;margin-top:13px;flex-shrink:0;background:{% if p.content_type == 'Video' %}#185FA5{% else %}#1D9E75{% endif %}"></div>
+      <div style="width:10px;height:10px;border-radius:50%;margin-top:13px;flex-shrink:0;background:{% if p.content_type == 'Video' %}#F56E28{% else %}#1D9E75{% endif %}"></div>
       <div style="width:1px;flex:1;background:#dee2e6;margin-top:2px"></div>
     </div>
     <div style="background:#fff;border:0.5px solid #e0e0e0;border-radius:.5rem;padding:10px 14px;margin-bottom:10px;display:flex;gap:12px;align-items:flex-start">
@@ -48,6 +48,7 @@
         </div>
         <div style="display:flex;gap:12px;font-size:12px;color:#6c757d;flex-wrap:wrap">
           <span>👁 {{ p.impressions }}</span>
+          {% if p.views %}<span>▶ {{ p.views }}</span>{% endif %}
           <span>👆 {{ p.clicks }}</span>
           <span>❤ {{ p.likes }}</span>
           <span>💬 {{ p.comments }}</span>
@@ -118,33 +119,101 @@
 </div>
 </div>
 
-<!-- ═══ 3. Chart: Content Metrics (Impressions + Engagement Rate) ═══ -->
+<!-- ═══ 3. Chart: Video vs No Video ═══ -->
 <div class="cc">
-  <h2>📈 Content Metrics</h2>
-  <canvas id="contentMetrics" height="100"></canvas>
-  <p class="agg-note">Impressions als Balken; Engagement Rate (%) als Linie. Rechte Achse ist auf 45% skaliert.</p>
+  <h2>🎬 Video vs. No Video – Comparison <span style="font-size:.8rem;font-weight:400;color:#6c757d">(excl. Events, period: {{ date_from }} – {{ date_to }})</span></h2>
+
+  <!-- Summary KPI comparison -->
+  {% with v=video_summary.video nv=video_summary.novideo %}
+  {% if v or nv %}
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:1.5rem">
+
+    <!-- Video card -->
+    <div style="background:#FFF4EF;border:1px solid #F5A580;border-radius:.5rem;padding:1rem">
+      <div style="font-weight:600;color:#C04A0A;margin-bottom:.75rem;font-size:.95rem">🎬 Video Posts</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:.5rem">
+        <div style="text-align:center;background:#fff;border-radius:.375rem;padding:.5rem .25rem">
+          <div style="font-size:1.3rem;font-weight:700;color:#C04A0A">{{ v.count|default:"—" }}</div>
+          <div style="font-size:.7rem;color:#6c757d;text-transform:uppercase;letter-spacing:.4px">Posts</div>
+        </div>
+        <div style="text-align:center;background:#fff;border-radius:.375rem;padding:.5rem .25rem">
+          <div style="font-size:1.3rem;font-weight:700;color:#C04A0A">{{ v.avg_imp|default:"—" }}</div>
+          <div style="font-size:.7rem;color:#6c757d;text-transform:uppercase;letter-spacing:.4px">Ø Impressions</div>
+        </div>
+        <div style="text-align:center;background:#fff;border-radius:.375rem;padding:.5rem .25rem;border:2px solid #F56E28">
+          <div style="font-size:1.3rem;font-weight:700;color:#C04A0A">{{ v.avg_cli|default:"—" }}</div>
+          <div style="font-size:.7rem;color:#C04A0A;text-transform:uppercase;letter-spacing:.4px;font-weight:600">Ø Clicks ★</div>
+        </div>
+        <div style="text-align:center;background:#fff;border-radius:.375rem;padding:.5rem .25rem">
+          <div style="font-size:1.3rem;font-weight:700;color:#C04A0A">{{ v.ctr|default:"—" }}%</div>
+          <div style="font-size:.7rem;color:#6c757d;text-transform:uppercase;letter-spacing:.4px">CTR</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- No Video card -->
+    <div style="background:#EEF9F7;border:1px solid #72C9BC;border-radius:.5rem;padding:1rem">
+      <div style="font-weight:600;color:#0F6E56;margin-bottom:.75rem;font-size:.95rem">📄 No Video Posts</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:.5rem">
+        <div style="text-align:center;background:#fff;border-radius:.375rem;padding:.5rem .25rem">
+          <div style="font-size:1.3rem;font-weight:700;color:#0F6E56">{{ nv.count|default:"—" }}</div>
+          <div style="font-size:.7rem;color:#6c757d;text-transform:uppercase;letter-spacing:.4px">Posts</div>
+        </div>
+        <div style="text-align:center;background:#fff;border-radius:.375rem;padding:.5rem .25rem">
+          <div style="font-size:1.3rem;font-weight:700;color:#0F6E56">{{ nv.avg_imp|default:"—" }}</div>
+          <div style="font-size:.7rem;color:#6c757d;text-transform:uppercase;letter-spacing:.4px">Ø Impressions</div>
+        </div>
+        <div style="text-align:center;background:#fff;border-radius:.375rem;padding:.5rem .25rem;border:2px solid #1D9E75">
+          <div style="font-size:1.3rem;font-weight:700;color:#0F6E56">{{ nv.avg_cli|default:"—" }}</div>
+          <div style="font-size:.7rem;color:#0F6E56;text-transform:uppercase;letter-spacing:.4px;font-weight:600">Ø Clicks ★</div>
+        </div>
+        <div style="text-align:center;background:#fff;border-radius:.375rem;padding:.5rem .25rem">
+          <div style="font-size:1.3rem;font-weight:700;color:#0F6E56">{{ nv.ctr|default:"—" }}%</div>
+          <div style="font-size:.7rem;color:#6c757d;text-transform:uppercase;letter-spacing:.4px">CTR</div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Interpretation hint -->
+  <p style="font-size:.82rem;color:#495057;margin-bottom:1.25rem;background:#f8f9fa;border-left:3px solid #008080;padding:.5rem .75rem;border-radius:0 .25rem .25rem 0">
+    <strong>👆 Clicks per Post</strong> is the key signal for genuine interest — it's already normalised by post count, so the number of videos published doesn't skew the result.
+    {% if v.avg_cli and nv.avg_cli %}
+      {% if v.avg_cli > nv.avg_cli %}
+        In this period, <strong>Video posts get more clicks on average ({{ v.avg_cli }} vs {{ nv.avg_cli }})</strong> — people are actively clicking through, not just watching.
+        CTR tells the same story: {{ v.ctr }}% (Video) vs {{ nv.ctr }}% (No Video).
+      {% elif nv.avg_cli > v.avg_cli %}
+        In this period, <strong>No Video posts get more clicks on average ({{ nv.avg_cli }} vs {{ v.avg_cli }})</strong> — content without video drives more active interest per post.
+        CTR: {{ nv.ctr }}% (No Video) vs {{ v.ctr }}% (Video).
+      {% else %}
+        Both formats generate the <strong>same average clicks ({{ v.avg_cli }}) per post</strong> in this period.
+      {% endif %}
+    {% endif %}
+  </p>
+  {% endif %}
+  {% endwith %}
+
+  <!-- Per-post bar chart -->
+  <div id="videoSplitWrapper" style="position:relative;width:100%;height:400px;overflow:hidden">
+    <canvas id="videoSplit"></canvas>
+  </div>
+  <p class="agg-note">Each bar = one post. Orange = Video, Teal = No Video. Hover to see Clicks. Sorted by impressions descending.</p>
 </div>
 
-<!-- ═══ 4. Chart: Interaktionen (absolut) ═══ -->
-<div class="cc">
-  <h2>📊 Interaktionen (absolut)</h2>
-  <canvas id="interaktionen" height="120"></canvas>
-  <p class="agg-note">Daten werden <strong>{{ agg_text }}</strong> zusammengefasst. Pro Zeitraum wird je Post nur der letzte Snapshot gezählt.</p>
-</div>
-
-<!-- ═══ 5. Top 5 nach Impressions ═══ -->
+<!-- ═══ 6. Top 5 nach Impressions ═══ -->
 <div class="cc" style="padding:0">
   <h2 style="padding:1rem 1.5rem .5rem">🏆 Top 5 Posts – nach Impressions</h2>
   {% if top_posts_impressions %}
   <table class="pt">
-    <thead><tr><th>#</th><th>Post</th><th>Datum</th><th>Impressions</th><th>Clicks</th><th>Likes</th><th>Comments</th><th>Shares</th></tr></thead>
+    <thead><tr><th>#</th><th>Post</th><th>Datum</th><th>Impressions</th><th>Views</th><th>Clicks</th><th>Likes</th><th>Comments</th><th>Shares</th></tr></thead>
     <tbody>
     {% for p in top_posts_impressions %}
     <tr>
       <td>{{ forloop.counter }}</td>
       <td>{% if p.link %}<a href="{{ p.link }}" target="_blank">{{ p.title|truncatechars:50 }}</a>{% else %}{{ p.title|truncatechars:50 }}{% endif %}</td>
       <td>{{ p.post_date|date:"d.m.Y"|default:"—" }}</td>
-      <td>{{ p.impressions }}</td><td>{{ p.clicks }}</td><td>{{ p.likes }}</td><td>{{ p.comments }}</td><td>{{ p.shares }}</td>
+      <td>{{ p.impressions }}</td><td>{% if p.views %}{{ p.views }}{% else %}—{% endif %}</td><td>{{ p.clicks }}</td><td>{{ p.likes }}</td><td>{{ p.comments }}</td><td>{{ p.shares }}</td>
     </tr>
     {% endfor %}
     </tbody>
@@ -157,14 +226,14 @@
   <h2 style="padding:1rem 1.5rem .5rem">🔥 Top 5 Posts – nach Engagement</h2>
   {% if top_posts_engagement %}
   <table class="pt">
-    <thead><tr><th>#</th><th>Post</th><th>Datum</th><th>Engagement</th><th>Likes</th><th>Comments</th><th>Shares</th><th>Impressions</th></tr></thead>
+    <thead><tr><th>#</th><th>Post</th><th>Datum</th><th>Engagement</th><th>Views</th><th>Likes</th><th>Comments</th><th>Shares</th><th>Impressions</th></tr></thead>
     <tbody>
     {% for p in top_posts_engagement %}
     <tr>
       <td>{{ forloop.counter }}</td>
       <td>{% if p.link %}<a href="{{ p.link }}" target="_blank">{{ p.title|truncatechars:50 }}</a>{% else %}{{ p.title|truncatechars:50 }}{% endif %}</td>
       <td>{{ p.post_date|date:"d.m.Y"|default:"—" }}</td>
-      <td><strong>{{ p.engagement }}</strong></td><td>{{ p.likes }}</td><td>{{ p.comments }}</td><td>{{ p.shares }}</td><td>{{ p.impressions }}</td>
+      <td><strong>{{ p.engagement }}</strong></td><td>{% if p.views %}{{ p.views }}{% else %}—{% endif %}</td><td>{{ p.likes }}</td><td>{{ p.comments }}</td><td>{{ p.shares }}</td><td>{{ p.impressions }}</td>
     </tr>
     {% endfor %}
     </tbody>
@@ -174,79 +243,72 @@
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
-const labels = {{ chart_labels_json|safe }};
-const impressionsData = {{ chart_impressions_json|safe }};
-const engagementData = {{ chart_engagement_json|safe }};
-const clicksData = {{ chart_clicks_json|safe }};
-const reactionsData = {{ chart_reactions_json|safe }};
-const commentsData = {{ chart_comments_json|safe }};
-const sharesData = {{ chart_shares_json|safe }};
+const postLabels      = {{ chart_post_labels_json|safe }};
+const impVideoData    = {{ chart_imp_video_json|safe }};
+const impNoVideoData  = {{ chart_imp_novideo_json|safe }};
+const cliVideoData    = {{ chart_cli_video_json|safe }};
+const cliNoVideoData  = {{ chart_cli_novideo_json|safe }};
 
-/* ── Content Metrics: Impressions (Bar) + Engagement Rate (Line) ── */
-if (labels && labels.length) {
-  new Chart(document.getElementById('contentMetrics').getContext('2d'), {
+/* ── Video vs No Video: per-post Impressions + Clicks ── */
+if (postLabels && postLabels.length) {
+  // Merge video/novideo into single arrays with per-bar color
+  const impData = postLabels.map((_, i) => impVideoData[i] ?? impNoVideoData[i] ?? 0);
+  const cliData = postLabels.map((_, i) => cliVideoData[i] ?? cliNoVideoData[i] ?? 0);
+  const isVideo = postLabels.map((_, i) => impVideoData[i] !== null && impVideoData[i] !== undefined);
+
+  const colImp = isVideo.map(v => v ? 'rgba(245,110,40,0.75)' : 'rgba(0,133,145,0.65)');
+  const colCli = isVideo.map(v => v ? 'rgba(160,60,10,0.9)'  : 'rgba(0,80,90,0.85)');
+
+  const dynamicHeight = Math.max(300, postLabels.length * 18);
+  document.getElementById('videoSplitWrapper').style.height = dynamicHeight + 'px';
+
+  new Chart(document.getElementById('videoSplit').getContext('2d'), {
+    type: 'bar',
     data: {
-      labels: labels,
+      labels: postLabels,
       datasets: [
         {
-          type: 'bar',
           label: 'Impressions',
-          data: impressionsData,
-          backgroundColor: 'rgba(0,119,181,0.5)',
-          borderColor: 'rgba(0,119,181,1)',
-          borderWidth: 1,
-          yAxisID: 'y',
-          order: 2
+          data: impData,
+          backgroundColor: colImp,
+          borderWidth: 0,
+          maxBarThickness: 12,
         },
         {
-          type: 'line',
-          label: 'Engagement Rate (%)',
-          data: engagementData,
-          borderColor: 'rgba(220,53,69,1)',
-          backgroundColor: 'rgba(220,53,69,0.1)',
-          borderWidth: 2,
-          pointRadius: 4,
-          tension: 0.3,
-          fill: true,
-          yAxisID: 'y1',
-          order: 1
+          label: 'Clicks',
+          data: cliData,
+          backgroundColor: colCli,
+          borderWidth: 0,
+          maxBarThickness: 6,
         }
       ]
     },
     options: {
+      indexAxis: 'y',
       responsive: true,
+      maintainAspectRatio: false,
       interaction: { mode: 'index', intersect: false },
-      plugins: { legend: { position: 'top' } },
+      plugins: {
+        legend: {
+          position: 'top',
+          labels: {
+            generateLabels: () => [
+              { text: 'Impressions – Video',    fillStyle: 'rgba(245,110,40,0.75)', strokeStyle: 'transparent' },
+              { text: 'Impressions – No Video', fillStyle: 'rgba(0,133,145,0.65)',  strokeStyle: 'transparent' },
+              { text: 'Clicks – Video',         fillStyle: 'rgba(160,60,10,0.9)',   strokeStyle: 'transparent' },
+              { text: 'Clicks – No Video',      fillStyle: 'rgba(0,80,90,0.85)',    strokeStyle: 'transparent' },
+            ]
+          }
+        },
+        tooltip: {
+          callbacks: {
+            label: ctx => ctx.dataset.label + ': ' + ctx.parsed.x
+          }
+        }
+      },
       scales: {
-        x: { ticks: { maxRotation: 45, minRotation: 0 } },
-        y:  { title: { display: true, text: 'Impressions' }, beginAtZero: true, position: 'left' },
-        y1: { title: { display: true, text: 'Engagement %' }, beginAtZero: true, max: 45, position: 'right',
-              grid: { drawOnChartArea: false } }
-      }
-    }
-  });
-}
-
-/* ── Interaktionen (absolut) ── */
-if (labels && labels.length) {
-  new Chart(document.getElementById('interaktionen').getContext('2d'), {
-    type: 'bar',
-    data: {
-      labels: labels,
-      datasets: [
-        { label: 'Clicks',    data: clicksData,    backgroundColor: 'rgba(135,206,235,0.7)', borderWidth: 0 },
-        { label: 'Likes/Reactions',  data: reactionsData, backgroundColor: 'rgba(255,182,193,0.7)', borderWidth: 0 },
-        { label: 'Comments',   data: commentsData,  backgroundColor: 'rgba(255,218,185,0.7)', borderWidth: 0 },
-        { label: 'Shares',     data: sharesData,    backgroundColor: 'rgba(240,230,140,0.7)', borderWidth: 0 }
-      ]
-    },
-    options: {
-      responsive: true,
-      interaction: { mode: 'index', intersect: false },
-      plugins: { legend: { position: 'top' } },
-      scales: {
-        x: { ticks: { maxRotation: 45, minRotation: 0 } },
-        y: { title: { display: true, text: 'Anzahl' }, beginAtZero: true }
+        x: { title: { display: true, text: 'Count' }, beginAtZero: true },
+        y: { ticks: { font: { size: 11 } } }
       }
     }
   });
@@ -276,7 +338,7 @@ if (labels && labels.length) {
   <div style="display:grid;grid-template-columns:80px 12px 1fr;gap:0 16px;align-items:stretch">
     <div style="text-align:right;font-size:12px;color:#6c757d;padding-top:13px">{{ p.post_date|date:"d.m.Y"|default:"—" }}</div>
     <div style="display:flex;flex-direction:column;align-items:center">
-      <div style="width:10px;height:10px;border-radius:50%;margin-top:13px;flex-shrink:0;background:{% if p.content_type == 'Video' %}#185FA5{% else %}#1D9E75{% endif %}"></div>
+      <div style="width:10px;height:10px;border-radius:50%;margin-top:13px;flex-shrink:0;background:{% if p.content_type == 'Video' %}#F56E28{% else %}#1D9E75{% endif %}"></div>
       <div style="width:1px;flex:1;background:#dee2e6;margin-top:2px"></div>
     </div>
     <div style="background:#fff;border:0.5px solid #e0e0e0;border-radius:.5rem;padding:10px 14px;margin-bottom:10px;display:flex;gap:12px;align-items:flex-start">
@@ -301,6 +363,7 @@ if (labels && labels.length) {
         </div>
         <div style="display:flex;gap:12px;font-size:12px;color:#6c757d;flex-wrap:wrap">
           <span>👁 {{ p.impressions }}</span>
+          {% if p.views %}<span>▶ {{ p.views }}</span>{% endif %}
           <span>👆 {{ p.clicks }}</span>
           <span>❤ {{ p.likes }}</span>
           <span>💬 {{ p.comments }}</span>

@@ -128,8 +128,8 @@ def import_posts_from_content(df, file_path=""):
         'post_url':        ['link veröffentlichen', 'post link', 'post url', 'url'],
         'created_at':      ['erstellt am', 'datum', 'date', 'created'],
         'post_title_raw':  ['titel des beitrags', 'beitragstitel', 'post title', 'titel', 'title'],
-        'post_distribution':['verteilung', 'distribution'],
-        'content_type':    ['art des beitrags', 'inhaltstyp', 'content type', 'typ', 'type'],
+        'post_distribution':['art des beitrags', 'verteilung', 'distribution'],
+        'content_type':    ['art des inhalts', 'inhaltstyp', 'content type', 'typ', 'type'],
         'campaign_name':   ['name der kampagne', 'kampagnenname', 'campaign name', 'kampagne'],
         'published_by':    ['veröffentlicht von', 'published by', 'autor', 'author'],
         'audience':        ['zielgruppe', 'audience'],
@@ -182,9 +182,12 @@ def import_posts_from_content(df, file_path=""):
                 continue
 
             created_at = None
+            post_date = None
             if mapped['created_at'] and pd.notna(row.get(mapped['created_at'])):
                 try:
-                    created_at = pd.to_datetime(row[mapped['created_at']]).strftime('%Y-%m-%d %H:%M:%S')
+                    dt_parsed = pd.to_datetime(row[mapped['created_at']])
+                    created_at = dt_parsed.strftime('%Y-%m-%d %H:%M:%S')
+                    post_date  = dt_parsed.strftime('%Y-%m-%d')
                 except: pass
 
             title_raw = get_str('post_title_raw')
@@ -194,20 +197,21 @@ def import_posts_from_content(df, file_path=""):
             try:
                 cur.execute("""
                     INSERT INTO linkedin_posts
-                        (post_id, post_url, created_at, post_title_raw, post_title,
+                        (post_id, post_url, created_at, post_date, post_title_raw, post_title,
                          post_distribution, content_type, campaign_name, published_by, audience)
-                    VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                    VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
                     ON DUPLICATE KEY UPDATE
                         post_url=VALUES(post_url),
                         created_at=COALESCE(VALUES(created_at),created_at),
+                        post_date=COALESCE(VALUES(post_date),post_date),
                         post_title_raw=COALESCE(VALUES(post_title_raw),post_title_raw),
                         post_title=COALESCE(VALUES(post_title),post_title),
                         post_distribution=COALESCE(VALUES(post_distribution),post_distribution),
-                        content_type=COALESCE(VALUES(content_type),content_type),
+                        content_type=VALUES(content_type),
                         campaign_name=COALESCE(VALUES(campaign_name),campaign_name),
                         published_by=COALESCE(VALUES(published_by),published_by),
                         audience=COALESCE(VALUES(audience),audience)
-                """, [post_id, post_url, created_at, title_raw, title,
+                """, [post_id, post_url, created_at, post_date, title_raw, title,
                       get_str('post_distribution',100), get_str('content_type',100),
                       get_str('campaign_name',255), get_str('published_by',255), get_str('audience')])
             except Exception as e:
