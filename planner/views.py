@@ -84,7 +84,7 @@ def planner_view(request):
     return render(request, 'planner/planner.html', {
         'topics_data': topics_data,
         'topics': topics,
-        'statuses': ['Draft', 'Review', 'Ready', 'Scheduled', 'Posted'],
+        'statuses': ['Draft', 'Review', 'Ready', 'Scheduled', 'Posted', 'Archive'],
         'tab': 'planner',
     })
 
@@ -98,7 +98,7 @@ def pipeline_view(request):
                         p.image, t.name, t.color, p.topic_id, COALESCE(p.comment,'') as comment
                  FROM planner_posts p
                  LEFT JOIN planner_topics t ON p.topic_id = t.id
-                 WHERE p.status IN ('Draft', 'Review')"""
+                 WHERE p.status IN ('Draft', 'Review') AND COALESCE(p.is_oj,0) = 0"""
         params = []
         if topic_filter:
             sql += " AND p.topic_id=%s"
@@ -116,7 +116,7 @@ def pipeline_view(request):
             'topic_id': r[8], 'comment': r[9] or '', 'bg': bg, 'fg': fg,
         })
 
-    return render(request, 'planner/pipeline.html', {'posts': posts_list, 'topics': topics, 'topic_filter': topic_filter, 'statuses': ['Draft', 'Review', 'Ready', 'Scheduled', 'Posted'], 'tab': 'pipeline', 'page_title': '→ Pipeline', 'posts_json': _posts_to_json(posts_list)})
+    return render(request, 'planner/pipeline.html', {'posts': posts_list, 'topics': topics, 'topic_filter': topic_filter, 'statuses': ['Draft', 'Review', 'Ready', 'Scheduled', 'Posted', 'Archive'], 'tab': 'pipeline', 'page_title': '→ Pipeline', 'posts_json': _posts_to_json(posts_list)})
 
 
 @login_required
@@ -128,7 +128,7 @@ def ready_view(request):
                         p.image, t.name, t.color, p.topic_id, p.comment
                  FROM planner_posts p
                  LEFT JOIN planner_topics t ON p.topic_id = t.id
-                 WHERE p.status = 'Ready' AND p.in_pipeline = 1"""
+                 WHERE p.status = 'Ready' AND p.in_pipeline = 1 AND COALESCE(p.is_oj,0) = 0"""
         params = []
         if topic_filter:
             sql += " AND p.topic_id=%s"
@@ -146,7 +146,7 @@ def ready_view(request):
             'topic_id': r[8], 'comment': r[9] or '', 'bg': bg, 'fg': fg,
         })
 
-    return render(request, 'planner/ready.html', {'posts': posts_list, 'topics': topics, 'topic_filter': topic_filter, 'statuses': ['Draft', 'Review', 'Ready', 'Scheduled', 'Posted'], 'tab': 'ready', 'page_title': '🚀 Ready to post', 'posts_json': _posts_to_json(posts_list)})
+    return render(request, 'planner/ready.html', {'posts': posts_list, 'topics': topics, 'topic_filter': topic_filter, 'statuses': ['Draft', 'Review', 'Ready', 'Scheduled', 'Posted', 'Archive'], 'tab': 'ready', 'page_title': '🚀 Ready to post', 'posts_json': _posts_to_json(posts_list)})
 
 
 @login_required
@@ -158,7 +158,7 @@ def scheduled_view(request):
                         p.image, t.name, t.color, p.topic_id, p.comment
                  FROM planner_posts p
                  LEFT JOIN planner_topics t ON p.topic_id = t.id
-                 WHERE p.status = 'Scheduled' AND p.in_pipeline = 1"""
+                 WHERE p.status = 'Scheduled' AND p.in_pipeline = 1 AND COALESCE(p.is_oj,0) = 0"""
         params = []
         if topic_filter:
             sql += " AND p.topic_id=%s"
@@ -176,7 +176,7 @@ def scheduled_view(request):
             'topic_id': r[8], 'comment': r[9] or '', 'bg': bg, 'fg': fg,
         })
 
-    return render(request, 'planner/scheduled.html', {'posts': posts_list, 'topics': topics, 'topic_filter': topic_filter, 'statuses': ['Draft', 'Review', 'Ready', 'Scheduled', 'Posted'], 'tab': 'scheduled', 'page_title': '📅 Scheduled', 'posts_json': _posts_to_json(posts_list)})
+    return render(request, 'planner/scheduled.html', {'posts': posts_list, 'topics': topics, 'topic_filter': topic_filter, 'statuses': ['Draft', 'Review', 'Ready', 'Scheduled', 'Posted', 'Archive'], 'tab': 'scheduled', 'page_title': '📅 Scheduled', 'posts_json': _posts_to_json(posts_list)})
 
 
 @login_required
@@ -188,7 +188,7 @@ def archive_view(request):
                         p.image, t.name, t.color, p.topic_id, p.comment
                  FROM planner_posts p
                  LEFT JOIN planner_topics t ON p.topic_id = t.id
-                 WHERE p.status = 'Posted' AND p.in_pipeline = 1"""
+                 WHERE p.status IN ('Posted', 'Archive')"""
         params = []
         if topic_filter:
             sql += " AND p.topic_id=%s"
@@ -206,7 +206,7 @@ def archive_view(request):
             'topic_id': r[8], 'comment': r[9] or '', 'bg': bg, 'fg': fg,
         })
 
-    return render(request, 'planner/archive.html', {'posts': posts_list, 'topics': topics, 'topic_filter': topic_filter, 'statuses': ['Draft', 'Review', 'Ready', 'Scheduled', 'Posted'], 'tab': 'archive', 'page_title': '📦 Archive', 'posts_json': _posts_to_json(posts_list)})
+    return render(request, 'planner/archive.html', {'posts': posts_list, 'topics': topics, 'topic_filter': topic_filter, 'statuses': ['Draft', 'Review', 'Ready', 'Scheduled', 'Posted', 'Archive'], 'tab': 'archive', 'page_title': '📦 Archive', 'posts_json': _posts_to_json(posts_list)})
 
 
 @login_required
@@ -218,7 +218,7 @@ def all_view(request):
                         p.image, t.name, t.color, p.topic_id, p.comment
                  FROM planner_posts p
                  LEFT JOIN planner_topics t ON p.topic_id = t.id
-                 WHERE 1=1"""
+                 WHERE COALESCE(p.is_oj,0) = 0"""
         params = []
         if topic_filter:
             sql += " AND p.topic_id=%s"
@@ -240,7 +240,7 @@ def all_view(request):
         'posts': posts_list,
         'topics': topics,
         'topic_filter': topic_filter,
-        'statuses': ['Draft', 'Review', 'Ready', 'Scheduled', 'Posted'],
+        'statuses': ['Draft', 'Review', 'Ready', 'Scheduled', 'Posted', 'Archive'],
         'tab': 'all',
         'posts_json': _posts_to_json(posts_list),
     })
@@ -275,7 +275,7 @@ def oj_view(request):
     return render(request, 'planner/oj.html', {
         'posts': posts_list,
         'topics': topics,
-        'statuses': ['Draft', 'Review', 'Ready', 'Scheduled', 'Posted'],
+        'statuses': ['Draft', 'Review', 'Ready', 'Scheduled', 'Posted', 'Archive'],
         'tab': 'oj',
     })
 

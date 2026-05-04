@@ -60,6 +60,7 @@
         <option {% if p.status == 'Ready' %}selected{% endif %} value="Ready">Ready</option>
         <option {% if p.status == 'Scheduled' %}selected{% endif %} value="Scheduled">Scheduled</option>
         <option {% if p.status == 'Posted' %}selected{% endif %} value="Posted">Posted</option>
+        <option {% if p.status == 'Archive' %}selected{% endif %} value="Archive">Archive</option>
       </select>
       <button type="button"
         onclick="openEdit({{ p.id }})"

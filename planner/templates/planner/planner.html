@@ -59,6 +59,7 @@
 .s-chip-ready.active{background:#1D9E75;color:#fff}
 .s-chip-scheduled.active{background:#185FA5;color:#fff}
 .s-chip-posted.active{background:#7F77DD;color:#fff}
+.s-chip-archive.active{background:#888;color:#fff}
 /* topic chips — solid colour when active */
 #cat-filter-bar .s-chip.active{background:var(--tc,#008080);color:#fff;border-color:var(--tc,#008080)}
 
@@ -107,6 +108,7 @@
 .s-Ready{background:#E1F5EE;color:#0F6E56}
 .s-Scheduled{background:#E6F1FB;color:#185FA5}
 .s-Posted{background:#EEEDFE;color:#3C3489}
+.s-Archive{background:#e8e8e8;color:#555}
 .post-actions{display:flex;gap:4px;justify-content:flex-end}
 .pa-btn{font-size:11px;padding:2px 6px;border:0.5px solid #e0e0e0;border-radius:4px;background:#fff;cursor:pointer;color:#6c757d}
 .pa-btn:hover{border-color:#008080;color:#008080}
@@ -160,6 +162,7 @@
   <span class="s-chip s-chip-ready" onclick="filterStatus(this,'ready')">Ready</span>
   <span class="s-chip s-chip-scheduled" onclick="filterStatus(this,'scheduled')">Scheduled</span>
   <span class="s-chip s-chip-posted" onclick="filterStatus(this,'posted')">Posted</span>
+  <span class="s-chip s-chip-archive" onclick="filterStatus(this,'archive')">Archive</span>
 </div>
 
 <!-- ── Category filter ── -->
