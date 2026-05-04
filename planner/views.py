@@ -29,54 +29,43 @@ COLOR_MAP = {
     'red': ('#FCEBEB', '#791F1F'),
     'gray': ('#f5f5f5', '#6c757d'),
 }
+ACCENT_MAP = {
+    'blue': '#185FA5',
+    'green': '#1D9E75',
+    'amber': '#BA7517',
+    'purple': '#7F77DD',
+    'red': '#A32D2D',
+    'gray': '#888780',
+}
 
 
 @login_required
 def planner_view(request):
     with connection.cursor() as c:
         topics = _topics(c)
-
-        columns = []
+        topics_data = []
         for t in topics:
             bg, fg = COLOR_MAP.get(t['color'], ('#f5f5f5', '#6c757d'))
-            t['bg'] = bg
-            t['fg'] = fg
-
-            series = _q(c, """SELECT id, name FROM planner_series
-                              WHERE topic_id=%s ORDER BY created_at""", [t['id']])
-
-            series_list = []
-            for s in series:
-                parts = _q(c, """SELECT id, title, content, status, planned_date, image, series_order, COALESCE(comment,'') as comment
-                                 FROM planner_posts WHERE series_id=%s AND in_pipeline=0
-                                 ORDER BY series_order""", [s[0]])
-                series_list.append({
-                    'id': s[0], 'name': s[1],
-                    'parts': [{'id': r[0], 'title': r[1] or '', 'content': r[2] or '',
-                               'status': r[3], 'planned_date': r[4],
-                               'image': r[5] or '', 'order': r[6], 'comment': r[7] or ''} for r in parts]
-                })
-
+            accent = ACCENT_MAP.get(t['color'], '#888780')
             posts = _q(c, """SELECT id, title, content, status, planned_date, image, COALESCE(comment,'') as comment
                              FROM planner_posts
-                             WHERE topic_id=%s AND series_id IS NULL AND in_pipeline=0
+                             WHERE topic_id=%s
                              ORDER BY COALESCE(planned_date,'9999-12-31'), created_at""", [t['id']])
-
             ideas = _q(c, """SELECT id, text FROM planner_ideas
                              WHERE topic_id=%s ORDER BY created_at DESC""", [t['id']])
-
-            columns.append({
-                'topic': t,
-                'series': series_list,
+            topics_data.append({
+                'id': t['id'], 'name': t['name'], 'color': t['color'],
+                'bg': bg, 'fg': fg, 'accent': accent,
                 'posts': [{'id': r[0], 'title': r[1] or '', 'content': r[2] or '',
-                           'status': r[3], 'planned_date': r[4], 'image': r[5] or ''} for r in posts],
+                           'status': r[3], 'planned_date': r[4],
+                           'image': r[5] or '', 'comment': r[6] or ''} for r in posts],
                 'ideas': [{'id': r[0], 'text': r[1]} for r in ideas],
             })
 
     return render(request, 'planner/planner.html', {
-        'columns': columns,
+        'topics_data': topics_data,
         'topics': topics,
-        'statuses': ['Draft', 'In Progress', 'Ready', 'Scheduled', 'Posted'],
+        'statuses': ['Draft', 'Review', 'Ready', 'Scheduled', 'Posted'],
         'tab': 'planner',
     })
 
@@ -90,7 +79,7 @@ def pipeline_view(request):
                         p.image, t.name, t.color, p.topic_id
                  FROM planner_posts p
                  LEFT JOIN planner_topics t ON p.topic_id = t.id
-                 WHERE p.in_pipeline=1 AND p.status NOT IN ('Ready', 'Scheduled', 'Posted')"""
+                 WHERE p.status IN ('Draft', 'Review')"""
         params = []
         if topic_filter:
             sql += " AND p.topic_id=%s"
@@ -108,7 +97,7 @@ def pipeline_view(request):
             'topic_id': r[8], 'bg': bg, 'fg': fg,
         })
 
-    return render(request, 'planner/pipeline.html', {'posts': posts_list, 'topics': topics, 'topic_filter': topic_filter, 'statuses': ['Draft', 'In Progress', 'Ready', 'Scheduled', 'Posted'], 'tab': 'pipeline', 'page_title': '→ Pipeline'})
+    return render(request, 'planner/pipeline.html', {'posts': posts_list, 'topics': topics, 'topic_filter': topic_filter, 'statuses': ['Draft', 'Review', 'Ready', 'Scheduled', 'Posted'], 'tab': 'pipeline', 'page_title': '→ Pipeline'})
 
 
 @login_required
@@ -138,7 +127,7 @@ def ready_view(request):
             'topic_id': r[8], 'comment': r[9] or '', 'bg': bg, 'fg': fg,
         })
 
-    return render(request, 'planner/ready.html', {'posts': posts_list, 'topics': topics, 'topic_filter': topic_filter, 'statuses': ['Draft', 'In Progress', 'Ready', 'Scheduled', 'Posted'], 'tab': 'ready', 'page_title': '🚀 Ready to post'})
+    return render(request, 'planner/ready.html', {'posts': posts_list, 'topics': topics, 'topic_filter': topic_filter, 'statuses': ['Draft', 'Review', 'Ready', 'Scheduled', 'Posted'], 'tab': 'ready', 'page_title': '🚀 Ready to post'})
 
 
 @login_required
@@ -168,7 +157,7 @@ def scheduled_view(request):
             'topic_id': r[8], 'comment': r[9] or '', 'bg': bg, 'fg': fg,
         })
 
-    return render(request, 'planner/scheduled.html', {'posts': posts_list, 'topics': topics, 'topic_filter': topic_filter, 'statuses': ['Draft', 'In Progress', 'Ready', 'Scheduled', 'Posted'], 'tab': 'scheduled', 'page_title': '📅 Scheduled'})
+    return render(request, 'planner/scheduled.html', {'posts': posts_list, 'topics': topics, 'topic_filter': topic_filter, 'statuses': ['Draft', 'Review', 'Ready', 'Scheduled', 'Posted'], 'tab': 'scheduled', 'page_title': '📅 Scheduled'})
 
 
 @login_required
@@ -198,7 +187,7 @@ def scheduled_view(request):
             'topic_id': r[8], 'comment': r[9] or '', 'bg': bg, 'fg': fg,
         })
 
-    return render(request, 'planner/scheduled.html', {'posts': posts_list, 'topics': topics, 'topic_filter': topic_filter, 'statuses': ['Draft', 'In Progress', 'Ready', 'Scheduled', 'Posted'], 'tab': 'scheduled', 'page_title': '📅 Scheduled'})
+    return render(request, 'planner/scheduled.html', {'posts': posts_list, 'topics': topics, 'topic_filter': topic_filter, 'statuses': ['Draft', 'Review', 'Ready', 'Scheduled', 'Posted'], 'tab': 'scheduled', 'page_title': '📅 Scheduled'})
 
 
 @login_required
@@ -228,7 +217,7 @@ def scheduled_view(request):
             'topic_id': r[8], 'comment': r[9] or '', 'bg': bg, 'fg': fg,
         })
 
-    return render(request, 'planner/scheduled.html', {'posts': posts_list, 'topics': topics, 'topic_filter': topic_filter, 'statuses': ['Draft', 'In Progress', 'Ready', 'Scheduled', 'Posted'], 'tab': 'scheduled', 'page_title': '📅 Scheduled'})
+    return render(request, 'planner/scheduled.html', {'posts': posts_list, 'topics': topics, 'topic_filter': topic_filter, 'statuses': ['Draft', 'Review', 'Ready', 'Scheduled', 'Posted'], 'tab': 'scheduled', 'page_title': '📅 Scheduled'})
 
 
 @login_required
@@ -258,7 +247,7 @@ def archive_view(request):
             'topic_id': r[8], 'comment': r[9] or '', 'bg': bg, 'fg': fg,
         })
 
-    return render(request, 'planner/archive.html', {'posts': posts_list, 'topics': topics, 'topic_filter': topic_filter, 'statuses': ['Draft', 'In Progress', 'Ready', 'Scheduled', 'Posted'], 'tab': 'archive', 'page_title': '📦 Archive'})
+    return render(request, 'planner/archive.html', {'posts': posts_list, 'topics': topics, 'topic_filter': topic_filter, 'statuses': ['Draft', 'Review', 'Ready', 'Scheduled', 'Posted'], 'tab': 'archive', 'page_title': '📦 Archive'})
 
 
 @login_required
@@ -292,7 +281,7 @@ def all_view(request):
         'posts': posts_list,
         'topics': topics,
         'topic_filter': topic_filter,
-        'statuses': ['Draft', 'In Progress', 'Ready', 'Scheduled', 'Posted'],
+        'statuses': ['Draft', 'Review', 'Ready', 'Scheduled', 'Posted'],
         'tab': 'all',
     })
 
@@ -370,7 +359,7 @@ def api_post(request):
             status = data.get('status')
             if status == 'Draft':
                 in_pipeline = 0
-            elif status == 'In Progress':
+            elif status == 'Review':
                 in_pipeline = 1
             else:
                 in_pipeline = 1
@@ -419,6 +408,10 @@ def api_topic(request):
             return JsonResponse({'ok': True, 'id': c.lastrowid})
         elif action == 'delete':
             c.execute("DELETE FROM planner_topics WHERE id=%s", [data.get('id')])
+            return JsonResponse({'ok': True})
+        elif action == 'rename':
+            c.execute("UPDATE planner_topics SET name=%s WHERE id=%s",
+                      [data.get('name'), data.get('id')])
             return JsonResponse({'ok': True})
     return JsonResponse({'ok': False}, status=400)
 

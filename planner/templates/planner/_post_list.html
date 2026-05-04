@@ -56,7 +56,7 @@
     <div style="display:flex;gap:6px;flex-shrink:0;align-items:center">
       <select onchange="setStatus({{ p.id }}, this.value)" style="font-size:12px;padding:3px 6px;border:0.5px solid #ced4da;border-radius:4px;cursor:pointer">
         <option {% if p.status == 'Draft' %}selected{% endif %} value="Draft">Draft</option>
-        <option {% if p.status == 'In Progress' %}selected{% endif %} value="In Progress">In Progress</option>
+        <option {% if p.status == 'Review' %}selected{% endif %} value="Review">Review</option>
         <option {% if p.status == 'Ready' %}selected{% endif %} value="Ready">Ready</option>
         <option {% if p.status == 'Scheduled' %}selected{% endif %} value="Scheduled">Scheduled</option>
         <option {% if p.status == 'Posted' %}selected{% endif %} value="Posted">Posted</option>
@@ -66,6 +66,10 @@
         style="font-size:12px;padding:3px 10px;border:0.5px solid #008080;border-radius:4px;background:#fff;cursor:pointer;color:#008080;white-space:nowrap">
         ✏️ Edit
       </button>
+      <button type="button"
+        onclick="peDeletePost({{ p.id }})"
+        style="font-size:12px;padding:3px 8px;border:0.5px solid #dc3545;border-radius:4px;background:#fff;cursor:pointer;color:#dc3545"
+        title="Delete post">🗑</button>
     </div>
   </div>
 </div>
@@ -84,7 +88,7 @@
         {% for t in topics %}<option value="{{ t.id }}">{{ t.name }}</option>{% endfor %}
       </select>
       <select id="pe-status" style="font-size:13px;flex:1;padding:6px 8px;border:0.5px solid #ced4da;border-radius:4px">
-        <option>Draft</option><option>In Progress</option><option>Ready</option><option>Scheduled</option><option>Posted</option>
+        <option>Draft</option><option>Review</option><option>Ready</option><option>Scheduled</option><option>Posted</option>
       </select>
     </div>
     <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
@@ -195,6 +199,11 @@ document.addEventListener('keydown', e => { if (e.key === 'Escape') peLightboxCl
 
 async function setStatus(id, status) {
   await peApi({action:'set_status', id, status});
+  location.reload();
+}
+async function peDeletePost(id) {
+  if (!confirm('Delete this post permanently? This cannot be undone.')) return;
+  await peApi({action:'delete', id});
   location.reload();
 }
 

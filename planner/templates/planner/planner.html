@@ -3,24 +3,7 @@
 {% block title %}Content Planner{% endblock %}
 {% block content %}
 <style>
-.kanban{display:flex;gap:12px;align-items:flex-start;overflow-x:auto;padding-bottom:1rem}
-.col{width:260px;flex-shrink:0;border-radius:10px;overflow:hidden;background:#f8f9fa}
-.col-body{padding:8px;display:flex;flex-direction:column;gap:6px;min-height:100px}
-.col-footer{padding:8px;border-top:0.5px solid #dee2e6}
-.card{background:#fff;border:0.5px solid #e0e0e0;border-radius:8px;padding:10px;cursor:grab}
-.drop-zone{border:1.5px dashed #dee2e6;border-radius:8px;padding:12px;text-align:center;font-size:12px;color:#6c757d}
-.drop-zone.over{border-color:#008080;background:#f0faf8;color:#008080}
-.serie-box{border:1.5px solid #dee2e6;border-radius:8px;overflow:hidden}
-.serie-head{padding:8px 10px;display:flex;justify-content:space-between;align-items:center;cursor:pointer}
-.serie-body{padding:6px;display:flex;flex-direction:column;gap:4px}
-.bdg{font-size:10px;padding:1px 6px;border-radius:99px}
-.bdg-draft{background:#f5f5f5;color:#6c757d}
-.bdg-ready{background:#E1F5EE;color:#0F6E56}
-.bdg-scheduled{background:#E6F1FB;color:#185FA5}
-.bdg-posted{background:#EEEDFE;color:#3C3489}
-.bdg-in-progress{background:#FFF3CD;color:#856404}
-.bdg-in-progress{background:#FFF3CD;color:#856404}
-.ib{cursor:pointer;width:22px;height:22px;border-radius:4px;border:0.5px solid #e0e0e0;display:inline-flex;align-items:center;justify-content:center;background:#fff}
+/* ── Modals ── */
 .modal-bg{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.4);z-index:1000;align-items:center;justify-content:center}
 .modal-bg.open{display:flex}
 .modal{background:#fff;border-radius:12px;padding:1.5rem;width:520px;max-width:95vw;max-height:90vh;overflow-y:auto}
@@ -28,164 +11,260 @@
 .fselect{font-size:13px;padding:6px 8px;border:0.5px solid #ced4da;border-radius:4px}
 .color-dot{width:20px;height:20px;border-radius:50%;cursor:pointer;border:2px solid transparent;display:inline-block}
 .color-dot.selected{border-color:#333}
-.img-drop{width:80px;height:80px;border-radius:8px;border:1.5px dashed #ced4da;flex-shrink:0;display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:pointer;gap:4px;background:#f8f9fa;transition:all .2s;overflow:hidden}
+/* ── Image upload/preview ── */
+.img-drop{width:44px;height:44px;border-radius:8px;border:1.5px dashed #ced4da;flex-shrink:0;display:flex;align-items:center;justify-content:center;cursor:pointer;background:#f8f9fa;transition:all .2s;overflow:hidden}
 .img-drop:hover{border-color:#008080;background:#f0faf8}
-/* image preview under text */
 .img-preview{display:none;position:relative;width:100%;margin-bottom:8px;border-radius:6px;overflow:hidden;border:0.5px solid #ced4da;background:#f8f9fa;cursor:zoom-in}
 .img-preview img{width:100%;max-height:220px;object-fit:contain;display:block}
-.img-preview-bar{position:absolute;bottom:0;left:0;right:0;display:flex;justify-content:space-between;align-items:center;padding:4px 8px;background:rgba(0,0,0,0.45);opacity:0;transition:opacity .15s}
+.img-preview-bar{position:absolute;bottom:0;left:0;right:0;display:flex;justify-content:space-between;padding:4px 8px;background:rgba(0,0,0,0.45);opacity:0;transition:opacity .15s}
 .img-preview:hover .img-preview-bar{opacity:1}
 .img-preview-bar span{font-size:12px;color:#fff;cursor:pointer;padding:2px 6px;border-radius:3px;background:rgba(255,255,255,0.15)}
 .img-preview-bar span:hover{background:rgba(255,255,255,0.3)}
-/* Lightbox */
+/* ── Lightbox ── */
 #img-lightbox{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.82);z-index:9999;align-items:center;justify-content:center;cursor:zoom-out}
 #img-lightbox.open{display:flex}
-#img-lightbox img{max-width:90vw;max-height:88vh;border-radius:8px;box-shadow:0 8px 40px rgba(0,0,0,.6);object-fit:contain}
+#img-lightbox img{max-width:90vw;max-height:88vh;border-radius:8px;object-fit:contain}
 #img-lightbox-close{position:absolute;top:16px;right:20px;color:#fff;font-size:28px;cursor:pointer;line-height:1;opacity:.8}
 #img-lightbox-close:hover{opacity:1}
-
-/* ── Rich text editor ── */
+/* ── Rich-text editor ── */
 .editor-wrap{border:0.5px solid #ced4da;border-radius:4px;overflow:hidden;margin-bottom:8px}
 .editor-toolbar{display:flex;gap:2px;padding:4px 6px;background:#f8f9fa;border-bottom:0.5px solid #e0e0e0;flex-wrap:wrap}
-.editor-toolbar button{padding:2px 7px;font-size:12px;border:0.5px solid #ced4da;border-radius:3px;background:#fff;cursor:pointer;line-height:1.4;color:#333;transition:background .15s}
+.editor-toolbar button{padding:2px 7px;font-size:12px;border:0.5px solid #ced4da;border-radius:3px;background:#fff;cursor:pointer;line-height:1.4;color:#333}
 .editor-toolbar button:hover{background:#e8f5f5;border-color:#008080}
-.editor-toolbar .tb-sep{width:1px;background:#dee2e6;margin:2px 3px}
+.tb-sep{width:1px;background:#dee2e6;margin:2px 3px}
 .tb-highlight{background:#FFF176 !important;font-weight:600;color:#7a5c00 !important;border-color:#e6d800 !important}
-.tb-highlight:hover{background:#FFEE00 !important}
 .content-editor{min-height:180px;max-height:340px;overflow-y:auto;padding:8px 10px;font-size:13px;line-height:1.6;outline:none;color:#212529;white-space:pre-wrap;word-break:break-word}
 .content-editor:focus{background:#fafffe}
 .content-editor mark{background:#FFF176;border-radius:2px;padding:0 1px}
+
+/* ── Overview layout ── */
+.planner-topbar{display:flex;align-items:center;gap:10px;margin-bottom:1.25rem;flex-wrap:wrap}
+.planner-title{font-size:1.3rem;font-weight:500;color:#212529;white-space:nowrap}
+.search-wrap{flex:1;min-width:180px;position:relative}
+.search-wrap input{width:100%;padding:6px 10px 6px 30px;font-size:13px;border:0.5px solid #ced4da;border-radius:6px;background:#fff;color:#212529;box-sizing:border-box}
+.search-wrap input:focus{outline:none;border-color:#008080}
+.search-ico{position:absolute;left:9px;top:50%;transform:translateY(-50%);width:13px;height:13px;opacity:.4;pointer-events:none}
+.btn-new-post{padding:6px 16px;font-size:13px;font-weight:500;background:#008080;color:#fff;border:none;border-radius:6px;cursor:pointer;white-space:nowrap}
+.btn-new-post:hover{background:#006666}
+
+/* ── Status chips ── */
+.status-bar{display:flex;gap:5px;margin-bottom:1.25rem;flex-wrap:wrap;align-items:center}
+.status-label{font-size:12px;color:#6c757d;margin-right:2px}
+.s-chip{padding:3px 12px;font-size:12px;border:0.5px solid #ced4da;border-radius:99px;cursor:pointer;color:#6c757d;background:#fff;transition:all .15s}
+.s-chip:hover{border-color:#008080;color:#008080}
+.s-chip.active{border-color:transparent}
+.s-chip-all.active{background:#E1F5EE;color:#0F6E56}
+.s-chip-draft.active{background:#F1EFE8;color:#444441}
+.s-chip-review.active{background:#FFF3CD;color:#856404}
+.s-chip-ready.active{background:#E1F5EE;color:#0F6E56}
+.s-chip-scheduled.active{background:#E6F1FB;color:#185FA5}
+.s-chip-posted.active{background:#EEEDFE;color:#3C3489}
+
+/* ── Category manager bar ── */
+.cat-bar{display:flex;align-items:center;gap:8px;margin-bottom:1.25rem;flex-wrap:wrap;padding:10px 14px;background:#f8f9fa;border-radius:8px;border:0.5px solid #e0e0e0}
+.cat-bar-label{font-size:12px;font-weight:500;color:#495057;white-space:nowrap}
+.cat-chips{display:flex;gap:6px;flex-wrap:wrap;flex:1}
+.cat-chip{font-size:12px;padding:3px 10px;border-radius:99px;display:flex;align-items:center;gap:5px;border:0.5px solid transparent}
+.cat-chip .cat-rename{cursor:pointer;opacity:.5;font-size:11px}
+.cat-chip .cat-rename:hover{opacity:1}
+.cat-chip .cat-del{cursor:pointer;opacity:.5;font-size:13px;line-height:1}
+.cat-chip .cat-del:hover{opacity:1;color:#dc3545}
+.btn-add-cat{font-size:12px;padding:3px 10px;border:0.5px dashed #ced4da;border-radius:99px;background:#fff;cursor:pointer;color:#6c757d;white-space:nowrap}
+.btn-add-cat:hover{border-color:#008080;color:#008080}
+#add-cat-form{display:none;align-items:center;gap:6px;flex-wrap:wrap;margin-top:6px;width:100%}
+#add-cat-form input{font-size:12px;padding:4px 8px;border:0.5px solid #ced4da;border-radius:4px;flex:1;min-width:130px}
+#add-cat-form button{font-size:12px;padding:4px 10px;background:#008080;color:#fff;border:none;border-radius:4px;cursor:pointer}
+
+/* ── Topic sections ── */
+#topic-sections{display:grid;grid-template-columns:1fr 1fr;gap:1rem;align-items:start}
+@media(max-width:900px){#topic-sections{grid-template-columns:1fr}}
+.topic-section{border:0.5px solid #e0e0e0;border-radius:10px;overflow:hidden;margin-bottom:0}
+.topic-hd{display:flex;align-items:center;gap:8px;padding:9px 14px;cursor:pointer;user-select:none;background:#f8f9fa}
+.topic-hd:hover{background:#f0f0f0}
+.t-accent{width:4px;height:20px;border-radius:2px;flex-shrink:0}
+.t-name{font-size:13px;font-weight:500;color:#212529;flex:1}
+.t-pill{font-size:10px;padding:2px 8px;border-radius:99px;background:#fff;border:0.5px solid #e0e0e0;color:#6c757d;white-space:nowrap}
+.t-chevron{font-size:11px;color:#aaa;margin-left:4px;transition:transform .15s}
+.topic-body{border-top:0.5px solid #e0e0e0}
+
+/* ── Posts table ── */
+.posts-col-hd{display:grid;grid-template-columns:1fr 90px 90px 60px 36px;gap:8px;padding:5px 14px;background:#fafafa;border-bottom:0.5px solid #e0e0e0}
+.posts-col-hd span{font-size:10px;color:#6c757d;text-transform:uppercase;letter-spacing:.4px}
+.post-row{display:grid;grid-template-columns:1fr 90px 90px 60px 36px;gap:8px;padding:7px 14px;border-bottom:0.5px solid #f0f0f0;align-items:center}
+.post-row:last-of-type{border-bottom:none}
+.post-row:hover{background:#f8fffe}
+.post-title-link{font-size:12px;color:#008080;text-decoration:none;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:block;cursor:pointer}
+.post-title-link:hover{text-decoration:underline}
+.post-date{font-size:11px;color:#6c757d}
+.sbadge{font-size:10px;padding:2px 7px;border-radius:99px;display:inline-block;white-space:nowrap}
+.s-Draft{background:#F1EFE8;color:#444441}
+.s-Review{background:#FFF3CD;color:#856404}
+.s-Ready{background:#E1F5EE;color:#0F6E56}
+.s-Scheduled{background:#E6F1FB;color:#185FA5}
+.s-Posted{background:#EEEDFE;color:#3C3489}
+.post-actions{display:flex;gap:4px;justify-content:flex-end}
+.pa-btn{font-size:11px;padding:2px 6px;border:0.5px solid #e0e0e0;border-radius:4px;background:#fff;cursor:pointer;color:#6c757d}
+.pa-btn:hover{border-color:#008080;color:#008080}
+.pa-btn.del:hover{border-color:#dc3545;color:#dc3545}
+.no-posts{padding:12px 14px;font-size:12px;color:#aaa;text-align:center;border-bottom:0.5px solid #f0f0f0}
+
+/* ── Ideas ── */
+.ideas-section{padding:8px 14px 10px;border-top:0.5px dashed #e0e0e0;background:#fefef8}
+.ideas-hd{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:#888;margin-bottom:6px;display:flex;align-items:center;gap:5px}
+.idea-row{display:flex;align-items:center;gap:8px;padding:3px 0;border-bottom:0.5px solid #f5f5f5}
+.idea-row:last-of-type{border-bottom:none}
+.idea-dot{width:5px;height:5px;border-radius:50%;background:#ccc;flex-shrink:0}
+.idea-text{font-size:12px;color:#555;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.idea-actions{display:flex;gap:3px}
+.ia-btn{font-size:11px;padding:1px 5px;border:0.5px solid #e0e0e0;border-radius:3px;background:#fff;cursor:pointer;color:#aaa}
+.ia-btn:hover{color:#333;border-color:#aaa}
+.ia-btn.del:hover{color:#dc3545;border-color:#dc3545}
+.add-idea-row{display:flex;gap:6px;margin-top:7px}
+.add-idea-row input{flex:1;font-size:12px;padding:4px 8px;border:0.5px solid #ced4da;border-radius:4px;background:#fff}
+.add-idea-row input:focus{outline:none;border-color:#008080}
+.add-idea-row button{font-size:12px;padding:4px 10px;background:#008080;color:#fff;border:none;border-radius:4px;cursor:pointer}
+.add-idea-row button:hover{background:#006666}
+
+/* ── Search results overlay ── */
+.search-pane{display:none;margin-bottom:1.25rem}
+.search-pane.vis{display:block}
+.sr-label{font-size:12px;color:#6c757d;margin-bottom:8px}
+.sr-row{display:flex;align-items:center;gap:10px;padding:7px 12px;border:0.5px solid #e0e0e0;border-radius:8px;margin-bottom:5px;cursor:pointer;background:#fff}
+.sr-row:hover{background:#f8fffe;border-color:#008080}
+.sr-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.sr-title{font-size:12px;color:#212529;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sr-topic{font-size:11px;color:#aaa;white-space:nowrap}
 </style>
 
-<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem">
-  <h1 style="margin:0;font-size:1.4rem">📅 Content Planner</h1>
-  <button onclick="openModal('post-modal')" style="font-size:13px;padding:4px 14px;background:#008080;color:#fff;border:none;border-radius:4px;cursor:pointer">+ New post</button>
+<!-- ── Top bar ── -->
+<div class="planner-topbar">
+  <span class="planner-title">📋 Content planner</span>
+  <div class="search-wrap">
+    <svg class="search-ico" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="7" cy="7" r="5"/><path d="M11 11l3 3"/></svg>
+    <input type="text" id="search-input" placeholder="Search posts and ideas..." oninput="doSearch(this.value)">
+  </div>
+  <button class="btn-new-post" onclick="openPostModal()">+ New post</button>
 </div>
 
-<!-- Categories -->
-<div style="background:#fff;border:0.5px solid #e0e0e0;border-radius:10px;padding:12px 16px;margin-bottom:1rem">
-  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-    <span style="font-size:13px;font-weight:500">Content categories</span>
-    <button onclick="toggleAddCat()" style="font-size:12px;padding:3px 10px;border:0.5px solid #ced4da;border-radius:4px;background:#fff;cursor:pointer">+ Add category</button>
-  </div>
-  <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px">
-    {% for t in topics %}
-    <span style="font-size:12px;padding:3px 10px;border-radius:99px;{% if t.color == 'blue' %}background:#E6F1FB;color:#185FA5{% elif t.color == 'green' %}background:#E1F5EE;color:#0F6E56{% elif t.color == 'amber' %}background:#FAEEDA;color:#633806{% elif t.color == 'purple' %}background:#EEEDFE;color:#3C3489{% elif t.color == 'red' %}background:#FCEBEB;color:#791F1F{% else %}background:#f5f5f5;color:#6c757d{% endif %}">
-      {{ t.name }} <span onclick="deleteTopic({{ t.id }})" style="cursor:pointer;margin-left:4px">×</span>
+<!-- ── Status filter ── -->
+<div class="status-bar">
+  <span class="status-label">Status:</span>
+  <span class="s-chip s-chip-all active" onclick="filterStatus(this,'all')">All</span>
+  <span class="s-chip s-chip-draft" onclick="filterStatus(this,'draft')">Draft</span>
+  <span class="s-chip s-chip-review" onclick="filterStatus(this,'review')">Review</span>
+  <span class="s-chip s-chip-ready" onclick="filterStatus(this,'ready')">Ready</span>
+  <span class="s-chip s-chip-scheduled" onclick="filterStatus(this,'scheduled')">Scheduled</span>
+  <span class="s-chip s-chip-posted" onclick="filterStatus(this,'posted')">Posted</span>
+</div>
+
+<!-- ── Category manager ── -->
+<div class="cat-bar">
+  <span class="cat-bar-label">Categories:</span>
+  <div class="cat-chips">
+    {% for t in topics_data %}
+    <span class="cat-chip" style="background:{{ t.bg }};color:{{ t.fg }};border-color:{{ t.fg }}40">
+      <span id="topic-name-{{ t.id }}" data-topic-id="{{ t.id }}">{{ t.name }}</span>
+      <span class="cat-rename" onclick="editTopic({{ t.id }})" title="Rename">✏️</span>
+      <span class="cat-del" onclick="deleteTopic({{ t.id }})">×</span>
     </span>
     {% endfor %}
   </div>
-  <div id="add-cat-form" style="display:none;gap:8px;align-items:center;flex-wrap:wrap">
-    <input type="text" id="new-cat-name" placeholder="Category name..." style="font-size:13px;padding:5px 8px;border:0.5px solid #ced4da;border-radius:4px;flex:1;min-width:150px">
-    <div style="display:flex;gap:6px;align-items:center">
-      <span class="color-dot selected" style="background:#185FA5" data-color="blue" onclick="selectColor(this)"></span>
-      <span class="color-dot" style="background:#0F6E56" data-color="green" onclick="selectColor(this)"></span>
-      <span class="color-dot" style="background:#BA7517" data-color="amber" onclick="selectColor(this)"></span>
-      <span class="color-dot" style="background:#534AB7" data-color="purple" onclick="selectColor(this)"></span>
-      <span class="color-dot" style="background:#A32D2D" data-color="red" onclick="selectColor(this)"></span>
-      <span class="color-dot" style="background:#888780" data-color="gray" onclick="selectColor(this)"></span>
-    </div>
-    <input type="hidden" id="new-cat-color" value="blue">
-    <button onclick="addCat()" style="font-size:13px;padding:5px 12px;background:#008080;color:#fff;border:none;border-radius:4px;cursor:pointer">Add</button>
+  <button class="btn-add-cat" onclick="toggleAddCat()">+ Add category</button>
+  <div id="add-cat-form">
+    <input type="text" id="new-cat-name" placeholder="Category name...">
+    <span style="display:flex;gap:5px;align-items:center">
+      <span class="color-dot selected" style="background:#E6F1FB;border:2px solid #185FA5" data-color="blue" onclick="selectColor(this)"></span>
+      <span class="color-dot" style="background:#E1F5EE;border:2px solid transparent" data-color="green" onclick="selectColor(this)"></span>
+      <span class="color-dot" style="background:#FAEEDA;border:2px solid transparent" data-color="amber" onclick="selectColor(this)"></span>
+      <span class="color-dot" style="background:#EEEDFE;border:2px solid transparent" data-color="purple" onclick="selectColor(this)"></span>
+      <span class="color-dot" style="background:#FCEBEB;border:2px solid transparent" data-color="red" onclick="selectColor(this)"></span>
+      <span class="color-dot" style="background:#f5f5f5;border:2px solid transparent" data-color="gray" onclick="selectColor(this)"></span>
+    </span>
+    <button type="button" onclick="addCat()">Add</button>
+    <button type="button" onclick="toggleAddCat()" style="background:#6c757d">Cancel</button>
   </div>
 </div>
 
-<!-- Kanban -->
-<div class="kanban">
-  {% for col in columns %}
-  <div class="col" id="col-{{ col.topic.id }}"
-       ondragover="event.preventDefault();this.querySelector('.drop-zone').classList.add('over')"
-       ondragleave="this.querySelector('.drop-zone').classList.remove('over')"
-       ondrop="dropPost(event,{{ col.topic.id }})">
-    <div style="padding:10px 12px;display:flex;justify-content:space-between;align-items:center;background:{{ col.topic.bg }}">
-      <span style="font-size:13px;font-weight:500;color:{{ col.topic.fg }}">{{ col.topic.name }}</span>
-      <span onclick="deleteTopic({{ col.topic.id }})" style="cursor:pointer;font-size:16px;color:{{ col.topic.fg }};opacity:.6">×</span>
+<!-- ── Search results pane ── -->
+<div class="search-pane" id="search-pane">
+  <p class="sr-label" id="sr-label"></p>
+  <div id="sr-results"></div>
+</div>
+
+<!-- ── Topic sections ── -->
+<div id="topic-sections">
+{% for t in topics_data %}
+<div class="topic-section" id="tsec-{{ t.id }}">
+  <div class="topic-hd" onclick="toggleSection({{ t.id }})">
+    <div class="t-accent" style="background:{{ t.accent }}"></div>
+    <span class="t-name">{{ t.name }}</span>
+    <span class="t-pill">{{ t.posts|length }} post{{ t.posts|length|pluralize }}</span>
+    <span class="t-pill">{{ t.ideas|length }} idea{{ t.ideas|length|pluralize }}</span>
+    <button type="button"
+      onclick="event.stopPropagation();openPostModal({{ t.id }})"
+      style="margin-left:auto;font-size:11px;padding:2px 10px;border:0.5px solid {{ t.accent }};border-radius:99px;background:#fff;color:{{ t.accent }};cursor:pointer;white-space:nowrap;font-weight:500">
+      + Post
+    </button>
+    <span class="t-chevron" id="chev-{{ t.id }}" style="margin-left:6px">▾</span>
+  </div>
+  <div class="topic-body" id="tbody-{{ t.id }}">
+    {% if t.posts %}
+    <div class="posts-col-hd">
+      <span>Title</span><span>Status</span><span>Date</span><span>Topic</span><span></span>
     </div>
-    <div class="col-body">
-      {% for s in col.series %}
-      <div class="serie-box" style="border-color:{{ col.topic.fg }}">
-        <div class="serie-head" style="background:{{ col.topic.bg }}" onclick="toggleSerie({{ s.id }})">
-          <span style="font-size:12px;font-weight:500;color:{{ col.topic.fg }}">{{ s.name }}</span>
-          <div style="display:flex;gap:4px;align-items:center">
-            <span style="font-size:10px;padding:1px 5px;border-radius:99px;background:rgba(0,0,0,0.1);color:{{ col.topic.fg }}">{{ s.parts|length }}</span>
-            <span onclick="event.stopPropagation();deleteSerie({{ s.id }})" style="cursor:pointer;color:{{ col.topic.fg }}">×</span>
-          </div>
-        </div>
-        <div class="serie-body" id="serie-{{ s.id }}">
-          {% for p in s.parts %}
-          <div class="card" draggable="true" id="post-{{ p.id }}" ondragstart="dragStart(event,{{ p.id }})">
-            <div style="display:flex;justify-content:space-between;margin-bottom:4px">
-              <div style="display:flex;gap:4px">
-                <span style="font-size:10px;color:{{ col.topic.fg }};font-weight:500">Part {{ forloop.counter }}</span>
-                <span class="bdg bdg-{{ p.status|lower }}">{{ p.status }}</span>
-              </div>
-              <div style="display:flex;gap:2px">
-                <span class="ib" onclick="openEditModal({{ p.id }},'{{ p.title|escapejs }}','{{ p.content|escapejs }}','{{ p.status }}','{{ p.planned_date|date:'Y-m-d' }}','{{ p.comment|escapejs }}','{{ p.image|escapejs }}')">✏️</span>
-                <span class="ib" onclick="toPipeline({{ p.id }})">→</span>
-                <span class="ib" onclick="deletePost({{ p.id }})">🗑</span>
-              </div>
-            </div>
-            <p style="font-size:12px;margin:0;line-height:1.4">{{ p.title|default:p.content|truncatechars:60 }}</p>
-            {% if p.planned_date %}<p style="font-size:11px;color:#6c757d;margin:3px 0 0">📅 {{ p.planned_date|date:"d.m.Y" }}</p>{% endif %}
-          </div>
-          {% endfor %}
-          <button onclick="openPostModal({{ col.topic.id }},{{ s.id }})" style="font-size:11px;padding:3px;border:0.5px dashed #ced4da;border-radius:4px;background:#fff;cursor:pointer;color:#6c757d;width:100%">+ Add part</button>
-        </div>
-      </div>
-      {% endfor %}
-
-      {% for p in col.posts %}
-      <div class="card" draggable="true" id="post-{{ p.id }}" ondragstart="dragStart(event,{{ p.id }})">
-        <div style="display:flex;justify-content:space-between;margin-bottom:4px">
-          <span class="bdg bdg-{{ p.status|lower }}">{{ p.status }}</span>
-          <div style="display:flex;gap:2px">
-            <span class="ib" onclick="openEditModal({{ p.id }},'{{ p.title|escapejs }}','{{ p.content|escapejs }}','{{ p.status }}','{{ p.planned_date|date:'Y-m-d' }}','{{ p.comment|escapejs }}','{{ p.image|escapejs }}')">✏️</span>
-            <span class="ib" onclick="toPipeline({{ p.id }})">→</span>
-            <span class="ib" onclick="deletePost({{ p.id }})">🗑</span>
-          </div>
-        </div>
-        <p style="font-size:12px;margin:0;line-height:1.4">{{ p.title|default:p.content|truncatechars:60 }}</p>
-        {% if p.planned_date %}<p style="font-size:11px;color:#6c757d;margin:3px 0 0">📅 {{ p.planned_date|date:"d.m.Y" }}</p>{% endif %}
-      </div>
-      {% endfor %}
-
-      <div class="drop-zone">Drop here</div>
-      <div style="display:flex;gap:4px">
-        <button onclick="openPostModal({{ col.topic.id }})" style="font-size:11px;padding:3px 8px;border:0.5px solid #ced4da;border-radius:4px;background:#fff;cursor:pointer;color:#6c757d;flex:1">+ Post</button>
-        <button onclick="openSerieModal({{ col.topic.id }})" style="font-size:11px;padding:3px 8px;border:0.5px solid {{ col.topic.fg }};border-radius:4px;background:#fff;cursor:pointer;color:{{ col.topic.fg }};flex:1">+ Serie</button>
+    {% for p in t.posts %}
+    <div class="post-row" data-status="{{ p.status|lower }}" id="prow-{{ p.id }}">
+      <span class="post-title-link"
+        onclick="openEditModal({{ p.id }},'{{ p.title|escapejs }}','{{ p.content|escapejs }}','{{ p.status }}','{{ p.planned_date|date:'Y-m-d' }}','{{ p.comment|escapejs }}','{{ p.image|escapejs }}')"
+        title="{{ p.title|default:p.content|truncatechars:120 }}">
+        {{ p.title|default:p.content|truncatechars:80 }}
+      </span>
+      <span><span class="sbadge s-{{ p.status }}">{{ p.status }}</span></span>
+      <span class="post-date">{% if p.planned_date %}{{ p.planned_date|date:"d.m.Y" }}{% else %}—{% endif %}</span>
+      <span style="font-size:11px;padding:1px 7px;border-radius:99px;background:{{ t.bg }};color:{{ t.fg }};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block">{{ t.name }}</span>
+      <div class="post-actions">
+        <button class="pa-btn" title="Edit"
+          onclick="openEditModal({{ p.id }},'{{ p.title|escapejs }}','{{ p.content|escapejs }}','{{ p.status }}','{{ p.planned_date|date:'Y-m-d' }}','{{ p.comment|escapejs }}','{{ p.image|escapejs }}')">✏</button>
+        <button class="pa-btn del" title="Delete" onclick="deletePost({{ p.id }})">🗑</button>
       </div>
     </div>
-    <div class="col-footer">
-      <div style="font-size:11px;font-weight:500;color:{{ col.topic.fg }};margin-bottom:4px">💡 Ideas</div>
-      {% for idea in col.ideas %}
-      <div style="display:flex;gap:4px;align-items:center;padding:2px 0">
-        <span style="font-size:12px;flex:1">{{ idea.text }}</span>
-        <span onclick="editIdea({{ idea.id }},'{{ idea.text|escapejs }}')" style="cursor:pointer;font-size:11px;color:#aaa">✏️</span>
-        <span onclick="deleteIdea({{ idea.id }})" style="cursor:pointer;font-size:12px;color:#aaa">×</span>
+    {% endfor %}
+    {% else %}
+    <div class="no-posts">No posts yet — <span style="color:#008080;cursor:pointer" onclick="openPostModal({{ t.id }})">create one</span></div>
+    {% endif %}
+
+    <!-- Ideas -->
+    <div class="ideas-section">
+      <div class="ideas-hd">
+        <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="6"/><path d="M8 5v3.5M8 11v.5"/></svg>
+        Ideas
+      </div>
+      {% for idea in t.ideas %}
+      <div class="idea-row" id="irow-{{ idea.id }}">
+        <div class="idea-dot" style="background:{{ t.accent }}"></div>
+        <span class="idea-text" title="{{ idea.text }}">{{ idea.text }}</span>
+        <div class="idea-actions">
+          <button class="ia-btn" onclick="editIdea({{ idea.id }},'{{ idea.text|escapejs }}')">✏</button>
+          <button class="ia-btn del" onclick="deleteIdea({{ idea.id }})">×</button>
+        </div>
       </div>
       {% empty %}
-      <p style="font-size:12px;color:#aaa;font-style:italic;margin:0 0 4px">No ideas yet.</p>
+      <p style="font-size:12px;color:#bbb;margin:2px 0 6px">No ideas yet.</p>
       {% endfor %}
-      <div style="display:flex;gap:4px;margin-top:4px">
-        <input type="text" id="idea-{{ col.topic.id }}" placeholder="Add idea..." style="font-size:12px;flex:1;padding:3px 6px;border:0.5px solid #ced4da;border-radius:4px">
-        <button onclick="addIdea({{ col.topic.id }})" style="font-size:12px;padding:3px 8px;background:#008080;color:#fff;border:none;border-radius:4px;cursor:pointer">+</button>
+      <div class="add-idea-row">
+        <input type="text" id="idea-{{ t.id }}" placeholder="Add idea..."
+               onkeydown="if(event.key==='Enter'){event.preventDefault();addIdea({{ t.id }})}">
+        <button type="button" onclick="event.preventDefault();addIdea({{ t.id }})">+</button>
       </div>
     </div>
   </div>
-  {% endfor %}
-
-  <div style="width:160px;flex-shrink:0;border-radius:10px;overflow:hidden;background:#F1EFE8"
-       ondragover="event.preventDefault();this.style.background='#e8e4dc'"
-       ondragleave="this.style.background='#F1EFE8'"
-       ondrop="dropToPipeline(event)">
-    <div style="background:#D3D1C7;padding:10px 12px">
-      <span style="font-size:13px;font-weight:500;color:#444441">→ Pipeline</span>
-    </div>
-    <div style="padding:12px;min-height:100px;display:flex;align-items:center;justify-content:center">
-      <span style="font-size:12px;color:#6c757d;text-align:center">Drag finished posts here</span>
-    </div>
-  </div>
 </div>
+{% empty %}
+<p style="text-align:center;color:#aaa;padding:2rem">No categories yet. Add one above.</p>
+{% endfor %}
+</div>
+
+<!-- ═══════════════ MODALS ═══════════════ -->
 
 <!-- New Post Modal -->
 <div class="modal-bg" id="post-modal">
@@ -210,8 +289,7 @@
            onclick="document.getElementById('m-img-input').click()"
            ondragover="event.preventDefault();this.style.borderColor='#008080'"
            ondragleave="this.style.borderColor='#ced4da'"
-           ondrop="handleImgDrop(event,'m')"
-           style="width:44px;height:44px;flex-shrink:0">
+           ondrop="handleImgDrop(event,'m')">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" stroke="#aaa" stroke-width="1.5"/><polyline points="17,8 12,3 7,8" stroke="#aaa" stroke-width="1.5"/><line x1="12" y1="3" x2="12" y2="15" stroke="#aaa" stroke-width="1.5"/></svg>
       </div>
       <input type="file" id="m-img-input" accept="image/*" style="display:none" onchange="previewImg('m',this)">
@@ -219,16 +297,15 @@
     </div>
     <div class="editor-wrap">
       <div class="editor-toolbar">
-        <button type="button" onmousedown="event.preventDefault();fmt('m','bold')" title="Bold"><b>B</b></button>
-        <button type="button" onmousedown="event.preventDefault();fmt('m','italic')" title="Italic"><i>I</i></button>
-        <button type="button" onmousedown="event.preventDefault();fmt('m','underline')" title="Underline"><u>U</u></button>
+        <button type="button" onmousedown="event.preventDefault();fmt('m','bold')"><b>B</b></button>
+        <button type="button" onmousedown="event.preventDefault();fmt('m','italic')"><i>I</i></button>
+        <button type="button" onmousedown="event.preventDefault();fmt('m','underline')"><u>U</u></button>
         <div class="tb-sep"></div>
-        <button type="button" class="tb-highlight" onmousedown="event.preventDefault();fmtMark('m')" title="Mark for revision — needs to be changed before posting">🟡 Mark</button>
-        <button type="button" onmousedown="event.preventDefault();fmt('m','removeFormat')" title="Remove all formatting" style="font-size:11px;color:#888">✕ Clear</button>
+        <button type="button" class="tb-highlight" onmousedown="event.preventDefault();fmtMark('m')">🟡 Mark</button>
+        <button type="button" onmousedown="event.preventDefault();fmt('m','removeFormat')" style="font-size:11px;color:#888">✕ Clear</button>
       </div>
       <div id="m-content" contenteditable="true" class="content-editor" data-placeholder="Post text..."></div>
     </div>
-    <!-- Image preview under text -->
     <div class="img-preview" id="m-img-preview" onclick="openLightbox(this.querySelector('img').src)">
       <img id="m-img-preview-img" src="" alt="">
       <div class="img-preview-bar">
@@ -239,13 +316,13 @@
     </div>
     <textarea id="m-comment" placeholder="Internal comment / notes..." style="width:100%;min-height:50px;font-size:13px;padding:8px;border:0.5px solid #ced4da;border-radius:4px;resize:vertical;box-sizing:border-box;background:#fffef0"></textarea>
     <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:12px">
-      <button onclick="closeModal('post-modal')" style="font-size:13px;padding:5px 14px;border:0.5px solid #ced4da;border-radius:4px;background:#fff;cursor:pointer">Cancel</button>
-      <button onclick="savePost()" style="font-size:13px;padding:5px 14px;background:#008080;color:#fff;border:none;border-radius:4px;cursor:pointer">Save</button>
+      <button type="button" onclick="closeModal('post-modal')" style="font-size:13px;padding:5px 14px;border:0.5px solid #ced4da;border-radius:4px;background:#fff;cursor:pointer">Cancel</button>
+      <button type="button" onclick="savePost()" style="font-size:13px;padding:5px 14px;background:#008080;color:#fff;border:none;border-radius:4px;cursor:pointer">Save</button>
     </div>
   </div>
 </div>
 
-<!-- Edit Modal -->
+<!-- Edit Post Modal -->
 <div class="modal-bg" id="edit-modal">
   <div class="modal">
     <h3 style="margin:0 0 1rem;font-size:15px">Edit Post</h3>
@@ -261,8 +338,7 @@
            onclick="document.getElementById('e-img-input').click()"
            ondragover="event.preventDefault();this.style.borderColor='#008080'"
            ondragleave="this.style.borderColor='#ced4da'"
-           ondrop="handleImgDrop(event,'e')"
-           style="width:44px;height:44px;flex-shrink:0">
+           ondrop="handleImgDrop(event,'e')">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" stroke="#aaa" stroke-width="1.5"/><polyline points="17,8 12,3 7,8" stroke="#aaa" stroke-width="1.5"/><line x1="12" y1="3" x2="12" y2="15" stroke="#aaa" stroke-width="1.5"/></svg>
       </div>
       <input type="file" id="e-img-input" accept="image/*" style="display:none" onchange="previewImg('e',this)">
@@ -270,16 +346,15 @@
     </div>
     <div class="editor-wrap">
       <div class="editor-toolbar">
-        <button type="button" onmousedown="event.preventDefault();fmt('e','bold')" title="Bold"><b>B</b></button>
-        <button type="button" onmousedown="event.preventDefault();fmt('e','italic')" title="Italic"><i>I</i></button>
-        <button type="button" onmousedown="event.preventDefault();fmt('e','underline')" title="Underline"><u>U</u></button>
+        <button type="button" onmousedown="event.preventDefault();fmt('e','bold')"><b>B</b></button>
+        <button type="button" onmousedown="event.preventDefault();fmt('e','italic')"><i>I</i></button>
+        <button type="button" onmousedown="event.preventDefault();fmt('e','underline')"><u>U</u></button>
         <div class="tb-sep"></div>
-        <button type="button" class="tb-highlight" onmousedown="event.preventDefault();fmtMark('e')" title="Mark for revision — needs to be changed before posting">🟡 Mark</button>
-        <button type="button" onmousedown="event.preventDefault();fmt('e','removeFormat')" title="Remove all formatting" style="font-size:11px;color:#888">✕ Clear</button>
+        <button type="button" class="tb-highlight" onmousedown="event.preventDefault();fmtMark('e')">🟡 Mark</button>
+        <button type="button" onmousedown="event.preventDefault();fmt('e','removeFormat')" style="font-size:11px;color:#888">✕ Clear</button>
       </div>
       <div id="e-content" contenteditable="true" class="content-editor" data-placeholder="Post text..."></div>
     </div>
-    <!-- Image preview under text -->
     <div class="img-preview" id="e-img-preview" onclick="openLightbox(this.querySelector('img').src)">
       <img id="e-img-preview-img" src="" alt="">
       <div class="img-preview-bar">
@@ -289,9 +364,12 @@
       </div>
     </div>
     <textarea id="e-comment" placeholder="Internal comment / notes..." style="width:100%;min-height:50px;font-size:13px;padding:8px;border:0.5px solid #ced4da;border-radius:4px;resize:vertical;box-sizing:border-box;background:#fffef0"></textarea>
-    <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:12px">
-      <button onclick="closeModal('edit-modal')" style="font-size:13px;padding:5px 14px;border:0.5px solid #ced4da;border-radius:4px;background:#fff;cursor:pointer">Cancel</button>
-      <button onclick="updatePost()" style="font-size:13px;padding:5px 14px;background:#008080;color:#fff;border:none;border-radius:4px;cursor:pointer">Save</button>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-top:12px">
+      <button type="button" onclick="deletePostFromEdit()" style="font-size:13px;padding:5px 12px;border:0.5px solid #dc3545;border-radius:4px;background:#fff;cursor:pointer;color:#dc3545">🗑 Delete</button>
+      <div style="display:flex;gap:8px">
+        <button type="button" onclick="closeModal('edit-modal')" style="font-size:13px;padding:5px 14px;border:0.5px solid #ced4da;border-radius:4px;background:#fff;cursor:pointer">Cancel</button>
+        <button type="button" onclick="updatePost()" style="font-size:13px;padding:5px 14px;background:#008080;color:#fff;border:none;border-radius:4px;cursor:pointer">Save</button>
+      </div>
     </div>
   </div>
 </div>
@@ -302,107 +380,89 @@
   <img id="img-lightbox-img" src="" alt="Preview">
 </div>
 
-<!-- Serie Modal -->
-<div class="modal-bg" id="serie-modal">
-  <div class="modal">
-    <h3 style="margin:0 0 1rem;font-size:15px">New Serie</h3>
-    <input type="hidden" id="s-topic-id">
-    <input type="text" id="s-name" placeholder="Serie name..." class="finput">
-    <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:4px">
-      <button onclick="closeModal('serie-modal')" style="font-size:13px;padding:5px 14px;border:0.5px solid #ced4da;border-radius:4px;background:#fff;cursor:pointer">Cancel</button>
-      <button onclick="saveSerie()" style="font-size:13px;padding:5px 14px;background:#008080;color:#fff;border:none;border-radius:4px;cursor:pointer">Create</button>
-    </div>
-  </div>
-</div>
-
 <script>
 const CSRF = '{{ csrf_token }}';
-let draggedId = null;
 let selectedColor = 'blue';
 
-/* ── Editor helpers ── */
-function fmt(prefix, cmd) {
-  const el = document.getElementById(prefix + '-content');
-  el.focus();
-  document.execCommand(cmd, false, null);
-}
-function fmtMark(prefix) {
-  const el = document.getElementById(prefix + '-content');
-  el.focus();
-  // toggle yellow highlight
-  const sel = window.getSelection();
-  if (!sel || sel.isCollapsed) return;
-  document.execCommand('hiliteColor', false, '#FFF176');
-}
-function getEditorText(prefix) {
-  return document.getElementById(prefix + '-content').innerHTML;
-}
-function setEditorText(prefix, html) {
-  const el = document.getElementById(prefix + '-content');
-  // plain text (old posts) → show as-is; HTML (new posts) → render
-  el.innerHTML = html || '';
-}
-function clearEditor(prefix) {
-  document.getElementById(prefix + '-content').innerHTML = '';
-}
+/* ── Search data ── */
+const ALL_POSTS = [
+  {% for t in topics_data %}{% for p in t.posts %}
+  {id:{{ p.id }},
+   title:'{{ p.title|default:p.content|truncatechars:80|escapejs }}',
+   status:'{{ p.status }}',
+   date:'{{ p.planned_date|date:"Y-m-d" }}',
+   comment:'{{ p.comment|escapejs }}',
+   image:'{{ p.image|escapejs }}',
+   fullTitle:'{{ p.title|escapejs }}',
+   content:'{{ p.content|escapejs }}',
+   topic:'{{ t.name|escapejs }}',
+   topicColor:'{{ t.accent }}'},
+  {% endfor %}{% endfor %}
+];
 
-/* Placeholder behaviour for contenteditable */
-document.addEventListener('DOMContentLoaded', () => {
-  document.querySelectorAll('.content-editor[data-placeholder]').forEach(el => {
-    const ph = el.dataset.placeholder;
-    const style = document.createElement('style');
-    style.textContent = `#${el.id}:empty:before{content:attr(data-placeholder);color:#aaa;pointer-events:none}`;
-    document.head.appendChild(style);
-  });
-});
-
+/* ── Helpers ── */
 function api(url, data) {
   return fetch(url, {method:'POST', headers:{'Content-Type':'application/json','X-CSRFToken':CSRF}, body:JSON.stringify(data)}).then(r=>r.json());
 }
 
-// Image handling - unified
+/* ── Editor ── */
+function fmt(prefix, cmd) {
+  const el = document.getElementById(prefix+'-content');
+  el.focus();
+  document.execCommand(cmd, false, null);
+}
+function fmtMark(prefix) {
+  const el = document.getElementById(prefix+'-content');
+  el.focus();
+  const sel = window.getSelection();
+  if (!sel || sel.isCollapsed) return;
+  document.execCommand('hiliteColor', false, '#FFF176');
+}
+function getEditorText(prefix) { return document.getElementById(prefix+'-content').innerHTML; }
+function setEditorText(prefix, html) { document.getElementById(prefix+'-content').innerHTML = html || ''; }
+function clearEditor(prefix) { document.getElementById(prefix+'-content').innerHTML = ''; }
+
+document.addEventListener('DOMContentLoaded', () => {
+  document.querySelectorAll('.content-editor[data-placeholder]').forEach(el => {
+    const s = document.createElement('style');
+    s.textContent = `#${el.id}:empty:before{content:attr(data-placeholder);color:#aaa;pointer-events:none}`;
+    document.head.appendChild(s);
+  });
+});
+
+/* ── Image ── */
 function handleImgDrop(e, prefix) {
   e.preventDefault();
   document.getElementById(prefix+'-thumb').style.borderColor = '#ced4da';
   const file = e.dataTransfer.files[0];
   if (!file || !file.type.startsWith('image/')) return;
-  const dt = new DataTransfer();
-  dt.items.add(file);
+  const dt = new DataTransfer(); dt.items.add(file);
   document.getElementById(prefix+'-img-input').files = dt.files;
-  previewImg(prefix, {files: [file]});
+  previewImg(prefix, {files:[file]});
 }
-
 function previewImg(prefix, input) {
   const file = input.files ? input.files[0] : null;
   if (!file) return;
   const reader = new FileReader();
-  reader.onload = ev => {
-    showImgPreview(prefix, ev.target.result);
-  };
+  reader.onload = ev => showImgPreview(prefix, ev.target.result);
   reader.readAsDataURL(file);
 }
-
 function showImgPreview(prefix, src) {
-  const previewDiv = document.getElementById(prefix+'-img-preview');
-  const previewImg = document.getElementById(prefix+'-img-preview-img');
-  previewImg.src = src;
-  previewDiv.style.display = 'block';
-  // small thumb: show a tick to indicate image loaded
+  const pd = document.getElementById(prefix+'-img-preview');
+  document.getElementById(prefix+'-img-preview-img').src = src;
+  pd.style.display = 'block';
   const thumb = document.getElementById(prefix+'-thumb');
   thumb.style.borderColor = '#008080';
   thumb.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none"><polyline points="20,6 9,17 4,12" stroke="#008080" stroke-width="2"/></svg>';
 }
-
 function clearImgPreview(prefix) {
-  const previewDiv = document.getElementById(prefix+'-img-preview');
-  previewDiv.style.display = 'none';
+  document.getElementById(prefix+'-img-preview').style.display = 'none';
   document.getElementById(prefix+'-img-preview-img').src = '';
   document.getElementById(prefix+'-img-input').value = '';
   const thumb = document.getElementById(prefix+'-thumb');
   thumb.style.borderColor = '#ced4da';
   thumb.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" stroke="#aaa" stroke-width="1.5"/><polyline points="17,8 12,3 7,8" stroke="#aaa" stroke-width="1.5"/><line x1="12" y1="3" x2="12" y2="15" stroke="#aaa" stroke-width="1.5"/></svg>';
 }
-
 function openLightbox(src) {
   if (!src) return;
   document.getElementById('img-lightbox-img').src = src;
@@ -413,21 +473,67 @@ function closeLightbox() {
   document.getElementById('img-lightbox').classList.remove('open');
   document.body.style.overflow = '';
 }
-
 async function removeImg() {
   const id = document.getElementById('e-id').value;
   if (id) await api('/planner/api/post/', {action:'delete_image', id});
   clearImgPreview('e');
 }
 
-// Category
+/* ── Topic sections toggle ── */
+function toggleSection(id) {
+  const body = document.getElementById('tbody-'+id);
+  const chev = document.getElementById('chev-'+id);
+  const open = body.style.display !== 'none';
+  body.style.display = open ? 'none' : '';
+  chev.textContent = open ? '▸' : '▾';
+}
+
+/* ── Status filter ── */
+function filterStatus(el, status) {
+  document.querySelectorAll('.s-chip').forEach(c => c.classList.remove('active'));
+  el.classList.add('active');
+  document.querySelectorAll('.post-row').forEach(r => {
+    r.style.display = (status === 'all' || r.dataset.status === status) ? '' : 'none';
+  });
+}
+
+/* ── Search ── */
+function doSearch(val) {
+  const pane = document.getElementById('search-pane');
+  const sections = document.getElementById('topic-sections');
+  if (val.trim().length < 2) {
+    pane.classList.remove('vis');
+    sections.style.opacity = '1';
+    sections.style.pointerEvents = '';
+    return;
+  }
+  const q = val.trim().toLowerCase();
+  const hits = ALL_POSTS.filter(p =>
+    p.title.toLowerCase().includes(q) || p.content.toLowerCase().includes(q)
+  );
+  pane.classList.add('vis');
+  sections.style.opacity = '.2';
+  sections.style.pointerEvents = 'none';
+  document.getElementById('sr-label').textContent =
+    hits.length + ' result' + (hits.length !== 1 ? 's' : '') + ' for "' + val.trim() + '"';
+  document.getElementById('sr-results').innerHTML = hits.length
+    ? hits.map(p => `<div class="sr-row" onclick='openEditModal(${p.id},${JSON.stringify(p.fullTitle)},${JSON.stringify(p.content)},${JSON.stringify(p.status)},${JSON.stringify(p.date)},${JSON.stringify(p.comment)},${JSON.stringify(p.image)})'>
+        <div class="sr-dot" style="background:${p.topicColor}"></div>
+        <span class="sr-title">${p.title}</span>
+        <span class="sbadge s-${p.status}" style="font-size:10px;padding:2px 7px;border-radius:99px;white-space:nowrap;margin:0 6px">${p.status}</span>
+        <span class="sr-topic">${p.topic}</span>
+      </div>`).join('')
+    : '<p style="font-size:12px;color:#aaa;padding:6px 0">No results found.</p>';
+}
+
+/* ── Categories ── */
 function toggleAddCat() {
   const f = document.getElementById('add-cat-form');
   f.style.display = f.style.display === 'none' ? 'flex' : 'none';
 }
 function selectColor(el) {
-  document.querySelectorAll('.color-dot').forEach(d => d.classList.remove('selected'));
-  el.classList.add('selected');
+  document.querySelectorAll('.color-dot').forEach(d => d.style.border = '2px solid transparent');
+  el.style.border = '2px solid #333';
   selectedColor = el.dataset.color;
 }
 async function addCat() {
@@ -437,51 +543,32 @@ async function addCat() {
   location.reload();
 }
 async function deleteTopic(id) {
-  if (!confirm('Delete topic and all its posts?')) return;
+  if (!confirm('Delete this category and all its posts?')) return;
   await api('/planner/api/topic/', {action:'delete', id});
   location.reload();
 }
-
-// Drag & Drop
-function dragStart(e, id) { draggedId = id; }
-async function dropPost(e, topicId) {
-  e.preventDefault();
-  e.currentTarget.querySelector('.drop-zone').classList.remove('over');
-  if (!draggedId) return;
-  await api('/planner/api/post/', {action:'update_topic', id:draggedId, topic_id:topicId});
-  location.reload();
-}
-async function dropToPipeline(e) {
-  e.preventDefault();
-  e.currentTarget.style.background = '#F1EFE8';
-  if (!draggedId) return;
-  await api('/planner/api/post/', {action:'to_pipeline', id:draggedId});
-  location.reload();
-}
-async function toPipeline(id) {
-  await api('/planner/api/post/', {action:'to_pipeline', id});
-  location.reload();
+async function editTopic(id) {
+  const span = document.getElementById('topic-name-'+id);
+  const oldName = span.textContent.trim();
+  const newName = prompt('Rename category:', oldName);
+  if (!newName || newName.trim() === oldName) return;
+  const res = await api('/planner/api/topic/', {action:'rename', id, name:newName.trim()});
+  if (res && res.ok) {
+    span.textContent = newName.trim();
+    document.querySelectorAll('[data-topic-id="'+id+'"]').forEach(el => {
+      el.textContent = newName.trim();
+    });
+  }
 }
 
-// Post CRUD
-async function deletePost(id) {
-  if (!confirm('Delete?')) return;
-  await api('/planner/api/post/', {action:'delete', id});
+/* ── Ideas ── */
+async function addIdea(topicId) {
+  const input = document.getElementById('idea-'+topicId);
+  const text = input.value.trim();
+  if (!text) return;
+  await api('/planner/api/idea/', {action:'create', text, topic_id:topicId});
   location.reload();
 }
-
-// Serie
-function toggleSerie(id) {
-  const el = document.getElementById('serie-'+id);
-  el.style.display = el.style.display === 'none' ? 'flex' : 'none';
-}
-async function deleteSerie(id) {
-  if (!confirm('Delete serie and all parts?')) return;
-  await api('/planner/api/series/', {action:'delete', id});
-  location.reload();
-}
-
-// Ideas
 async function editIdea(id, text) {
   const t = prompt('Edit idea:', text);
   if (t === null || !t.trim()) return;
@@ -492,107 +579,19 @@ async function deleteIdea(id) {
   await api('/planner/api/idea/', {action:'delete', id});
   location.reload();
 }
-async function addIdea(topicId) {
-  const text = document.getElementById('idea-'+topicId).value.trim();
-  if (!text) return;
-  await api('/planner/api/idea/', {action:'create', text, topic_id:topicId});
+
+/* ── Post CRUD ── */
+async function deletePost(id) {
+  if (!confirm('Delete this post permanently?')) return;
+  await api('/planner/api/post/', {action:'delete', id});
   location.reload();
 }
-
-// Modals
-function openModal(id) { document.getElementById(id).classList.add('open'); }
-function closeModal(id) { document.getElementById(id).classList.remove('open'); }
-
-function openPostModal(topicId, serieId) {
-  document.getElementById('m-topic-id').value = topicId || '';
-  document.getElementById('m-series-id').value = serieId || '';
-  if (topicId) document.getElementById('m-topic').value = topicId;
-  document.getElementById('m-title').value = '';
-  clearEditor('m');
-  document.getElementById('m-comment').value = '';
-  document.getElementById('m-date').value = '';
-  clearImgPreview('m');
-  openModal('post-modal');
-}
-
-async function savePost() {
-  const topicId = document.getElementById('m-topic-id').value || document.getElementById('m-topic').value;
-  const result = await api('/planner/api/post/', {
-    action:'create', topic_id:topicId,
-    series_id: document.getElementById('m-series-id').value || null,
-    status: document.getElementById('m-status').value,
-    planned_date: document.getElementById('m-date').value || null,
-    title: document.getElementById('m-title').value,
-    content: getEditorText('m'),
-    comment: document.getElementById('m-comment').value,
-  });
-  const imgInput = document.getElementById('m-img-input');
-  if (result.id && imgInput.files && imgInput.files[0]) {
-    const form = new FormData();
-    form.append('image', imgInput.files[0]);
-    await fetch('/planner/api/image/'+result.id+'/', {
-      method:'POST', headers:{'X-CSRFToken':CSRF}, body:form
-    });
-  }
-  location.reload();
-}
-
-function openEditModal(id, title, content, status, date, comment, image) {
-  document.getElementById('e-id').value = id;
-  document.getElementById('e-title').value = title;
-  setEditorText('e', content);
-  document.getElementById('e-status').value = status;
-  document.getElementById('e-date').value = date || '';
-  document.getElementById('e-comment').value = comment || '';
-  document.getElementById('e-img-input').value = '';
-  if (image) {
-    showImgPreview('e', `/media/${image}`);
-  } else {
-    clearImgPreview('e');
-  }
-  openModal('edit-modal');
-}
-
-async function updatePost() {
+async function deletePostFromEdit() {
   const id = document.getElementById('e-id').value;
-  await api('/planner/api/post/', {
-    action:'update', id,
-    title: document.getElementById('e-title').value,
-    content: getEditorText('e'),
-    comment: document.getElementById('e-comment').value,
-    status: document.getElementById('e-status').value,
-    planned_date: document.getElementById('e-date').value || null,
-  });
-  const imgInput = document.getElementById('e-img-input');
-  if (imgInput.files && imgInput.files[0]) {
-    const form = new FormData();
-    form.append('image', imgInput.files[0]);
-    await fetch('/planner/api/image/'+id+'/', {
-      method:'POST', headers:{'X-CSRFToken':CSRF}, body:form
-    });
-  }
+  if (!id) return;
+  if (!confirm('Delete this post permanently?')) return;
+  await api('/planner/api/post/', {action:'delete', id});
   location.reload();
 }
-
-function openSerieModal(topicId) {
-  document.getElementById('s-topic-id').value = topicId;
-  document.getElementById('s-name').value = '';
-  openModal('serie-modal');
-}
-async function saveSerie() {
-  await api('/planner/api/series/', {
-    action:'create',
-    name: document.getElementById('s-name').value,
-    topic_id: document.getElementById('s-topic-id').value,
-  });
-  location.reload();
-}
-
-document.querySelectorAll('.modal-bg').forEach(m => {
-  m.addEventListener('click', e => { if(e.target===m) m.classList.remove('open'); });
-});
-document.addEventListener('keydown', e => {
-  if (e.key === 'Escape') closeLightbox();
-});
 </script>
 {% endblock %}
