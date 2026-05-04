@@ -202,26 +202,61 @@
     border-radius: 8px;
     overflow: hidden;
     box-shadow: 0 1px 4px rgba(0,0,0,0.07);
-    flex-shrink: 0;
   }
-  .db-sql-panel textarea {
+  .sql-editor-wrap {
+    display: flex;
+    flex-direction: column;
+  }
+  .sql-editor-wrap textarea {
     width: 100%;
-    height: 110px;
-    padding: 0.5rem 0.7rem;
+    padding: 0.6rem 0.8rem;
     border: none;
     border-bottom: 1px solid var(--octo-light-gray);
     font-family: 'Courier New', monospace;
-    font-size: 0.78rem;
+    font-size: 0.82rem;
     resize: vertical;
     outline: none;
-    color: var(--octo-text);
+    color: #1a1a2e;
+    background: #f8fffe;
+    line-height: 1.55;
+    tab-size: 2;
   }
-  .db-sql-panel textarea:focus { border-bottom-color: var(--octo-petrol); }
-  .db-sql-actions { display: flex; gap: 0.4rem; padding: 0.4rem 0.6rem; background: var(--octo-light-gray); }
-  .db-sql-result { max-height: 220px; overflow: auto; padding: 0.5rem 0.7rem; font-size: 0.75rem; }
-  .db-sql-result table { font-size: 0.73rem; }
-  .db-sql-result .err { color: #c0392b; }
+  .sql-editor-wrap textarea:focus { background: #fff; border-bottom-color: var(--octo-petrol); }
+  .sql-editor-wrap textarea::placeholder { color: #b0c4c4; }
+  .db-sql-actions {
+    display: flex; gap: 0.4rem; padding: 0.4rem 0.6rem;
+    background: var(--octo-light-gray);
+    align-items: center; flex-wrap: wrap;
+  }
+  .sql-history-btn {
+    margin-left: auto; font-size: 0.75rem; color: #777;
+    background: none; border: 1px solid #ccc; border-radius: 4px;
+    padding: 0.2rem 0.5rem; cursor: pointer;
+  }
+  .sql-history-btn:hover { color: var(--octo-petrol); border-color: var(--octo-petrol); }
+  .sql-history-list {
+    display: none; border-top: 1px solid var(--octo-light-gray);
+    background: #f8f8f8; max-height: 140px; overflow-y: auto;
+  }
+  .sql-history-list.open { display: block; }
+  .sql-hist-entry {
+    padding: 0.3rem 0.8rem; font-size: 0.75rem; font-family: monospace;
+    color: #333; cursor: pointer; border-bottom: 1px solid #eee;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .sql-hist-entry:hover { background: #e3f6f7; color: var(--octo-petrol); }
+  .db-sql-result {
+    overflow: auto; padding: 0.5rem 0.7rem; font-size: 0.75rem;
+    max-height: 340px;
+  }
+  .db-sql-result table { font-size: 0.73rem; min-width: 100%; }
+  .db-sql-result thead { background: var(--octo-petrol); color: #fff; position: sticky; top: 0; }
+  .db-sql-result thead th { padding: 0.3rem 0.5rem; font-weight: 600; white-space: nowrap; }
+  .db-sql-result tbody tr:nth-child(even) { background: #f5fafa; }
+  .db-sql-result tbody td { padding: 0.28rem 0.5rem; border-bottom: 1px solid #f0f0f0; white-space: nowrap; max-width: 260px; overflow: hidden; text-overflow: ellipsis; }
+  .db-sql-result .err { color: #c0392b; font-weight: 600; font-size: 0.82rem; }
   .db-sql-result .ok  { color: #27ae60; font-weight: 600; }
+  .sql-timing { font-size: 0.72rem; color: #aaa; margin-left: 0.5rem; font-weight: 400; }
 </style>
 
 <div class="db3">
@@ -247,11 +282,31 @@
   <!-- ── MITTE: Inhalt ── -->
   <div class="db-mid">
     {% if content_type == "welcome" %}
-    <div class="db-welcome">
+    <div class="db-welcome" style="margin-bottom:1rem;">
       <h2>🛢 DB Verwaltung</h2>
-      <p>Wähle links eine Tabelle aus.</p>
       <div class="big">{{ tables|length }}</div>
-      <p>Tabellen in der Datenbank</p>
+      <p>Tabellen in der Datenbank — wähle links eine aus oder führe unten SQL aus.</p>
+    </div>
+    <!-- SQL-Editor prominent auf der Startseite -->
+    <div class="db-sql-panel">
+      <div class="db-panel-header">
+        ⚡ SQL-Abfrage
+        <span style="font-weight:400;font-size:0.75rem;opacity:0.8;">— Strg+Enter zum Ausführen</span>
+      </div>
+      <div class="sql-editor-wrap">
+        <textarea id="sqlInput" rows="8"
+          placeholder="-- SQL hier eingeben&#10;SELECT * FROM planner_posts LIMIT 20;&#10;ALTER TABLE planner_posts ADD COLUMN is_oj TINYINT(1) NOT NULL DEFAULT 0;"></textarea>
+        <div class="db-sql-actions">
+          <button class="btn btn-primary btn-sm" onclick="runSQL()">▶ Ausführen</button>
+          <button class="btn btn-sm" style="background:#eee;color:#555;"
+            onclick="document.getElementById('sqlInput').value='';document.getElementById('sqlResult').innerHTML=''">
+            ✕ Leeren
+          </button>
+          <button class="sql-history-btn" onclick="toggleHistory()">🕐 Verlauf</button>
+        </div>
+        <div class="sql-history-list" id="sqlHistoryList"></div>
+      </div>
+      <div class="db-sql-result" id="sqlResult"></div>
     </div>
 
     {% else %}
@@ -354,11 +409,26 @@
     </div>
     <!-- SQL-Abfragefeld -->
     <div class="db-sql-panel" style="margin-top:1rem;">
-      <div class="db-panel-header">⚡ SQL-Abfrage <span style="font-weight:400;font-size:0.75rem;opacity:0.8;">— Strg+Enter zum Ausführen</span></div>
-      <textarea id="sqlInput" placeholder="SELECT * FROM tabelle LIMIT 10;"></textarea>
-      <div class="db-sql-actions">
-        <button class="btn btn-primary btn-sm" onclick="runSQL()">▶ Ausführen</button>
-        <button class="btn btn-sm" style="background:#eee;color:#555;" onclick="document.getElementById('sqlInput').value='';document.getElementById('sqlResult').innerHTML=''">✕ Leeren</button>
+      <div class="db-panel-header">
+        ⚡ SQL-Abfrage
+        <span style="font-weight:400;font-size:0.75rem;opacity:0.8;">— Strg+Enter zum Ausführen</span>
+      </div>
+      <div class="sql-editor-wrap">
+        <textarea id="sqlInput" rows="5"
+          placeholder="SELECT * FROM `{{ table_name }}` LIMIT 10;"></textarea>
+        <div class="db-sql-actions">
+          <button class="btn btn-primary btn-sm" onclick="runSQL()">▶ Ausführen</button>
+          <button class="btn btn-sm" style="background:#eee;color:#555;"
+            onclick="document.getElementById('sqlInput').value='';document.getElementById('sqlResult').innerHTML=''">
+            ✕ Leeren
+          </button>
+          <button class="btn btn-sm" style="background:#eee;color:#555;"
+            onclick="document.getElementById('sqlInput').value='SELECT * FROM \`{{ table_name }}\` LIMIT 50;'">
+            📋 Diese Tabelle
+          </button>
+          <button class="sql-history-btn" onclick="toggleHistory()">🕐 Verlauf</button>
+        </div>
+        <div class="sql-history-list" id="sqlHistoryList"></div>
       </div>
       <div class="db-sql-result" id="sqlResult"></div>
     </div>
@@ -368,58 +438,117 @@
 </div>
 
 <script>
-  // Tabellen-Filter (links)
+  /* ── Tabellen-Filter (links) ── */
   function filterTables(val) {
     const q = val.toLowerCase();
     document.querySelectorAll('#tableList a').forEach(a => {
-      a.style.display = a.dataset.name.includes(q) ? '' : 'none';
+      a.style.display = a.dataset.name.toLowerCase().includes(q) ? '' : 'none';
     });
   }
 
-  // SQL ausführen
+  /* ── Query-Verlauf (localStorage) ── */
+  const HIST_KEY = 'db_sql_history';
+  function loadHistory() {
+    try { return JSON.parse(localStorage.getItem(HIST_KEY) || '[]'); } catch { return []; }
+  }
+  function saveToHistory(sql) {
+    let h = loadHistory().filter(s => s !== sql);
+    h.unshift(sql);
+    if (h.length > 20) h = h.slice(0, 20);
+    localStorage.setItem(HIST_KEY, JSON.stringify(h));
+  }
+  function toggleHistory() {
+    const list = document.getElementById('sqlHistoryList');
+    const h = loadHistory();
+    if (!list.classList.contains('open') && h.length) {
+      list.innerHTML = h.map(s =>
+        `<div class="sql-hist-entry" onclick="loadHistEntry(this)" title="${s.replace(/"/g,'&quot;')}">${s}</div>`
+      ).join('');
+    }
+    list.classList.toggle('open');
+  }
+  function loadHistEntry(el) {
+    document.getElementById('sqlInput').value = el.title;
+    document.getElementById('sqlHistoryList').classList.remove('open');
+    document.getElementById('sqlInput').focus();
+  }
+
+  /* ── SQL ausführen ── */
   function runSQL() {
     const sql = document.getElementById('sqlInput').value.trim();
     const res = document.getElementById('sqlResult');
     if (!sql) return;
-    res.innerHTML = '<span style="color:#888">Wird ausgeführt…</span>';
+
+    const t0 = performance.now();
+    res.innerHTML = '<span style="color:#888;font-size:0.78rem">⏳ Wird ausgeführt…</span>';
 
     fetch('/db-admin/sql/', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-CSRFToken': '{{ csrf_token }}'
-      },
+      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': '{{ csrf_token }}' },
       body: JSON.stringify({ sql })
     })
     .then(r => r.json())
     .then(data => {
+      const ms = (performance.now() - t0).toFixed(0);
+      saveToHistory(sql);
+
       if (data.error) {
-        res.innerHTML = `<span class="err">❌ ${data.error}</span>`;
-      } else if (data.type === 'select') {
+        res.innerHTML = `<span class="err">❌ ${escHtml(data.error)}</span>`;
+        return;
+      }
+
+      if (data.type === 'select') {
         if (data.rows.length === 0) {
-          res.innerHTML = '<span class="ok">✓ Keine Zeilen zurückgegeben.</span>';
+          res.innerHTML = `<span class="ok">✓ Keine Zeilen zurückgegeben. <span class="sql-timing">${ms} ms</span></span>`;
           return;
         }
-        let html = `<div class="ok" style="margin-bottom:4px">✓ ${data.count} Zeile(n)</div>`;
+        let html = `<div class="ok" style="margin-bottom:4px">✓ ${data.count} Zeile(n) <span class="sql-timing">${ms} ms</span></div>`;
         html += '<div style="overflow-x:auto"><table><thead><tr>';
-        data.columns.forEach(c => html += `<th>${c}</th>`);
+        data.columns.forEach(c => html += `<th>${escHtml(c)}</th>`);
         html += '</tr></thead><tbody>';
         data.rows.forEach(row => {
           html += '<tr>';
-          row.forEach(cell => html += `<td>${cell === null ? '<span style="color:#bbb;font-style:italic">NULL</span>' : cell}</td>`);
+          row.forEach(cell => {
+            if (cell === null) {
+              html += '<td><span style="color:#bbb;font-style:italic">NULL</span></td>';
+            } else {
+              html += `<td title="${escHtml(String(cell))}">${escHtml(String(cell))}</td>`;
+            }
+          });
           html += '</tr>';
         });
         html += '</tbody></table></div>';
         res.innerHTML = html;
       } else {
-        res.innerHTML = `<span class="ok">✓ ${data.rows_affected} Zeile(n) betroffen.</span>`;
+        res.innerHTML = `<span class="ok">✓ ${data.rows_affected} Zeile(n) betroffen. <span class="sql-timing">${ms} ms</span></span>`;
       }
     })
-    .catch(e => res.innerHTML = `<span class="err">❌ Fehler: ${e}</span>`);
+    .catch(e => {
+      res.innerHTML = `<span class="err">❌ Netzwerkfehler: ${escHtml(String(e))}</span>`;
+    });
   }
 
-  // SQL mit Ctrl+Enter ausführen
-  document.getElementById('sqlInput').addEventListener('keydown', e => {
-    if (e.ctrlKey && e.key === 'Enter') runSQL();
+  function escHtml(s) {
+    return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  /* ── Tastaturkürzel ── */
+  document.addEventListener('DOMContentLoaded', () => {
+    const ta = document.getElementById('sqlInput');
+    if (!ta) return;
+    // Strg+Enter → ausführen
+    ta.addEventListener('keydown', e => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+        e.preventDefault();
+        runSQL();
+      }
+      // Tab → 2 Leerzeichen einfügen
+      if (e.key === 'Tab') {
+        e.preventDefault();
+        const s = ta.selectionStart, en = ta.selectionEnd;
+        ta.value = ta.value.substring(0, s) + '  ' + ta.value.substring(en);
+        ta.selectionStart = ta.selectionEnd = s + 2;
+      }
+    });
   });
 </script>

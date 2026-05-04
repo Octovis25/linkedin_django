@@ -1,0 +1,440 @@
+{% extends "core/base.html" %}
+{% load static %}
+{% block title %}OJ Posts{% endblock %}
+{% block content %}
+<style>
+/* ── Modals ── */
+.modal-bg{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.4);z-index:1000;align-items:center;justify-content:center}
+.modal-bg.open{display:flex}
+.modal{background:#fff;border-radius:12px;padding:1.5rem;width:520px;max-width:95vw;max-height:90vh;overflow-y:auto}
+.finput{width:100%;font-size:13px;padding:6px 8px;border:0.5px solid #ced4da;border-radius:4px;box-sizing:border-box;margin-bottom:8px}
+.fselect{font-size:13px;padding:6px 8px;border:0.5px solid #ced4da;border-radius:4px}
+/* ── Image upload ── */
+.img-drop{width:44px;height:44px;border-radius:8px;border:1.5px dashed #ced4da;flex-shrink:0;display:flex;align-items:center;justify-content:center;cursor:pointer;background:#f8f9fa;transition:all .2s;overflow:hidden}
+.img-drop:hover{border-color:#008080;background:#f0faf8}
+.img-preview{display:none;position:relative;width:100%;margin-bottom:8px;border-radius:6px;overflow:hidden;border:0.5px solid #ced4da;background:#f8f9fa;cursor:zoom-in}
+.img-preview img{width:100%;max-height:220px;object-fit:contain;display:block}
+.img-preview-bar{position:absolute;bottom:0;left:0;right:0;display:flex;justify-content:space-between;padding:4px 8px;background:rgba(0,0,0,0.45);opacity:0;transition:opacity .15s}
+.img-preview:hover .img-preview-bar{opacity:1}
+.img-preview-bar span{font-size:12px;color:#fff;cursor:pointer;padding:2px 6px;border-radius:3px;background:rgba(255,255,255,0.15)}
+.img-preview-bar span:hover{background:rgba(255,255,255,0.3)}
+/* ── Lightbox ── */
+#img-lightbox{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.82);z-index:9999;align-items:center;justify-content:center;cursor:zoom-out}
+#img-lightbox.open{display:flex}
+#img-lightbox img{max-width:90vw;max-height:88vh;border-radius:8px;object-fit:contain}
+#img-lightbox-close{position:absolute;top:16px;right:20px;color:#fff;font-size:28px;cursor:pointer;line-height:1;opacity:.8}
+#img-lightbox-close:hover{opacity:1}
+/* ── Rich-text editor ── */
+.editor-wrap{border:0.5px solid #ced4da;border-radius:4px;overflow:hidden;margin-bottom:8px}
+.editor-toolbar{display:flex;gap:2px;padding:4px 6px;background:#f8f9fa;border-bottom:0.5px solid #e0e0e0;flex-wrap:wrap}
+.editor-toolbar button{padding:2px 7px;font-size:12px;border:0.5px solid #ced4da;border-radius:3px;background:#fff;cursor:pointer;line-height:1.4;color:#333}
+.editor-toolbar button:hover{background:#e8f5f5;border-color:#008080}
+.tb-sep{width:1px;background:#dee2e6;margin:2px 3px}
+.tb-highlight{background:#FFF176 !important;font-weight:600;color:#7a5c00 !important;border-color:#e6d800 !important}
+.content-editor{min-height:180px;max-height:340px;overflow-y:auto;padding:8px 10px;font-size:13px;line-height:1.6;outline:none;color:#212529;white-space:pre-wrap;word-break:break-word}
+.content-editor:focus{background:#fafffe}
+.content-editor mark{background:#FFF176;border-radius:2px;padding:0 1px}
+/* ── Page layout ── */
+.oj-topbar{display:flex;align-items:center;gap:10px;margin-bottom:1.25rem;flex-wrap:wrap}
+.oj-page-title{font-size:1.2rem;font-weight:500;color:#212529}
+.oj-tag{display:inline-block;background:#e0f2fe;color:#0369a1;border-radius:8px;font-size:.75rem;font-weight:700;padding:.1rem .5rem;margin-left:.4rem;vertical-align:middle}
+.btn-new-oj{padding:6px 16px;font-size:13px;font-weight:500;background:#008080;color:#fff;border:none;border-radius:6px;cursor:pointer;white-space:nowrap}
+.btn-new-oj:hover{background:#006666}
+/* ── List table ── */
+.oj-table{width:100%;border-collapse:collapse;background:#fff;box-shadow:0 1px 4px rgba(0,0,0,.08);border-radius:8px;overflow:hidden;font-size:13px}
+.oj-table thead{background:var(--octo-petrol);color:#fff}
+.oj-table th,.oj-table td{padding:.55rem .9rem;text-align:left;border-bottom:1px solid #f0f0f0}
+.oj-table tr:last-child td{border-bottom:none}
+.oj-table tr.post-row:hover td{background:#f8fffe;cursor:pointer}
+.td-title{max-width:340px}
+.post-name{font-weight:500;color:#008080;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:block}
+.post-snippet{font-size:.8rem;color:#888;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:300px}
+.sbadge{font-size:10px;padding:2px 7px;border-radius:99px;display:inline-block;white-space:nowrap}
+.s-Draft{background:#F1EFE8;color:#444441}
+.s-Review{background:#FFF3CD;color:#856404}
+.s-Ready{background:#E1F5EE;color:#0F6E56}
+.s-Scheduled{background:#E6F1FB;color:#185FA5}
+.s-Posted{background:#EEEDFE;color:#3C3489}
+.pa-btn{font-size:11px;padding:2px 6px;border:0.5px solid #e0e0e0;border-radius:4px;background:#fff;cursor:pointer;color:#6c757d}
+.pa-btn:hover{border-color:#008080;color:#008080}
+.pa-btn.del:hover{border-color:#dc3545;color:#dc3545}
+.topic-dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:4px;vertical-align:middle}
+.ta-blue{background:#185FA5}.ta-green{background:#1D9E75}.ta-amber{background:#BA7517}
+.ta-purple{background:#7F77DD}.ta-red{background:#A32D2D}.ta-gray{background:#888780}
+.empty-oj{padding:2rem;text-align:center;color:#aaa;font-size:1rem}
+</style>
+
+<!-- ── Top bar ── -->
+<div class="oj-topbar">
+  <span class="oj-page-title">👤 OJ — Persönliche Posts <span class="oj-tag">OJ</span></span>
+  <button type="button" class="btn-new-oj" onclick="openOjModal()">+ New OJ Post</button>
+</div>
+
+{% if posts %}
+<table class="oj-table">
+  <thead>
+    <tr>
+      <th>Title / Content</th>
+      <th>Status</th>
+      <th>Kategorie</th>
+      <th>Datum</th>
+      <th></th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for p in posts %}
+    <tr class="post-row" id="prow-{{ p.id }}"
+        onclick="openOjEditById({{ p.id }})">
+      <td class="td-title">
+        <span class="post-name" title="{{ p.title|default:p.content|truncatechars:120 }}">
+          {{ p.title|default:p.content|truncatechars:70 }}
+        </span>
+        {% if p.title and p.content %}
+        <div class="post-snippet">{{ p.content|striptags|truncatechars:80 }}</div>
+        {% endif %}
+      </td>
+      <td><span class="sbadge s-{{ p.status }}">{{ p.status }}</span></td>
+      <td>
+        {% if p.topic_name %}
+        <span class="topic-dot ta-{{ p.topic_color }}"></span>{{ p.topic_name }}
+        {% else %}—{% endif %}
+      </td>
+      <td style="font-size:12px;color:#6c757d">{{ p.planned_date|date:"d.m.Y"|default:"—" }}</td>
+      <td>
+        <button type="button" class="pa-btn del" title="Löschen"
+          onclick="event.stopPropagation();ojDelete({{ p.id }})">🗑</button>
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<div class="empty-oj">Noch keine OJ-Posts. Erstelle deinen ersten mit "+ New OJ Post".</div>
+{% endif %}
+
+<!-- ══ New OJ Post Modal ══ -->
+<div class="modal-bg" id="oj-new-modal">
+  <div class="modal">
+    <h3 style="margin:0 0 1rem;font-size:15px">New OJ Post <span class="oj-tag">OJ</span></h3>
+    <input type="hidden" id="n-oj" value="1">
+    <div style="display:flex;gap:8px;margin-bottom:8px">
+      <select id="n-topic" class="fselect" style="flex:1">
+        <option value="">— keine Kategorie —</option>
+        {% for t in topics %}<option value="{{ t.id }}">{{ t.name }}</option>{% endfor %}
+      </select>
+      <select id="n-status" class="fselect" style="flex:1">
+        {% for s in statuses %}<option>{{ s }}</option>{% endfor %}
+      </select>
+    </div>
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+      <label style="font-size:12px;color:#6c757d;white-space:nowrap">Planned to post</label>
+      <input type="date" id="n-date" class="fselect" style="flex:1">
+    </div>
+    <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
+      <div class="img-drop" id="n-thumb"
+           onclick="document.getElementById('n-img-input').click()"
+           ondragover="event.preventDefault();this.style.borderColor='#008080'"
+           ondragleave="this.style.borderColor='#ced4da'"
+           ondrop="handleImgDrop(event,'n')">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" stroke="#aaa" stroke-width="1.5"/><polyline points="17,8 12,3 7,8" stroke="#aaa" stroke-width="1.5"/><line x1="12" y1="3" x2="12" y2="15" stroke="#aaa" stroke-width="1.5"/></svg>
+      </div>
+      <input type="file" id="n-img-input" accept="image/*" style="display:none" onchange="previewImg('n',this)">
+      <input type="text" id="n-title" placeholder="Titel (optional)..." class="finput" style="margin-bottom:0;flex:1">
+    </div>
+    <div class="editor-wrap">
+      <div class="editor-toolbar">
+        <button type="button" onmousedown="event.preventDefault();fmt('n','bold')"><b>B</b></button>
+        <button type="button" onmousedown="event.preventDefault();fmt('n','italic')"><i>I</i></button>
+        <button type="button" onmousedown="event.preventDefault();fmt('n','underline')"><u>U</u></button>
+        <div class="tb-sep"></div>
+        <button type="button" class="tb-highlight" onmousedown="event.preventDefault();fmtMark('n')">🟡 Mark</button>
+        <button type="button" onmousedown="event.preventDefault();fmt('n','removeFormat')" style="font-size:11px;color:#888">✕ Clear</button>
+      </div>
+      <div id="n-content" contenteditable="true" class="content-editor" data-placeholder="Post text..."></div>
+    </div>
+    <div class="img-preview" id="n-img-preview" onclick="openLightbox(this.querySelector('img').src)">
+      <img id="n-img-preview-img" src="" alt="">
+      <div class="img-preview-bar">
+        <span onclick="event.stopPropagation();document.getElementById('n-img-input').click()">🔄 Replace</span>
+        <span onclick="event.stopPropagation();openLightbox(document.getElementById('n-img-preview-img').src)">🔍 Full size</span>
+        <span onclick="event.stopPropagation();clearImgPreview('n')" style="color:#ffb3b3">🗑 Remove</span>
+      </div>
+    </div>
+    <textarea id="n-comment" placeholder="Kommentar / Notiz..." style="width:100%;min-height:50px;font-size:13px;padding:8px;border:0.5px solid #ced4da;border-radius:4px;resize:vertical;box-sizing:border-box;background:#fffef0"></textarea>
+    <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:12px">
+      <button type="button" onclick="closeModal('oj-new-modal')" style="font-size:13px;padding:5px 14px;border:0.5px solid #ced4da;border-radius:4px;background:#fff;cursor:pointer">Abbrechen</button>
+      <button type="button" onclick="saveOjNew()" style="font-size:13px;padding:5px 14px;background:#008080;color:#fff;border:none;border-radius:4px;cursor:pointer">Speichern</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══ Edit OJ Post Modal ══ -->
+<div class="modal-bg" id="oj-edit-modal">
+  <div class="modal">
+    <h3 style="margin:0 0 1rem;font-size:15px">OJ Post bearbeiten <span class="oj-tag">OJ</span></h3>
+    <input type="hidden" id="e-id">
+    <div style="display:flex;gap:8px;margin-bottom:8px">
+      <select id="e-topic" class="fselect" style="flex:1">
+        <option value="">— keine Kategorie —</option>
+        {% for t in topics %}<option value="{{ t.id }}">{{ t.name }}</option>{% endfor %}
+      </select>
+      <select id="e-status" class="fselect" style="flex:1">
+        {% for s in statuses %}<option>{{ s }}</option>{% endfor %}
+      </select>
+    </div>
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+      <label style="font-size:12px;color:#6c757d;white-space:nowrap">Planned to post</label>
+      <input type="date" id="e-date" class="fselect" style="flex:1">
+    </div>
+    <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
+      <div class="img-drop" id="e-thumb"
+           onclick="document.getElementById('e-img-input').click()"
+           ondragover="event.preventDefault();this.style.borderColor='#008080'"
+           ondragleave="this.style.borderColor='#ced4da'"
+           ondrop="handleImgDrop(event,'e')">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" stroke="#aaa" stroke-width="1.5"/><polyline points="17,8 12,3 7,8" stroke="#aaa" stroke-width="1.5"/><line x1="12" y1="3" x2="12" y2="15" stroke="#aaa" stroke-width="1.5"/></svg>
+      </div>
+      <input type="file" id="e-img-input" accept="image/*" style="display:none" onchange="previewImg('e',this)">
+      <input type="text" id="e-title" placeholder="Titel..." class="finput" style="margin-bottom:0;flex:1">
+    </div>
+    <div class="editor-wrap">
+      <div class="editor-toolbar">
+        <button type="button" onmousedown="event.preventDefault();fmt('e','bold')"><b>B</b></button>
+        <button type="button" onmousedown="event.preventDefault();fmt('e','italic')"><i>I</i></button>
+        <button type="button" onmousedown="event.preventDefault();fmt('e','underline')"><u>U</u></button>
+        <div class="tb-sep"></div>
+        <button type="button" class="tb-highlight" onmousedown="event.preventDefault();fmtMark('e')">🟡 Mark</button>
+        <button type="button" onmousedown="event.preventDefault();fmt('e','removeFormat')" style="font-size:11px;color:#888">✕ Clear</button>
+      </div>
+      <div id="e-content" contenteditable="true" class="content-editor" data-placeholder="Post text..."></div>
+    </div>
+    <div class="img-preview" id="e-img-preview" onclick="openLightbox(this.querySelector('img').src)">
+      <img id="e-img-preview-img" src="" alt="">
+      <div class="img-preview-bar">
+        <span onclick="event.stopPropagation();document.getElementById('e-img-input').click()">🔄 Replace</span>
+        <span onclick="event.stopPropagation();openLightbox(document.getElementById('e-img-preview-img').src)">🔍 Full size</span>
+        <span onclick="event.stopPropagation();removeOjImg()" style="color:#ffb3b3">🗑 Remove</span>
+      </div>
+    </div>
+    <textarea id="e-comment" placeholder="Kommentar / Notiz..." style="width:100%;min-height:50px;font-size:13px;padding:8px;border:0.5px solid #ced4da;border-radius:4px;resize:vertical;box-sizing:border-box;background:#fffef0"></textarea>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-top:12px">
+      <button type="button" onclick="ojDeleteFromEdit()" style="font-size:13px;padding:5px 12px;border:0.5px solid #dc3545;border-radius:4px;background:#fff;cursor:pointer;color:#dc3545">🗑 Delete</button>
+      <div style="display:flex;gap:8px">
+        <button type="button" onclick="closeModal('oj-edit-modal')" style="font-size:13px;padding:5px 14px;border:0.5px solid #ced4da;border-radius:4px;background:#fff;cursor:pointer">Abbrechen</button>
+        <button type="button" onclick="updateOjPost()" style="font-size:13px;padding:5px 14px;background:#008080;color:#fff;border:none;border-radius:4px;cursor:pointer">Speichern</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Lightbox -->
+<div id="img-lightbox" onclick="closeLightbox()">
+  <span id="img-lightbox-close" onclick="closeLightbox()">×</span>
+  <img id="img-lightbox-img" src="" alt="Preview">
+</div>
+
+<!-- Post data for JS -->
+<script id="oj-data-raw" type="application/json">
+[{% for p in posts %}{"id":{{ p.id }},"title":"{{ p.title|default:""|escapejs }}","content":"{{ p.content|default:""|escapejs }}","status":"{{ p.status }}","date":"{{ p.planned_date|date:"Y-m-d"|default:"" }}","topicId":{{ p.topic_id|default:"null" }},"comment":"{{ p.comment|escapejs }}","image":"{{ p.image|default:""|escapejs }}"}{% if not forloop.last %},{% endif %}{% endfor %}]
+</script>
+
+<script>
+const CSRF = '{{ csrf_token }}';
+
+/* ── Post data map ── */
+const OJ_DATA = JSON.parse(document.getElementById('oj-data-raw').textContent);
+const ojMap = {};
+OJ_DATA.forEach(p => ojMap[p.id] = p);
+
+/* ── API helper ── */
+function api(url, data) {
+  return fetch(url, {
+    method:'POST',
+    headers:{'Content-Type':'application/json','X-CSRFToken':CSRF},
+    body:JSON.stringify(data)
+  }).then(r => r.json());
+}
+
+/* ── Editor ── */
+function fmt(prefix, cmd) {
+  const el = document.getElementById(prefix+'-content');
+  el.focus();
+  document.execCommand(cmd, false, null);
+}
+function fmtMark(prefix) {
+  const el = document.getElementById(prefix+'-content');
+  el.focus();
+  const sel = window.getSelection();
+  if (!sel || sel.isCollapsed) return;
+  document.execCommand('hiliteColor', false, '#FFF176');
+}
+function getEditorText(prefix) { return document.getElementById(prefix+'-content').innerHTML; }
+function setEditorText(prefix, html) { document.getElementById(prefix+'-content').innerHTML = html || ''; }
+
+document.addEventListener('DOMContentLoaded', () => {
+  document.querySelectorAll('.content-editor[data-placeholder]').forEach(el => {
+    const s = document.createElement('style');
+    s.textContent = `#${el.id}:empty:before{content:attr(data-placeholder);color:#aaa;pointer-events:none}`;
+    document.head.appendChild(s);
+  });
+  document.querySelectorAll('.modal-bg').forEach(bg => {
+    bg.addEventListener('click', e => { if (e.target === bg) bg.classList.remove('open'); });
+  });
+});
+
+/* ── Image ── */
+function handleImgDrop(e, prefix) {
+  e.preventDefault();
+  document.getElementById(prefix+'-thumb').style.borderColor = '#ced4da';
+  const file = e.dataTransfer.files[0];
+  if (!file || !file.type.startsWith('image/')) return;
+  const dt = new DataTransfer(); dt.items.add(file);
+  document.getElementById(prefix+'-img-input').files = dt.files;
+  previewImg(prefix, {files:[file]});
+}
+function previewImg(prefix, input) {
+  const file = input.files ? input.files[0] : null;
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = ev => showImgPreview(prefix, ev.target.result);
+  reader.readAsDataURL(file);
+}
+function showImgPreview(prefix, src) {
+  const pd = document.getElementById(prefix+'-img-preview');
+  document.getElementById(prefix+'-img-preview-img').src = src;
+  pd.style.display = 'block';
+  const thumb = document.getElementById(prefix+'-thumb');
+  thumb.style.borderColor = '#008080';
+  thumb.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none"><polyline points="20,6 9,17 4,12" stroke="#008080" stroke-width="2"/></svg>';
+}
+function clearImgPreview(prefix) {
+  document.getElementById(prefix+'-img-preview').style.display = 'none';
+  document.getElementById(prefix+'-img-preview-img').src = '';
+  document.getElementById(prefix+'-img-input').value = '';
+  const thumb = document.getElementById(prefix+'-thumb');
+  thumb.style.borderColor = '#ced4da';
+  thumb.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" stroke="#aaa" stroke-width="1.5"/><polyline points="17,8 12,3 7,8" stroke="#aaa" stroke-width="1.5"/><line x1="12" y1="3" x2="12" y2="15" stroke="#aaa" stroke-width="1.5"/></svg>';
+}
+function openLightbox(src) {
+  if (!src) return;
+  document.getElementById('img-lightbox-img').src = src;
+  document.getElementById('img-lightbox').classList.add('open');
+  document.body.style.overflow = 'hidden';
+}
+function closeLightbox() {
+  document.getElementById('img-lightbox').classList.remove('open');
+  document.body.style.overflow = '';
+}
+async function removeOjImg() {
+  const id = document.getElementById('e-id').value;
+  if (id) await api('/planner/api/post/', {action:'delete_image', id});
+  clearImgPreview('e');
+}
+
+/* ── Modal helpers ── */
+function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+
+/* ── Open NEW OJ post modal ── */
+function openOjModal() {
+  document.getElementById('n-title').value = '';
+  document.getElementById('n-status').value = 'Draft';
+  document.getElementById('n-date').value = '';
+  document.getElementById('n-topic').value = '';
+  document.getElementById('n-comment').value = '';
+  setEditorText('n', '');
+  clearImgPreview('n');
+  document.getElementById('oj-new-modal').classList.add('open');
+  setTimeout(() => document.getElementById('n-title').focus(), 50);
+}
+
+/* ── Save new OJ post (is_oj: 1) ── */
+async function saveOjNew() {
+  const topicId = document.getElementById('n-topic').value;
+  const title = document.getElementById('n-title').value.trim();
+  const content = getEditorText('n').trim();
+  const status = document.getElementById('n-status').value;
+  const date = document.getElementById('n-date').value;
+  const comment = document.getElementById('n-comment').value.trim();
+  if (!content && !title) { alert('Bitte Titel oder Inhalt eingeben.'); return; }
+  const res = await api('/planner/api/post/', {
+    action:'create', topic_id:topicId||null, title, content, status,
+    planned_date:date||null, comment:comment||null, is_oj:1
+  });
+  if (res && res.ok) {
+    const imgInput = document.getElementById('n-img-input');
+    if (imgInput.files && imgInput.files[0]) {
+      const fd = new FormData();
+      fd.append('image', imgInput.files[0]);
+      await fetch(`/planner/api/image/${res.id}/`, {method:'POST', headers:{'X-CSRFToken':CSRF}, body:fd});
+    }
+    closeModal('oj-new-modal');
+    location.reload();
+  } else {
+    alert('Fehler beim Speichern.');
+  }
+}
+
+/* ── Open edit modal by post id ── */
+function openOjEditById(id) {
+  const p = ojMap[id];
+  if (!p) return;
+  document.getElementById('e-id').value = id;
+  document.getElementById('e-title').value = p.title || '';
+  setEditorText('e', p.content || '');
+  document.getElementById('e-status').value = p.status || 'Draft';
+  document.getElementById('e-date').value = p.date || '';
+  document.getElementById('e-topic').value = p.topicId || '';
+  document.getElementById('e-comment').value = p.comment || '';
+  clearImgPreview('e');
+  if (p.image) showImgPreview('e', `/planner/image/${id}/`);
+  document.getElementById('oj-edit-modal').classList.add('open');
+}
+
+/* ── Save edit ── */
+async function updateOjPost() {
+  const id = document.getElementById('e-id').value;
+  const topicId = document.getElementById('e-topic').value;
+  const title = document.getElementById('e-title').value.trim();
+  const content = getEditorText('e').trim();
+  const status = document.getElementById('e-status').value;
+  const date = document.getElementById('e-date').value;
+  const comment = document.getElementById('e-comment').value.trim();
+  const res = await api('/planner/api/post/', {
+    action:'update', id:parseInt(id), topic_id:topicId||null,
+    title, content, status,
+    planned_date:date||null, comment:comment||null,
+    in_pipeline: status === 'Draft' ? 0 : 1
+  });
+  if (res && res.ok) {
+    const imgInput = document.getElementById('e-img-input');
+    if (imgInput.files && imgInput.files[0]) {
+      const fd = new FormData();
+      fd.append('image', imgInput.files[0]);
+      await fetch(`/planner/api/image/${id}/`, {method:'POST', headers:{'X-CSRFToken':CSRF}, body:fd});
+    }
+    closeModal('oj-edit-modal');
+    location.reload();
+  } else {
+    alert('Fehler beim Speichern.');
+  }
+}
+
+/* ── Delete from edit modal ── */
+async function ojDeleteFromEdit() {
+  const id = document.getElementById('e-id').value;
+  if (!id || !confirm('Post wirklich löschen?')) return;
+  await api('/planner/api/post/', {action:'delete', id});
+  location.reload();
+}
+
+/* ── Delete from list ── */
+async function ojDelete(id) {
+  if (!confirm('Post wirklich löschen?')) return;
+  const res = await api('/planner/api/post/', {action:'delete', id});
+  if (res.ok) {
+    const row = document.getElementById('prow-'+id);
+    if (row) row.remove();
+  }
+}
+</script>
+{% endblock %}

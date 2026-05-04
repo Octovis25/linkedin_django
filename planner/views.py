@@ -287,6 +287,36 @@ def all_view(request):
 
 
 @login_required
+def oj_view(request):
+    with connection.cursor() as c:
+        topics = _topics(c)
+        posts = _q(c, """SELECT p.id, p.title, p.content, p.status, p.planned_date,
+                                p.image, t.name, t.color, p.topic_id, COALESCE(p.comment,'') as comment
+                         FROM planner_posts p
+                         LEFT JOIN planner_topics t ON p.topic_id = t.id
+                         WHERE p.is_oj = 1
+                         ORDER BY FIELD(p.status,'Draft','Review','Ready','Scheduled','Posted'),
+                                  COALESCE(p.planned_date,'9999-12-31'), p.created_at""", [])
+
+    posts_list = []
+    for r in posts:
+        bg, fg = COLOR_MAP.get(r[7] or 'gray', ('#f5f5f5', '#6c757d'))
+        posts_list.append({
+            'id': r[0], 'title': r[1] or '', 'content': r[2] or '',
+            'status': r[3], 'planned_date': r[4], 'image': r[5] or '',
+            'topic_name': r[6] or '', 'topic_color': r[7] or 'gray',
+            'topic_id': r[8], 'comment': r[9] or '', 'bg': bg, 'fg': fg,
+        })
+
+    return render(request, 'planner/oj.html', {
+        'posts': posts_list,
+        'topics': topics,
+        'statuses': ['Draft', 'Review', 'Ready', 'Scheduled', 'Posted'],
+        'tab': 'oj',
+    })
+
+
+@login_required
 def planner_image(request, post_id):
     """Proxy: lädt Planner-Bild von Nextcloud"""
     from django.http import HttpResponse, Http404
@@ -314,15 +344,17 @@ def api_post(request):
     action = data.get('action')
     with connection.cursor() as c:
         if action == 'create':
+            is_oj = 1 if data.get('is_oj') else 0
             c.execute("""INSERT INTO planner_posts
-                        (topic_id, title, content, status, planned_date, series_id, series_order, comment)
-                        VALUES (%s,%s,%s,%s,%s,%s,%s,%s)""",
+                        (topic_id, title, content, status, planned_date, series_id, series_order, comment, is_oj)
+                        VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
                 [data.get('topic_id') or None, data.get('title'),
                  data.get('content'), data.get('status', 'Draft'),
                  data.get('planned_date') or None,
                  data.get('series_id') or None,
                  data.get('series_order', 0),
-                 data.get('comment') or None])
+                 data.get('comment') or None,
+                 is_oj])
             return JsonResponse({'ok': True, 'id': c.lastrowid})
         elif action == 'update':
             status = data.get('status')

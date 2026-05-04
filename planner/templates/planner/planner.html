@@ -616,5 +616,93 @@ async function deletePostFromEdit() {
   await api('/planner/api/post/', {action:'delete', id});
   location.reload();
 }
+
+/* ── Modal helpers ── */
+function closeModal(id) {
+  document.getElementById(id).classList.remove('open');
+}
+document.addEventListener('DOMContentLoaded', () => {
+  document.querySelectorAll('.modal-bg').forEach(bg => {
+    bg.addEventListener('click', e => { if (e.target === bg) bg.classList.remove('open'); });
+  });
+});
+
+/* ── Open new post modal ── */
+function openPostModal(topicId) {
+  document.getElementById('m-topic-id').value = topicId || '';
+  document.getElementById('m-series-id').value = '';
+  if (topicId) document.getElementById('m-topic').value = topicId;
+  document.getElementById('m-title').value = '';
+  document.getElementById('m-status').value = 'Draft';
+  document.getElementById('m-date').value = '';
+  document.getElementById('m-comment').value = '';
+  clearEditor('m');
+  clearImgPreview('m');
+  document.getElementById('post-modal').classList.add('open');
+  setTimeout(() => document.getElementById('m-title').focus(), 50);
+}
+
+/* ── Save new post ── */
+async function savePost() {
+  const topicId = document.getElementById('m-topic').value;
+  const title = document.getElementById('m-title').value.trim();
+  const content = getEditorText('m').trim();
+  const status = document.getElementById('m-status').value;
+  const date = document.getElementById('m-date').value;
+  const comment = document.getElementById('m-comment').value.trim();
+  if (!content && !title) { alert('Please enter a title or content.'); return; }
+  const res = await api('/planner/api/post/', {
+    action: 'create', topic_id: topicId || null, title, content, status,
+    planned_date: date || null, comment: comment || null
+  });
+  if (res && res.ok) {
+    const imgInput = document.getElementById('m-img-input');
+    if (imgInput.files && imgInput.files[0]) {
+      const fd = new FormData();
+      fd.append('image', imgInput.files[0]);
+      await fetch(`/planner/api/image/${res.id}/`, {method:'POST', headers:{'X-CSRFToken':CSRF}, body:fd});
+    }
+    closeModal('post-modal');
+    location.reload();
+  }
+}
+
+/* ── Open edit modal ── */
+function openEditModal(id, title, content, status, date, comment, image) {
+  document.getElementById('e-id').value = id;
+  document.getElementById('e-title').value = title || '';
+  setEditorText('e', content);
+  document.getElementById('e-status').value = status || 'Draft';
+  document.getElementById('e-date').value = date || '';
+  document.getElementById('e-comment').value = comment || '';
+  clearImgPreview('e');
+  if (image) showImgPreview('e', `/planner/image/${id}/`);
+  document.getElementById('edit-modal').classList.add('open');
+}
+
+/* ── Update (save edit) ── */
+async function updatePost() {
+  const id = document.getElementById('e-id').value;
+  const title = document.getElementById('e-title').value.trim();
+  const content = getEditorText('e').trim();
+  const status = document.getElementById('e-status').value;
+  const date = document.getElementById('e-date').value;
+  const comment = document.getElementById('e-comment').value.trim();
+  const res = await api('/planner/api/post/', {
+    action: 'update', id: parseInt(id), title, content, status,
+    planned_date: date || null, comment: comment || null,
+    in_pipeline: status === 'Draft' ? 0 : 1
+  });
+  if (res && res.ok) {
+    const imgInput = document.getElementById('e-img-input');
+    if (imgInput.files && imgInput.files[0]) {
+      const fd = new FormData();
+      fd.append('image', imgInput.files[0]);
+      await fetch(`/planner/api/image/${id}/`, {method:'POST', headers:{'X-CSRFToken':CSRF}, body:fd});
+    }
+    closeModal('edit-modal');
+    location.reload();
+  }
+}
 </script>
 {% endblock %}
