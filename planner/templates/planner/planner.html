@@ -53,24 +53,25 @@
 .s-chip{padding:3px 12px;font-size:12px;border:0.5px solid #ced4da;border-radius:99px;cursor:pointer;color:#6c757d;background:#fff;transition:all .15s}
 .s-chip:hover{border-color:#008080;color:#008080}
 .s-chip.active{border-color:transparent}
-.s-chip-all.active{background:#E1F5EE;color:#0F6E56}
-.s-chip-draft.active{background:#F1EFE8;color:#444441}
-.s-chip-review.active{background:#FFF3CD;color:#856404}
-.s-chip-ready.active{background:#E1F5EE;color:#0F6E56}
-.s-chip-scheduled.active{background:#E6F1FB;color:#185FA5}
-.s-chip-posted.active{background:#EEEDFE;color:#3C3489}
-/* topic chips use inline --tc color var */
-#cat-filter-bar .s-chip.active{background:color-mix(in srgb,var(--tc,#008080) 12%,#fff);color:var(--tc,#008080);border-color:var(--tc,#008080)}
+.s-chip-all.active{background:#1D9E75;color:#fff}
+.s-chip-draft.active{background:#888780;color:#fff}
+.s-chip-review.active{background:#BA7517;color:#fff}
+.s-chip-ready.active{background:#1D9E75;color:#fff}
+.s-chip-scheduled.active{background:#185FA5;color:#fff}
+.s-chip-posted.active{background:#7F77DD;color:#fff}
+/* topic chips — solid colour when active */
+#cat-filter-bar .s-chip.active{background:var(--tc,#008080);color:#fff;border-color:var(--tc,#008080)}
 
 /* ── Category manager bar ── */
 .cat-bar{display:flex;align-items:center;gap:8px;margin-bottom:1.25rem;flex-wrap:wrap;padding:10px 14px;background:#f8f9fa;border-radius:8px;border:0.5px solid #e0e0e0}
 .cat-bar-label{font-size:12px;font-weight:500;color:#495057;white-space:nowrap}
 .cat-chips{display:flex;gap:6px;flex-wrap:wrap;flex:1}
-.cat-chip{font-size:12px;padding:3px 10px;border-radius:99px;display:flex;align-items:center;gap:5px;border:0.5px solid transparent}
-.cat-chip .cat-rename{cursor:pointer;opacity:.5;font-size:11px}
+/* cat-chip: solid colour, white text */
+.cat-chip{font-size:12px;padding:3px 10px;border-radius:99px;display:flex;align-items:center;gap:5px;border:none;color:#fff}
+.cat-chip .cat-rename{cursor:pointer;opacity:.65;font-size:11px}
 .cat-chip .cat-rename:hover{opacity:1}
-.cat-chip .cat-del{cursor:pointer;opacity:.5;font-size:13px;line-height:1}
-.cat-chip .cat-del:hover{opacity:1;color:#dc3545}
+.cat-chip .cat-del{cursor:pointer;opacity:.65;font-size:13px;line-height:1}
+.cat-chip .cat-del:hover{opacity:1}
 .btn-add-cat{font-size:12px;padding:3px 10px;border:0.5px dashed #ced4da;border-radius:99px;background:#fff;cursor:pointer;color:#6c757d;white-space:nowrap}
 .btn-add-cat:hover{border-color:#008080;color:#008080}
 #add-cat-form{display:none;align-items:center;gap:6px;flex-wrap:wrap;margin-top:6px;width:100%}
@@ -80,12 +81,15 @@
 /* ── Topic sections ── */
 #topic-sections{display:flex;flex-direction:column;gap:.75rem}
 .topic-section{border:0.5px solid #e0e0e0;border-radius:10px;overflow:hidden;margin-bottom:0}
-.topic-hd{display:flex;align-items:center;gap:8px;padding:9px 14px;cursor:pointer;user-select:none;background:#f8f9fa}
-.topic-hd:hover{background:#f0f0f0}
+/* topic-hd background comes from inline style via --ta var */
+.topic-hd{display:flex;align-items:center;gap:0;padding:0;cursor:pointer;user-select:none;}
+.topic-hd:hover{filter:brightness(.95)}
+.t-stripe{width:5px;align-self:stretch;flex-shrink:0}
+.t-hd-inner{display:flex;align-items:center;gap:8px;flex:1;padding:9px 14px}
 .t-accent{width:4px;height:20px;border-radius:2px;flex-shrink:0}
-.t-name{font-size:13px;font-weight:500;color:#212529;flex:1}
-.t-pill{font-size:10px;padding:2px 8px;border-radius:99px;background:#fff;border:0.5px solid #e0e0e0;color:#6c757d;white-space:nowrap}
-.t-chevron{font-size:11px;color:#aaa;margin-left:4px;transition:transform .15s}
+.t-name{font-size:13px;font-weight:500;flex:1}
+.t-pill{font-size:10px;padding:2px 8px;border-radius:99px;background:rgba(255,255,255,0.55);border:0.5px solid rgba(0,0,0,0.12);color:rgba(0,0,0,0.55);white-space:nowrap}
+.t-chevron{font-size:11px;color:rgba(0,0,0,0.35);margin-left:4px;transition:transform .15s}
 .topic-body{border-top:0.5px solid #e0e0e0}
 
 /* ── Posts table ── */
@@ -163,7 +167,7 @@
   <span class="status-label">Category:</span>
   <span class="s-chip s-chip-all active" onclick="filterTopic(this,'all')">All</span>
   {% for t in topics_data %}
-  <span class="s-chip" style="--tc:{{ t.accent }}" onclick="filterTopic(this,'{{ t.id }}')">{{ t.name }}</span>
+  <span class="s-chip" style="--tc:{{ t.accent }};background:{{ t.bg }};color:{{ t.fg }};border-color:{{ t.accent }}80" onclick="filterTopic(this,'{{ t.id }}')">{{ t.name }}</span>
   {% endfor %}
 </div>
 
@@ -172,7 +176,7 @@
   <span class="cat-bar-label">Categories:</span>
   <div class="cat-chips">
     {% for t in topics_data %}
-    <span class="cat-chip" style="background:{{ t.bg }};color:{{ t.fg }};border-color:{{ t.fg }}40">
+    <span class="cat-chip" style="background:{{ t.accent }};color:#fff">
       <span id="topic-name-{{ t.id }}" data-topic-id="{{ t.id }}">{{ t.name }}</span>
       <span class="cat-rename" onclick="editTopic({{ t.id }})" title="Rename">✏️</span>
       <span class="cat-del" onclick="deleteTopic({{ t.id }})">×</span>
@@ -205,17 +209,19 @@
 <div id="topic-sections">
 {% for t in topics_data %}
 <div class="topic-section" id="tsec-{{ t.id }}">
-  <div class="topic-hd" onclick="toggleSection({{ t.id }})">
-    <div class="t-accent" style="background:{{ t.accent }}"></div>
-    <span class="t-name">{{ t.name }}</span>
-    <span class="t-pill">{{ t.posts|length }} post{{ t.posts|length|pluralize }}</span>
-    <span class="t-pill">{{ t.ideas|length }} idea{{ t.ideas|length|pluralize }}</span>
-    <button type="button"
-      onclick="event.stopPropagation();openPostModal({{ t.id }})"
-      style="margin-left:auto;font-size:11px;padding:2px 10px;border:0.5px solid {{ t.accent }};border-radius:99px;background:#fff;color:{{ t.accent }};cursor:pointer;white-space:nowrap;font-weight:500">
-      + Post
-    </button>
-    <span class="t-chevron" id="chev-{{ t.id }}" style="margin-left:6px">▾</span>
+  <div class="topic-hd" style="background:color-mix(in srgb,{{ t.accent }} 50%,#fff)" onclick="toggleSection({{ t.id }})">
+    <div class="t-stripe" style="background:{{ t.accent }}"></div>
+    <div class="t-hd-inner">
+      <span class="t-name" style="color:{{ t.fg }};font-weight:600">{{ t.name }}</span>
+      <span class="t-pill" style="background:rgba(255,255,255,0.55);border-color:{{ t.accent }}60;color:{{ t.fg }}">{{ t.posts|length }} post{{ t.posts|length|pluralize }}</span>
+      <span class="t-pill" style="background:rgba(255,255,255,0.55);border-color:{{ t.accent }}60;color:{{ t.fg }}">{{ t.ideas|length }} idea{{ t.ideas|length|pluralize }}</span>
+      <button type="button"
+        onclick="event.stopPropagation();openPostModal({{ t.id }})"
+        style="margin-left:auto;font-size:11px;padding:2px 10px;border:1px solid {{ t.accent }};border-radius:99px;background:rgba(255,255,255,0.6);color:{{ t.fg }};cursor:pointer;white-space:nowrap;font-weight:500">
+        + Post
+      </button>
+      <span class="t-chevron" id="chev-{{ t.id }}" style="color:{{ t.fg }}">▾</span>
+    </div>
   </div>
   <div class="topic-body" id="tbody-{{ t.id }}">
     {% if t.posts %}
@@ -231,7 +237,7 @@
       </span>
       <span><span class="sbadge s-{{ p.status }}">{{ p.status }}</span></span>
       <span class="post-date">{% if p.planned_date %}{{ p.planned_date|date:"d.m.Y" }}{% else %}—{% endif %}</span>
-      <span style="font-size:11px;padding:1px 7px;border-radius:99px;background:{{ t.bg }};color:{{ t.fg }};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block">{{ t.name }}</span>
+      <span style="font-size:11px;padding:1px 7px;border-radius:99px;background:{{ t.accent }};color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block">{{ t.name }}</span>
       <div class="post-actions">
         <button class="pa-btn" title="Edit"
           onclick="openEditModal({{ p.id }},'{{ p.title|escapejs }}','{{ p.content|escapejs }}','{{ p.status }}','{{ p.planned_date|date:'Y-m-d' }}','{{ p.comment|escapejs }}','{{ p.image|escapejs }}')">✏</button>
