@@ -62,7 +62,7 @@
         <option {% if p.status == 'Posted' %}selected{% endif %} value="Posted">Posted</option>
       </select>
       <button type="button"
-        onclick="openEdit({{ p.id }},'{{ p.title|escapejs }}','{{ p.content|escapejs }}','{{ p.status }}','{{ p.planned_date|date:'Y-m-d' }}','{{ p.comment|escapejs }}','{{ p.image|escapejs }}',{{ p.topic_id|default:0 }})"
+        onclick="openEdit({{ p.id }})"
         style="font-size:12px;padding:3px 10px;border:0.5px solid #008080;border-radius:4px;background:#fff;cursor:pointer;color:#008080;white-space:nowrap">
         ✏️ Edit
       </button>
@@ -145,6 +145,7 @@
 
 <script>
 const peCSRF = '{{ csrf_token }}';
+const PE_POSTS = {{ posts_json|safe }};
 
 function peApi(data) {
   return fetch('/planner/api/post/', {
@@ -207,17 +208,19 @@ async function peDeletePost(id) {
   location.reload();
 }
 
-function openEdit(id, title, content, status, date, comment, image, topicId) {
-  document.getElementById('pe-id').value = id;
-  document.getElementById('pe-title').value = title;
-  document.getElementById('pe-content').innerHTML = content || '';
-  document.getElementById('pe-status').value = status;
-  document.getElementById('pe-date').value = date || '';
-  document.getElementById('pe-comment').value = comment || '';
+function openEdit(id) {
+  const p = PE_POSTS.find(x => x.id == id);
+  if (!p) return;
+  document.getElementById('pe-id').value = p.id;
+  document.getElementById('pe-title').value = p.title;
+  document.getElementById('pe-content').innerHTML = p.content || '';
+  document.getElementById('pe-status').value = p.status;
+  document.getElementById('pe-date').value = p.date || '';
+  document.getElementById('pe-comment').value = p.comment || '';
   document.getElementById('pe-img-input').value = '';
-  if (topicId) document.getElementById('pe-topic').value = topicId;
-  if (image) {
-    peShowPreview(`/media/${image}`);
+  if (p.topic_id) document.getElementById('pe-topic').value = p.topic_id;
+  if (p.image) {
+    peShowPreview(`/planner/image/${p.id}/`);
   } else {
     peClearPreview();
   }
@@ -252,22 +255,36 @@ async function peRemoveImg() {
 
 async function saveEdit() {
   const id = document.getElementById('pe-id').value;
-  await peApi({
-    action:'update', id,
-    topic_id: document.getElementById('pe-topic').value,
-    title: document.getElementById('pe-title').value,
-    content: document.getElementById('pe-content').innerHTML,
-    comment: document.getElementById('pe-comment').value,
-    status: document.getElementById('pe-status').value,
-    planned_date: document.getElementById('pe-date').value || null,
-  });
-  const imgInput = document.getElementById('pe-img-input');
-  if (imgInput.files && imgInput.files[0]) {
-    const form = new FormData();
-    form.append('image', imgInput.files[0]);
-    await fetch('/planner/api/image/'+id+'/', {method:'POST', headers:{'X-CSRFToken':peCSRF}, body:form});
+  try {
+    const res = await peApi({
+      action:'update', id,
+      topic_id: document.getElementById('pe-topic').value,
+      title: document.getElementById('pe-title').value,
+      content: document.getElementById('pe-content').innerHTML,
+      comment: document.getElementById('pe-comment').value,
+      status: document.getElementById('pe-status').value,
+      planned_date: document.getElementById('pe-date').value || null,
+    });
+    if (res && res.error === 'session_expired') {
+      if (confirm('Deine Sitzung ist abgelaufen. Jetzt neu einloggen?')) {
+        window.location.href = '/login/?next=' + encodeURIComponent(window.location.pathname);
+      }
+      return;
+    }
+    if (!res || !res.ok) {
+      alert('Fehler beim Speichern: ' + JSON.stringify(res));
+      return;
+    }
+    const imgInput = document.getElementById('pe-img-input');
+    if (imgInput.files && imgInput.files[0]) {
+      const form = new FormData();
+      form.append('image', imgInput.files[0]);
+      await fetch('/planner/api/image/'+id+'/', {method:'POST', headers:{'X-CSRFToken':peCSRF}, body:form});
+    }
+    location.reload();
+  } catch(e) {
+    alert('Netzwerk- oder Serverfehler: ' + e.message);
   }
-  location.reload();
 }
 
 document.getElementById('post-edit-modal').addEventListener('click', function(e) {

@@ -21,6 +21,25 @@ def _topics(c):
             for r in _q(c, "SELECT id, name, color FROM planner_topics ORDER BY name")]
 
 
+def _posts_to_json(posts_list):
+    """Safely serialize posts for embedding in a <script> block."""
+    safe = []
+    for p in posts_list:
+        date = p['planned_date']
+        safe.append({
+            'id': p['id'],
+            'title': p.get('title') or '',
+            'content': p.get('content') or '',
+            'status': p.get('status') or '',
+            'date': date.strftime('%Y-%m-%d') if date else '',
+            'comment': p.get('comment') or '',
+            'image': p.get('image') or '',
+            'topic_id': p.get('topic_id') or 0,
+        })
+    # Replace </ to prevent </script> injection
+    return json.dumps(safe, ensure_ascii=False).replace('</', '<\\/')
+
+
 COLOR_MAP = {
     'blue': ('#E6F1FB', '#185FA5'),
     'green': ('#E1F5EE', '#0F6E56'),
@@ -76,7 +95,7 @@ def pipeline_view(request):
     with connection.cursor() as c:
         topics = _topics(c)
         sql = """SELECT p.id, p.title, p.content, p.status, p.planned_date,
-                        p.image, t.name, t.color, p.topic_id
+                        p.image, t.name, t.color, p.topic_id, COALESCE(p.comment,'') as comment
                  FROM planner_posts p
                  LEFT JOIN planner_topics t ON p.topic_id = t.id
                  WHERE p.status IN ('Draft', 'Review')"""
@@ -94,10 +113,10 @@ def pipeline_view(request):
             'id': r[0], 'title': r[1] or '', 'content': r[2] or '',
             'status': r[3], 'planned_date': r[4], 'image': r[5] or '',
             'topic_name': r[6] or '', 'topic_color': r[7] or 'gray',
-            'topic_id': r[8], 'bg': bg, 'fg': fg,
+            'topic_id': r[8], 'comment': r[9] or '', 'bg': bg, 'fg': fg,
         })
 
-    return render(request, 'planner/pipeline.html', {'posts': posts_list, 'topics': topics, 'topic_filter': topic_filter, 'statuses': ['Draft', 'Review', 'Ready', 'Scheduled', 'Posted'], 'tab': 'pipeline', 'page_title': '→ Pipeline'})
+    return render(request, 'planner/pipeline.html', {'posts': posts_list, 'topics': topics, 'topic_filter': topic_filter, 'statuses': ['Draft', 'Review', 'Ready', 'Scheduled', 'Posted'], 'tab': 'pipeline', 'page_title': '→ Pipeline', 'posts_json': _posts_to_json(posts_list)})
 
 
 @login_required
@@ -127,7 +146,7 @@ def ready_view(request):
             'topic_id': r[8], 'comment': r[9] or '', 'bg': bg, 'fg': fg,
         })
 
-    return render(request, 'planner/ready.html', {'posts': posts_list, 'topics': topics, 'topic_filter': topic_filter, 'statuses': ['Draft', 'Review', 'Ready', 'Scheduled', 'Posted'], 'tab': 'ready', 'page_title': '🚀 Ready to post'})
+    return render(request, 'planner/ready.html', {'posts': posts_list, 'topics': topics, 'topic_filter': topic_filter, 'statuses': ['Draft', 'Review', 'Ready', 'Scheduled', 'Posted'], 'tab': 'ready', 'page_title': '🚀 Ready to post', 'posts_json': _posts_to_json(posts_list)})
 
 
 @login_required
@@ -157,67 +176,7 @@ def scheduled_view(request):
             'topic_id': r[8], 'comment': r[9] or '', 'bg': bg, 'fg': fg,
         })
 
-    return render(request, 'planner/scheduled.html', {'posts': posts_list, 'topics': topics, 'topic_filter': topic_filter, 'statuses': ['Draft', 'Review', 'Ready', 'Scheduled', 'Posted'], 'tab': 'scheduled', 'page_title': '📅 Scheduled'})
-
-
-@login_required
-def scheduled_view(request):
-    topic_filter = request.GET.get('topic', '')
-    with connection.cursor() as c:
-        topics = _topics(c)
-        sql = """SELECT p.id, p.title, p.content, p.status, p.planned_date,
-                        p.image, t.name, t.color, p.topic_id, p.comment
-                 FROM planner_posts p
-                 LEFT JOIN planner_topics t ON p.topic_id = t.id
-                 WHERE p.status = 'Scheduled' AND p.in_pipeline = 1"""
-        params = []
-        if topic_filter:
-            sql += " AND p.topic_id=%s"
-            params.append(topic_filter)
-        sql += " ORDER BY COALESCE(p.planned_date,'9999-12-31'), p.created_at"
-        posts = _q(c, sql, params)
-
-    posts_list = []
-    for r in posts:
-        bg, fg = COLOR_MAP.get(r[7] or 'gray', ('#f5f5f5', '#6c757d'))
-        posts_list.append({
-            'id': r[0], 'title': r[1] or '', 'content': r[2] or '',
-            'status': r[3], 'planned_date': r[4], 'image': r[5] or '',
-            'topic_name': r[6] or '', 'topic_color': r[7] or 'gray',
-            'topic_id': r[8], 'comment': r[9] or '', 'bg': bg, 'fg': fg,
-        })
-
-    return render(request, 'planner/scheduled.html', {'posts': posts_list, 'topics': topics, 'topic_filter': topic_filter, 'statuses': ['Draft', 'Review', 'Ready', 'Scheduled', 'Posted'], 'tab': 'scheduled', 'page_title': '📅 Scheduled'})
-
-
-@login_required
-def scheduled_view(request):
-    topic_filter = request.GET.get('topic', '')
-    with connection.cursor() as c:
-        topics = _topics(c)
-        sql = """SELECT p.id, p.title, p.content, p.status, p.planned_date,
-                        p.image, t.name, t.color, p.topic_id, p.comment
-                 FROM planner_posts p
-                 LEFT JOIN planner_topics t ON p.topic_id = t.id
-                 WHERE p.status = 'Scheduled' AND p.in_pipeline = 1"""
-        params = []
-        if topic_filter:
-            sql += " AND p.topic_id=%s"
-            params.append(topic_filter)
-        sql += " ORDER BY COALESCE(p.planned_date,'9999-12-31'), p.created_at"
-        posts = _q(c, sql, params)
-
-    posts_list = []
-    for r in posts:
-        bg, fg = COLOR_MAP.get(r[7] or 'gray', ('#f5f5f5', '#6c757d'))
-        posts_list.append({
-            'id': r[0], 'title': r[1] or '', 'content': r[2] or '',
-            'status': r[3], 'planned_date': r[4], 'image': r[5] or '',
-            'topic_name': r[6] or '', 'topic_color': r[7] or 'gray',
-            'topic_id': r[8], 'comment': r[9] or '', 'bg': bg, 'fg': fg,
-        })
-
-    return render(request, 'planner/scheduled.html', {'posts': posts_list, 'topics': topics, 'topic_filter': topic_filter, 'statuses': ['Draft', 'Review', 'Ready', 'Scheduled', 'Posted'], 'tab': 'scheduled', 'page_title': '📅 Scheduled'})
+    return render(request, 'planner/scheduled.html', {'posts': posts_list, 'topics': topics, 'topic_filter': topic_filter, 'statuses': ['Draft', 'Review', 'Ready', 'Scheduled', 'Posted'], 'tab': 'scheduled', 'page_title': '📅 Scheduled', 'posts_json': _posts_to_json(posts_list)})
 
 
 @login_required
@@ -247,7 +206,7 @@ def archive_view(request):
             'topic_id': r[8], 'comment': r[9] or '', 'bg': bg, 'fg': fg,
         })
 
-    return render(request, 'planner/archive.html', {'posts': posts_list, 'topics': topics, 'topic_filter': topic_filter, 'statuses': ['Draft', 'Review', 'Ready', 'Scheduled', 'Posted'], 'tab': 'archive', 'page_title': '📦 Archive'})
+    return render(request, 'planner/archive.html', {'posts': posts_list, 'topics': topics, 'topic_filter': topic_filter, 'statuses': ['Draft', 'Review', 'Ready', 'Scheduled', 'Posted'], 'tab': 'archive', 'page_title': '📦 Archive', 'posts_json': _posts_to_json(posts_list)})
 
 
 @login_required
@@ -283,6 +242,7 @@ def all_view(request):
         'topic_filter': topic_filter,
         'statuses': ['Draft', 'Review', 'Ready', 'Scheduled', 'Posted'],
         'tab': 'all',
+        'posts_json': _posts_to_json(posts_list),
     })
 
 
@@ -290,13 +250,17 @@ def all_view(request):
 def oj_view(request):
     with connection.cursor() as c:
         topics = _topics(c)
-        posts = _q(c, """SELECT p.id, p.title, p.content, p.status, p.planned_date,
-                                p.image, t.name, t.color, p.topic_id, COALESCE(p.comment,'') as comment
-                         FROM planner_posts p
-                         LEFT JOIN planner_topics t ON p.topic_id = t.id
-                         WHERE p.is_oj = 1
-                         ORDER BY FIELD(p.status,'Draft','Review','Ready','Scheduled','Posted'),
-                                  COALESCE(p.planned_date,'9999-12-31'), p.created_at""", [])
+        # Check if is_oj column exists; fall back to empty list if not
+        try:
+            posts = _q(c, """SELECT p.id, p.title, p.content, p.status, p.planned_date,
+                                    p.image, t.name, t.color, p.topic_id, COALESCE(p.comment,'') as comment
+                             FROM planner_posts p
+                             LEFT JOIN planner_topics t ON p.topic_id = t.id
+                             WHERE p.is_oj = 1
+                             ORDER BY FIELD(p.status,'Draft','Review','Ready','Scheduled','Posted'),
+                                      COALESCE(p.planned_date,'9999-12-31'), p.created_at""", [])
+        except Exception:
+            posts = []
 
     posts_list = []
     for r in posts:
@@ -336,8 +300,9 @@ def planner_image(request, post_id):
     return HttpResponse(content, content_type=ct or 'image/jpeg')
 
 
-@login_required
 def api_post(request):
+    if not request.user.is_authenticated:
+        return JsonResponse({'ok': False, 'error': 'session_expired'}, status=401)
     if request.method != 'POST':
         return JsonResponse({'ok': False}, status=400)
     data = json.loads(request.body)
@@ -345,16 +310,24 @@ def api_post(request):
     with connection.cursor() as c:
         if action == 'create':
             is_oj = 1 if data.get('is_oj') else 0
-            c.execute("""INSERT INTO planner_posts
-                        (topic_id, title, content, status, planned_date, series_id, series_order, comment, is_oj)
-                        VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
-                [data.get('topic_id') or None, data.get('title'),
-                 data.get('content'), data.get('status', 'Draft'),
-                 data.get('planned_date') or None,
-                 data.get('series_id') or None,
-                 data.get('series_order', 0),
-                 data.get('comment') or None,
-                 is_oj])
+            base_params = [
+                data.get('topic_id') or None, data.get('title'),
+                data.get('content'), data.get('status', 'Draft'),
+                data.get('planned_date') or None,
+                data.get('series_id') or None,
+                data.get('series_order', 0),
+                data.get('comment') or None,
+            ]
+            try:
+                c.execute("""INSERT INTO planner_posts
+                            (topic_id, title, content, status, planned_date, series_id, series_order, comment, is_oj)
+                            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
+                    base_params + [is_oj])
+            except Exception:
+                c.execute("""INSERT INTO planner_posts
+                            (topic_id, title, content, status, planned_date, series_id, series_order, comment)
+                            VALUES (%s,%s,%s,%s,%s,%s,%s,%s)""",
+                    base_params)
             return JsonResponse({'ok': True, 'id': c.lastrowid})
         elif action == 'update':
             status = data.get('status')
