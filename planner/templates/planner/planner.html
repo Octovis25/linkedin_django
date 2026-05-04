@@ -59,6 +59,8 @@
 .s-chip-ready.active{background:#E1F5EE;color:#0F6E56}
 .s-chip-scheduled.active{background:#E6F1FB;color:#185FA5}
 .s-chip-posted.active{background:#EEEDFE;color:#3C3489}
+/* topic chips use inline --tc color var */
+#cat-filter-bar .s-chip.active{background:color-mix(in srgb,var(--tc,#008080) 12%,#fff);color:var(--tc,#008080);border-color:var(--tc,#008080)}
 
 /* ── Category manager bar ── */
 .cat-bar{display:flex;align-items:center;gap:8px;margin-bottom:1.25rem;flex-wrap:wrap;padding:10px 14px;background:#f8f9fa;border-radius:8px;border:0.5px solid #e0e0e0}
@@ -76,8 +78,7 @@
 #add-cat-form button{font-size:12px;padding:4px 10px;background:#008080;color:#fff;border:none;border-radius:4px;cursor:pointer}
 
 /* ── Topic sections ── */
-#topic-sections{display:grid;grid-template-columns:1fr 1fr;gap:1rem;align-items:start}
-@media(max-width:900px){#topic-sections{grid-template-columns:1fr}}
+#topic-sections{display:flex;flex-direction:column;gap:.75rem}
 .topic-section{border:0.5px solid #e0e0e0;border-radius:10px;overflow:hidden;margin-bottom:0}
 .topic-hd{display:flex;align-items:center;gap:8px;padding:9px 14px;cursor:pointer;user-select:none;background:#f8f9fa}
 .topic-hd:hover{background:#f0f0f0}
@@ -155,6 +156,15 @@
   <span class="s-chip s-chip-ready" onclick="filterStatus(this,'ready')">Ready</span>
   <span class="s-chip s-chip-scheduled" onclick="filterStatus(this,'scheduled')">Scheduled</span>
   <span class="s-chip s-chip-posted" onclick="filterStatus(this,'posted')">Posted</span>
+</div>
+
+<!-- ── Category filter ── -->
+<div class="status-bar" id="cat-filter-bar">
+  <span class="status-label">Category:</span>
+  <span class="s-chip s-chip-all active" onclick="filterTopic(this,'all')">All</span>
+  {% for t in topics_data %}
+  <span class="s-chip" style="--tc:{{ t.accent }}" onclick="filterTopic(this,'{{ t.id }}')">{{ t.name }}</span>
+  {% endfor %}
 </div>
 
 <!-- ── Category manager ── -->
@@ -494,6 +504,19 @@ function filterStatus(el, status) {
   el.classList.add('active');
   document.querySelectorAll('.post-row').forEach(r => {
     r.style.display = (status === 'all' || r.dataset.status === status) ? '' : 'none';
+  });
+}
+
+/* ── Category filter ── */
+function filterTopic(el, topicId) {
+  document.querySelectorAll('#cat-filter-bar .s-chip').forEach(c => c.classList.remove('active'));
+  el.classList.add('active');
+  document.querySelectorAll('.topic-section').forEach(sec => {
+    if (topicId === 'all') {
+      sec.style.display = '';
+    } else {
+      sec.style.display = sec.id === 'tsec-' + topicId ? '' : 'none';
+    }
   });
 }
 
