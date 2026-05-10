@@ -16,4 +16,4 @@ urlpatterns = [
     path('api/idea/', views.api_idea, name='api_idea'),
     path('api/image/<int:post_id>/', views.api_image, name='api_image'),
     path('image/<int:post_id>/', views.planner_image, name='planner_image'),
-]
+   

@@ -1,0 +1,288 @@
+{% extends "core/base.html" %}
+{% block title %}API Connect{% endblock %}
+{% block content %}
+<style>
+.ac-card{background:#fff;border:0.5px solid #e0e0e0;border-radius:12px;padding:1.5rem;margin-bottom:1.25rem}
+.ac-card h2{font-size:15px;font-weight:600;margin:0 0 1rem;display:flex;align-items:center;gap:8px}
+.ac-badge-on{display:inline-flex;align-items:center;gap:5px;font-size:12px;padding:3px 10px;border-radius:99px;background:#E1F5EE;color:#0F6E56;font-weight:500}
+.ac-badge-off{display:inline-flex;align-items:center;gap:5px;font-size:12px;padding:3px 10px;border-radius:99px;background:#f5f5f5;color:#888}
+.ac-avatar{width:48px;height:48px;border-radius:50%;object-fit:cover;border:2px solid #e0e0e0}
+.ac-profile{display:flex;align-items:center;gap:12px;padding:10px 0 14px}
+.btn-li{display:inline-flex;align-items:center;gap:7px;padding:8px 18px;border-radius:6px;font-size:13px;font-weight:600;cursor:pointer;border:none;background:#0077B5;color:#fff}
+.btn-li:hover{background:#006097}
+.btn-li-outline{background:#fff;color:#0077B5;border:1.5px solid #0077B5}
+.btn-li-outline:hover{background:#f0f8ff}
+.btn-danger{background:#fff;color:#dc3545;border:1px solid #dc3545;padding:6px 14px;border-radius:6px;font-size:12px;cursor:pointer}
+.btn-danger:hover{background:#dc3545;color:#fff}
+.setup-step{display:flex;gap:12px;padding:10px 0;border-bottom:0.5px solid #f0f0f0}
+.setup-step:last-child{border-bottom:none}
+.step-num{width:24px;height:24px;border-radius:50%;background:#0077B5;color:#fff;font-size:12px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:1px}
+.step-body{flex:1;font-size:13px;line-height:1.5;color:#444}
+.step-body code{background:#f5f5f5;padding:1px 6px;border-radius:3px;font-size:12px;color:#c7254e}
+.step-body a{color:#0077B5}
+.post-card{background:#fff;border:0.5px solid #e0e0e0;border-radius:10px;padding:12px 14px;margin-bottom:8px}
+.post-card-hd{display:flex;align-items:flex-start;gap:10px}
+.post-preview{font-size:12px;color:#555;margin:6px 0 0;max-height:60px;overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical}
+.post-actions{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap}
+.btn-post{padding:5px 14px;font-size:12px;border-radius:6px;cursor:pointer;font-weight:500;border:none}
+.btn-post-person{background:#0077B5;color:#fff}
+.btn-post-org{background:#00A0DC;color:#fff}
+.btn-post-person:hover{background:#006097}
+.btn-post-org:hover{background:#0082b3}
+.btn-post-preview{background:#fff;color:#555;border:0.5px solid #ced4da}
+.btn-post-preview:hover{border-color:#0077B5;color:#0077B5}
+.img-badge{font-size:11px;padding:1px 7px;border-radius:99px;background:#E6F1FB;color:#185FA5;display:inline-flex;align-items:center;gap:3px}
+#post-modal-bg{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.4);z-index:1000;align-items:center;justify-content:center}
+#post-modal-bg.open{display:flex}
+#post-modal{background:#fff;border-radius:12px;padding:1.5rem;width:540px;max-width:95vw;max-height:90vh;overflow-y:auto}
+#post-text{width:100%;min-height:180px;font-size:13px;padding:8px 10px;border:0.5px solid #ced4da;border-radius:6px;resize:vertical;box-sizing:border-box;line-height:1.6;font-family:inherit}
+.target-btn{padding:6px 16px;font-size:12px;border-radius:6px;cursor:pointer;font-weight:500;border:1.5px solid #ced4da;background:#fff;color:#555}
+.target-btn.active{border-color:#0077B5;background:#0077B5;color:#fff}
+.alert-ok{padding:10px 14px;background:#E1F5EE;color:#0F6E56;border-radius:6px;font-size:13px;margin-bottom:1rem}
+.alert-err{padding:10px 14px;background:#FCEBEB;color:#791F1F;border-radius:6px;font-size:13px;margin-bottom:1rem}
+</style>
+
+<div style="display:flex;align-items:center;gap:10px;margin-bottom:1.5rem">
+  <span style="font-size:1.3rem;font-weight:500">🔗 API Connect</span>
+  {% if token %}
+  <span class="ac-badge-on">● Verbunden</span>
+  {% else %}
+  <span class="ac-badge-off">○ Nicht verbunden</span>
+  {% endif %}
+</div>
+
+{% if request.GET.connected %}
+<div class="alert-ok">✅ LinkedIn erfolgreich verbunden!</div>
+{% endif %}
+{% if request.GET.error %}
+<div class="alert-err">❌ Fehler: {{ request.GET.error }}</div>
+{% endif %}
+
+<!-- ── LinkedIn Verbindung ── -->
+<div class="ac-card">
+  <h2>
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="#0077B5"><path d="M20.45 20.45h-3.55v-5.57c0-1.33-.03-3.04-1.85-3.04-1.85 0-2.13 1.45-2.13 2.94v5.67H9.37V9h3.41v1.56h.05c.47-.9 1.63-1.85 3.35-1.85 3.59 0 4.25 2.36 4.25 5.43v6.31zM5.34 7.43a2.06 2.06 0 1 1 0-4.12 2.06 2.06 0 0 1 0 4.12zM7.12 20.45H3.56V9h3.56v11.45z"/></svg>
+    LinkedIn
+  </h2>
+
+  {% if token %}
+  <!-- Verbunden -->
+  <div class="ac-profile">
+    {% if token.picture %}
+    <img src="{{ token.picture }}" class="ac-avatar" alt="">
+    {% else %}
+    <div class="ac-avatar" style="background:#E6F1FB;display:flex;align-items:center;justify-content:center">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="#185FA5"><circle cx="12" cy="8" r="4"/><path d="M20 20c0-4.42-3.58-8-8-8s-8 3.58-8 8"/></svg>
+    </div>
+    {% endif %}
+    <div>
+      <div style="font-size:14px;font-weight:600;color:#212529">{{ token.name }}</div>
+      <div style="font-size:12px;color:#6c757d">Persönliches Profil</div>
+      {% if token.org_name %}
+      <div style="font-size:12px;color:#0077B5;margin-top:2px">🏢 {{ token.org_name }}</div>
+      {% endif %}
+    </div>
+  </div>
+  <form method="post" action="/planner/linkedin/disconnect/" style="display:inline">
+    {% csrf_token %}
+    <button type="submit" class="btn-danger">Verbindung trennen</button>
+  </form>
+
+  {% elif creds_ok %}
+  <!-- Credentials vorhanden, noch nicht verbunden -->
+  <p style="font-size:13px;color:#555;margin:0 0 1rem">Verbinde dein LinkedIn-Konto um Posts direkt zu veröffentlichen.</p>
+  <a href="/planner/linkedin/auth/" class="btn-li">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="#fff"><path d="M20.45 20.45h-3.55v-5.57c0-1.33-.03-3.04-1.85-3.04-1.85 0-2.13 1.45-2.13 2.94v5.67H9.37V9h3.41v1.56h.05c.47-.9 1.63-1.85 3.35-1.85 3.59 0 4.25 2.36 4.25 5.43v6.31zM5.34 7.43a2.06 2.06 0 1 1 0-4.12 2.06 2.06 0 0 1 0 4.12zM7.12 20.45H3.56V9h3.56v11.45z"/></svg>
+    Mit LinkedIn verbinden
+  </a>
+
+  {% else %}
+  <!-- Noch keine Credentials -->
+  <div style="font-size:13px;color:#555;margin-bottom:1.25rem">
+    Bevor du LinkedIn verbinden kannst, musst du einmalig eine App im LinkedIn Developer Portal anlegen und die Credentials in den Settings hinterlegen.
+  </div>
+  <div>
+    <div class="setup-step">
+      <div class="step-num">1</div>
+      <div class="step-body">
+        Gehe zu <a href="https://www.linkedin.com/developers/apps/new" target="_blank">linkedin.com/developers/apps/new</a> und erstelle eine neue App.<br>
+        <em>App Name:</em> z.B. "Octotrial Content Planner" · <em>LinkedIn Page:</em> deine Unternehmensseite
+      </div>
+    </div>
+    <div class="setup-step">
+      <div class="step-num">2</div>
+      <div class="step-body">
+        Unter <strong>Products</strong> füge hinzu:<br>
+        ✅ <em>Share on LinkedIn</em> &nbsp;·&nbsp; ✅ <em>Sign In with LinkedIn using OpenID Connect</em>
+      </div>
+    </div>
+    <div class="setup-step">
+      <div class="step-num">3</div>
+      <div class="step-body">
+        Unter <strong>Auth → Authorized redirect URLs</strong> eintrage:<br>
+        <code>http://localhost:8000/planner/linkedin/callback/</code>
+      </div>
+    </div>
+    <div class="setup-step">
+      <div class="step-num">4</div>
+      <div class="step-body">
+        Kopiere <strong>Client ID</strong> und <strong>Client Secret</strong> und trage sie in die <code>.env</code> Datei oder <code>settings.py</code> ein:<br>
+        <code>LINKEDIN_CLIENT_ID = "deine-client-id"</code><br>
+        <code>LINKEDIN_CLIENT_SECRET = "dein-secret"</code>
+      </div>
+    </div>
+    <div class="setup-step">
+      <div class="step-num">5</div>
+      <div class="step-body">
+        Django neu starten — dann erscheint hier der "Mit LinkedIn verbinden" Button.
+      </div>
+    </div>
+  </div>
+  {% endif %}
+</div>
+
+<!-- ── Posts posten ── -->
+{% if token %}
+<div class="ac-card">
+  <h2>📤 Posts veröffentlichen</h2>
+  {% if ready_posts %}
+  <p style="font-size:12px;color:#6c757d;margin:0 0 1rem">Posts mit Status <strong>Ready</strong> oder <strong>Scheduled</strong></p>
+  {% for p in ready_posts %}
+  <div class="post-card">
+    <div class="post-card-hd">
+      <div style="flex:1">
+        <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-bottom:4px">
+          <span style="font-size:11px;padding:1px 8px;border-radius:99px;background:{{ p.bg }};color:{{ p.fg }}">{{ p.topic_name }}</span>
+          <span class="sbadge s-{{ p.status }}" style="font-size:10px;padding:1px 7px">{{ p.status }}</span>
+          {% if p.planned_date %}<span style="font-size:11px;color:#6c757d">📅 {{ p.planned_date|date:"d.m.Y" }}</span>{% endif %}
+          {% if p.has_image %}<span class="img-badge">🖼 Bild</span>{% endif %}
+        </div>
+        <div style="font-size:13px;font-weight:500;color:#212529">{{ p.title|default:p.content|truncatechars:80 }}</div>
+        {% if p.content %}<div class="post-preview">{{ p.content|striptags|truncatechars:150 }}</div>{% endif %}
+      </div>
+    </div>
+    <div class="post-actions">
+      <button class="btn-post btn-post-preview" onclick="openPostModal({{ p.id }})">✏️ Vorschau &amp; Posten</button>
+    </div>
+  </div>
+  {% endfor %}
+  {% else %}
+  <p style="font-size:13px;color:#aaa;text-align:center;padding:1.5rem 0">Keine Posts mit Status Ready oder Scheduled.</p>
+  {% endif %}
+</div>
+{% endif %}
+
+<!-- ── Post Modal ── -->
+<div id="post-modal-bg">
+  <div id="post-modal">
+    <h3 style="margin:0 0 1rem;font-size:15px">📤 Post auf LinkedIn</h3>
+    <input type="hidden" id="pm-post-id">
+    <div style="display:flex;gap:8px;margin-bottom:12px">
+      {% if token %}
+      <button class="target-btn active" id="btn-target-person" onclick="setTarget('person')">
+        👤 {{ token.name|truncatechars:20 }}
+      </button>
+      {% if token.org_name %}
+      <button class="target-btn" id="btn-target-org" onclick="setTarget('org')">
+        🏢 {{ token.org_name|truncatechars:20 }}
+      </button>
+      {% endif %}
+      {% endif %}
+    </div>
+    <textarea id="pm-text" placeholder="Post-Text (wird aus dem Content vorausgefüllt)..."></textarea>
+    <div style="display:flex;align-items:center;gap:8px;margin:10px 0">
+      <label style="display:flex;align-items:center;gap:5px;font-size:13px;cursor:pointer">
+        <input type="checkbox" id="pm-include-img"> Bild anhängen
+      </label>
+      <span id="pm-char-count" style="font-size:12px;color:#6c757d;margin-left:auto">0 / 3000</span>
+    </div>
+    <div id="pm-result" style="display:none;margin:10px 0"></div>
+    <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:12px">
+      <button type="button" onclick="closePostModal()" style="font-size:13px;padding:5px 14px;border:0.5px solid #ced4da;border-radius:4px;background:#fff;cursor:pointer">Abbrechen</button>
+      <button type="button" onclick="doPost()" id="pm-submit" class="btn-li" style="padding:6px 18px;font-size:13px">Jetzt posten</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const AC_CSRF = '{{ csrf_token }}';
+let pmTarget = 'person';
+
+{% if ready_posts %}
+const AC_POSTS = {{ posts_json|safe }};
+{% else %}
+const AC_POSTS = [];
+{% endif %}
+
+function setTarget(t) {
+  pmTarget = t;
+  document.getElementById('btn-target-person').classList.toggle('active', t === 'person');
+  const orgBtn = document.getElementById('btn-target-org');
+  if (orgBtn) orgBtn.classList.toggle('active', t === 'org');
+}
+
+function openPostModal(id) {
+  const p = AC_POSTS.find(x => x.id == id);
+  document.getElementById('pm-post-id').value = id;
+  // Strip HTML tags for plain text
+  const tmp = document.createElement('div');
+  tmp.innerHTML = p ? p.content : '';
+  const plain = tmp.innerText || tmp.textContent || '';
+  document.getElementById('pm-text').value = plain;
+  document.getElementById('pm-include-img').checked = p && p.has_image;
+  document.getElementById('pm-result').style.display = 'none';
+  updateCharCount();
+  document.getElementById('post-modal-bg').classList.add('open');
+}
+
+function closePostModal() {
+  document.getElementById('post-modal-bg').classList.remove('open');
+}
+
+document.getElementById('pm-text').addEventListener('input', updateCharCount);
+function updateCharCount() {
+  const n = document.getElementById('pm-text').value.length;
+  const el = document.getElementById('pm-char-count');
+  el.textContent = n + ' / 3000';
+  el.style.color = n > 2900 ? '#dc3545' : '#6c757d';
+}
+
+async function doPost() {
+  const id      = document.getElementById('pm-post-id').value;
+  const text    = document.getElementById('pm-text').value.trim();
+  const withImg = document.getElementById('pm-include-img').checked;
+  if (!text) { alert('Bitte Post-Text eingeben.'); return; }
+  const btn = document.getElementById('pm-submit');
+  btn.textContent = 'Wird gepostet…';
+  btn.disabled = true;
+  try {
+    const res = await fetch(`/planner/linkedin/post/${id}/`, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json', 'X-CSRFToken': AC_CSRF},
+      body: JSON.stringify({target: pmTarget, text, include_image: withImg}),
+    }).then(r => r.json());
+    const el = document.getElementById('pm-result');
+    el.style.display = 'block';
+    if (res.ok) {
+      el.className = 'alert-ok';
+      el.textContent = '✅ Erfolgreich auf LinkedIn gepostet!';
+      btn.textContent = '✓ Gepostet';
+      setTimeout(() => location.reload(), 1500);
+    } else {
+      el.className = 'alert-err';
+      el.textContent = '❌ Fehler: ' + (res.error || JSON.stringify(res));
+      btn.textContent = 'Jetzt posten';
+      btn.disabled = false;
+    }
+  } catch(e) {
+    alert('Netzwerkfehler: ' + e.message);
+    btn.textContent = 'Jetzt posten';
+    btn.disabled = false;
+  }
+}
+
+document.getElementById('post-modal-bg').addEventListener('click', e => {
+  if (e.target === document.getElementById('post-modal-bg')) closePostModal();
+});
+</script>
+{% endblock %}

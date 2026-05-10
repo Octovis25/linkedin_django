@@ -1,9 +1,13 @@
-from django.shortcuts import render
+from django.shortcuts import render, redirect
 from django.contrib.auth.decorators import login_required
-from django.http import JsonResponse
+from django.http import JsonResponse, Http404
 from django.db import connection
+from django.views.decorators.csrf import csrf_exempt
 import json
 import os
+import secrets
+import urllib.parse
+import urllib.request
 from django.conf import settings
 
 
@@ -458,3 +462,265 @@ def api_image(request, post_id):
                 print(f"NC image upload error: {e}")
             return JsonResponse({'ok': False, 'error': 'Upload failed'}, status=500)
     return JsonResponse({'ok': False}, status=400)
+
+
+# ─────────────────────────────────────────────
+#  LinkedIn API Connect
+# ─────────────────────────────────────────────
+
+LINKEDIN_AUTH_URL  = 'https://www.linkedin.com/oauth/v2/authorization'
+LINKEDIN_TOKEN_URL = 'https://www.linkedin.com/oauth/v2/accessToken'
+LINKEDIN_API_BASE  = 'https://api.linkedin.com/v2'
+LINKEDIN_SCOPES    = 'openid profile w_member_social r_organization_social w_organization_social'
+
+
+def _li_credentials_ok():
+    return bool(getattr(settings, 'LINKEDIN_CLIENT_ID', None) and
+                getattr(settings, 'LINKEDIN_CLIENT_SECRET', None))
+
+
+def _li_get_token(request):
+    with connection.cursor() as c:
+        try:
+            c.execute("""SELECT access_token, token_type, expires_at,
+                                linkedin_person_id, linkedin_name, linkedin_picture,
+                                org_id, org_name
+                         FROM planner_linkedin_tokens WHERE user_id=%s""",
+                      [request.user.id])
+            row = c.fetchone()
+        except Exception:
+            return None
+    if not row:
+        return None
+    return {'access_token': row[0], 'token_type': row[1], 'expires_at': row[2],
+            'person_id': row[3], 'name': row[4], 'picture': row[5],
+            'org_id': row[6], 'org_name': row[7]}
+
+
+def _li_ensure_table():
+    with connection.cursor() as c:
+        c.execute("""CREATE TABLE IF NOT EXISTS planner_linkedin_tokens (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            user_id INT NOT NULL UNIQUE,
+            access_token TEXT,
+            token_type VARCHAR(50) DEFAULT 'Bearer',
+            expires_at BIGINT DEFAULT 0,
+            linkedin_person_id VARCHAR(100),
+            linkedin_name VARCHAR(200),
+            linkedin_picture TEXT,
+            org_id VARCHAR(100),
+            org_name VARCHAR(200)
+        )""")
+
+
+def _li_fetch(url, token, method='GET', body=None):
+    req = urllib.request.Request(url)
+    req.add_header('Authorization', f'Bearer {token}')
+    req.add_header('Content-Type', 'application/json')
+    req.add_header('X-Restli-Protocol-Version', '2.0.0')
+    if body:
+        req.method = 'POST'
+        req.data = json.dumps(body).encode('utf-8')
+    with urllib.request.urlopen(req) as resp:
+        return json.loads(resp.read().decode('utf-8'))
+
+
+def _superuser_only(view_func):
+    @login_required
+    def wrapped(request, *args, **kwargs):
+        if not request.user.is_superuser:
+            raise Http404
+        return view_func(request, *args, **kwargs)
+    return wrapped
+
+
+@_superuser_only
+def api_connect_view(request):
+    _li_ensure_table()
+    token    = _li_get_token(request)
+    creds_ok = _li_credentials_ok()
+    ready_posts = []
+    with connection.cursor() as c:
+        rows = _q(c, """SELECT p.id, p.title, p.content, p.status, p.planned_date,
+                               p.image, t.name, t.color
+                        FROM planner_posts p
+                        LEFT JOIN planner_topics t ON p.topic_id = t.id
+                        WHERE p.status IN ('Ready','Scheduled')
+                        AND COALESCE(p.is_oj,0) = 0
+                        ORDER BY COALESCE(p.planned_date,'9999-12-31'), p.created_at""", [])
+    for r in rows:
+        bg, fg = COLOR_MAP.get(r[7] or 'gray', ('#f5f5f5', '#6c757d'))
+        ready_posts.append({'id': r[0], 'title': r[1] or '', 'content': r[2] or '',
+                            'status': r[3], 'planned_date': r[4], 'has_image': bool(r[5]),
+                            'topic_name': r[6] or '', 'bg': bg, 'fg': fg})
+    return render(request, 'planner/api_connect.html', {
+        'tab': 'api_connect', 'token': token, 'creds_ok': creds_ok,
+        'ready_posts': ready_posts,
+        'posts_json': _posts_to_json(ready_posts),
+    })
+
+
+@_superuser_only
+def linkedin_auth_start(request):
+    if not _li_credentials_ok():
+        return redirect('/planner/api-connect/')
+    state = secrets.token_urlsafe(16)
+    request.session['li_oauth_state'] = state
+    redirect_uri = request.build_absolute_uri('/planner/linkedin/callback/')
+    params = urllib.parse.urlencode({
+        'response_type': 'code',
+        'client_id': settings.LINKEDIN_CLIENT_ID,
+        'redirect_uri': redirect_uri,
+        'state': state,
+        'scope': LINKEDIN_SCOPES,
+    })
+    return redirect(f'{LINKEDIN_AUTH_URL}?{params}')
+
+
+@_superuser_only
+def linkedin_auth_callback(request):
+    error = request.GET.get('error')
+    if error:
+        return redirect('/planner/api-connect/?error=' + urllib.parse.quote(error))
+    code  = request.GET.get('code', '')
+    state = request.GET.get('state', '')
+    if state != request.session.get('li_oauth_state', ''):
+        return redirect('/planner/api-connect/?error=state_mismatch')
+    redirect_uri = request.build_absolute_uri('/planner/linkedin/callback/')
+    try:
+        data = urllib.parse.urlencode({
+            'grant_type': 'authorization_code',
+            'code': code,
+            'redirect_uri': redirect_uri,
+            'client_id': settings.LINKEDIN_CLIENT_ID,
+            'client_secret': settings.LINKEDIN_CLIENT_SECRET,
+        }).encode('utf-8')
+        req = urllib.request.Request(LINKEDIN_TOKEN_URL, data=data,
+            headers={'Content-Type': 'application/x-www-form-urlencoded'})
+        with urllib.request.urlopen(req) as resp:
+            token_data = json.loads(resp.read().decode('utf-8'))
+    except Exception as e:
+        return redirect(f'/planner/api-connect/?error={urllib.parse.quote(str(e))}')
+    import time
+    access_token = token_data.get('access_token', '')
+    expires_at   = int(time.time()) + token_data.get('expires_in', 3600)
+    try:
+        profile   = _li_fetch('https://api.linkedin.com/v2/userinfo', access_token)
+        person_id = profile.get('sub', '')
+        name      = profile.get('name', '')
+        picture   = profile.get('picture', '')
+    except Exception:
+        person_id, name, picture = '', '', ''
+    org_id, org_name = '', ''
+    try:
+        orgs = _li_fetch(
+            'https://api.linkedin.com/v2/organizationAcls?q=roleAssignee&role=ADMINISTRATOR'
+            '&projection=(elements*(organization~(id,localizedName)))', access_token)
+        elems = orgs.get('elements', [])
+        if elems:
+            org = elems[0].get('organization~', {})
+            org_id   = str(org.get('id', ''))
+            org_name = org.get('localizedName', '')
+    except Exception:
+        pass
+    _li_ensure_table()
+    with connection.cursor() as c:
+        c.execute("""INSERT INTO planner_linkedin_tokens
+                        (user_id, access_token, expires_at, linkedin_person_id,
+                         linkedin_name, linkedin_picture, org_id, org_name)
+                     VALUES (%s,%s,%s,%s,%s,%s,%s,%s)
+                     ON DUPLICATE KEY UPDATE
+                        access_token=VALUES(access_token), expires_at=VALUES(expires_at),
+                        linkedin_person_id=VALUES(linkedin_person_id),
+                        linkedin_name=VALUES(linkedin_name),
+                        linkedin_picture=VALUES(linkedin_picture),
+                        org_id=VALUES(org_id), org_name=VALUES(org_name)""",
+                  [request.user.id, access_token, expires_at,
+                   person_id, name, picture, org_id, org_name])
+    return redirect('/planner/api-connect/?connected=1')
+
+
+@_superuser_only
+def linkedin_disconnect(request):
+    with connection.cursor() as c:
+        try:
+            c.execute("DELETE FROM planner_linkedin_tokens WHERE user_id=%s",
+                      [request.user.id])
+        except Exception:
+            pass
+    return redirect('/planner/api-connect/')
+
+
+@_superuser_only
+def linkedin_do_post(request, post_id):
+    if not request.user.is_authenticated:
+        return JsonResponse({'ok': False, 'error': 'session_expired'}, status=401)
+    if request.method != 'POST':
+        return JsonResponse({'ok': False}, status=405)
+    token = _li_get_token(request)
+    if not token or not token.get('access_token'):
+        return JsonResponse({'ok': False, 'error': 'not_connected'}, status=401)
+    data         = json.loads(request.body)
+    target       = data.get('target', 'person')
+    text         = data.get('text', '')
+    include_img  = data.get('include_image', False)
+    if target == 'org' and token.get('org_id'):
+        author     = f"urn:li:organization:{token['org_id']}"
+        post_token = token['access_token']
+    else:
+        author     = f"urn:li:person:{token['person_id']}"
+        post_token = token['access_token']
+    media = []
+    if include_img:
+        with connection.cursor() as c:
+            rows = _q(c, "SELECT image FROM planner_posts WHERE id=%s", [post_id])
+        if rows and rows[0][0]:
+            try:
+                reg = _li_fetch(f'{LINKEDIN_API_BASE}/assets?action=registerUpload',
+                    post_token, method='POST', body={
+                        'registerUploadRequest': {
+                            'recipes': ['urn:li:digitalmediaRecipe:feedshare-image'],
+                            'owner': author,
+                            'serviceRelationships': [{'relationshipType': 'OWNER',
+                                'identifier': 'urn:li:userGeneratedContent'}],
+                        }})
+                upload_url = (reg['value']['uploadMechanism']
+                              ['com.linkedin.digitalmedia.uploading.MediaUploadHttpRequest']
+                              ['uploadUrl'])
+                asset = reg['value']['asset']
+                with connection.cursor() as c:
+                    img_rows = _q(c, "SELECT image FROM planner_posts WHERE id=%s", [post_id])
+                image_path = img_rows[0][0] if img_rows else None
+                if image_path:
+                    full_path = os.path.join(settings.MEDIA_ROOT, image_path)
+                    with open(full_path, 'rb') as f:
+                        img_bytes = f.read()
+                    img_req = urllib.request.Request(upload_url, data=img_bytes, method='PUT')
+                    img_req.add_header('Authorization', f'Bearer {post_token}')
+                    img_req.add_header('Content-Type', 'image/jpeg')
+                    urllib.request.urlopen(img_req)
+                    media.append({'status': 'READY', 'media': asset})
+            except Exception as e:
+                print(f'LI image upload error: {e}')
+    post_body = {
+        'author': author,
+        'lifecycleState': 'PUBLISHED',
+        'specificContent': {
+            'com.linkedin.ugc.ShareContent': {
+                'shareCommentary': {'text': text},
+                'shareMediaCategory': 'IMAGE' if media else 'NONE',
+                'media': media,
+            }
+        },
+        'visibility': {'com.linkedin.ugc.MemberNetworkVisibility': 'PUBLIC'},
+    }
+    try:
+        result   = _li_fetch(f'{LINKEDIN_API_BASE}/ugcPosts', post_token,
+                             method='POST', body=post_body)
+        post_urn = result.get('id', '')
+        with connection.cursor() as c:
+            c.execute("UPDATE planner_posts SET status='Posted', in_pipeline=1 WHERE id=%s",
+                      [post_id])
+        return JsonResponse({'ok': True, 'post_urn': post_urn})
+    except Exception as e:
+        return JsonResponse({'ok': False, 'error': str(e)}, status=500)
