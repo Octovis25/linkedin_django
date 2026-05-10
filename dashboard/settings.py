@@ -86,4 +86,8 @@ DEFAULT_FROM_EMAIL = os.getenv("DEFAULT_FROM_EMAIL", "contact@octotrial.com")
 DASHBOARD_URL = os.getenv("DASHBOARD_URL", "http://localhost:8000")
 
 LINKEDIN_CLIENT_ID     = os.getenv("LINKEDIN_CLIENT_ID", "")
-LINKEDIN_CLIENT_SECRET = os.getenv("LINKEDIN_CLI
+LINKEDIN_CLIENT_SECRET = os.getenv("LINKEDIN_CLIENT_SECRET", "")
+CSRF_TRUSTED_ORIGINS = [
+    "https://linkedin-django-wd7a.onrender.com",
+    "https://*.onrender.com",
+]
