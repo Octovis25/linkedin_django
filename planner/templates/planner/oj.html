@@ -100,7 +100,12 @@
         {% else %}—{% endif %}
       </td>
       <td style="font-size:12px;color:#6c757d">{{ p.planned_date|date:"d.m.Y"|default:"—" }}</td>
-      <td>
+      <td style="white-space:nowrap">
+        {% if li_connected and p.status == 'Scheduled' %}
+        <button type="button" class="pa-btn" title="Auf LinkedIn posten"
+          onclick="event.stopPropagation();liOjOpenPost({{ p.id }})"
+          style="background:#0077B5;color:#fff;border-color:#0077B5;font-weight:700">in</button>
+        {% endif %}
         <button type="button" class="pa-btn del" title="Löschen"
           onclick="event.stopPropagation();ojDelete({{ p.id }})">🗑</button>
       </td>
@@ -436,5 +441,125 @@ async function ojDelete(id) {
     if (row) row.remove();
   }
 }
+
+{% if li_connected %}
+/* ── LinkedIn Post (OJ → always personal profile) ── */
+let liOjCurrentId = null;
+
+function liOjOpenPost(id) {
+  const p = ojMap[id];
+  if (!p) return;
+  liOjCurrentId = id;
+  const tmp = document.createElement('div');
+  tmp.innerHTML = p.content || '';
+  const plain = (tmp.textContent || tmp.innerText || '').trim();
+  document.getElementById('li-oj-text').value = plain;
+  document.getElementById('li-oj-char').textContent = plain.length;
+  document.getElementById('li-oj-img-row').style.display = p.image ? 'flex' : 'none';
+  document.getElementById('li-oj-img-check').checked = !!p.image;
+  // Scheduling
+  const schedRow = document.getElementById('li-oj-sched-row');
+  if (p.date) {
+    const postDate = new Date(p.date + 'T09:00:00');
+    const isFuture = postDate > new Date(Date.now() + 600000);
+    schedRow.style.display = isFuture ? 'flex' : 'none';
+    document.getElementById('li-oj-sched-check').checked = isFuture;
+    document.getElementById('li-oj-sched-time').textContent = isFuture
+      ? postDate.toLocaleDateString('de-DE', {day:'2-digit',month:'2-digit',year:'numeric'}) + ' 09:00' : '';
+  } else {
+    schedRow.style.display = 'none';
+  }
+  document.getElementById('li-oj-result').style.display = 'none';
+  document.getElementById('li-oj-modal-bg').style.display = 'flex';
+}
+
+function liOjClose() {
+  document.getElementById('li-oj-modal-bg').style.display = 'none';
+  liOjCurrentId = null;
+}
+
+document.getElementById('li-oj-text').addEventListener('input', function() {
+  document.getElementById('li-oj-char').textContent = this.value.length;
+});
+
+async function liOjDoPost() {
+  if (!liOjCurrentId) return;
+  const btn = document.getElementById('li-oj-btn');
+  const schedCheck = document.getElementById('li-oj-sched-check');
+  const isScheduled = schedCheck && schedCheck.checked;
+  btn.disabled = true;
+  btn.textContent = isScheduled ? 'Scheduling…' : 'Posting…';
+  const res = document.getElementById('li-oj-result');
+  res.style.display = 'none';
+  const p = ojMap[liOjCurrentId];
+  let scheduled_ms = null;
+  if (isScheduled && p && p.date) {
+    scheduled_ms = new Date(p.date + 'T09:00:00').getTime();
+  }
+  try {
+    const r = await fetch(`/planner/linkedin/post/${liOjCurrentId}/`, {
+      method: 'POST',
+      headers: {'Content-Type':'application/json','X-CSRFToken':CSRF},
+      body: JSON.stringify({
+        text: document.getElementById('li-oj-text').value,
+        target: 'person',
+        include_image: document.getElementById('li-oj-img-check').checked,
+        scheduled_ms: scheduled_ms,
+      })
+    });
+    const data = await r.json();
+    if (data.ok) {
+      res.style.display = 'block';
+      res.style.background = '#E1F5EE'; res.style.color = '#0F6E56';
+      res.textContent = data.scheduled ? '📅 Post für LinkedIn geplant!' : '✓ Auf LinkedIn veröffentlicht!';
+      setTimeout(() => { liOjClose(); location.reload(); }, 1800);
+    } else {
+      res.style.display = 'block';
+      res.style.background = '#FCEBEB'; res.style.color = '#791F1F';
+      res.textContent = 'Fehler: ' + (data.error || 'Unbekannt');
+      btn.disabled = false; btn.textContent = 'Jetzt posten';
+    }
+  } catch(e) {
+    res.style.display = 'block';
+    res.style.background = '#FCEBEB'; res.style.color = '#791F1F';
+    res.textContent = 'Netzwerkfehler: ' + e.message;
+    btn.disabled = false; btn.textContent = 'Jetzt posten';
+  }
+}
+
+document.getElementById('li-oj-modal-bg').addEventListener('click', function(e) {
+  if (e.target === this) liOjClose();
+});
+{% endif %}
 </script>
+
+{% if li_connected %}
+<!-- LinkedIn OJ Post Modal -->
+<div id="li-oj-modal-bg" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:9999;align-items:center;justify-content:center">
+  <div style="background:#fff;border-radius:12px;padding:1.5rem;width:500px;max-width:95vw;max-height:90vh;overflow-y:auto">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem">
+      <span style="font-size:15px;font-weight:600;display:flex;align-items:center;gap:7px">
+        <span style="background:#0077B5;color:#fff;font-weight:700;font-size:13px;padding:2px 7px;border-radius:3px">in</span>
+        OJ Post auf LinkedIn <span class="oj-tag">Persönliches Profil</span>
+      </span>
+      <button onclick="liOjClose()" style="border:none;background:none;font-size:20px;cursor:pointer;color:#888;line-height:1">×</button>
+    </div>
+    <textarea id="li-oj-text" style="width:100%;min-height:160px;font-size:13px;padding:8px;border:0.5px solid #ced4da;border-radius:4px;resize:vertical;box-sizing:border-box;line-height:1.6;font-family:inherit"></textarea>
+    <div style="text-align:right;font-size:11px;color:#aaa;margin-bottom:8px"><span id="li-oj-char">0</span> Zeichen</div>
+    <div id="li-oj-img-row" style="display:none;align-items:center;gap:8px;margin-bottom:8px;font-size:13px">
+      <input type="checkbox" id="li-oj-img-check" checked style="cursor:pointer">
+      <label for="li-oj-img-check" style="cursor:pointer;color:#444">Bild mitposten</label>
+    </div>
+    <div id="li-oj-sched-row" style="display:none;align-items:center;gap:8px;margin-bottom:12px;font-size:13px">
+      <input type="checkbox" id="li-oj-sched-check" checked style="cursor:pointer">
+      <label for="li-oj-sched-check" style="cursor:pointer;color:#444">📅 Auf LinkedIn planen für <strong id="li-oj-sched-time"></strong></label>
+    </div>
+    <div id="li-oj-result" style="display:none;padding:8px 12px;border-radius:6px;font-size:13px;margin-bottom:10px"></div>
+    <div style="display:flex;justify-content:flex-end;gap:8px">
+      <button onclick="liOjClose()" style="font-size:13px;padding:5px 14px;border:0.5px solid #ced4da;border-radius:4px;background:#fff;cursor:pointer">Abbrechen</button>
+      <button id="li-oj-btn" onclick="liOjDoPost()" style="font-size:13px;padding:5px 16px;background:#0077B5;color:#fff;border:none;border-radius:4px;cursor:pointer;font-weight:600">Jetzt posten</button>
+    </div>
+  </div>
+</div>
+{% endif %}
 {% endblock %}

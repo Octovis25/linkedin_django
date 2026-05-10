@@ -67,7 +67,7 @@
         style="font-size:12px;padding:3px 10px;border:0.5px solid #008080;border-radius:4px;background:#fff;cursor:pointer;color:#008080;white-space:nowrap">
         ✏️ Edit
       </button>
-      {% if tab == 'scheduled' and li_connected %}
+      {% if li_connected and tab in 'scheduled,oj' %}
       <button type="button"
         onclick="liOpenPost({{ p.id }})"
         style="font-size:12px;padding:3px 10px;border:0.5px solid #0077B5;border-radius:4px;background:#0077B5;cursor:pointer;color:#fff;white-space:nowrap"
@@ -298,7 +298,7 @@ document.getElementById('post-edit-modal').addEventListener('click', function(e)
   if (e.target === this) closeEdit();
 });
 
-{% if tab == 'scheduled' and li_connected %}
+{% if li_connected %}
 /* ── LinkedIn Post ── */
 let liCurrentId = null;
 
@@ -312,9 +312,26 @@ function liOpenPost(id) {
   const plain = (tmp.textContent || tmp.innerText || '').trim();
   document.getElementById('li-post-text').value = plain;
   document.getElementById('li-char-count').textContent = plain.length;
-  document.getElementById('li-target').value = 'person';
+  // Default: OJ posts → personal profile, others → org page
+  const targetEl = document.getElementById('li-target');
+  if (targetEl) {
+    const hasOrg = targetEl.options.length > 1;
+    targetEl.value = (p.is_oj || !hasOrg) ? 'person' : 'org';
+  }
   document.getElementById('li-include-img').checked = !!p.image;
   document.getElementById('li-include-img-row').style.display = p.image ? 'flex' : 'none';
+  // Scheduling: show if post has a future date
+  const schedRow = document.getElementById('li-schedule-row');
+  const schedCheck = document.getElementById('li-schedule-check');
+  if (schedRow && p.date) {
+    const postDate = new Date(p.date + 'T09:00:00');
+    const isFuture = postDate > new Date(Date.now() + 600000);
+    schedRow.style.display = isFuture ? 'flex' : 'none';
+    if (schedCheck) schedCheck.checked = isFuture;
+    document.getElementById('li-schedule-time').textContent = isFuture ? postDate.toLocaleDateString('de-DE', {day:'2-digit',month:'2-digit',year:'numeric'}) + ' 09:00' : '';
+  } else if (schedRow) {
+    schedRow.style.display = 'none';
+  }
   document.getElementById('li-post-result').style.display = 'none';
   document.getElementById('li-modal-bg').style.display = 'flex';
 }
@@ -332,9 +349,18 @@ async function liDoPost() {
   if (!liCurrentId) return;
   const btn = document.getElementById('li-submit-btn');
   btn.disabled = true;
-  btn.textContent = 'Posting…';
+  const p = PE_POSTS.find(x => x.id == liCurrentId);
+  const schedCheck = document.getElementById('li-schedule-check');
+  const isScheduled = schedCheck && schedCheck.checked;
+  btn.textContent = isScheduled ? 'Scheduling…' : 'Posting…';
   const res = document.getElementById('li-post-result');
   res.style.display = 'none';
+  // Calculate scheduled_ms if scheduling
+  let scheduled_ms = null;
+  if (isScheduled && p && p.date) {
+    const d = new Date(p.date + 'T09:00:00');
+    scheduled_ms = d.getTime();
+  }
   try {
     const r = await fetch(`/planner/linkedin/post/${liCurrentId}/`, {
       method: 'POST',
@@ -343,14 +369,15 @@ async function liDoPost() {
         text: document.getElementById('li-post-text').value,
         target: document.getElementById('li-target').value,
         include_image: document.getElementById('li-include-img').checked,
+        scheduled_ms: scheduled_ms,
       })
     });
     const data = await r.json();
     if (data.ok) {
       res.style.display = 'block';
       res.style.background = '#E1F5EE'; res.style.color = '#0F6E56';
-      res.textContent = '✓ Post veröffentlicht!';
-      setTimeout(() => { liClosePost(); location.reload(); }, 1500);
+      res.textContent = data.scheduled ? '📅 Post für LinkedIn geplant!' : '✓ Post veröffentlicht!';
+      setTimeout(() => { liClosePost(); location.reload(); }, 1800);
     } else {
       res.style.display = 'block';
       res.style.background = '#FCEBEB'; res.style.color = '#791F1F';
@@ -371,7 +398,7 @@ document.getElementById('li-modal-bg').addEventListener('click', function(e) {
 {% endif %}
 </script>
 
-{% if tab == 'scheduled' and li_connected %}
+{% if li_connected %}
 <!-- LinkedIn Post Modal -->
 <div id="li-modal-bg" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:9999;align-items:center;justify-content:center">
   <div style="background:#fff;border-radius:12px;padding:1.5rem;width:500px;max-width:95vw;max-height:90vh;overflow-y:auto">
@@ -390,9 +417,13 @@ document.getElementById('li-modal-bg').addEventListener('click', function(e) {
     </div>
     <textarea id="li-post-text" style="width:100%;min-height:160px;font-size:13px;padding:8px;border:0.5px solid #ced4da;border-radius:4px;resize:vertical;box-sizing:border-box;line-height:1.6;font-family:inherit"></textarea>
     <div style="text-align:right;font-size:11px;color:#aaa;margin-bottom:8px"><span id="li-char-count">0</span> Zeichen</div>
-    <div id="li-include-img-row" style="display:none;align-items:center;gap:8px;margin-bottom:12px;font-size:13px">
+    <div id="li-include-img-row" style="display:none;align-items:center;gap:8px;margin-bottom:8px;font-size:13px">
       <input type="checkbox" id="li-include-img" checked style="cursor:pointer">
       <label for="li-include-img" style="cursor:pointer;color:#444">Bild mitposten</label>
+    </div>
+    <div id="li-schedule-row" style="display:none;align-items:center;gap:8px;margin-bottom:12px;font-size:13px">
+      <input type="checkbox" id="li-schedule-check" checked style="cursor:pointer">
+      <label for="li-schedule-check" style="cursor:pointer;color:#444">📅 Auf LinkedIn planen für <strong id="li-schedule-time"></strong></label>
     </div>
     <div id="li-post-result" style="display:none;padding:8px 12px;border-radius:6px;font-size:13px;margin-bottom:10px"></div>
     <div style="display:flex;justify-content:flex-end;gap:8px">

@@ -39,6 +39,7 @@ def _posts_to_json(posts_list):
             'comment': p.get('comment') or '',
             'image': p.get('image') or '',
             'topic_id': p.get('topic_id') or 0,
+            'is_oj': bool(p.get('is_oj', False)),
         })
     # Replace </ to prevent </script> injection
     return json.dumps(safe, ensure_ascii=False).replace('</', '<\\/')
@@ -180,6 +181,9 @@ def scheduled_view(request):
             'topic_id': r[8], 'comment': r[9] or '', 'bg': bg, 'fg': fg,
         })
 
+    # Add is_oj=False so JS knows to default to company page
+    for p in posts_list:
+        p['is_oj'] = False
     li_token = _li_get_superuser_token()
     return render(request, 'planner/scheduled.html', {'posts': posts_list, 'topics': topics, 'topic_filter': topic_filter, 'statuses': ['Draft', 'Review', 'Ready', 'Scheduled', 'Posted', 'Archive'], 'tab': 'scheduled', 'page_title': '📅 Scheduled', 'posts_json': _posts_to_json(posts_list), 'li_connected': bool(li_token), 'li_org': li_token.get('org_name','') if li_token else ''})
 
@@ -275,13 +279,18 @@ def oj_view(request):
             'status': r[3], 'planned_date': r[4], 'image': r[5] or '',
             'topic_name': r[6] or '', 'topic_color': r[7] or 'gray',
             'topic_id': r[8], 'comment': r[9] or '', 'bg': bg, 'fg': fg,
+            'is_oj': True,
         })
 
+    li_token = _li_get_superuser_token()
     return render(request, 'planner/oj.html', {
         'posts': posts_list,
         'topics': topics,
         'statuses': ['Draft', 'Review', 'Ready', 'Scheduled', 'Posted', 'Archive'],
         'tab': 'oj',
+        'posts_json': _posts_to_json(posts_list),
+        'li_connected': bool(li_token),
+        'li_org': li_token.get('org_name', '') if li_token else '',
     })
 
 
@@ -534,16 +543,21 @@ def _li_ensure_table():
         )""")
 
 
-def _li_fetch(url, token, method='GET', body=None):
+def _li_fetch(url, token, method='GET', body=None, version=None):
     req = urllib.request.Request(url)
     req.add_header('Authorization', f'Bearer {token}')
     req.add_header('Content-Type', 'application/json')
     req.add_header('X-Restli-Protocol-Version', '2.0.0')
+    if version:
+        req.add_header('LinkedIn-Version', version)
     if body:
-        req.method = 'POST'
+        req.method = method if method != 'GET' else 'POST'
         req.data = json.dumps(body).encode('utf-8')
+    else:
+        req.method = method
     with urllib.request.urlopen(req) as resp:
-        return json.loads(resp.read().decode('utf-8'))
+        raw = resp.read()
+        return json.loads(raw.decode('utf-8')) if raw.strip() else {}
 
 
 def _superuser_only(view_func):
@@ -674,72 +688,80 @@ def linkedin_disconnect(request):
 
 @login_required
 def linkedin_do_post(request, post_id):
+    import time as _time
     if request.method != 'POST':
         return JsonResponse({'ok': False}, status=405)
     token = _li_get_superuser_token()
     if not token or not token.get('access_token'):
         return JsonResponse({'ok': False, 'error': 'not_connected'}, status=401)
-    data         = json.loads(request.body)
-    target       = data.get('target', 'person')
-    text         = data.get('text', '')
-    include_img  = data.get('include_image', False)
+    data          = json.loads(request.body)
+    target        = data.get('target', 'person')
+    text          = data.get('text', '')
+    include_img   = data.get('include_image', False)
+    scheduled_ms  = data.get('scheduled_ms')   # Unix timestamp in ms or None
+    post_token    = token['access_token']
     if target == 'org' and token.get('org_id'):
-        author     = f"urn:li:organization:{token['org_id']}"
-        post_token = token['access_token']
+        author = f"urn:li:organization:{token['org_id']}"
     else:
-        author     = f"urn:li:person:{token['person_id']}"
-        post_token = token['access_token']
-    media = []
+        author = f"urn:li:person:{token['person_id']}"
+
+    # ── Image upload via new Images API ──────────────────────────────
+    image_urn = None
     if include_img:
         with connection.cursor() as c:
             rows = _q(c, "SELECT image FROM planner_posts WHERE id=%s", [post_id])
         if rows and rows[0][0]:
             try:
-                reg = _li_fetch(f'{LINKEDIN_API_BASE}/assets?action=registerUpload',
-                    post_token, method='POST', body={
-                        'registerUploadRequest': {
-                            'recipes': ['urn:li:digitalmediaRecipe:feedshare-image'],
-                            'owner': author,
-                            'serviceRelationships': [{'relationshipType': 'OWNER',
-                                'identifier': 'urn:li:userGeneratedContent'}],
-                        }})
-                upload_url = (reg['value']['uploadMechanism']
-                              ['com.linkedin.digitalmedia.uploading.MediaUploadHttpRequest']
-                              ['uploadUrl'])
-                asset = reg['value']['asset']
-                with connection.cursor() as c:
-                    img_rows = _q(c, "SELECT image FROM planner_posts WHERE id=%s", [post_id])
-                image_path = img_rows[0][0] if img_rows else None
-                if image_path:
-                    full_path = os.path.join(settings.MEDIA_ROOT, image_path)
-                    with open(full_path, 'rb') as f:
-                        img_bytes = f.read()
-                    img_req = urllib.request.Request(upload_url, data=img_bytes, method='PUT')
-                    img_req.add_header('Authorization', f'Bearer {post_token}')
-                    img_req.add_header('Content-Type', 'image/jpeg')
-                    urllib.request.urlopen(img_req)
-                    media.append({'status': 'READY', 'media': asset})
+                image_path = rows[0][0]
+                full_path  = os.path.join(settings.MEDIA_ROOT, image_path)
+                # Initialize upload
+                init = _li_fetch(
+                    'https://api.linkedin.com/rest/images?action=initializeUpload',
+                    post_token, method='POST',
+                    body={'initializeUploadRequest': {'owner': author}},
+                    version='202404')
+                upload_url = init['value']['uploadUrl']
+                image_urn  = init['value']['image']
+                # Upload bytes
+                with open(full_path, 'rb') as f:
+                    img_bytes = f.read()
+                img_req = urllib.request.Request(upload_url, data=img_bytes, method='PUT')
+                img_req.add_header('Authorization', f'Bearer {post_token}')
+                img_req.add_header('Content-Type', 'image/jpeg')
+                urllib.request.urlopen(img_req)
             except Exception as e:
                 print(f'LI image upload error: {e}')
+                image_urn = None
+
+    # ── Build post body (new Posts API) ──────────────────────────────
     post_body = {
-        'author': author,
-        'lifecycleState': 'PUBLISHED',
-        'specificContent': {
-            'com.linkedin.ugc.ShareContent': {
-                'shareCommentary': {'text': text},
-                'shareMediaCategory': 'IMAGE' if media else 'NONE',
-                'media': media,
-            }
+        'author':     author,
+        'commentary': text,
+        'visibility': 'PUBLIC',
+        'distribution': {
+            'feedDistribution': 'MAIN_FEED',
+            'targetEntities': [],
+            'thirdPartyDistributionChannels': [],
         },
-        'visibility': {'com.linkedin.ugc.MemberNetworkVisibility': 'PUBLIC'},
     }
+    if image_urn:
+        post_body['content'] = {'media': {'id': image_urn}}
+
+    now_ms = int(_time.time() * 1000)
+    if scheduled_ms and int(scheduled_ms) > now_ms + 600_000:  # at least 10 min in future
+        post_body['lifecycleState']      = 'SCHEDULED'
+        post_body['scheduledPublishTime'] = int(scheduled_ms)
+    else:
+        post_body['lifecycleState'] = 'PUBLISHED'
+
     try:
-        result   = _li_fetch(f'{LINKEDIN_API_BASE}/ugcPosts', post_token,
-                             method='POST', body=post_body)
-        post_urn = result.get('id', '')
+        result   = _li_fetch('https://api.linkedin.com/rest/posts',
+                             post_token, method='POST', body=post_body, version='202404')
+        post_urn = result.get('id', '') if isinstance(result, dict) else ''
+        new_status = 'Scheduled' if post_body['lifecycleState'] == 'SCHEDULED' else 'Posted'
         with connection.cursor() as c:
-            c.execute("UPDATE planner_posts SET status='Posted', in_pipeline=1 WHERE id=%s",
-                      [post_id])
-        return JsonResponse({'ok': True, 'post_urn': post_urn})
+            c.execute("UPDATE planner_posts SET status=%s, in_pipeline=1 WHERE id=%s",
+                      [new_status, post_id])
+        return JsonResponse({'ok': True, 'post_urn': post_urn, 'scheduled': post_body['lifecycleState'] == 'SCHEDULED'})
     except Exception as e:
         return JsonResponse({'ok': False, 'error': str(e)}, status=500)
