@@ -67,6 +67,12 @@
         style="font-size:12px;padding:3px 10px;border:0.5px solid #008080;border-radius:4px;background:#fff;cursor:pointer;color:#008080;white-space:nowrap">
         ✏️ Edit
       </button>
+      {% if tab == 'scheduled' and li_connected %}
+      <button type="button"
+        onclick="liOpenPost({{ p.id }})"
+        style="font-size:12px;padding:3px 10px;border:0.5px solid #0077B5;border-radius:4px;background:#0077B5;cursor:pointer;color:#fff;white-space:nowrap"
+        title="Post to LinkedIn">in</button>
+      {% endif %}
       <button type="button"
         onclick="peDeletePost({{ p.id }})"
         style="font-size:12px;padding:3px 8px;border:0.5px solid #dc3545;border-radius:4px;background:#fff;cursor:pointer;color:#dc3545"
@@ -291,4 +297,108 @@ async function saveEdit() {
 document.getElementById('post-edit-modal').addEventListener('click', function(e) {
   if (e.target === this) closeEdit();
 });
+
+{% if tab == 'scheduled' and li_connected %}
+/* ── LinkedIn Post ── */
+let liCurrentId = null;
+
+function liOpenPost(id) {
+  const p = PE_POSTS.find(x => x.id == id);
+  if (!p) return;
+  liCurrentId = id;
+  // Strip HTML tags for plain LinkedIn text
+  const tmp = document.createElement('div');
+  tmp.innerHTML = p.content || '';
+  const plain = (tmp.textContent || tmp.innerText || '').trim();
+  document.getElementById('li-post-text').value = plain;
+  document.getElementById('li-char-count').textContent = plain.length;
+  document.getElementById('li-target').value = 'person';
+  document.getElementById('li-include-img').checked = !!p.image;
+  document.getElementById('li-include-img-row').style.display = p.image ? 'flex' : 'none';
+  document.getElementById('li-post-result').style.display = 'none';
+  document.getElementById('li-modal-bg').style.display = 'flex';
+}
+
+function liClosePost() {
+  document.getElementById('li-modal-bg').style.display = 'none';
+  liCurrentId = null;
+}
+
+document.getElementById('li-post-text').addEventListener('input', function() {
+  document.getElementById('li-char-count').textContent = this.value.length;
+});
+
+async function liDoPost() {
+  if (!liCurrentId) return;
+  const btn = document.getElementById('li-submit-btn');
+  btn.disabled = true;
+  btn.textContent = 'Posting…';
+  const res = document.getElementById('li-post-result');
+  res.style.display = 'none';
+  try {
+    const r = await fetch(`/planner/linkedin/post/${liCurrentId}/`, {
+      method: 'POST',
+      headers: {'Content-Type':'application/json','X-CSRFToken':peCSRF},
+      body: JSON.stringify({
+        text: document.getElementById('li-post-text').value,
+        target: document.getElementById('li-target').value,
+        include_image: document.getElementById('li-include-img').checked,
+      })
+    });
+    const data = await r.json();
+    if (data.ok) {
+      res.style.display = 'block';
+      res.style.background = '#E1F5EE'; res.style.color = '#0F6E56';
+      res.textContent = '✓ Post veröffentlicht!';
+      setTimeout(() => { liClosePost(); location.reload(); }, 1500);
+    } else {
+      res.style.display = 'block';
+      res.style.background = '#FCEBEB'; res.style.color = '#791F1F';
+      res.textContent = 'Fehler: ' + (data.error || 'Unbekannt');
+    }
+  } catch(e) {
+    res.style.display = 'block';
+    res.style.background = '#FCEBEB'; res.style.color = '#791F1F';
+    res.textContent = 'Netzwerkfehler: ' + e.message;
+  }
+  btn.disabled = false;
+  btn.textContent = 'Jetzt posten';
+}
+
+document.getElementById('li-modal-bg').addEventListener('click', function(e) {
+  if (e.target === this) liClosePost();
+});
+{% endif %}
 </script>
+
+{% if tab == 'scheduled' and li_connected %}
+<!-- LinkedIn Post Modal -->
+<div id="li-modal-bg" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:9999;align-items:center;justify-content:center">
+  <div style="background:#fff;border-radius:12px;padding:1.5rem;width:500px;max-width:95vw;max-height:90vh;overflow-y:auto">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem">
+      <span style="font-size:15px;font-weight:600;display:flex;align-items:center;gap:7px">
+        <span style="background:#0077B5;color:#fff;font-weight:700;font-size:13px;padding:2px 7px;border-radius:3px">in</span>
+        Post auf LinkedIn
+      </span>
+      <button onclick="liClosePost()" style="border:none;background:none;font-size:20px;cursor:pointer;color:#888;line-height:1">×</button>
+    </div>
+    <div style="margin-bottom:10px;display:flex;gap:8px">
+      <select id="li-target" style="font-size:13px;padding:5px 8px;border:0.5px solid #ced4da;border-radius:4px;flex:1">
+        <option value="person">Persönliches Profil</option>
+        {% if li_org %}<option value="org">{{ li_org }} (Seite)</option>{% endif %}
+      </select>
+    </div>
+    <textarea id="li-post-text" style="width:100%;min-height:160px;font-size:13px;padding:8px;border:0.5px solid #ced4da;border-radius:4px;resize:vertical;box-sizing:border-box;line-height:1.6;font-family:inherit"></textarea>
+    <div style="text-align:right;font-size:11px;color:#aaa;margin-bottom:8px"><span id="li-char-count">0</span> Zeichen</div>
+    <div id="li-include-img-row" style="display:none;align-items:center;gap:8px;margin-bottom:12px;font-size:13px">
+      <input type="checkbox" id="li-include-img" checked style="cursor:pointer">
+      <label for="li-include-img" style="cursor:pointer;color:#444">Bild mitposten</label>
+    </div>
+    <div id="li-post-result" style="display:none;padding:8px 12px;border-radius:6px;font-size:13px;margin-bottom:10px"></div>
+    <div style="display:flex;justify-content:flex-end;gap:8px">
+      <button onclick="liClosePost()" style="font-size:13px;padding:5px 14px;border:0.5px solid #ced4da;border-radius:4px;background:#fff;cursor:pointer">Abbrechen</button>
+      <button id="li-submit-btn" onclick="liDoPost()" style="font-size:13px;padding:5px 16px;background:#0077B5;color:#fff;border:none;border-radius:4px;cursor:pointer;font-weight:600">Jetzt posten</button>
+    </div>
+  </div>
+</div>
+{% endif %}

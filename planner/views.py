@@ -180,7 +180,8 @@ def scheduled_view(request):
             'topic_id': r[8], 'comment': r[9] or '', 'bg': bg, 'fg': fg,
         })
 
-    return render(request, 'planner/scheduled.html', {'posts': posts_list, 'topics': topics, 'topic_filter': topic_filter, 'statuses': ['Draft', 'Review', 'Ready', 'Scheduled', 'Posted', 'Archive'], 'tab': 'scheduled', 'page_title': '📅 Scheduled', 'posts_json': _posts_to_json(posts_list)})
+    li_token = _li_get_superuser_token()
+    return render(request, 'planner/scheduled.html', {'posts': posts_list, 'topics': topics, 'topic_filter': topic_filter, 'statuses': ['Draft', 'Review', 'Ready', 'Scheduled', 'Posted', 'Archive'], 'tab': 'scheduled', 'page_title': '📅 Scheduled', 'posts_json': _posts_to_json(posts_list), 'li_connected': bool(li_token), 'li_org': li_token.get('org_name','') if li_token else ''})
 
 
 @login_required
@@ -479,6 +480,26 @@ def _li_credentials_ok():
                 getattr(settings, 'LINKEDIN_CLIENT_SECRET', None))
 
 
+def _li_get_superuser_token():
+    """Get the LinkedIn token stored by any superuser (shared for all users to post)."""
+    with connection.cursor() as c:
+        try:
+            c.execute("""SELECT t.access_token, t.token_type, t.expires_at,
+                                t.linkedin_person_id, t.linkedin_name, t.linkedin_picture,
+                                t.org_id, t.org_name
+                         FROM planner_linkedin_tokens t
+                         JOIN auth_user u ON t.user_id = u.id
+                         WHERE u.is_superuser = 1 LIMIT 1""")
+            row = c.fetchone()
+        except Exception:
+            return None
+    if not row:
+        return None
+    return {'access_token': row[0], 'token_type': row[1], 'expires_at': row[2],
+            'person_id': row[3], 'name': row[4], 'picture': row[5],
+            'org_id': row[6], 'org_name': row[7]}
+
+
 def _li_get_token(request):
     with connection.cursor() as c:
         try:
@@ -651,13 +672,11 @@ def linkedin_disconnect(request):
     return redirect('/planner/api-connect/')
 
 
-@_superuser_only
+@login_required
 def linkedin_do_post(request, post_id):
-    if not request.user.is_authenticated:
-        return JsonResponse({'ok': False, 'error': 'session_expired'}, status=401)
     if request.method != 'POST':
         return JsonResponse({'ok': False}, status=405)
-    token = _li_get_token(request)
+    token = _li_get_superuser_token()
     if not token or not token.get('access_token'):
         return JsonResponse({'ok': False, 'error': 'not_connected'}, status=401)
     data         = json.loads(request.body)
