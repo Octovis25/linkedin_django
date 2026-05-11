@@ -490,7 +490,7 @@ def api_image(request, post_id):
 LINKEDIN_AUTH_URL  = 'https://www.linkedin.com/oauth/v2/authorization'
 LINKEDIN_TOKEN_URL = 'https://www.linkedin.com/oauth/v2/accessToken'
 LINKEDIN_API_BASE  = 'https://api.linkedin.com/v2'
-LINKEDIN_SCOPES    = 'openid profile w_member_social w_organization_social'
+LINKEDIN_SCOPES    = 'openid profile w_member_social'
 
 
 def _li_credentials_ok():
