@@ -740,7 +740,7 @@ def linkedin_do_post(request, post_id):
                     'https://api.linkedin.com/rest/images?action=initializeUpload',
                     post_token, method='POST',
                     body={'initializeUploadRequest': {'owner': author}},
-                    version='202404')
+                    version='202501')
                 upload_url = init['value']['uploadUrl']
                 image_urn  = init['value']['image']
                 # Upload bytes
@@ -777,7 +777,7 @@ def linkedin_do_post(request, post_id):
 
     try:
         result   = _li_fetch('https://api.linkedin.com/rest/posts',
-                             post_token, method='POST', body=post_body, version='202404')
+                             post_token, method='POST', body=post_body, version='202501')
         post_urn = result.get('id', '') if isinstance(result, dict) else ''
         is_sched  = post_body['lifecycleState'] == 'SCHEDULED'
         new_status = 'Scheduled' if is_sched else 'Posted'
