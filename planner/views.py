@@ -159,8 +159,14 @@ def scheduled_view(request):
     topic_filter = request.GET.get('topic', '')
     with connection.cursor() as c:
         topics = _topics(c)
+        # Ensure linkedin_posted column exists
+        try:
+            c.execute("ALTER TABLE planner_posts ADD COLUMN linkedin_posted TINYINT(1) NOT NULL DEFAULT 0")
+        except Exception:
+            pass
         sql = """SELECT p.id, p.title, p.content, p.status, p.planned_date,
-                        p.image, t.name, t.color, p.topic_id, p.comment
+                        p.image, t.name, t.color, p.topic_id, p.comment,
+                        COALESCE(p.linkedin_posted,0)
                  FROM planner_posts p
                  LEFT JOIN planner_topics t ON p.topic_id = t.id
                  WHERE p.status = 'Scheduled' AND p.in_pipeline = 1 AND COALESCE(p.is_oj,0) = 0"""
@@ -179,11 +185,8 @@ def scheduled_view(request):
             'status': r[3], 'planned_date': r[4], 'image': r[5] or '',
             'topic_name': r[6] or '', 'topic_color': r[7] or 'gray',
             'topic_id': r[8], 'comment': r[9] or '', 'bg': bg, 'fg': fg,
+            'linkedin_posted': bool(r[10]), 'is_oj': False,
         })
-
-    # Add is_oj=False so JS knows to default to company page
-    for p in posts_list:
-        p['is_oj'] = False
     li_token = _li_get_superuser_token()
     return render(request, 'planner/scheduled.html', {'posts': posts_list, 'topics': topics, 'topic_filter': topic_filter, 'statuses': ['Draft', 'Review', 'Ready', 'Scheduled', 'Posted', 'Archive'], 'tab': 'scheduled', 'page_title': '📅 Scheduled', 'posts_json': _posts_to_json(posts_list), 'li_connected': bool(li_token), 'li_org': li_token.get('org_name','') if li_token else ''})
 
@@ -261,8 +264,13 @@ def oj_view(request):
         topics = _topics(c)
         # Check if is_oj column exists; fall back to empty list if not
         try:
+            c.execute("ALTER TABLE planner_posts ADD COLUMN linkedin_posted TINYINT(1) NOT NULL DEFAULT 0")
+        except Exception:
+            pass
+        try:
             posts = _q(c, """SELECT p.id, p.title, p.content, p.status, p.planned_date,
-                                    p.image, t.name, t.color, p.topic_id, COALESCE(p.comment,'') as comment
+                                    p.image, t.name, t.color, p.topic_id, COALESCE(p.comment,'') as comment,
+                                    COALESCE(p.linkedin_posted,0)
                              FROM planner_posts p
                              LEFT JOIN planner_topics t ON p.topic_id = t.id
                              WHERE p.is_oj = 1
@@ -279,7 +287,7 @@ def oj_view(request):
             'status': r[3], 'planned_date': r[4], 'image': r[5] or '',
             'topic_name': r[6] or '', 'topic_color': r[7] or 'gray',
             'topic_id': r[8], 'comment': r[9] or '', 'bg': bg, 'fg': fg,
-            'is_oj': True,
+            'linkedin_posted': bool(r[10]), 'is_oj': True,
         })
 
     li_token = _li_get_superuser_token()
@@ -572,6 +580,19 @@ def _superuser_only(view_func):
 @_superuser_only
 def api_connect_view(request):
     _li_ensure_table()
+    # Handle manual org save
+    if request.method == 'POST' and 'org_id' in request.POST:
+        org_id_m   = request.POST.get('org_id',   '').strip()
+        org_name_m = request.POST.get('org_name', '').strip()
+        if org_id_m:
+            with connection.cursor() as c:
+                try:
+                    c.execute(
+                        "UPDATE planner_linkedin_tokens SET org_id=%s, org_name=%s WHERE user_id=%s",
+                        [org_id_m, org_name_m or org_id_m, request.user.id])
+                except Exception:
+                    pass
+        return redirect('/planner/api-connect/?org_saved=1')
     token    = _li_get_token(request)
     creds_ok = _li_credentials_ok()
     ready_posts = []
@@ -749,7 +770,7 @@ def linkedin_do_post(request, post_id):
 
     now_ms = int(_time.time() * 1000)
     if scheduled_ms and int(scheduled_ms) > now_ms + 600_000:  # at least 10 min in future
-        post_body['lifecycleState']      = 'SCHEDULED'
+        post_body['lifecycleState']       = 'SCHEDULED'
         post_body['scheduledPublishTime'] = int(scheduled_ms)
     else:
         post_body['lifecycleState'] = 'PUBLISHED'
@@ -758,10 +779,16 @@ def linkedin_do_post(request, post_id):
         result   = _li_fetch('https://api.linkedin.com/rest/posts',
                              post_token, method='POST', body=post_body, version='202404')
         post_urn = result.get('id', '') if isinstance(result, dict) else ''
-        new_status = 'Scheduled' if post_body['lifecycleState'] == 'SCHEDULED' else 'Posted'
+        is_sched  = post_body['lifecycleState'] == 'SCHEDULED'
+        new_status = 'Scheduled' if is_sched else 'Posted'
         with connection.cursor() as c:
-            c.execute("UPDATE planner_posts SET status=%s, in_pipeline=1 WHERE id=%s",
-                      [new_status, post_id])
-        return JsonResponse({'ok': True, 'post_urn': post_urn, 'scheduled': post_body['lifecycleState'] == 'SCHEDULED'})
+            try:
+                c.execute("ALTER TABLE planner_posts ADD COLUMN linkedin_posted TINYINT(1) NOT NULL DEFAULT 0")
+            except Exception:
+                pass
+            c.execute("""UPDATE planner_posts
+                         SET status=%s, in_pipeline=1, linkedin_posted=1
+                         WHERE id=%s""", [new_status, post_id])
+        return JsonResponse({'ok': True, 'post_urn': post_urn, 'scheduled': is_sched})
     except Exception as e:
         return JsonResponse({'ok': False, 'error': str(e)}, status=500)

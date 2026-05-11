@@ -88,6 +88,33 @@
     <button type="submit" class="btn-danger">Verbindung trennen</button>
   </form>
 
+  <!-- Manual org entry (needed when r_organization_social scope not available) -->
+  <div style="margin-top:1.25rem;padding-top:1rem;border-top:0.5px solid #f0f0f0">
+    <div style="font-size:13px;font-weight:500;color:#444;margin-bottom:6px">🏢 Unternehmensseite manuell eintragen</div>
+    <div style="font-size:12px;color:#888;margin-bottom:10px">
+      LinkedIn-Organisations-ID und Name eintragen (z.B. Octovis).
+      Die ID findest du in der URL deiner LinkedIn-Unternehmensseite:<br>
+      <code style="font-size:11px">linkedin.com/company/<strong style="color:#c7254e">&lt;ID&gt;</strong>/admin/</code>
+    </div>
+    {% if request.GET.org_saved %}
+    <div style="background:#E1F5EE;color:#0F6E56;padding:8px 12px;border-radius:6px;font-size:12px;margin-bottom:10px">✅ Unternehmensseite gespeichert!</div>
+    {% endif %}
+    <form method="post" style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end">
+      {% csrf_token %}
+      <div style="display:flex;flex-direction:column;gap:3px">
+        <label style="font-size:11px;color:#888">Organisations-ID (Zahl)</label>
+        <input type="text" name="org_id" value="{{ token.org_id|default:'' }}" placeholder="z.B. 12345678"
+               style="font-size:13px;padding:5px 9px;border:0.5px solid #ced4da;border-radius:4px;width:160px">
+      </div>
+      <div style="display:flex;flex-direction:column;gap:3px">
+        <label style="font-size:11px;color:#888">Name der Seite</label>
+        <input type="text" name="org_name" value="{{ token.org_name|default:'' }}" placeholder="z.B. Octovis"
+               style="font-size:13px;padding:5px 9px;border:0.5px solid #ced4da;border-radius:4px;width:160px">
+      </div>
+      <button type="submit" class="btn-li" style="padding:7px 16px;font-size:13px">Speichern</button>
+    </form>
+  </div>
+
   {% elif creds_ok %}
   <!-- Credentials vorhanden, noch nicht verbunden -->
   <p style="font-size:13px;color:#555;margin:0 0 1rem">Verbinde dein LinkedIn-Konto um Posts direkt zu veröffentlichen.</p>
