@@ -8,6 +8,7 @@ import os
 import secrets
 import urllib.parse
 import urllib.request
+import urllib.error
 from django.conf import settings
 
 
@@ -566,9 +567,13 @@ def _li_fetch(url, token, method='GET', body=None, version=None):
         req.data = json.dumps(body).encode('utf-8')
     else:
         req.method = method
-    with urllib.request.urlopen(req) as resp:
-        raw = resp.read()
-        return json.loads(raw.decode('utf-8')) if raw.strip() else {}
+    try:
+        with urllib.request.urlopen(req) as resp:
+            raw = resp.read()
+            return json.loads(raw.decode('utf-8')) if raw.strip() else {}
+    except urllib.error.HTTPError as e:
+        body = e.read().decode('utf-8', errors='replace')
+        raise Exception(f"HTTP {e.code} {e.reason}: {body}")
 
 
 def _superuser_only(view_func):
