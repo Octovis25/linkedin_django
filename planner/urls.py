@@ -16,4 +16,9 @@ urlpatterns = [
     path('api/idea/', views.api_idea, name='api_idea'),
     path('api/image/<int:post_id>/', views.api_image, name='api_image'),
     path('image/<int:post_id>/', views.planner_image, name='planner_image'),
-   
+    path('api-connect/', views.api_connect_view, name='api_connect'),
+    path('linkedin/auth/', views.linkedin_auth_start, name='linkedin_auth_start'),
+    path('linkedin/callback/', views.linkedin_auth_callback, name='linkedin_auth_callback'),
+    path('linkedin/disconnect/', views.linkedin_disconnect, name='linkedin_disconnect'),
+    path('linkedin/post/<int:post_id>/', views.linkedin_do_post, name='linkedin_do_post'),
+]
