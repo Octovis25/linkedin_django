@@ -490,7 +490,7 @@ def api_image(request, post_id):
 LINKEDIN_AUTH_URL  = 'https://www.linkedin.com/oauth/v2/authorization'
 LINKEDIN_TOKEN_URL = 'https://www.linkedin.com/oauth/v2/accessToken'
 LINKEDIN_API_BASE  = 'https://api.linkedin.com/v2'
-LINKEDIN_SCOPES    = 'openid profile w_member_social'
+LINKEDIN_SCOPES    = 'openid profile w_member_social w_organization_social'
 
 
 def _li_credentials_ok():
@@ -784,19 +784,15 @@ def linkedin_do_post(request, post_id):
     if image_urn:
         post_body['content'] = {'media': {'id': image_urn}}
 
-    now_ms = int(_time.time() * 1000)
-    if scheduled_ms and int(scheduled_ms) > now_ms + 600_000:  # at least 10 min in future
-        post_body['lifecycleState']       = 'SCHEDULED'
-        post_body['scheduledPublishTime'] = int(scheduled_ms)
-    else:
-        post_body['lifecycleState'] = 'PUBLISHED'
+    # LinkedIn Posts API v202604 only supports lifecycleState=PUBLISHED on creation.
+    # Scheduling via the API is not available in this version.
+    post_body['lifecycleState'] = 'PUBLISHED'
 
     try:
         result   = _li_fetch('https://api.linkedin.com/rest/posts',
                              post_token, method='POST', body=post_body, version='202604')
         post_urn = result.get('id', '') if isinstance(result, dict) else ''
-        is_sched  = post_body['lifecycleState'] == 'SCHEDULED'
-        new_status = 'Scheduled' if is_sched else 'Posted'
+        new_status = 'Posted'
         with connection.cursor() as c:
             try:
                 c.execute("ALTER TABLE planner_posts ADD COLUMN linkedin_posted TINYINT(1) NOT NULL DEFAULT 0")
@@ -805,6 +801,6 @@ def linkedin_do_post(request, post_id):
             c.execute("""UPDATE planner_posts
                          SET status=%s, in_pipeline=1, linkedin_posted=1
                          WHERE id=%s""", [new_status, post_id])
-        return JsonResponse({'ok': True, 'post_urn': post_urn, 'scheduled': is_sched})
+        return JsonResponse({'ok': True, 'post_urn': post_urn, 'scheduled': False})
     except Exception as e:
         return JsonResponse({'ok': False, 'error': str(e)}, status=500)
