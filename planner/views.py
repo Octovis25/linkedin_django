@@ -555,9 +555,12 @@ def _li_fetch(url, token, method='GET', body=None, version=None):
     req = urllib.request.Request(url)
     req.add_header('Authorization', f'Bearer {token}')
     req.add_header('Content-Type', 'application/json')
-    req.add_header('X-Restli-Protocol-Version', '2.0.0')
     if version:
+        # New versioned REST API — no Restli header
         req.add_header('LinkedIn-Version', version)
+    else:
+        # Legacy Restli API (/v2/)
+        req.add_header('X-Restli-Protocol-Version', '2.0.0')
     if body:
         req.method = method if method != 'GET' else 'POST'
         req.data = json.dumps(body).encode('utf-8')
