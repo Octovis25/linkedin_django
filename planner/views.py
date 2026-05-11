@@ -592,6 +592,10 @@ def api_connect_view(request):
     if request.method == 'POST' and 'org_id' in request.POST:
         org_id_m   = request.POST.get('org_id',   '').strip()
         org_name_m = request.POST.get('org_name', '').strip()
+        # Extract only the numeric part (handle full URLs like linkedin.com/company/12345/admin/)
+        import re as _re
+        m = _re.search(r'(\d{5,})', org_id_m)
+        org_id_m = m.group(1) if m else org_id_m
         if org_id_m:
             with connection.cursor() as c:
                 try:
@@ -730,7 +734,11 @@ def linkedin_do_post(request, post_id):
     scheduled_ms  = data.get('scheduled_ms')   # Unix timestamp in ms or None
     post_token    = token['access_token']
     if target == 'org' and token.get('org_id'):
-        author = f"urn:li:organization:{token['org_id']}"
+        import re as _re2
+        _oid = token['org_id']
+        _m = _re2.search(r'(\d{5,})', str(_oid))
+        _oid_clean = _m.group(1) if _m else _oid
+        author = f"urn:li:organization:{_oid_clean}"
     else:
         author = f"urn:li:person:{token['person_id']}"
 
