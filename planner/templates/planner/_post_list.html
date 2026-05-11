@@ -49,6 +49,7 @@
       <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:4px">
         <span style="font-size:11px;padding:1px 8px;border-radius:99px;background:{{ p.bg }};color:{{ p.fg }}">{{ p.topic_name }}</span>
         {% if p.planned_date %}<span style="font-size:11px;color:#6c757d">📅 {{ p.planned_date|date:"d.m.Y" }}</span>{% endif %}
+        {% if p.linkedin_posted %}<span style="font-size:11px;padding:1px 7px;border-radius:99px;background:#0077B5;color:#fff;font-weight:600">in ✓</span>{% endif %}
       </div>
       <p style="font-size:13px;color:#212529;margin:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ p.title|default:p.content|truncatechars:80 }}</p>
       {% if p.comment %}<p style="font-size:12px;color:#6c757d;margin:3px 0 0;font-style:italic">{{ p.comment|truncatechars:60 }}</p>{% endif %}
@@ -315,22 +316,40 @@ function liOpenPost(id) {
   // Default: OJ posts → personal profile, others → org page
   const targetEl = document.getElementById('li-target');
   if (targetEl) {
-    const hasOrg = targetEl.options.length > 1;
-    targetEl.value = (p.is_oj || !hasOrg) ? 'person' : 'org';
+    const hasOrg = Array.from(targetEl.options).some(o => o.value === 'org');
+    const hasPerson = Array.from(targetEl.options).some(o => o.value === 'person');
+    const want = (p.is_oj || !hasOrg) ? 'person' : 'org';
+    targetEl.value = want;
+    // Fallback: if desired option doesn't exist, pick the first available
+    if (!targetEl.value && targetEl.options.length > 0) {
+      targetEl.value = targetEl.options[0].value;
+    }
   }
   document.getElementById('li-include-img').checked = !!p.image;
   document.getElementById('li-include-img-row').style.display = p.image ? 'flex' : 'none';
-  // Scheduling: show if post has a future date
+  // Scheduling: always show with datetime-local input
   const schedRow = document.getElementById('li-schedule-row');
   const schedCheck = document.getElementById('li-schedule-check');
-  if (schedRow && p.date) {
-    const postDate = new Date(p.date + 'T09:00:00');
-    const isFuture = postDate > new Date(Date.now() + 600000);
-    schedRow.style.display = isFuture ? 'flex' : 'none';
-    if (schedCheck) schedCheck.checked = isFuture;
-    document.getElementById('li-schedule-time').textContent = isFuture ? postDate.toLocaleDateString('de-DE', {day:'2-digit',month:'2-digit',year:'numeric'}) + ' 09:00' : '';
-  } else if (schedRow) {
-    schedRow.style.display = 'none';
+  const schedDt = document.getElementById('li-schedule-dt');
+  if (schedRow && schedDt) {
+    // Compute default datetime: use post's planned_date at 09:00 if in the future, else tomorrow 09:00
+    let defaultDt = '';
+    if (p.date) {
+      const postDate = new Date(p.date + 'T09:00:00');
+      if (postDate > new Date(Date.now() + 600000)) {
+        defaultDt = p.date + 'T09:00';
+      }
+    }
+    if (!defaultDt) {
+      const tom = new Date(Date.now() + 86400000);
+      const y = tom.getFullYear();
+      const mo = String(tom.getMonth()+1).padStart(2,'0');
+      const d = String(tom.getDate()).padStart(2,'0');
+      defaultDt = `${y}-${mo}-${d}T09:00`;
+    }
+    schedDt.value = defaultDt;
+    schedRow.style.display = 'flex';
+    if (schedCheck) schedCheck.checked = true;
   }
   document.getElementById('li-post-result').style.display = 'none';
   document.getElementById('li-modal-bg').style.display = 'flex';
@@ -355,11 +374,13 @@ async function liDoPost() {
   btn.textContent = isScheduled ? 'Scheduling…' : 'Posting…';
   const res = document.getElementById('li-post-result');
   res.style.display = 'none';
-  // Calculate scheduled_ms if scheduling
+  // Calculate scheduled_ms from datetime-local input
   let scheduled_ms = null;
-  if (isScheduled && p && p.date) {
-    const d = new Date(p.date + 'T09:00:00');
-    scheduled_ms = d.getTime();
+  if (isScheduled) {
+    const dtVal = document.getElementById('li-schedule-dt') && document.getElementById('li-schedule-dt').value;
+    if (dtVal) {
+      scheduled_ms = new Date(dtVal).getTime();
+    }
   }
   try {
     const r = await fetch(`/planner/linkedin/post/${liCurrentId}/`, {
@@ -411,7 +432,7 @@ document.getElementById('li-modal-bg').addEventListener('click', function(e) {
     </div>
     <div style="margin-bottom:10px;display:flex;gap:8px">
       <select id="li-target" style="font-size:13px;padding:5px 8px;border:0.5px solid #ced4da;border-radius:4px;flex:1">
-        <option value="person">Persönliches Profil</option>
+        {% if tab != 'scheduled' %}<option value="person">Persönliches Profil</option>{% endif %}
         {% if li_org %}<option value="org">{{ li_org }} (Seite)</option>{% endif %}
       </select>
     </div>
@@ -421,9 +442,10 @@ document.getElementById('li-modal-bg').addEventListener('click', function(e) {
       <input type="checkbox" id="li-include-img" checked style="cursor:pointer">
       <label for="li-include-img" style="cursor:pointer;color:#444">Bild mitposten</label>
     </div>
-    <div id="li-schedule-row" style="display:none;align-items:center;gap:8px;margin-bottom:12px;font-size:13px">
-      <input type="checkbox" id="li-schedule-check" checked style="cursor:pointer">
-      <label for="li-schedule-check" style="cursor:pointer;color:#444">📅 Auf LinkedIn planen für <strong id="li-schedule-time"></strong></label>
+    <div id="li-schedule-row" style="display:flex;align-items:center;gap:8px;margin-bottom:12px;font-size:13px;flex-wrap:wrap">
+      <input type="checkbox" id="li-schedule-check" style="cursor:pointer">
+      <label for="li-schedule-check" style="cursor:pointer;color:#444">📅 Auf LinkedIn planen:</label>
+      <input type="datetime-local" id="li-schedule-dt" style="font-size:13px;padding:4px 8px;border:0.5px solid #ced4da;border-radius:4px">
     </div>
     <div id="li-post-result" style="display:none;padding:8px 12px;border-radius:6px;font-size:13px;margin-bottom:10px"></div>
     <div style="display:flex;justify-content:flex-end;gap:8px">
