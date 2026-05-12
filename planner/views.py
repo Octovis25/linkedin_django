@@ -802,10 +802,10 @@ def linkedin_do_post(request, post_id):
     # ── Make.com webhook route: org posts go via Make webhook ──
     if target == 'org' and token.get('make_webhook_url'):
         try:
-            payload = json.dumps({'text': text}).encode('utf-8')
+            payload = urllib.parse.urlencode({'text': text}).encode('utf-8')
             wh_req = urllib.request.Request(
                 token['make_webhook_url'], data=payload, method='POST')
-            wh_req.add_header('Content-Type', 'application/json')
+            wh_req.add_header('Content-Type', 'application/x-www-form-urlencoded')
             with urllib.request.urlopen(wh_req, timeout=30) as wh_resp:
                 wh_resp.read()
             with connection.cursor() as c:
