@@ -309,10 +309,13 @@ function liOpenPost(id) {
   const p = PE_POSTS.find(x => x.id == id);
   if (!p) return;
   liCurrentId = id;
-  // Strip HTML tags for plain LinkedIn text
+  // Convert HTML to plain text preserving line breaks
+  let html = p.content || '';
+  // Replace block-level endings with double newlines, <br> with single newline
+  html = html.replace(/<\/p>/gi, '\n\n').replace(/<br\s*\/?>/gi, '\n');
   const tmp = document.createElement('div');
-  tmp.innerHTML = p.content || '';
-  const plain = (tmp.textContent || tmp.innerText || '').trim();
+  tmp.innerHTML = html;
+  const plain = (tmp.textContent || tmp.innerText || '').replace(/\n{3,}/g, '\n\n').trim();
   document.getElementById('li-post-text').value = plain;
   document.getElementById('li-char-count').textContent = plain.length;
   // Default: OJ posts → personal profile, others → org page
