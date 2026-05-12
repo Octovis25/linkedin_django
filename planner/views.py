@@ -806,7 +806,7 @@ def linkedin_do_post(request, post_id):
             wh_req = urllib.request.Request(
                 token['make_webhook_url'], data=payload, method='POST')
             wh_req.add_header('Content-Type', 'application/json')
-            with urllib.request.urlopen(wh_req, timeout=15) as wh_resp:
+            with urllib.request.urlopen(wh_req, timeout=30) as wh_resp:
                 wh_resp.read()
             with connection.cursor() as c:
                 try:
