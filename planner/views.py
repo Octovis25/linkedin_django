@@ -500,6 +500,7 @@ def _li_credentials_ok():
 
 def _li_get_superuser_token():
     """Get the LinkedIn token stored by any superuser (shared for all users to post)."""
+    _li_ensure_table()
     with connection.cursor() as c:
         try:
             c.execute("""SELECT t.access_token, t.token_type, t.expires_at,
