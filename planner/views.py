@@ -504,7 +504,8 @@ def _li_get_superuser_token():
         try:
             c.execute("""SELECT t.access_token, t.token_type, t.expires_at,
                                 t.linkedin_person_id, t.linkedin_name, t.linkedin_picture,
-                                t.org_id, t.org_name
+                                t.org_id, t.org_name,
+                                t.buffer_token, t.buffer_profile_id, t.buffer_profile_name
                          FROM planner_linkedin_tokens t
                          JOIN auth_user u ON t.user_id = u.id
                          WHERE u.is_superuser = 1 LIMIT 1""")
@@ -515,7 +516,8 @@ def _li_get_superuser_token():
         return None
     return {'access_token': row[0], 'token_type': row[1], 'expires_at': row[2],
             'person_id': row[3], 'name': row[4], 'picture': row[5],
-            'org_id': row[6], 'org_name': row[7]}
+            'org_id': row[6], 'org_name': row[7],
+            'buffer_token': row[8], 'buffer_profile_id': row[9], 'buffer_profile_name': row[10]}
 
 
 def _li_get_token(request):
@@ -523,7 +525,8 @@ def _li_get_token(request):
         try:
             c.execute("""SELECT access_token, token_type, expires_at,
                                 linkedin_person_id, linkedin_name, linkedin_picture,
-                                org_id, org_name
+                                org_id, org_name,
+                                buffer_token, buffer_profile_id, buffer_profile_name
                          FROM planner_linkedin_tokens WHERE user_id=%s""",
                       [request.user.id])
             row = c.fetchone()
@@ -533,7 +536,8 @@ def _li_get_token(request):
         return None
     return {'access_token': row[0], 'token_type': row[1], 'expires_at': row[2],
             'person_id': row[3], 'name': row[4], 'picture': row[5],
-            'org_id': row[6], 'org_name': row[7]}
+            'org_id': row[6], 'org_name': row[7],
+            'buffer_token': row[8], 'buffer_profile_id': row[9], 'buffer_profile_name': row[10]}
 
 
 def _li_ensure_table():
@@ -548,8 +552,19 @@ def _li_ensure_table():
             linkedin_name VARCHAR(200),
             linkedin_picture TEXT,
             org_id VARCHAR(100),
-            org_name VARCHAR(200)
+            org_name VARCHAR(200),
+            buffer_token TEXT,
+            buffer_profile_id VARCHAR(100),
+            buffer_profile_name VARCHAR(200)
         )""")
+        # Migrate existing tables — silently skip if columns already exist
+        for col, defn in [('buffer_token', 'TEXT'),
+                          ('buffer_profile_id', 'VARCHAR(100)'),
+                          ('buffer_profile_name', 'VARCHAR(200)')]:
+            try:
+                c.execute(f"ALTER TABLE planner_linkedin_tokens ADD COLUMN {col} {defn}")
+            except Exception:
+                pass
 
 
 def _li_fetch(url, token, method='GET', body=None, version=None):
@@ -576,6 +591,26 @@ def _li_fetch(url, token, method='GET', body=None, version=None):
         raise Exception(f"HTTP {e.code} {e.reason}: {body}")
 
 
+def _buffer_post(buf_token, profile_id, text):
+    """Post text to Buffer API which publishes to a LinkedIn company page."""
+    data = urllib.parse.urlencode([
+        ('access_token', buf_token),
+        ('profile_ids[]', profile_id),
+        ('text', text),
+        ('now', 'true'),
+    ]).encode('utf-8')
+    req = urllib.request.Request(
+        'https://api.bufferapp.com/1/updates/create.json',
+        data=data, method='POST')
+    req.add_header('Content-Type', 'application/x-www-form-urlencoded')
+    try:
+        with urllib.request.urlopen(req) as resp:
+            return json.loads(resp.read().decode('utf-8'))
+    except urllib.error.HTTPError as e:
+        body = e.read().decode('utf-8', errors='replace')
+        raise Exception(f"Buffer HTTP {e.code}: {body}")
+
+
 def _superuser_only(view_func):
     @login_required
     def wrapped(request, *args, **kwargs):
@@ -588,6 +623,20 @@ def _superuser_only(view_func):
 @_superuser_only
 def api_connect_view(request):
     _li_ensure_table()
+    # Handle Buffer token/profile save
+    if request.method == 'POST' and 'buffer_token' in request.POST:
+        buf_tok  = request.POST.get('buffer_token', '').strip()
+        buf_pid  = request.POST.get('buffer_profile_id', '').strip()
+        buf_pname = request.POST.get('buffer_profile_name', '').strip()
+        with connection.cursor() as c:
+            try:
+                c.execute("""UPDATE planner_linkedin_tokens
+                             SET buffer_token=%s, buffer_profile_id=%s, buffer_profile_name=%s
+                             WHERE user_id=%s""",
+                          [buf_tok or None, buf_pid or None, buf_pname or None, request.user.id])
+            except Exception as ex:
+                print('Buffer save error:', ex)
+        return redirect('/planner/api-connect/?buf_saved=1')
     # Handle manual org save
     if request.method == 'POST' and 'org_id' in request.POST:
         org_id_m   = request.POST.get('org_id',   '').strip()
@@ -733,6 +782,21 @@ def linkedin_do_post(request, post_id):
     include_img   = data.get('include_image', False)
     scheduled_ms  = data.get('scheduled_ms')   # Unix timestamp in ms or None
     post_token    = token['access_token']
+
+    # ── Buffer route: org posts go via Buffer (has w_organization_social) ──
+    if target == 'org' and token.get('buffer_token') and token.get('buffer_profile_id'):
+        try:
+            _buffer_post(token['buffer_token'], token['buffer_profile_id'], text)
+            with connection.cursor() as c:
+                try:
+                    c.execute("ALTER TABLE planner_posts ADD COLUMN linkedin_posted TINYINT(1) NOT NULL DEFAULT 0")
+                except Exception:
+                    pass
+                c.execute("UPDATE planner_posts SET status='Posted', in_pipeline=1, linkedin_posted=1 WHERE id=%s", [post_id])
+            return JsonResponse({'ok': True, 'via': 'buffer', 'scheduled': False})
+        except Exception as e:
+            return JsonResponse({'ok': False, 'error': str(e)}, status=500)
+
     if target == 'org' and token.get('org_id'):
         import re as _re2
         _oid = token['org_id']
@@ -804,3 +868,33 @@ def linkedin_do_post(request, post_id):
         return JsonResponse({'ok': True, 'post_urn': post_urn, 'scheduled': False})
     except Exception as e:
         return JsonResponse({'ok': False, 'error': str(e)}, status=500)
+
+
+@login_required
+def api_buffer_profiles(request):
+    """Fetch LinkedIn profiles connected to Buffer so the user can select the right one."""
+    if request.method != 'POST':
+        return JsonResponse({'error': 'POST only'}, status=405)
+    data = json.loads(request.body)
+    buf_token = data.get('token', '').strip()
+    if not buf_token:
+        return JsonResponse({'error': 'Kein Token angegeben'}, status=400)
+    try:
+        url = 'https://api.bufferapp.com/1/profiles.json?access_token=' + urllib.parse.quote(buf_token, safe='')
+        req = urllib.request.Request(url)
+        with urllib.request.urlopen(req) as resp:
+            profiles = json.loads(resp.read().decode('utf-8'))
+        li_profiles = [
+            {
+                'id':   p['_id'],
+                'name': p.get('formatted_username') or p.get('service_username') or p['_id'],
+                'type': p.get('formatted_service') or p.get('service_type', ''),
+            }
+            for p in profiles if p.get('service') == 'linkedin'
+        ]
+        return JsonResponse({'profiles': li_profiles})
+    except urllib.error.HTTPError as e:
+        body = e.read().decode('utf-8', errors='replace')
+        return JsonResponse({'error': f'Buffer API Fehler: {body}'}, status=400)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)

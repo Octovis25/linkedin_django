@@ -21,4 +21,5 @@ urlpatterns = [
     path('linkedin/callback/', views.linkedin_auth_callback, name='linkedin_auth_callback'),
     path('linkedin/disconnect/', views.linkedin_disconnect, name='linkedin_disconnect'),
     path('linkedin/post/<int:post_id>/', views.linkedin_do_post, name='linkedin_do_post'),
+    path('api/buffer/profiles/', views.api_buffer_profiles, name='api_buffer_profiles'),
 ]

@@ -168,6 +168,65 @@
   {% endif %}
 </div>
 
+<!-- ── Buffer Integration ── -->
+<div class="ac-card">
+  <h2>
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="#168DE2"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 14H9V8h2v8zm4 0h-2V8h2v8z"/></svg>
+    Buffer
+    {% if token and token.buffer_profile_id %}
+    <span class="ac-badge-on">● {{ token.buffer_profile_name|default:"Verbunden" }}</span>
+    {% else %}
+    <span class="ac-badge-off">○ Nicht konfiguriert</span>
+    {% endif %}
+  </h2>
+  <p style="font-size:12px;color:#6c757d;margin:0 0 1rem">
+    Buffer ermöglicht das Posten auf die <strong>Octovis LinkedIn-Seite</strong> ohne zusätzliche LinkedIn API-Genehmigung.
+    Den Access Token findest du in Buffer unter <em>Settings → API Access</em> oder im Buffer Developer Portal.
+  </p>
+  {% if request.GET.buf_saved %}
+  <div style="background:#E1F5EE;color:#0F6E56;padding:8px 12px;border-radius:6px;font-size:12px;margin-bottom:12px">✅ Buffer-Einstellungen gespeichert!</div>
+  {% endif %}
+  <form method="post" id="buf-form">
+    {% csrf_token %}
+    <input type="hidden" name="buffer_token" id="buf-token-hidden" value="{{ token.buffer_token|default:'' }}">
+    <input type="hidden" name="buffer_profile_id" id="buf-pid-hidden" value="{{ token.buffer_profile_id|default:'' }}">
+    <input type="hidden" name="buffer_profile_name" id="buf-pname-hidden" value="{{ token.buffer_profile_name|default:'' }}">
+    <div style="display:flex;flex-direction:column;gap:10px">
+      <div>
+        <label style="font-size:11px;color:#888;display:block;margin-bottom:3px">Buffer Access Token</label>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <input type="text" id="buf-token-input" value="{{ token.buffer_token|default:'' }}"
+                 placeholder="Einfügen …"
+                 style="font-size:13px;padding:5px 9px;border:0.5px solid #ced4da;border-radius:4px;flex:1;min-width:200px">
+          <button type="button" onclick="loadBufferProfiles()"
+                  style="padding:5px 14px;font-size:13px;border-radius:4px;background:#168DE2;color:#fff;border:none;cursor:pointer;font-weight:500">
+            Profile laden
+          </button>
+        </div>
+      </div>
+      <div id="buf-profiles-wrap" style="{% if token.buffer_profile_id %}display:block{% else %}display:none{% endif %}">
+        <label style="font-size:11px;color:#888;display:block;margin-bottom:3px">LinkedIn-Seite in Buffer</label>
+        <select id="buf-profile-select"
+                style="font-size:13px;padding:5px 9px;border:0.5px solid #ced4da;border-radius:4px;min-width:260px"
+                onchange="onProfileSelect()">
+          {% if token.buffer_profile_id %}
+          <option value="{{ token.buffer_profile_id }}" data-name="{{ token.buffer_profile_name|default:'' }}" selected>
+            {{ token.buffer_profile_name|default:token.buffer_profile_id }}
+          </option>
+          {% else %}
+          <option value="">— Profile zuerst laden —</option>
+          {% endif %}
+        </select>
+      </div>
+      <div id="buf-err" style="display:none;color:#dc3545;font-size:12px"></div>
+      <div>
+        <button type="submit" onclick="prepareBufferSubmit()"
+                class="btn-li" style="padding:7px 16px;font-size:13px">Speichern</button>
+      </div>
+    </div>
+  </form>
+</div>
+
 <!-- ── Posts posten ── -->
 {% if token %}
 <div class="ac-card">
@@ -311,5 +370,51 @@ async function doPost() {
 document.getElementById('post-modal-bg').addEventListener('click', e => {
   if (e.target === document.getElementById('post-modal-bg')) closePostModal();
 });
+
+// ── Buffer ────────────────────────────────────────────────────────────
+async function loadBufferProfiles() {
+  const token = document.getElementById('buf-token-input').value.trim();
+  const errEl = document.getElementById('buf-err');
+  errEl.style.display = 'none';
+  if (!token) { errEl.textContent = 'Bitte erst den Token eintragen.'; errEl.style.display='block'; return; }
+  try {
+    const res = await fetch('/planner/api/buffer/profiles/', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json', 'X-CSRFToken': AC_CSRF},
+      body: JSON.stringify({token}),
+    }).then(r => r.json());
+    if (res.error) { errEl.textContent = '❌ ' + res.error; errEl.style.display='block'; return; }
+    const sel = document.getElementById('buf-profile-select');
+    sel.innerHTML = '';
+    if (!res.profiles || res.profiles.length === 0) {
+      errEl.textContent = 'Keine LinkedIn-Profile in Buffer gefunden. Stelle sicher, dass die LinkedIn-Seite in Buffer verbunden ist.';
+      errEl.style.display = 'block';
+      return;
+    }
+    res.profiles.forEach(p => {
+      const opt = document.createElement('option');
+      opt.value = p.id;
+      opt.dataset.name = p.name;
+      opt.textContent = p.name + (p.type ? ' (' + p.type + ')' : '');
+      sel.appendChild(opt);
+    });
+    document.getElementById('buf-profiles-wrap').style.display = 'block';
+    onProfileSelect();
+  } catch(e) {
+    errEl.textContent = 'Netzwerkfehler: ' + e.message;
+    errEl.style.display = 'block';
+  }
+}
+
+function onProfileSelect() {
+  const sel = document.getElementById('buf-profile-select');
+  const opt = sel.options[sel.selectedIndex];
+  document.getElementById('buf-pid-hidden').value = opt ? opt.value : '';
+  document.getElementById('buf-pname-hidden').value = opt ? (opt.dataset.name || opt.textContent) : '';
+}
+
+function prepareBufferSubmit() {
+  document.getElementById('buf-token-hidden').value = document.getElementById('buf-token-input').value.trim();
+}
 </script>
 {% endblock %}
