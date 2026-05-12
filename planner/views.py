@@ -802,19 +802,46 @@ def linkedin_do_post(request, post_id):
     # ── Make.com webhook route: org posts go via Make webhook ──
     if target == 'org' and token.get('make_webhook_url'):
         try:
-            payload = urllib.parse.urlencode({'text': text}).encode('utf-8')
-            wh_req = urllib.request.Request(
-                token['make_webhook_url'], data=payload, method='POST')
-            wh_req.add_header('Content-Type', 'application/x-www-form-urlencoded')
-            with urllib.request.urlopen(wh_req, timeout=30) as wh_resp:
-                wh_resp.read()
+            import requests as _requests
+            wh_url = token['make_webhook_url']
+            # Check if post has an image to send
+            img_content, img_content_type, img_filename = None, None, None
+            if include_img:
+                with connection.cursor() as c:
+                    c.execute("SELECT image FROM planner_posts WHERE id=%s", [post_id])
+                    row = c.fetchone()
+                if row and row[0]:
+                    nc_path = row[0]
+                    try:
+                        from posts_posted.nc_storage import download_image_from_nextcloud
+                        img_content, img_content_type = download_image_from_nextcloud(nc_path)
+                        img_filename = nc_path.split('/')[-1] if nc_path else 'image.jpg'
+                    except Exception as img_err:
+                        print(f"Image download error: {img_err}")
+            if img_content:
+                # Multipart: text field + image file
+                resp = _requests.post(
+                    wh_url,
+                    data={'text': text},
+                    files={'image': (img_filename, img_content, img_content_type or 'image/jpeg')},
+                    timeout=30
+                )
+            else:
+                # Text-only: form-encoded
+                resp = _requests.post(
+                    wh_url,
+                    data={'text': text},
+                    timeout=30
+                )
+            if resp.status_code >= 400:
+                return JsonResponse({'ok': False, 'error': f'Make webhook HTTP {resp.status_code}'}, status=500)
             with connection.cursor() as c:
                 try:
                     c.execute("ALTER TABLE planner_posts ADD COLUMN linkedin_posted TINYINT(1) NOT NULL DEFAULT 0")
                 except Exception:
                     pass
                 c.execute("UPDATE planner_posts SET status='Posted', in_pipeline=1, linkedin_posted=1 WHERE id=%s", [post_id])
-            return JsonResponse({'ok': True, 'via': 'make', 'scheduled': False})
+            return JsonResponse({'ok': True, 'via': 'make', 'has_image': bool(img_content), 'scheduled': False})
         except Exception as e:
             return JsonResponse({'ok': False, 'error': str(e)}, status=500)
 
