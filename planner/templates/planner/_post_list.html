@@ -51,7 +51,7 @@
         {% if p.planned_date %}<span style="font-size:11px;color:#6c757d">📅 {{ p.planned_date|date:"d.m.Y" }}</span>{% endif %}
         {% if p.linkedin_posted %}<span style="font-size:11px;padding:1px 7px;border-radius:99px;background:#0077B5;color:#fff;font-weight:600">in ✓</span>{% endif %}
       </div>
-      <p style="font-size:13px;color:#212529;margin:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ p.title|default:p.content|truncatechars:80 }}</p>
+      <p style="font-size:13px;color:#212529;margin:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ p.title|default:p.content|striptags|truncatechars:80 }}</p>
       {% if p.comment %}<p style="font-size:12px;color:#6c757d;margin:3px 0 0;font-style:italic">{{ p.comment|truncatechars:60 }}</p>{% endif %}
     </div>
     <div style="display:flex;gap:6px;flex-shrink:0;align-items:center">
@@ -166,6 +166,35 @@ function peApi(data) {
 }
 
 /* ── Editor ── */
+// Paste handler: strip all classes/styles, keep only basic formatting
+document.getElementById('pe-content').addEventListener('paste', function(e) {
+  e.preventDefault();
+  let text = '';
+  if (e.clipboardData) {
+    // Try to get HTML first, then strip unwanted attributes
+    const html = e.clipboardData.getData('text/html');
+    if (html) {
+      const tmp = document.createElement('div');
+      tmp.innerHTML = html;
+      // Remove all class and style attributes, keep only b/i/u/br/p/strong/em
+      tmp.querySelectorAll('*').forEach(el => {
+        el.removeAttribute('class');
+        el.removeAttribute('style');
+        el.removeAttribute('data-start');
+        el.removeAttribute('data-end');
+        el.removeAttribute('id');
+      });
+      text = tmp.innerHTML;
+    } else {
+      // Plain text fallback — convert newlines to <br>
+      text = e.clipboardData.getData('text/plain')
+        .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+        .replace(/\n/g,'<br>');
+    }
+  }
+  document.execCommand('insertHTML', false, text);
+});
+
 function peFmt(cmd) {
   document.getElementById('pe-content').focus();
   document.execCommand(cmd, false, null);
