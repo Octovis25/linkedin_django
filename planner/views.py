@@ -505,7 +505,8 @@ def _li_get_superuser_token():
             c.execute("""SELECT t.access_token, t.token_type, t.expires_at,
                                 t.linkedin_person_id, t.linkedin_name, t.linkedin_picture,
                                 t.org_id, t.org_name,
-                                t.buffer_token, t.buffer_profile_id, t.buffer_profile_name
+                                t.buffer_token, t.buffer_profile_id, t.buffer_profile_name,
+                                t.make_webhook_url
                          FROM planner_linkedin_tokens t
                          JOIN auth_user u ON t.user_id = u.id
                          WHERE u.is_superuser = 1 LIMIT 1""")
@@ -517,7 +518,8 @@ def _li_get_superuser_token():
     return {'access_token': row[0], 'token_type': row[1], 'expires_at': row[2],
             'person_id': row[3], 'name': row[4], 'picture': row[5],
             'org_id': row[6], 'org_name': row[7],
-            'buffer_token': row[8], 'buffer_profile_id': row[9], 'buffer_profile_name': row[10]}
+            'buffer_token': row[8], 'buffer_profile_id': row[9], 'buffer_profile_name': row[10],
+            'make_webhook_url': row[11]}
 
 
 def _li_get_token(request):
@@ -526,7 +528,8 @@ def _li_get_token(request):
             c.execute("""SELECT access_token, token_type, expires_at,
                                 linkedin_person_id, linkedin_name, linkedin_picture,
                                 org_id, org_name,
-                                buffer_token, buffer_profile_id, buffer_profile_name
+                                buffer_token, buffer_profile_id, buffer_profile_name,
+                                make_webhook_url
                          FROM planner_linkedin_tokens WHERE user_id=%s""",
                       [request.user.id])
             row = c.fetchone()
@@ -537,7 +540,8 @@ def _li_get_token(request):
     return {'access_token': row[0], 'token_type': row[1], 'expires_at': row[2],
             'person_id': row[3], 'name': row[4], 'picture': row[5],
             'org_id': row[6], 'org_name': row[7],
-            'buffer_token': row[8], 'buffer_profile_id': row[9], 'buffer_profile_name': row[10]}
+            'buffer_token': row[8], 'buffer_profile_id': row[9], 'buffer_profile_name': row[10],
+            'make_webhook_url': row[11]}
 
 
 def _li_ensure_table():
@@ -560,7 +564,8 @@ def _li_ensure_table():
         # Migrate existing tables — silently skip if columns already exist
         for col, defn in [('buffer_token', 'TEXT'),
                           ('buffer_profile_id', 'VARCHAR(100)'),
-                          ('buffer_profile_name', 'VARCHAR(200)')]:
+                          ('buffer_profile_name', 'VARCHAR(200)'),
+                          ('make_webhook_url', 'TEXT')]:
             try:
                 c.execute(f"ALTER TABLE planner_linkedin_tokens ADD COLUMN {col} {defn}")
             except Exception:
@@ -623,6 +628,16 @@ def _superuser_only(view_func):
 @_superuser_only
 def api_connect_view(request):
     _li_ensure_table()
+    # Handle Make.com webhook URL save
+    if request.method == 'POST' and 'make_webhook_url' in request.POST:
+        wh_url = request.POST.get('make_webhook_url', '').strip()
+        with connection.cursor() as c:
+            try:
+                c.execute("UPDATE planner_linkedin_tokens SET make_webhook_url=%s WHERE user_id=%s",
+                          [wh_url or None, request.user.id])
+            except Exception as ex:
+                print('Make webhook save error:', ex)
+        return redirect('/planner/api-connect/?make_saved=1')
     # Handle Buffer token/profile save
     if request.method == 'POST' and 'buffer_token' in request.POST:
         buf_tok  = request.POST.get('buffer_token', '').strip()
@@ -783,7 +798,26 @@ def linkedin_do_post(request, post_id):
     scheduled_ms  = data.get('scheduled_ms')   # Unix timestamp in ms or None
     post_token    = token['access_token']
 
-    # ── Buffer route: org posts go via Buffer (has w_organization_social) ──
+    # ── Make.com webhook route: org posts go via Make webhook ──
+    if target == 'org' and token.get('make_webhook_url'):
+        try:
+            payload = json.dumps({'text': text}).encode('utf-8')
+            wh_req = urllib.request.Request(
+                token['make_webhook_url'], data=payload, method='POST')
+            wh_req.add_header('Content-Type', 'application/json')
+            with urllib.request.urlopen(wh_req, timeout=15) as wh_resp:
+                wh_resp.read()
+            with connection.cursor() as c:
+                try:
+                    c.execute("ALTER TABLE planner_posts ADD COLUMN linkedin_posted TINYINT(1) NOT NULL DEFAULT 0")
+                except Exception:
+                    pass
+                c.execute("UPDATE planner_posts SET status='Posted', in_pipeline=1, linkedin_posted=1 WHERE id=%s", [post_id])
+            return JsonResponse({'ok': True, 'via': 'make', 'scheduled': False})
+        except Exception as e:
+            return JsonResponse({'ok': False, 'error': str(e)}, status=500)
+
+    # ── Buffer route: fallback if buffer is configured ──
     if target == 'org' and token.get('buffer_token') and token.get('buffer_profile_id'):
         try:
             _buffer_post(token['buffer_token'], token['buffer_profile_id'], text)

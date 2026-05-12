@@ -168,6 +168,41 @@
   {% endif %}
 </div>
 
+<!-- ── Make.com Webhook ── -->
+<div class="ac-card">
+  <h2>
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="#6D00CC"><circle cx="12" cy="12" r="10"/><path d="M8 12l3 3 5-5" stroke="#fff" stroke-width="2" fill="none" stroke-linecap="round"/></svg>
+    Make.com Webhook (Octovis-Seite)
+    {% if token and token.make_webhook_url %}
+    <span class="ac-badge-on">● Konfiguriert</span>
+    {% else %}
+    <span class="ac-badge-off">○ Nicht konfiguriert</span>
+    {% endif %}
+  </h2>
+  <p style="font-size:12px;color:#6c757d;margin:0 0 1rem">
+    Über einen Make.com Webhook können Posts direkt auf der <strong>Octovis LinkedIn-Seite</strong> veröffentlicht werden.
+    Erstelle ein Make-Szenario mit einem Webhook-Trigger und einem LinkedIn "Create an Organization Post" Modul.
+  </p>
+  {% if request.GET.make_saved %}
+  <div style="background:#E1F5EE;color:#0F6E56;padding:8px 12px;border-radius:6px;font-size:12px;margin-bottom:12px">✅ Webhook-URL gespeichert!</div>
+  {% endif %}
+  <form method="post">
+    {% csrf_token %}
+    <div style="display:flex;flex-direction:column;gap:8px">
+      <div>
+        <label style="font-size:11px;color:#888;display:block;margin-bottom:3px">Make.com Webhook-URL</label>
+        <input type="text" name="make_webhook_url"
+               value="{{ token.make_webhook_url|default:'' }}"
+               placeholder="https://hook.eu1.make.com/…"
+               style="font-size:13px;padding:5px 9px;border:0.5px solid #ced4da;border-radius:4px;width:100%;box-sizing:border-box">
+      </div>
+      <div>
+        <button type="submit" class="btn-li" style="padding:7px 16px;font-size:13px">Speichern</button>
+      </div>
+    </div>
+  </form>
+</div>
+
 <!-- ── Buffer Integration ── -->
 <div class="ac-card">
   <h2>
