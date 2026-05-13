@@ -483,6 +483,15 @@ def api_image(request, post_id):
     return JsonResponse({'ok': False}, status=400)
 
 
+def _ensure_scheduled_at_column():
+    """Add post_scheduled_at DATETIME column if it doesn't exist yet."""
+    with connection.cursor() as c:
+        try:
+            c.execute("ALTER TABLE planner_posts ADD COLUMN post_scheduled_at DATETIME NULL DEFAULT NULL")
+        except Exception:
+            pass
+
+
 def _make_image_token(post_id):
     """Generate a signed token for public image access (no auth required)."""
     import hmac as _hmac, hashlib as _hashlib
@@ -713,10 +722,17 @@ def api_connect_view(request):
         ready_posts.append({'id': r[0], 'title': r[1] or '', 'content': r[2] or '',
                             'status': r[3], 'planned_date': r[4], 'has_image': bool(r[5]),
                             'topic_name': r[6] or '', 'bg': bg, 'fg': fg})
+    # Build the trigger URL for Make.com
+    import hmac as _hmac2, hashlib as _hashlib2
+    _secret = (getattr(settings, 'SECRET_KEY', 'fallback'))[:32]
+    _trigger_key = _hmac2.new(_secret.encode(), b'trigger-scheduled', _hashlib2.sha256).hexdigest()[:24]
+    trigger_url = f"https://linkedin-django-wd7a.onrender.com/planner/api/trigger-scheduled/?key={_trigger_key}"
+
     return render(request, 'planner/api_connect.html', {
         'tab': 'api_connect', 'token': token, 'creds_ok': creds_ok,
         'ready_posts': ready_posts,
         'posts_json': _posts_to_json(ready_posts),
+        'trigger_url': trigger_url,
     })
 
 
@@ -830,22 +846,38 @@ def linkedin_do_post(request, post_id):
     if target == 'org' and token.get('make_webhook_url'):
         try:
             import requests as _requests
+            from datetime import datetime as _dt
             wh_url = token['make_webhook_url']
-            # Build payload: text + optional public image URL
+
+            # ── Scheduled for later? Save and return without posting ──
+            if scheduled_ms:
+                scheduled_ts = float(scheduled_ms) / 1000.0
+                if scheduled_ts > _time.time() + 60:
+                    _ensure_scheduled_at_column()
+                    scheduled_at = _dt.utcfromtimestamp(scheduled_ts)
+                    with connection.cursor() as c:
+                        try:
+                            c.execute("ALTER TABLE planner_posts ADD COLUMN linkedin_posted TINYINT(1) NOT NULL DEFAULT 0")
+                        except Exception:
+                            pass
+                        c.execute("""UPDATE planner_posts
+                                     SET content=%s, status='Scheduled', in_pipeline=1,
+                                         post_scheduled_at=%s, linkedin_posted=0
+                                     WHERE id=%s""",
+                                  [text, scheduled_at, post_id])
+                    return JsonResponse({'ok': True, 'via': 'make', 'scheduled': True,
+                                        'scheduled_at': scheduled_at.isoformat()})
+
+            # ── Post now via Make webhook ──
             payload = {'text': text}
-            print(f"[LI] post_id={post_id} include_img={include_img} target={target}")
             if include_img:
                 with connection.cursor() as c:
                     c.execute("SELECT image FROM planner_posts WHERE id=%s", [post_id])
                     row = c.fetchone()
-                print(f"[LI] image row={row}")
                 if row and row[0]:
                     img_token = _make_image_token(post_id)
                     base_url = 'https://linkedin-django-wd7a.onrender.com'
                     payload['image_url'] = f"{base_url}/planner/public-image/{post_id}/{img_token}/"
-                    print(f"[LI] image_url added: {payload['image_url']}")
-                else:
-                    print(f"[LI] NO image found for post {post_id}")
             resp = _requests.post(wh_url, data=payload, timeout=30)
             if resp.status_code >= 400:
                 return JsonResponse({'ok': False, 'error': f'Make webhook HTTP {resp.status_code}'}, status=500)
@@ -944,6 +976,65 @@ def linkedin_do_post(request, post_id):
         return JsonResponse({'ok': True, 'post_urn': post_urn, 'scheduled': False})
     except Exception as e:
         return JsonResponse({'ok': False, 'error': str(e)}, status=500)
+
+
+def api_trigger_scheduled(request):
+    """
+    Called by Make.com on a time schedule (e.g. every 15 min).
+    Finds all scheduled posts that are due and posts them via Make webhook.
+    Protected by a secret key: /planner/api/trigger-scheduled/?key=XXXX
+    """
+    import time as _time
+    import requests as _requests
+    from datetime import datetime as _dt
+    import hmac as _hmac, hashlib as _hashlib
+
+    # Derive a stable secret key from Django SECRET_KEY
+    secret = (getattr(settings, 'SECRET_KEY', 'fallback'))[:32]
+    expected = _hmac.new(secret.encode(), b'trigger-scheduled', _hashlib.sha256).hexdigest()[:24]
+    provided = request.GET.get('key', '')
+    if provided != expected:
+        return JsonResponse({'error': 'forbidden'}, status=403)
+
+    token = _li_get_superuser_token()
+    if not token or not token.get('make_webhook_url'):
+        return JsonResponse({'ok': False, 'error': 'no_webhook_configured'})
+
+    _ensure_scheduled_at_column()
+    with connection.cursor() as c:
+        c.execute("""SELECT id, content, image
+                     FROM planner_posts
+                     WHERE status = 'Scheduled'
+                       AND post_scheduled_at IS NOT NULL
+                       AND post_scheduled_at <= UTC_TIMESTAMP()
+                       AND COALESCE(linkedin_posted, 0) = 0""")
+        due_posts = c.fetchall()
+
+    posted = []
+    errors = []
+    wh_url = token['make_webhook_url']
+
+    for (pid, content, image) in due_posts:
+        try:
+            payload = {'text': content or ''}
+            if image:
+                img_token = _make_image_token(pid)
+                base_url = 'https://linkedin-django-wd7a.onrender.com'
+                payload['image_url'] = f"{base_url}/planner/public-image/{pid}/{img_token}/"
+            resp = _requests.post(wh_url, data=payload, timeout=30)
+            if resp.status_code < 400:
+                with connection.cursor() as c:
+                    c.execute("""UPDATE planner_posts
+                                 SET status='Posted', in_pipeline=1, linkedin_posted=1,
+                                     post_scheduled_at=NULL
+                                 WHERE id=%s""", [pid])
+                posted.append(pid)
+            else:
+                errors.append({'id': pid, 'error': f'HTTP {resp.status_code}'})
+        except Exception as e:
+            errors.append({'id': pid, 'error': str(e)})
+
+    return JsonResponse({'ok': True, 'posted': posted, 'errors': errors, 'count': len(posted)})
 
 
 @login_required

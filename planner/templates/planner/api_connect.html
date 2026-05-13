@@ -201,6 +201,25 @@
       </div>
     </div>
   </form>
+
+  {% if trigger_url %}
+  <div style="margin-top:1.2rem;padding:12px;background:#f8f6ff;border:1px solid #e0d8fc;border-radius:6px">
+    <div style="font-size:11px;color:#6c757d;font-weight:600;margin-bottom:6px;text-transform:uppercase;letter-spacing:.5px">
+      ⏰ Make.com Scheduler-URL (für geplante Posts)
+    </div>
+    <div style="font-size:11px;color:#555;margin-bottom:8px">
+      Erstelle in Make.com ein neues Szenario mit einem <strong>Schedule</strong>-Trigger (z.B. alle 15 Minuten) und einem <strong>HTTP → Make a request</strong>-Modul mit dieser URL:
+    </div>
+    <div style="display:flex;gap:6px;align-items:center">
+      <input id="triggerUrlInput" type="text" readonly value="{{ trigger_url }}"
+             style="font-size:11px;padding:5px 9px;border:0.5px solid #ced4da;border-radius:4px;flex:1;background:#fff;color:#333;font-family:monospace">
+      <button onclick="navigator.clipboard.writeText(document.getElementById('triggerUrlInput').value);this.textContent='✅ Kopiert!';setTimeout(()=>this.textContent='Kopieren',2000)"
+              style="font-size:12px;padding:5px 10px;background:#6D00CC;color:#fff;border:none;border-radius:4px;cursor:pointer;white-space:nowrap">
+        Kopieren
+      </button>
+    </div>
+  </div>
+  {% endif %}
 </div>
 
 <!-- ── Buffer Integration ── -->

@@ -23,4 +23,5 @@ urlpatterns = [
     path('linkedin/post/<int:post_id>/', views.linkedin_do_post, name='linkedin_do_post'),
     path('api/buffer/profiles/', views.api_buffer_profiles, name='api_buffer_profiles'),
     path('public-image/<int:post_id>/<str:token>/', views.public_image, name='public_image'),
+    path('api/trigger-scheduled/', views.api_trigger_scheduled, name='api_trigger_scheduled'),
 ]
