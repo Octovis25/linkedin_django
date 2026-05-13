@@ -483,6 +483,33 @@ def api_image(request, post_id):
     return JsonResponse({'ok': False}, status=400)
 
 
+def _make_image_token(post_id):
+    """Generate a signed token for public image access (no auth required)."""
+    import hmac as _hmac, hashlib as _hashlib
+    secret = (getattr(settings, 'SECRET_KEY', 'fallback'))[:32]
+    return _hmac.new(secret.encode(), str(post_id).encode(), _hashlib.sha256).hexdigest()[:24]
+
+
+def public_image(request, post_id, token):
+    """Serve a post image publicly using a signed token — used by Make.com webhook."""
+    from django.http import HttpResponse
+    if token != _make_image_token(post_id):
+        return HttpResponse(status=403)
+    with connection.cursor() as c:
+        c.execute("SELECT image FROM planner_posts WHERE id=%s", [post_id])
+        row = c.fetchone()
+    if not row or not row[0]:
+        return HttpResponse(status=404)
+    try:
+        from posts_posted.nc_storage import download_image_from_nextcloud
+        img_content, img_content_type = download_image_from_nextcloud(row[0])
+        if img_content:
+            return HttpResponse(img_content, content_type=img_content_type or 'image/jpeg')
+    except Exception as e:
+        print(f"public_image error: {e}")
+    return HttpResponse(status=404)
+
+
 # ─────────────────────────────────────────────
 #  LinkedIn API Connect
 # ─────────────────────────────────────────────
@@ -804,35 +831,17 @@ def linkedin_do_post(request, post_id):
         try:
             import requests as _requests
             wh_url = token['make_webhook_url']
-            # Check if post has an image to send
-            img_content, img_content_type, img_filename = None, None, None
+            # Build payload: text + optional public image URL
+            payload = {'text': text}
             if include_img:
                 with connection.cursor() as c:
                     c.execute("SELECT image FROM planner_posts WHERE id=%s", [post_id])
                     row = c.fetchone()
                 if row and row[0]:
-                    nc_path = row[0]
-                    try:
-                        from posts_posted.nc_storage import download_image_from_nextcloud
-                        img_content, img_content_type = download_image_from_nextcloud(nc_path)
-                        img_filename = nc_path.split('/')[-1] if nc_path else 'image.jpg'
-                    except Exception as img_err:
-                        print(f"Image download error: {img_err}")
-            if img_content:
-                # Multipart: text field + image file
-                resp = _requests.post(
-                    wh_url,
-                    data={'text': text},
-                    files={'image': (img_filename, img_content, img_content_type or 'image/jpeg')},
-                    timeout=30
-                )
-            else:
-                # Text-only: form-encoded
-                resp = _requests.post(
-                    wh_url,
-                    data={'text': text},
-                    timeout=30
-                )
+                    img_token = _make_image_token(post_id)
+                    base_url = 'https://linkedin-django-wd7a.onrender.com'
+                    payload['image_url'] = f"{base_url}/planner/public-image/{post_id}/{img_token}/"
+            resp = _requests.post(wh_url, data=payload, timeout=30)
             if resp.status_code >= 400:
                 return JsonResponse({'ok': False, 'error': f'Make webhook HTTP {resp.status_code}'}, status=500)
             with connection.cursor() as c:
@@ -841,7 +850,7 @@ def linkedin_do_post(request, post_id):
                 except Exception:
                     pass
                 c.execute("UPDATE planner_posts SET status='Posted', in_pipeline=1, linkedin_posted=1 WHERE id=%s", [post_id])
-            return JsonResponse({'ok': True, 'via': 'make', 'has_image': bool(img_content), 'scheduled': False})
+            return JsonResponse({'ok': True, 'via': 'make', 'has_image': bool(payload.get('image_url')), 'scheduled': False})
         except Exception as e:
             return JsonResponse({'ok': False, 'error': str(e)}, status=500)
 

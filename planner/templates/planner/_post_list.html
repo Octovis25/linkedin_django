@@ -119,7 +119,10 @@
       <input type="text" id="pe-title" placeholder="Title..." onkeydown="if(event.key==='Enter')event.preventDefault()" style="font-size:13px;flex:1;padding:6px 8px;border:0.5px solid #ced4da;border-radius:4px;box-sizing:border-box">
     </div>
     <!-- Rich text editor -->
-    <div class="pe-editor-wrap">
+    <div class="pe-editor-wrap"
+         ondragover="event.preventDefault();this.style.outline='2px dashed #008080'"
+         ondragleave="this.style.outline=''"
+         ondrop="this.style.outline='';peDropImg(event)">
       <div class="pe-toolbar">
         <button type="button" onmousedown="event.preventDefault();peFmt('bold')" title="Bold"><b>B</b></button>
         <button type="button" onmousedown="event.preventDefault();peFmt('italic')" title="Italic"><i>I</i></button>
