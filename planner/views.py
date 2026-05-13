@@ -833,14 +833,19 @@ def linkedin_do_post(request, post_id):
             wh_url = token['make_webhook_url']
             # Build payload: text + optional public image URL
             payload = {'text': text}
+            print(f"[LI] post_id={post_id} include_img={include_img} target={target}")
             if include_img:
                 with connection.cursor() as c:
                     c.execute("SELECT image FROM planner_posts WHERE id=%s", [post_id])
                     row = c.fetchone()
+                print(f"[LI] image row={row}")
                 if row and row[0]:
                     img_token = _make_image_token(post_id)
                     base_url = 'https://linkedin-django-wd7a.onrender.com'
                     payload['image_url'] = f"{base_url}/planner/public-image/{post_id}/{img_token}/"
+                    print(f"[LI] image_url added: {payload['image_url']}")
+                else:
+                    print(f"[LI] NO image found for post {post_id}")
             resp = _requests.post(wh_url, data=payload, timeout=30)
             if resp.status_code >= 400:
                 return JsonResponse({'ok': False, 'error': f'Make webhook HTTP {resp.status_code}'}, status=500)
