@@ -7,4 +7,5 @@ urlpatterns = [
     path('timeline/<str:post_id>/',   stat_views.timeline_detail,name='timeline_detail'),
     path('posts/',                    stat_views.posts,          name='posts'),
     path('post-image/<str:post_id>/', stat_views.post_image,    name='post_image'),
+    path('video/',                   stat_views.video_comparison, name='video'),
 ]

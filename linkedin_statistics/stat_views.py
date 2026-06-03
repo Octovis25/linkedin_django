@@ -642,3 +642,132 @@ def posts(request):
         'search':       search,
         'tab':          'posts',
     })
+
+
+@login_required
+def video_comparison(request):
+    df, dt = _defaults()
+    d_from   = request.GET.get('from', df)
+    d_to     = request.GET.get('to', dt)
+    group_by = request.GET.get('group_by', 'month')
+    fmt      = _period_fmt(group_by)
+
+    with connection.cursor() as c:
+        rows = _safe(c, """
+            SELECT
+                DATE_FORMAT(COALESCE(pp.post_date, lp.post_date), %s) AS period,
+                CASE WHEN lp.content_type = 'Video' THEN 'video' ELSE 'novideo' END AS ctype,
+                COUNT(*)                                              AS post_count,
+                ROUND(AVG(m.impressions), 1)                         AS avg_imp,
+                ROUND(AVG(m.clicks), 2)                              AS avg_cli,
+                ROUND(SUM(m.clicks) / NULLIF(SUM(m.impressions),0) * 100, 2) AS ctr
+            FROM linkedin_posts lp
+            LEFT JOIN linkedin_posts_posted pp ON lp.post_id = pp.post_id
+            INNER JOIN linkedin_posts_metrics m ON lp.post_id = m.post_id
+            WHERE m.metric_date = (
+                SELECT MAX(m2.metric_date) FROM linkedin_posts_metrics m2
+                WHERE m2.post_id = m.post_id
+            )
+              AND COALESCE(pp.post_date, lp.post_date) BETWEEN %s AND %s
+              AND (pp.category IS NULL OR pp.category != 'Event')
+            GROUP BY period, ctype
+            ORDER BY period, ctype
+        """, [fmt, d_from, d_to])
+
+    all_periods = _all_periods(d_from, d_to, group_by)
+    data = {}
+    for r in (rows or []):
+        period, ctype = r[0], r[1]
+        if period not in data:
+            data[period] = {}
+        data[period][ctype] = {
+            'count':   int(r[2] or 0),
+            'avg_imp': float(r[3] or 0),
+            'avg_cli': float(r[4] or 0),
+            'ctr':     float(r[5] or 0),
+        }
+
+    labels         = all_periods
+    imp_video      = [data.get(p, {}).get('video',   {}).get('avg_imp', None) for p in all_periods]
+    imp_novideo    = [data.get(p, {}).get('novideo', {}).get('avg_imp', None) for p in all_periods]
+    cli_video      = [data.get(p, {}).get('video',   {}).get('avg_cli', None) for p in all_periods]
+    cli_novideo    = [data.get(p, {}).get('novideo', {}).get('avg_cli', None) for p in all_periods]
+    ctr_video      = [data.get(p, {}).get('video',   {}).get('ctr',     None) for p in all_periods]
+    ctr_novideo    = [data.get(p, {}).get('novideo', {}).get('ctr',     None) for p in all_periods]
+    cnt_video      = [data.get(p, {}).get('video',   {}).get('count',   0)    for p in all_periods]
+    cnt_novideo    = [data.get(p, {}).get('novideo', {}).get('count',   0)    for p in all_periods]
+
+    # Overall summary
+    summary = {'video': {}, 'novideo': {}}
+    with connection.cursor() as c:
+        rows_s = _safe(c, """
+            SELECT
+                CASE WHEN lp.content_type = 'Video' THEN 'video' ELSE 'novideo' END AS ctype,
+                COUNT(*), ROUND(AVG(m.impressions),0), ROUND(AVG(m.clicks),1),
+                ROUND(SUM(m.clicks)/NULLIF(SUM(m.impressions),0)*100,2)
+            FROM linkedin_posts lp
+            LEFT JOIN linkedin_posts_posted pp ON lp.post_id = pp.post_id
+            INNER JOIN linkedin_posts_metrics m ON lp.post_id = m.post_id
+            WHERE m.metric_date = (
+                SELECT MAX(m2.metric_date) FROM linkedin_posts_metrics m2 WHERE m2.post_id = m.post_id
+            )
+              AND COALESCE(pp.post_date, lp.post_date) BETWEEN %s AND %s
+              AND (pp.category IS NULL OR pp.category != 'Event')
+            GROUP BY ctype
+        """, [d_from, d_to])
+    for r in (rows_s or []):
+        summary[r[0]] = {'count': int(r[1] or 0), 'avg_imp': int(r[2] or 0),
+                         'avg_cli': float(r[3] or 0), 'ctr': float(r[4] or 0)}
+
+    # Per-post data for scatter plot
+    scatter_video, scatter_novideo = [], []
+    with connection.cursor() as c:
+        rows_p = _safe(c, """
+            SELECT
+                COALESCE(pp.post_title, lp.post_title, lp.post_id),
+                CASE WHEN lp.content_type = 'Video' THEN 'video' ELSE 'novideo' END AS ctype,
+                COALESCE(m.impressions, 0),
+                COALESCE(m.clicks, 0),
+                COALESCE(pp.post_date, lp.post_date)
+            FROM linkedin_posts lp
+            LEFT JOIN linkedin_posts_posted pp ON lp.post_id = pp.post_id
+            INNER JOIN linkedin_posts_metrics m ON lp.post_id = m.post_id
+            WHERE m.metric_date = (
+                SELECT MAX(m2.metric_date) FROM linkedin_posts_metrics m2
+                WHERE m2.post_id = m.post_id
+            )
+              AND COALESCE(pp.post_date, lp.post_date) BETWEEN %s AND %s
+              AND (pp.category IS NULL OR pp.category != 'Event')
+            ORDER BY m.impressions DESC
+        """, [d_from, d_to])
+    import datetime as _dt
+    for r in (rows_p or []):
+        title    = (r[0] or '')[:60]
+        ctype    = r[1]
+        imp      = int(r[2] or 0)
+        cli      = int(r[3] or 0)
+        date_obj = r[4]
+        date_str = date_obj.strftime('%d.%m.%Y') if date_obj else ''
+        ts = int(_dt.datetime(date_obj.year, date_obj.month, date_obj.day).timestamp() * 1000) if date_obj else 0
+        point = {'x': imp, 'y': cli, 't': title, 'd': date_str, 'ts': ts}
+        if ctype == 'video':
+            scatter_video.append(point)
+        else:
+            scatter_novideo.append(point)
+
+    return render(request, 'linkedin_statistics/stat_video.html', {
+        'date_from': d_from, 'date_to': d_to, 'group_by': group_by,
+        'tab': 'video',
+        'summary': summary,
+        'chart_labels_json':      json.dumps(labels),
+        'chart_imp_video_json':   json.dumps(imp_video),
+        'chart_imp_novideo_json': json.dumps(imp_novideo),
+        'chart_cli_video_json':   json.dumps(cli_video),
+        'chart_cli_novideo_json': json.dumps(cli_novideo),
+        'chart_ctr_video_json':   json.dumps(ctr_video),
+        'chart_ctr_novideo_json': json.dumps(ctr_novideo),
+        'chart_cnt_video_json':   json.dumps(cnt_video),
+        'chart_cnt_novideo_json': json.dumps(cnt_novideo),
+        'scatter_video_json':     json.dumps(scatter_video),
+        'scatter_novideo_json':   json.dumps(scatter_novideo),
+    })

@@ -48,11 +48,17 @@
     <div style="flex:1;min-width:0">
       <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:4px">
         <span style="font-size:11px;padding:1px 8px;border-radius:99px;background:{{ p.bg }};color:{{ p.fg }}">{{ p.topic_name }}</span>
-        {% if p.planned_date %}<span style="font-size:11px;color:#6c757d">📅 {{ p.planned_date|date:"d.m.Y" }}</span>{% endif %}
-        {% if p.linkedin_posted %}<span style="font-size:11px;padding:1px 7px;border-radius:99px;background:#0077B5;color:#fff;font-weight:600">in ✓</span>{% endif %}
+        {% if p.planned_date %}<span style="font-size:11px;color:#6c757d">📅 {{ p.planned_date|date:"d.m.Y" }}{% if p.planned_time %} 🕐 {{ p.planned_time|time:"H:i" }}{% endif %}</span>{% endif %}
+        {% if p.linkedin_posted %}<span style="font-size:11px;padding:1px 7px;border-radius:99px;background:#0077B5;color:#fff;font-weight:600">in ✓</span>
+        {% elif p.post_scheduled_at_fmt %}<span style="font-size:11px;padding:1px 7px;border-radius:99px;background:#e8f4fb;color:#0077B5;font-weight:600;border:1px solid #0077B5" title="LinkedIn geplant">in 📅 {{ p.post_scheduled_at_fmt }}</span>{% endif %}
       </div>
       <p style="font-size:13px;color:#212529;margin:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ p.title|default:p.content|striptags|truncatechars:80 }}</p>
+      {% if p.link %}<p style="font-size:12px;margin:3px 0 0"><a href="{{ p.link }}" target="_blank" rel="noopener" style="color:#008080;text-decoration:none;word-break:break-all" title="{{ p.link }}">🔗 {{ p.link|truncatechars:60 }}</a></p>{% endif %}
       {% if p.comment %}<p style="font-size:12px;color:#6c757d;margin:3px 0 0;font-style:italic">{{ p.comment|truncatechars:60 }}</p>{% endif %}
+      <p style="font-size:11px;color:#adb5bd;margin:4px 0 0;display:flex;gap:12px;flex-wrap:wrap">
+        {% if p.created_at %}<span title="Erstellt">📝 {{ p.created_at|date:"d.m.Y H:i" }}</span>{% endif %}
+        {% if p.updated_at %}<span title="Zuletzt geändert">✏️ {{ p.updated_at|date:"d.m.Y H:i" }}</span>{% endif %}
+      </p>
     </div>
     <div style="display:flex;gap:6px;flex-shrink:0;align-items:center">
       <select onchange="setStatus({{ p.id }}, this.value)" style="font-size:12px;padding:3px 6px;border:0.5px solid #ced4da;border-radius:4px;cursor:pointer">
@@ -73,6 +79,12 @@
         onclick="liOpenPost({{ p.id }})"
         style="font-size:12px;padding:3px 10px;border:0.5px solid #0077B5;border-radius:4px;background:#0077B5;cursor:pointer;color:#fff;white-space:nowrap"
         title="Post to LinkedIn">in</button>
+      {% if p.post_scheduled_at_fmt %}
+      <button type="button"
+        onclick="liCancelPost({{ p.id }})"
+        style="font-size:12px;padding:3px 8px;border:0.5px solid #0077B5;border-radius:4px;background:#fff;cursor:pointer;color:#0077B5;white-space:nowrap"
+        title="LinkedIn-Scheduling abbrechen">in ✕</button>
+      {% endif %}
       {% endif %}
       <button type="button"
         onclick="peDeletePost({{ p.id }})"
@@ -99,10 +111,12 @@
         <option>Draft</option><option>Review</option><option>Ready</option><option>Scheduled</option><option>Posted</option>
       </select>
     </div>
-    <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
-      <label style="font-size:12px;color:#6c757d;white-space:nowrap">Planned to post</label>
-      <input type="date" id="pe-date" style="font-size:13px;flex:1;padding:6px 8px;border:0.5px solid #ced4da;border-radius:4px">
-      <button type="button" onclick="document.getElementById('pe-date').value=''" title="Datum löschen"
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap">
+      <label style="font-size:12px;color:#6c757d;white-space:nowrap">📅 Datum</label>
+      <input type="date" id="pe-date" style="font-size:13px;flex:1;min-width:130px;padding:6px 8px;border:0.5px solid #ced4da;border-radius:4px">
+      <label style="font-size:12px;color:#6c757d;white-space:nowrap">🕐 Uhrzeit</label>
+      <input type="time" id="pe-time" step="60" style="font-size:13px;width:100px;padding:6px 8px;border:0.5px solid #ced4da;border-radius:4px">
+      <button type="button" onclick="document.getElementById('pe-date').value='';document.getElementById('pe-time').value=''" title="Datum & Uhrzeit löschen"
         style="font-size:13px;padding:3px 8px;border:0.5px solid #ced4da;border-radius:4px;background:#fff;cursor:pointer;color:#888;line-height:1;flex-shrink:0">✕</button>
     </div>
     <!-- Upload zone + Title -->
@@ -141,6 +155,10 @@
         <span onclick="event.stopPropagation();peLightbox(document.getElementById('pe-img-preview-img').src)">🔍 Full size</span>
         <span onclick="event.stopPropagation();peRemoveImg()" style="color:#ffb3b3">🗑 Remove</span>
       </div>
+    </div>
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+      <label style="font-size:12px;color:#6c757d;white-space:nowrap">🔗 Link</label>
+      <input type="text" id="pe-link" placeholder="https://..." style="font-size:13px;flex:1;padding:6px 8px;border:0.5px solid #ced4da;border-radius:4px;box-sizing:border-box">
     </div>
     <textarea id="pe-comment" placeholder="Internal comment..." style="width:100%;min-height:50px;font-size:13px;padding:8px;border:0.5px solid #ced4da;border-radius:4px;resize:vertical;box-sizing:border-box;background:#fffef0"></textarea>
     <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:12px">
@@ -258,6 +276,8 @@ function openEdit(id) {
   document.getElementById('pe-content').innerHTML = p.content || '';
   document.getElementById('pe-status').value = p.status;
   document.getElementById('pe-date').value = p.date || '';
+  document.getElementById('pe-time').value = p.time || '';
+  document.getElementById('pe-link').value = p.link || '';
   document.getElementById('pe-comment').value = p.comment || '';
   document.getElementById('pe-img-input').value = '';
   if (p.topic_id) document.getElementById('pe-topic').value = p.topic_id;
@@ -303,9 +323,11 @@ async function saveEdit() {
       topic_id: document.getElementById('pe-topic').value,
       title: document.getElementById('pe-title').value,
       content: document.getElementById('pe-content').innerHTML,
+      link: document.getElementById('pe-link').value.trim() || null,
       comment: document.getElementById('pe-comment').value,
       status: document.getElementById('pe-status').value,
       planned_date: document.getElementById('pe-date').value || null,
+      planned_time: document.getElementById('pe-time').value || null,
     });
     if (res && res.error === 'session_expired') {
       if (confirm('Deine Sitzung ist abgelaufen. Jetzt neu einloggen?')) {
@@ -397,7 +419,14 @@ function liClosePost() {
   liCurrentId = null;
 }
 
-document.getElementById('li-post-text').addEventListener('input', function() {
+async function liCancelPost(id) {
+  if (!confirm('LinkedIn-Scheduling für diesen Post wirklich abbrechen?')) return;
+  await peApi({action: 'cancel_linkedin', id});
+  location.reload();
+}
+
+const _liPostText = document.getElementById('li-post-text');
+if (_liPostText) _liPostText.addEventListener('input', function() {
   document.getElementById('li-char-count').textContent = this.value.length;
 });
 
@@ -450,7 +479,8 @@ async function liDoPost() {
   btn.textContent = 'Jetzt posten';
 }
 
-document.getElementById('li-modal-bg').addEventListener('click', function(e) {
+const _liModalBg = document.getElementById('li-modal-bg');
+if (_liModalBg) _liModalBg.addEventListener('click', function(e) {
   if (e.target === this) liClosePost();
 });
 {% endif %}

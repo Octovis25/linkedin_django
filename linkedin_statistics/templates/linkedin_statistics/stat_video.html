@@ -1,0 +1,242 @@
+{% extends "base.html" %}
+{% block title %}Statistics – Video vs. No Video{% endblock %}
+{% block content %}
+<style>
+.cc{background:#fff;border:0.5px solid #e0e0e0;border-radius:.5rem;margin-bottom:1.25rem;overflow:hidden}
+.kpi-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;padding:1.25rem}
+.kpi{background:#f9f7f0;border-radius:.375rem;padding:.75rem 1rem;text-align:center}
+.kpi-label{font-size:11px;color:#6c757d;text-transform:uppercase;letter-spacing:.04em;margin:0 0 4px}
+.kpi-val{font-size:22px;font-weight:500;color:#212529;margin:0}
+.kpi-sub{font-size:11px;color:#6c757d;margin:3px 0 0}
+.section-head{padding:.75rem 1.25rem;font-size:.95rem;font-weight:500;border-bottom:0.5px solid #e0e0e0;display:flex;align-items:center;gap:8px;color:#008591}
+.insight{border-left:3px solid;padding:10px 14px;font-size:13px;line-height:1.6;margin:0 1.25rem 1.25rem;border-radius:0}
+.insight.blue{border-color:#F56E28;background:#E6F1FB;color:#0C447C}
+.insight.green{border-color:#1D9E75;background:#E1F5EE;color:#085041}
+</style>
+
+<!-- Filter bar -->
+<form method="get" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:1.25rem">
+  <label style="font-size:13px;color:#6c757d">From</label>
+  <input type="date" name="from" value="{{ date_from }}" style="padding:.3rem .5rem;border:1px solid #ced4da;border-radius:.25rem;font-size:.85rem">
+  <label style="font-size:13px;color:#6c757d">To</label>
+  <input type="date" name="to" value="{{ date_to }}" style="padding:.3rem .5rem;border:1px solid #ced4da;border-radius:.25rem;font-size:.85rem">
+  <select name="group_by" style="padding:.3rem .5rem;border:1px solid #ced4da;border-radius:.25rem;font-size:.85rem">
+    <option value="month" {% if group_by == 'month' %}selected{% endif %}>Month</option>
+    <option value="week"  {% if group_by == 'week'  %}selected{% endif %}>Week</option>
+  </select>
+  <button type="submit" style="padding:.3rem .75rem;background:#008080;color:#fff;border:none;border-radius:.25rem;font-size:.85rem;cursor:pointer">Apply</button>
+</form>
+
+<!-- KPI summary -->
+<div class="cc">
+  <div class="section-head">
+    <span style="background:#F56E28;color:#fff;font-size:11px;font-weight:700;padding:1px 6px;border-radius:3px">▶</span> Video Posts
+    &nbsp;vs.&nbsp;
+    <span style="background:#1D9E75;color:#fff;font-size:11px;font-weight:700;padding:1px 6px;border-radius:3px">◼</span> No Video Posts
+    <span style="font-size:12px;color:#6c757d;font-weight:400;margin-left:4px">— excl. Events, period: {{ date_from }} – {{ date_to }}</span>
+  </div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:0;border-bottom:0.5px solid #e0e0e0">
+    <div class="kpi-grid" style="border-right:0.5px solid #e0e0e0">
+      <div class="kpi">
+        <p class="kpi-label">Posts</p>
+        <p class="kpi-val" style="color:#F56E28">{{ summary.video.count|default:"—" }}</p>
+      </div>
+      <div class="kpi">
+        <p class="kpi-label">Avg Impressions</p>
+        <p class="kpi-val" style="color:#F56E28">{{ summary.video.avg_imp|default:"—" }}</p>
+      </div>
+      <div class="kpi" style="border:1px solid #F56E28">
+        <p class="kpi-label">Avg Clicks ★</p>
+        <p class="kpi-val" style="color:#F56E28">{{ summary.video.avg_cli|default:"—" }}</p>
+      </div>
+      <div class="kpi">
+        <p class="kpi-label">CTR</p>
+        <p class="kpi-val" style="color:#F56E28">{{ summary.video.ctr|default:"—" }}%</p>
+      </div>
+    </div>
+    <div class="kpi-grid">
+      <div class="kpi">
+        <p class="kpi-label">Posts</p>
+        <p class="kpi-val" style="color:#1D9E75">{{ summary.novideo.count|default:"—" }}</p>
+      </div>
+      <div class="kpi">
+        <p class="kpi-label">Avg Impressions</p>
+        <p class="kpi-val" style="color:#1D9E75">{{ summary.novideo.avg_imp|default:"—" }}</p>
+      </div>
+      <div class="kpi" style="border:1px solid #1D9E75">
+        <p class="kpi-label">Avg Clicks ★</p>
+        <p class="kpi-val" style="color:#1D9E75">{{ summary.novideo.avg_cli|default:"—" }}</p>
+      </div>
+      <div class="kpi">
+        <p class="kpi-label">CTR</p>
+        <p class="kpi-val" style="color:#1D9E75">{{ summary.novideo.ctr|default:"—" }}%</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+<!-- Scatter: Impressionen über Zeit -->
+<div class="cc">
+  <div class="section-head">👁 Impressionen über Zeit — jeder Post einzeln</div>
+  <div style="padding:1rem 1.25rem">
+    <div style="display:flex;gap:16px;margin-bottom:12px;font-size:12px;color:#6c757d;flex-wrap:wrap">
+      <span><span style="display:inline-block;width:10px;height:10px;background:#F56E28;border-radius:50%;vertical-align:middle;margin-right:4px"></span>Video</span>
+      <span><span style="display:inline-block;width:10px;height:10px;background:#1D9E75;border-radius:50%;vertical-align:middle;margin-right:4px"></span>No Video</span>
+    </div>
+    <div style="position:relative;width:100%;height:300px">
+      <canvas id="chartTimeImp" role="img" aria-label="Scatter plot of impressions per post over time">Each dot is one post. X=date, Y=impressions.</canvas>
+    </div>
+  </div>
+</div>
+
+<!-- Scatter: Klicks über Zeit -->
+<div class="cc">
+  <div class="section-head">👆 Klicks über Zeit — jeder Post einzeln</div>
+  <div style="padding:1rem 1.25rem">
+    <div style="display:flex;gap:16px;margin-bottom:12px;font-size:12px;color:#6c757d;flex-wrap:wrap">
+      <span><span style="display:inline-block;width:10px;height:10px;background:#F56E28;border-radius:50%;vertical-align:middle;margin-right:4px"></span>Video</span>
+      <span><span style="display:inline-block;width:10px;height:10px;background:#1D9E75;border-radius:50%;vertical-align:middle;margin-right:4px"></span>No Video</span>
+    </div>
+    <div style="position:relative;width:100%;height:300px">
+      <canvas id="chartTimeCli" role="img" aria-label="Scatter plot of clicks per post over time">Each dot is one post. X=date, Y=clicks.</canvas>
+    </div>
+  </div>
+</div>
+
+<!-- Timeline: Avg Impressions -->
+<div class="cc">
+  <div class="section-head">👁 Avg Impressions per Post — Timeline</div>
+  <div style="padding:1rem 1.25rem">
+    <div style="display:flex;gap:16px;margin-bottom:12px;font-size:12px;color:#6c757d;flex-wrap:wrap">
+      <span><span style="display:inline-block;width:10px;height:3px;background:#F56E28;vertical-align:middle;margin-right:4px;border-radius:2px"></span>Video</span>
+      <span><span style="display:inline-block;width:10px;height:3px;background:#1D9E75;vertical-align:middle;margin-right:4px;border-radius:2px"></span>No Video</span>
+    </div>
+    <div style="position:relative;width:100%;height:240px">
+      <canvas id="chartImp" role="img" aria-label="Line chart showing average impressions per post per month for video vs no-video posts">Monthly average impressions: video posts versus no-video posts.</canvas>
+    </div>
+  </div>
+</div>
+
+<!-- Timeline: CTR -->
+<div class="cc">
+  <div class="section-head">📊 CTR % — Timeline</div>
+  <div style="padding:1rem 1.25rem">
+    <div style="display:flex;gap:16px;margin-bottom:12px;font-size:12px;color:#6c757d;flex-wrap:wrap">
+      <span><span style="display:inline-block;width:10px;height:3px;background:#F56E28;vertical-align:middle;margin-right:4px;border-radius:2px"></span>Video</span>
+      <span><span style="display:inline-block;width:10px;height:3px;background:#1D9E75;vertical-align:middle;margin-right:4px;border-radius:2px"></span>No Video</span>
+      <span style="margin-left:auto;font-size:11px;color:#adb5bd">Post count per month shown as bar (right axis)</span>
+    </div>
+    <div style="position:relative;width:100%;height:240px">
+      <canvas id="chartCTR" role="img" aria-label="Line chart showing CTR percentage per month for video vs no-video posts with post count bars">Monthly CTR percentage for video vs no-video posts.</canvas>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+<script>
+const LABELS  = {{ chart_labels_json|safe }};
+const IMP_V   = {{ chart_imp_video_json|safe }};
+const IMP_NV  = {{ chart_imp_novideo_json|safe }};
+const CTR_V   = {{ chart_ctr_video_json|safe }};
+const CTR_NV  = {{ chart_ctr_novideo_json|safe }};
+const CNT_V   = {{ chart_cnt_video_json|safe }};
+const CNT_NV  = {{ chart_cnt_novideo_json|safe }};
+const SC_V    = {{ scatter_video_json|safe }};
+const SC_NV   = {{ scatter_novideo_json|safe }};
+
+const lineStyle = (color, dash) => ({
+  borderColor: color, backgroundColor: 'transparent',
+  borderWidth: 2, borderDash: dash || [],
+  pointRadius: 3, pointHoverRadius: 5,
+  fill: false, tension: 0.3, spanGaps: true,
+});
+
+const baseOpts = {
+  responsive: true, maintainAspectRatio: false,
+  plugins: { legend: { display: false } },
+  scales: {
+    x: { grid: { display: false }, ticks: { font: { size: 11 }, maxRotation: 45, autoSkip: true, maxTicksLimit: 14 } },
+    y: { grid: { color: 'rgba(128,128,128,0.08)' }, ticks: { font: { size: 11 } }, beginAtZero: true }
+  }
+};
+
+/* Shared tooltip callback for time-scatter charts */
+function timeTooltip(items) {
+  const d = items[0].raw;
+  return [d.t || '', d.d ? '📅 ' + d.d : '', '👁 ' + d.imp + '  👆 ' + d.cli].filter(Boolean);
+}
+
+function timeScatterChart(id, yKey, yLabel) {
+  const toPoint = (p) => ({ x: p.ts, y: p[yKey], t: p.t, d: p.d, imp: p.x, cli: p.y });
+  new Chart(document.getElementById(id), {
+    type: 'scatter',
+    data: {
+      datasets: [
+        { label: 'Video',    data: SC_V.map(toPoint),  backgroundColor: 'rgba(245,110,40,0.75)', borderColor: '#F56E28', borderWidth: 1, pointRadius: 6, pointHoverRadius: 9 },
+        { label: 'No Video', data: SC_NV.map(toPoint), backgroundColor: 'rgba(29,158,117,0.55)', borderColor: '#1D9E75', borderWidth: 1, pointRadius: 5, pointHoverRadius: 8 },
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: { callbacks: { title: () => '', label: items => timeTooltip([items]) } }
+      },
+      scales: {
+        x: {
+          type: 'time',
+          time: { unit: 'month', displayFormats: { month: 'MMM yy' } },
+          grid: { color: 'rgba(128,128,128,0.08)' },
+          ticks: { font: { size: 11 } },
+        },
+        y: {
+          title: { display: true, text: yLabel, font: { size: 12 } },
+          grid: { color: 'rgba(128,128,128,0.08)' },
+          ticks: { font: { size: 11 } },
+          beginAtZero: true,
+        }
+      }
+    }
+  });
+}
+
+timeScatterChart('chartTimeImp', 'x', 'Impressionen');
+timeScatterChart('chartTimeCli', 'y', 'Klicks');
+
+new Chart(document.getElementById('chartImp'), {
+  type: 'line',
+  data: {
+    labels: LABELS,
+    datasets: [
+      { label: 'Impr. Video',    data: IMP_V,  ...lineStyle('#F56E28') },
+      { label: 'Impr. No Video', data: IMP_NV, ...lineStyle('#1D9E75') },
+    ]
+  },
+  options: { ...baseOpts }
+});
+
+new Chart(document.getElementById('chartCTR'), {
+  type: 'bar',
+  data: {
+    labels: LABELS,
+    datasets: [
+      { label: 'Posts Video',    data: CNT_V,  type: 'bar', backgroundColor: 'rgba(245,110,40,0.15)', borderWidth: 0, yAxisID: 'yCount', order: 3 },
+      { label: 'Posts No Video', data: CNT_NV, type: 'bar', backgroundColor: 'rgba(29,158,117,0.15)', borderWidth: 0, yAxisID: 'yCount', order: 3 },
+      { label: 'CTR Video',    data: CTR_V,  type: 'line', ...lineStyle('#F56E28'), yAxisID: 'y', order: 1 },
+      { label: 'CTR No Video', data: CTR_NV, type: 'line', ...lineStyle('#1D9E75'), yAxisID: 'y', order: 2 },
+    ]
+  },
+  options: {
+    responsive: true, maintainAspectRatio: false,
+    plugins: { legend: { display: false } },
+    scales: {
+      x: { grid: { display: false }, ticks: { font: { size: 11 }, maxRotation: 45, autoSkip: true, maxTicksLimit: 14 } },
+      y:      { position: 'left',  grid: { color: 'rgba(128,128,128,0.08)' }, ticks: { font: { size: 11 }, callback: v => v + '%' }, beginAtZero: true, title: { display: true, text: 'CTR %', font: { size: 11 } } },
+      yCount: { position: 'right', grid: { display: false }, ticks: { font: { size: 10 }, color: '#adb5bd' }, beginAtZero: true, title: { display: true, text: 'Posts', font: { size: 10 }, color: '#adb5bd' } },
+    }
+  }
+});
+</script>
+{% endblock %}

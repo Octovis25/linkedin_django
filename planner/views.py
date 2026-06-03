@@ -41,6 +41,10 @@ def _posts_to_json(posts_list):
             'image': p.get('image') or '',
             'topic_id': p.get('topic_id') or 0,
             'is_oj': bool(p.get('is_oj', False)),
+            'link': p.get('link') or '',
+            'linkedin_posted': bool(p.get('linkedin_posted', False)),
+            'post_scheduled_at': p.get('post_scheduled_at_fmt') or '',
+            'time': str(p.get('planned_time') or ''),
         })
     # Replace </ to prevent </script> injection
     return json.dumps(safe, ensure_ascii=False).replace('</', '<\\/')
@@ -101,7 +105,9 @@ def pipeline_view(request):
     with connection.cursor() as c:
         topics = _topics(c)
         sql = """SELECT p.id, p.title, p.content, p.status, p.planned_date,
-                        p.image, t.name, t.color, p.topic_id, COALESCE(p.comment,'') as comment
+                        p.image, t.name, t.color, p.topic_id, COALESCE(p.comment,'') as comment,
+                        p.created_at, p.updated_at, COALESCE(p.link,'') as link,
+                        p.planned_time
                  FROM planner_posts p
                  LEFT JOIN planner_topics t ON p.topic_id = t.id
                  WHERE p.status IN ('Draft', 'Review') AND COALESCE(p.is_oj,0) = 0"""
@@ -109,7 +115,7 @@ def pipeline_view(request):
         if topic_filter:
             sql += " AND p.topic_id=%s"
             params.append(topic_filter)
-        sql += " ORDER BY COALESCE(p.planned_date,'9999-12-31'), p.created_at"
+        sql += " ORDER BY p.updated_at DESC"
         posts = _q(c, sql, params)
 
     posts_list = []
@@ -120,6 +126,8 @@ def pipeline_view(request):
             'status': r[3], 'planned_date': r[4], 'image': r[5] or '',
             'topic_name': r[6] or '', 'topic_color': r[7] or 'gray',
             'topic_id': r[8], 'comment': r[9] or '', 'bg': bg, 'fg': fg,
+            'created_at': r[10], 'updated_at': r[11], 'link': r[12] or '',
+            'planned_time': r[13],
         })
 
     return render(request, 'planner/pipeline.html', {'posts': posts_list, 'topics': topics, 'topic_filter': topic_filter, 'statuses': ['Draft', 'Review', 'Ready', 'Scheduled', 'Posted', 'Archive'], 'tab': 'pipeline', 'page_title': '→ Pipeline', 'posts_json': _posts_to_json(posts_list)})
@@ -167,7 +175,8 @@ def scheduled_view(request):
             pass
         sql = """SELECT p.id, p.title, p.content, p.status, p.planned_date,
                         p.image, t.name, t.color, p.topic_id, p.comment,
-                        COALESCE(p.linkedin_posted,0)
+                        COALESCE(p.linkedin_posted,0), COALESCE(p.link,'') as link,
+                        p.post_scheduled_at, p.planned_time
                  FROM planner_posts p
                  LEFT JOIN planner_topics t ON p.topic_id = t.id
                  WHERE p.status = 'Scheduled' AND p.in_pipeline = 1 AND COALESCE(p.is_oj,0) = 0"""
@@ -181,12 +190,16 @@ def scheduled_view(request):
     posts_list = []
     for r in posts:
         bg, fg = COLOR_MAP.get(r[7] or 'gray', ('#f5f5f5', '#6c757d'))
+        sched_at = r[12]
         posts_list.append({
             'id': r[0], 'title': r[1] or '', 'content': r[2] or '',
             'status': r[3], 'planned_date': r[4], 'image': r[5] or '',
             'topic_name': r[6] or '', 'topic_color': r[7] or 'gray',
             'topic_id': r[8], 'comment': r[9] or '', 'bg': bg, 'fg': fg,
-            'linkedin_posted': bool(r[10]), 'is_oj': False,
+            'linkedin_posted': bool(r[10]), 'is_oj': False, 'link': r[11] or '',
+            'post_scheduled_at': sched_at,
+            'post_scheduled_at_fmt': sched_at.strftime('%d.%m.%Y %H:%M') if sched_at else '',
+            'planned_time': r[13],
         })
     li_token = _li_get_superuser_token()
     return render(request, 'planner/scheduled.html', {'posts': posts_list, 'topics': topics, 'topic_filter': topic_filter, 'statuses': ['Draft', 'Review', 'Ready', 'Scheduled', 'Posted', 'Archive'], 'tab': 'scheduled', 'page_title': '📅 Scheduled', 'posts_json': _posts_to_json(posts_list), 'li_connected': bool(li_token), 'li_org': li_token.get('org_name','') if li_token else ''})
@@ -357,12 +370,26 @@ def api_post(request):
             in_pipeline = 0 if status == 'Draft' else 1
             if 'in_pipeline' in data:
                 in_pipeline = data.get('in_pipeline')
-            c.execute("""UPDATE planner_posts SET topic_id=%s, title=%s, content=%s,
-                        status=%s, planned_date=%s, comment=%s, in_pipeline=%s WHERE id=%s""",
-                [data.get('topic_id') or None, data.get('title'),
-                 data.get('content'), status,
-                 data.get('planned_date') or None,
-                 data.get('comment') or None, in_pipeline, data.get('id')])
+            try:
+                link_sent = data.get('link')
+                pt = data.get('planned_time') or None
+                if link_sent is not None:
+                    c.execute("""UPDATE planner_posts SET topic_id=%s, title=%s, content=%s,
+                                status=%s, planned_date=%s, planned_time=%s, comment=%s, link=%s, in_pipeline=%s WHERE id=%s""",
+                        [data.get('topic_id') or None, data.get('title'),
+                         data.get('content'), status,
+                         data.get('planned_date') or None, pt,
+                         data.get('comment') or None,
+                         link_sent.strip() or None, in_pipeline, data.get('id')])
+                else:
+                    c.execute("""UPDATE planner_posts SET topic_id=%s, title=%s, content=%s,
+                                status=%s, planned_date=%s, planned_time=%s, comment=%s, in_pipeline=%s WHERE id=%s""",
+                        [data.get('topic_id') or None, data.get('title'),
+                         data.get('content'), status,
+                         data.get('planned_date') or None, pt,
+                         data.get('comment') or None, in_pipeline, data.get('id')])
+            except Exception as e:
+                return JsonResponse({'ok': False, 'error': str(e)})
             return JsonResponse({'ok': True})
         elif action == 'delete':
             c.execute("DELETE FROM planner_posts WHERE id=%s", [data.get('id')])
@@ -396,6 +423,9 @@ def api_post(request):
             return JsonResponse({'ok': True})
         elif action == 'from_pipeline':
             c.execute("UPDATE planner_posts SET in_pipeline=0 WHERE id=%s", [data.get('id')])
+            return JsonResponse({'ok': True})
+        elif action == 'cancel_linkedin':
+            c.execute("UPDATE planner_posts SET post_scheduled_at=NULL WHERE id=%s", [data.get('id')])
             return JsonResponse({'ok': True})
     return JsonResponse({'ok': False}, status=400)
 
