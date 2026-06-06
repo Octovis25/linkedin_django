@@ -1419,6 +1419,138 @@ def linkedin_do_post(request, post_id):
     if not text:
         return JsonResponse({'ok': False, 'error': 'empty_text'}, status=400)
 
+    # ─────────────────────────────────────────────────────────────────────
+    # VIDEO-Bypass: Videos werden NIE über Buffer gepostet (Buffer's Video-URL-
+    # Validierung schlägt zuverlässig fehl). Stattdessen geht es direkt an die
+    # LinkedIn-Video-API (initializeUpload → PUT chunks → finalizeUpload → posts).
+    # Gilt sowohl für 'org' als auch 'person'. Für geplante Posts speichern wir
+    # in der DB; api_trigger_scheduled (Cron) postet sie zur fälligen Zeit.
+    # ─────────────────────────────────────────────────────────────────────
+    if include_video:
+        import re as _re
+        import requests as _requests
+
+        _ensure_media_columns()
+        with connection.cursor() as c:
+            c.execute("SELECT video_nc_path FROM planner_posts WHERE id=%s", [post_id])
+            vrow = c.fetchone()
+        if not vrow or not vrow[0]:
+            return JsonResponse({'ok': False, 'error': 'Kein Video für diesen Post gespeichert.'}, status=400)
+        nc_path = vrow[0]
+
+        # Zeitpunkt bestimmen
+        scheduled_at = None
+        if scheduled_ms:
+            scheduled_ts = float(scheduled_ms) / 1000.0
+            if scheduled_ts > _time.time() + 60:
+                scheduled_at = _dt.fromtimestamp(scheduled_ts, tz=_timezone.utc)
+
+        # GEPLANT → nur DB, Cron postet später
+        if scheduled_at:
+            _ensure_scheduled_at_column()
+            with connection.cursor() as c:
+                try:
+                    c.execute("ALTER TABLE planner_posts ADD COLUMN linkedin_posted TINYINT(1) NOT NULL DEFAULT 0")
+                except Exception:
+                    pass
+                c.execute("""
+                    UPDATE planner_posts
+                    SET content=%s, status='Scheduled', in_pipeline=1,
+                        linkedin_posted=0, post_scheduled_at=%s
+                    WHERE id=%s
+                """, [text, scheduled_at.replace(tzinfo=None), post_id])
+            return JsonResponse({
+                'ok': True, 'via': 'linkedin_scheduled',
+                'scheduled': True, 'scheduled_at': scheduled_at.isoformat(),
+                'has_video': True,
+            })
+
+        # SOFORT → direkt an LinkedIn
+        try:
+            from posts_posted.nc_storage import download_image_from_nextcloud
+            vid_bytes, _ct = download_image_from_nextcloud(nc_path)
+            if not vid_bytes:
+                return JsonResponse({'ok': False, 'error': 'Video konnte nicht aus Nextcloud geladen werden.'}, status=500)
+
+            # Author URN
+            if target == 'org' and token.get('org_id'):
+                m = _re.search(r'(\d{5,})', str(token['org_id']))
+                author = f"urn:li:organization:{m.group(1) if m else token['org_id']}"
+            else:
+                author = f"urn:li:person:{token['person_id']}"
+
+            # initializeUpload
+            init_r = _li_fetch(
+                'https://api.linkedin.com/rest/videos?action=initializeUpload',
+                token['access_token'], method='POST', version='202404',
+                body={'initializeUploadRequest': {
+                    'owner': author, 'fileSizeBytes': len(vid_bytes),
+                    'uploadCaptions': False, 'uploadThumbnail': False,
+                }},
+            )
+            instrs   = init_r['value']['uploadInstructions']
+            vid_urn  = init_r['value']['video']
+            up_token = init_r['value']['uploadToken']
+            up_ids   = []
+
+            for instr in instrs:
+                chunk = vid_bytes[instr['firstByte']:instr['lastByte'] + 1]
+                _requests.put(
+                    instr['uploadUrl'], data=chunk,
+                    headers={
+                        'Authorization': f"Bearer {token['access_token']}",
+                        'Content-Type': 'application/octet-stream',
+                    },
+                    timeout=180,
+                )
+                up_ids.append(instr.get('partId', ''))
+
+            # finalizeUpload
+            _li_fetch(
+                'https://api.linkedin.com/rest/videos?action=finalizeUpload',
+                token['access_token'], method='POST', version='202404',
+                body={'finalizeUploadRequest': {
+                    'video': vid_urn, 'uploadToken': up_token,
+                    'uploadedPartIds': up_ids,
+                }},
+            )
+
+            # Post veröffentlichen
+            result = _li_fetch(
+                'https://api.linkedin.com/rest/posts',
+                token['access_token'], method='POST', version='202404',
+                body={
+                    'author': author, 'commentary': text, 'visibility': 'PUBLIC',
+                    'distribution': {
+                        'feedDistribution': 'MAIN_FEED', 'targetEntities': [],
+                        'thirdPartyDistributionChannels': [],
+                    },
+                    'content': {'media': {'id': vid_urn}},
+                    'lifecycleState': 'PUBLISHED',
+                },
+            )
+
+            post_urn = result.get('id', '') if isinstance(result, dict) else ''
+            with connection.cursor() as c:
+                try:
+                    c.execute("ALTER TABLE planner_posts ADD COLUMN linkedin_posted TINYINT(1) NOT NULL DEFAULT 0")
+                except Exception:
+                    pass
+                c.execute("""
+                    UPDATE planner_posts
+                    SET content=%s, status='Posted', in_pipeline=1,
+                        linkedin_posted=1, post_scheduled_at=NULL
+                    WHERE id=%s
+                """, [text, post_id])
+
+            return JsonResponse({
+                'ok': True, 'via': 'linkedin', 'post_urn': post_urn,
+                'scheduled': False, 'has_video': True,
+            })
+
+        except Exception as e:
+            return JsonResponse({'ok': False, 'error': str(e)}, status=500)
+
     # ─────────────────────────────────────────────
     # Buffer route for organization/company posts
     # ─────────────────────────────────────────────
