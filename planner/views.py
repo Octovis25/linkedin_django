@@ -775,20 +775,9 @@ def public_image(request, post_id, token):
 
 def temp_video(request, post_id, token):
     """
-    Serve the temporary video to Buffer.
+    Serve the locally cached temporary video to Buffer.
 
-    Strategy (Render multi-instance + TTFB safe):
-
-    1. LOCAL CACHE HIT  → stream immediately from /tmp (fastest path).
-    2. LOCAL CACHE MISS → proxy-stream directly from Nextcloud without downloading first.
-       This gives Buffer an immediate first byte (no 10-second TTFB timeout) regardless
-       of which Render instance receives the request.
-
-    Buffer's 10-second "Video URL validation" timeout is measured from connection open
-    to first byte received.  Downloading to /tmp first (the old fallback) blocked that
-    first byte for the entire Nextcloud download duration — hence the timeout even for
-    small files.  Direct proxy streaming starts forwarding bytes to Buffer as soon as
-    Nextcloud starts sending them.
+    This view deliberately does not fetch from Nextcloud during Buffer validation.
     """
     from django.http import HttpResponse, StreamingHttpResponse
     import glob as _glob
@@ -798,124 +787,65 @@ def temp_video(request, post_id, token):
 
     temp_dir = _temp_video_dir()
     pattern = os.path.join(temp_dir, f"post_{post_id}_*")
-    hits = [p for p in _glob.glob(pattern) if os.path.isfile(p) and not p.endswith(".part")]
-    local_path = max(hits, key=os.path.getmtime) if hits else None
-    if local_path and os.path.getsize(local_path) <= 0:
-        local_path = None
+    candidates = [p for p in _glob.glob(pattern) if os.path.isfile(p) and not p.endswith(".part")]
 
-    # ── Path A: serve from local /tmp cache ──────────────────────────────────────────
-    if local_path:
-        file_size = os.path.getsize(local_path)
-        filename = os.path.basename(local_path)
-        content_type = _video_content_type(filename)
-
-        range_header = request.headers.get("Range")
-        start, end, status = 0, file_size - 1, 200
-        if range_header:
-            try:
-                units, rng = range_header.split("=", 1)
-                if units.strip().lower() == "bytes":
-                    start_s, end_s = rng.split("-", 1)
-                    if start_s:
-                        start = int(start_s)
-                    if end_s:
-                        end = int(end_s)
-                    end = min(end, file_size - 1)
-                    if start > end or start >= file_size:
-                        resp = HttpResponse(status=416)
-                        resp["Content-Range"] = f"bytes */{file_size}"
-                        return resp
-                    status = 206
-            except Exception:
-                start, end, status = 0, file_size - 1, 200
-
-        length = end - start + 1
-
-        def file_iterator(path, start_byte, bytes_to_send, chunk=1024 * 1024):
-            with open(path, "rb") as f:
-                f.seek(start_byte)
-                remaining = bytes_to_send
-                while remaining > 0:
-                    data = f.read(min(chunk, remaining))
-                    if not data:
-                        break
-                    remaining -= len(data)
-                    yield data
-
-        resp = StreamingHttpResponse(file_iterator(local_path, start, length), status=status, content_type=content_type)
-        resp["Content-Length"] = str(length)
-        resp["Accept-Ranges"] = "bytes"
-        resp["Content-Disposition"] = f'inline; filename="{filename}"'
-        resp["Cache-Control"] = "public, max-age=3600"
-        if status == 206:
-            resp["Content-Range"] = f"bytes {start}-{end}/{file_size}"
-        return resp
-
-    # ── Path B: cache miss → proxy-stream directly from Nextcloud (zero TTFB wait) ──
-    print(f"temp_video: cache miss post {post_id} — proxy-streaming from Nextcloud")
-    import requests as _req
-    from posts_posted.nc_storage import _get_nc_credentials
-    from urllib.parse import quote as _q2
-    from requests.auth import HTTPBasicAuth as _BA
-
-    try:
-        nc_path = _get_video_nc_path(post_id)
-    except Exception as e:
-        print(f"temp_video: nc_path error post {post_id}: {e}")
+    if not candidates:
         return HttpResponse(status=404)
 
-    filename = nc_path.split("/")[-1]
+    local_path = max(candidates, key=os.path.getmtime)
+    file_size = os.path.getsize(local_path)
+    if file_size <= 0:
+        return HttpResponse(status=404)
+
+    filename = os.path.basename(local_path)
     content_type = _video_content_type(filename)
 
-    nc_url, username, password = _get_nc_credentials()
-    if not all([nc_url, username, password]):
-        return HttpResponse(status=503)
-
-    download_url = f"{nc_url}/remote.php/dav/files/{username}/{_q2(nc_path, safe='/')}"
-
-    nc_headers = {}
     range_header = request.headers.get("Range")
+    start = 0
+    end = file_size - 1
+    status = 200
+
     if range_header:
-        nc_headers["Range"] = range_header
-
-    try:
-        # stream=True → Nextcloud starts sending immediately, we forward immediately
-        upstream = _req.get(
-            download_url,
-            auth=_BA(username, password),
-            headers=nc_headers,
-            stream=True,
-            timeout=(8, 300),   # 8 s connect, 5 min transfer
-        )
-    except Exception as e:
-        print(f"temp_video: NC connect error post {post_id}: {e}")
-        return HttpResponse(status=504)
-
-    if upstream.status_code not in (200, 206):
-        upstream.close()
-        return HttpResponse(status=404)
-
-    def _proxy_chunks():
         try:
-            # 8 KB chunks → echte Streaming-Latenz, auch für kleine Dateien.
-            # Größere chunk_size lässt requests warten, bis der Puffer voll ist,
-            # was bei <500 KB Videos zu „alles am Ende auf einmal" führt.
-            for chunk in upstream.iter_content(chunk_size=8192):
-                if chunk:
-                    yield chunk
-        finally:
-            upstream.close()
+            units, rng = range_header.split("=", 1)
+            if units.strip().lower() == "bytes":
+                start_s, end_s = rng.split("-", 1)
+                if start_s:
+                    start = int(start_s)
+                if end_s:
+                    end = int(end_s)
+                end = min(end, file_size - 1)
+                if start > end or start >= file_size:
+                    resp = HttpResponse(status=416)
+                    resp["Content-Range"] = f"bytes */{file_size}"
+                    return resp
+                status = 206
+        except Exception:
+            start = 0
+            end = file_size - 1
+            status = 200
 
-    status = 206 if upstream.status_code == 206 else 200
-    resp = StreamingHttpResponse(_proxy_chunks(), status=status, content_type=content_type)
-    if upstream.headers.get("Content-Length"):
-        resp["Content-Length"] = upstream.headers["Content-Length"]
-    if upstream.headers.get("Content-Range"):
-        resp["Content-Range"] = upstream.headers["Content-Range"]
-    resp["Accept-Ranges"] = "bytes"
-    resp["Content-Disposition"] = f'inline; filename="{filename}"'
-    resp["Cache-Control"] = "public, max-age=3600"
-    return resp
+    length = end - start + 1
+
+    def file_iterator(path, start_byte, bytes_to_send, chunk_size=1024 * 1024):
+        with open(path, "rb") as f:
+            f.seek(start_byte)
+            remaining = bytes_to_send
+            while remaining > 0:
+                chunk = f.read(min(chunk_size, remaining))
+                if not chunk:
+                    break
+                remaining -= len(chunk)
+                yield chunk
+
+    response = StreamingHttpResponse(file_iterator(local_path, start, length), status=status, content_type=content_type)
+    response["Content-Length"] = str(length)
+    response["Accept-Ranges"] = "bytes"
+    response["Content-Disposition"] = f'inline; filename="{filename}"'
+    response["Cache-Control"] = "public, max-age=3600"
+    if status == 206:
+        response["Content-Range"] = f"bytes {start}-{end}/{file_size}"
+    return response
 
 
 
@@ -1397,6 +1327,191 @@ def linkedin_disconnect(request):
     return redirect('/planner/api-connect/')
 
 
+def _linkedin_author_urn(token, target='org'):
+    """Build the LinkedIn author URN for organization/company or personal posting."""
+    import re as _re
+    if target == 'org' and token.get('org_id'):
+        m = _re.search(r'(\d{5,})', str(token['org_id']))
+        return f"urn:li:organization:{m.group(1) if m else token['org_id']}"
+    if not token.get('person_id'):
+        raise Exception("Kein LinkedIn person_id gefunden.")
+    return f"urn:li:person:{token['person_id']}"
+
+
+def _schedule_linkedin_video_post(post_id, text, scheduled_at):
+    """Store a video post for the scheduled trigger path. No Buffer is involved."""
+    _ensure_scheduled_at_column()
+    with connection.cursor() as c:
+        for sql in [
+            "ALTER TABLE planner_posts ADD COLUMN linkedin_posted TINYINT(1) NOT NULL DEFAULT 0",
+            "ALTER TABLE planner_posts ADD COLUMN post_scheduled_at DATETIME NULL DEFAULT NULL",
+        ]:
+            try:
+                c.execute(sql)
+            except Exception:
+                pass
+        c.execute("""
+            UPDATE planner_posts
+            SET content=%s,
+                status='Scheduled',
+                in_pipeline=1,
+                linkedin_posted=0,
+                post_scheduled_at=%s
+            WHERE id=%s
+        """, [text, scheduled_at.replace(tzinfo=None), post_id])
+
+
+def _post_linkedin_video_now(token, post_id, text, target='org'):
+    """
+    Upload an existing Planner video from Nextcloud directly to LinkedIn and publish it.
+    Buffer is intentionally bypassed for videos.
+    """
+    import requests as _requests
+    from posts_posted.nc_storage import download_image_from_nextcloud
+
+    nc_path = _get_video_nc_path(post_id)
+    vid_bytes, _ct = download_image_from_nextcloud(nc_path)
+    if not vid_bytes:
+        raise Exception("Video konnte nicht aus Nextcloud geladen werden.")
+
+    author = _linkedin_author_urn(token, target)
+
+    init_r = _li_fetch(
+        'https://api.linkedin.com/rest/videos?action=initializeUpload',
+        token['access_token'],
+        method='POST',
+        version='202404',
+        body={'initializeUploadRequest': {
+            'owner': author,
+            'fileSizeBytes': len(vid_bytes),
+            'uploadCaptions': False,
+            'uploadThumbnail': False,
+        }},
+    )
+
+    value = init_r.get('value') or {}
+    instrs = value.get('uploadInstructions') or []
+    vid_urn = value.get('video')
+    up_token = value.get('uploadToken')
+
+    if not instrs or not vid_urn or not up_token:
+        raise Exception("LinkedIn initializeUpload lieferte keine vollständigen Upload-Daten.")
+
+    up_ids = []
+    for instr in instrs:
+        first = instr['firstByte']
+        last = instr['lastByte']
+        chunk = vid_bytes[first:last + 1]
+        rr = _requests.put(
+            instr['uploadUrl'],
+            data=chunk,
+            headers={
+                'Authorization': f"Bearer {token['access_token']}",
+                'Content-Type': 'application/octet-stream',
+            },
+            timeout=180,
+        )
+        if rr.status_code >= 400:
+            raise Exception(f"LinkedIn Video Upload HTTP {rr.status_code}: {rr.text[:300]}")
+        part_id = instr.get('partId')
+        if part_id:
+            up_ids.append(part_id)
+
+    _li_fetch(
+        'https://api.linkedin.com/rest/videos?action=finalizeUpload',
+        token['access_token'],
+        method='POST',
+        version='202404',
+        body={'finalizeUploadRequest': {
+            'video': vid_urn,
+            'uploadToken': up_token,
+            'uploadedPartIds': up_ids,
+        }},
+    )
+
+    result = _li_fetch(
+        'https://api.linkedin.com/rest/posts',
+        token['access_token'],
+        method='POST',
+        version='202404',
+        body={
+            'author': author,
+            'commentary': text,
+            'visibility': 'PUBLIC',
+            'distribution': {
+                'feedDistribution': 'MAIN_FEED',
+                'targetEntities': [],
+                'thirdPartyDistributionChannels': [],
+            },
+            'content': {'media': {'id': vid_urn}},
+            'lifecycleState': 'PUBLISHED',
+        },
+    )
+
+    post_urn = result.get('id', '') if isinstance(result, dict) else ''
+
+    with connection.cursor() as c:
+        for sql in [
+            "ALTER TABLE planner_posts ADD COLUMN linkedin_posted TINYINT(1) NOT NULL DEFAULT 0",
+            "ALTER TABLE planner_posts ADD COLUMN post_scheduled_at DATETIME NULL DEFAULT NULL",
+        ]:
+            try:
+                c.execute(sql)
+            except Exception:
+                pass
+        c.execute("""
+            UPDATE planner_posts
+            SET content=%s,
+                status='Posted',
+                in_pipeline=1,
+                linkedin_posted=1,
+                post_scheduled_at=NULL
+            WHERE id=%s
+        """, [text, post_id])
+
+    return post_urn
+
+
+def _handle_video_from_json_request(token, post_id, text, target, scheduled_ms):
+    """
+    JSON endpoint helper for /planner/linkedin/post/<id>/.
+    If a video is included, do not call Buffer.
+    """
+    import time as _time
+    from datetime import datetime as _dt, timezone as _timezone
+
+    if not token.get('access_token'):
+        return JsonResponse({'ok': False, 'error': 'linkedin_not_connected'}, status=401)
+
+    _ensure_media_columns()
+    nc_path = _get_video_nc_path(post_id)
+
+    scheduled_at = None
+    if scheduled_ms:
+        scheduled_ts = float(scheduled_ms) / 1000.0
+        if scheduled_ts > _time.time() + 60:
+            scheduled_at = _dt.fromtimestamp(scheduled_ts, tz=_timezone.utc)
+
+    if scheduled_at:
+        _schedule_linkedin_video_post(post_id, text, scheduled_at)
+        return JsonResponse({
+            'ok': True,
+            'via': 'linkedin_scheduled',
+            'scheduled': True,
+            'scheduled_at': scheduled_at.isoformat(),
+            'has_video': True,
+        })
+
+    post_urn = _post_linkedin_video_now(token, post_id, text, target=target)
+    return JsonResponse({
+        'ok': True,
+        'via': 'linkedin',
+        'post_urn': post_urn,
+        'scheduled': False,
+        'has_video': True,
+    })
+
+
 @login_required
 def linkedin_do_post(request, post_id):
     import time as _time
@@ -1419,135 +1534,12 @@ def linkedin_do_post(request, post_id):
     if not text:
         return JsonResponse({'ok': False, 'error': 'empty_text'}, status=400)
 
-    # ─────────────────────────────────────────────────────────────────────
-    # VIDEO-Bypass: Videos werden NIE über Buffer gepostet (Buffer's Video-URL-
-    # Validierung schlägt zuverlässig fehl). Stattdessen geht es direkt an die
-    # LinkedIn-Video-API (initializeUpload → PUT chunks → finalizeUpload → posts).
-    # Gilt sowohl für 'org' als auch 'person'. Für geplante Posts speichern wir
-    # in der DB; api_trigger_scheduled (Cron) postet sie zur fälligen Zeit.
-    # ─────────────────────────────────────────────────────────────────────
+    # ─────────────────────────────────────────────
+    # Video route: bypass Buffer completely
+    # ─────────────────────────────────────────────
     if include_video:
-        import re as _re
-        import requests as _requests
-
-        _ensure_media_columns()
-        with connection.cursor() as c:
-            c.execute("SELECT video_nc_path FROM planner_posts WHERE id=%s", [post_id])
-            vrow = c.fetchone()
-        if not vrow or not vrow[0]:
-            return JsonResponse({'ok': False, 'error': 'Kein Video für diesen Post gespeichert.'}, status=400)
-        nc_path = vrow[0]
-
-        # Zeitpunkt bestimmen
-        scheduled_at = None
-        if scheduled_ms:
-            scheduled_ts = float(scheduled_ms) / 1000.0
-            if scheduled_ts > _time.time() + 60:
-                scheduled_at = _dt.fromtimestamp(scheduled_ts, tz=_timezone.utc)
-
-        # GEPLANT → nur DB, Cron postet später
-        if scheduled_at:
-            _ensure_scheduled_at_column()
-            with connection.cursor() as c:
-                try:
-                    c.execute("ALTER TABLE planner_posts ADD COLUMN linkedin_posted TINYINT(1) NOT NULL DEFAULT 0")
-                except Exception:
-                    pass
-                c.execute("""
-                    UPDATE planner_posts
-                    SET content=%s, status='Scheduled', in_pipeline=1,
-                        linkedin_posted=0, post_scheduled_at=%s
-                    WHERE id=%s
-                """, [text, scheduled_at.replace(tzinfo=None), post_id])
-            return JsonResponse({
-                'ok': True, 'via': 'linkedin_scheduled',
-                'scheduled': True, 'scheduled_at': scheduled_at.isoformat(),
-                'has_video': True,
-            })
-
-        # SOFORT → direkt an LinkedIn
         try:
-            from posts_posted.nc_storage import download_image_from_nextcloud
-            vid_bytes, _ct = download_image_from_nextcloud(nc_path)
-            if not vid_bytes:
-                return JsonResponse({'ok': False, 'error': 'Video konnte nicht aus Nextcloud geladen werden.'}, status=500)
-
-            # Author URN
-            if target == 'org' and token.get('org_id'):
-                m = _re.search(r'(\d{5,})', str(token['org_id']))
-                author = f"urn:li:organization:{m.group(1) if m else token['org_id']}"
-            else:
-                author = f"urn:li:person:{token['person_id']}"
-
-            # initializeUpload
-            init_r = _li_fetch(
-                'https://api.linkedin.com/rest/videos?action=initializeUpload',
-                token['access_token'], method='POST', version='202404',
-                body={'initializeUploadRequest': {
-                    'owner': author, 'fileSizeBytes': len(vid_bytes),
-                    'uploadCaptions': False, 'uploadThumbnail': False,
-                }},
-            )
-            instrs   = init_r['value']['uploadInstructions']
-            vid_urn  = init_r['value']['video']
-            up_token = init_r['value']['uploadToken']
-            up_ids   = []
-
-            for instr in instrs:
-                chunk = vid_bytes[instr['firstByte']:instr['lastByte'] + 1]
-                _requests.put(
-                    instr['uploadUrl'], data=chunk,
-                    headers={
-                        'Authorization': f"Bearer {token['access_token']}",
-                        'Content-Type': 'application/octet-stream',
-                    },
-                    timeout=180,
-                )
-                up_ids.append(instr.get('partId', ''))
-
-            # finalizeUpload
-            _li_fetch(
-                'https://api.linkedin.com/rest/videos?action=finalizeUpload',
-                token['access_token'], method='POST', version='202404',
-                body={'finalizeUploadRequest': {
-                    'video': vid_urn, 'uploadToken': up_token,
-                    'uploadedPartIds': up_ids,
-                }},
-            )
-
-            # Post veröffentlichen
-            result = _li_fetch(
-                'https://api.linkedin.com/rest/posts',
-                token['access_token'], method='POST', version='202404',
-                body={
-                    'author': author, 'commentary': text, 'visibility': 'PUBLIC',
-                    'distribution': {
-                        'feedDistribution': 'MAIN_FEED', 'targetEntities': [],
-                        'thirdPartyDistributionChannels': [],
-                    },
-                    'content': {'media': {'id': vid_urn}},
-                    'lifecycleState': 'PUBLISHED',
-                },
-            )
-
-            post_urn = result.get('id', '') if isinstance(result, dict) else ''
-            with connection.cursor() as c:
-                try:
-                    c.execute("ALTER TABLE planner_posts ADD COLUMN linkedin_posted TINYINT(1) NOT NULL DEFAULT 0")
-                except Exception:
-                    pass
-                c.execute("""
-                    UPDATE planner_posts
-                    SET content=%s, status='Posted', in_pipeline=1,
-                        linkedin_posted=1, post_scheduled_at=NULL
-                    WHERE id=%s
-                """, [text, post_id])
-
-            return JsonResponse({
-                'ok': True, 'via': 'linkedin', 'post_urn': post_urn,
-                'scheduled': False, 'has_video': True,
-            })
-
+            return _handle_video_from_json_request(token, post_id, text, target, scheduled_ms)
         except Exception as e:
             return JsonResponse({'ok': False, 'error': str(e)}, status=500)
 
@@ -1759,19 +1751,12 @@ def linkedin_do_post(request, post_id):
 @login_required
 def linkedin_post_video(request, post_id):
     """
-    Post a video either directly to LinkedIn (sofort) or
-    queue it for the scheduled-cron (geplant).
-    Buffer is NOT used for videos — Buffer's video URL validation has been
-    consistently unreliable, while LinkedIn's video upload API works directly.
+    Post a video to Buffer.
 
-    - SOFORT (kein scheduled_ms): Upload + Post sofort über LinkedIn /rest/videos
-    - GEPLANT (scheduled_ms in der Zukunft): nur in DB als 'Scheduled' speichern;
-      api_trigger_scheduled (Cron via Make.com) postet zur gegebenen Zeit direkt
-      an LinkedIn — der Code dafür existiert bereits in api_trigger_scheduled.
+    The uploaded video is stored in Nextcloud Planner/Videos and Buffer receives
+    the public Nextcloud download URL instead of the slow Render proxy URL.
     """
     import time as _time
-    import re as _re
-    import requests as _requests
     from datetime import datetime as _dt, timezone as _timezone
 
     if request.method != 'POST':
@@ -1781,25 +1766,33 @@ def linkedin_post_video(request, post_id):
     if not token:
         return JsonResponse({'ok': False, 'error': 'not_connected'}, status=401)
 
+    if not token.get('buffer_token') or not token.get('buffer_profile_id'):
+        return JsonResponse({
+            'ok': False,
+            'error': 'Buffer ist nicht konfiguriert. Bitte Buffer Access Token speichern und Profil auswählen.'
+        }, status=400)
+
+    target = request.POST.get('target', 'org')
+    if target != 'org':
+        return JsonResponse({
+            'ok': False,
+            'error': 'Video-Posting ist aktuell nur über Buffer für die Unternehmensseite aktiviert.'
+        }, status=400)
+
     text = (request.POST.get('text') or '').strip()
     if not text:
         return JsonResponse({'ok': False, 'error': 'empty_text'}, status=400)
 
-    target = request.POST.get('target', 'org')
-
     try:
         _ensure_media_columns()
 
-        # ── 1) Video in Nextcloud sicherstellen ──────────────────────────────
         video_file = request.FILES.get('video')
         nc_path = None
+
         if video_file:
             nc_path = _upload_video_to_nextcloud(video_file, post_id)
             with connection.cursor() as c:
-                c.execute(
-                    "UPDATE planner_posts SET video_nc_path=%s, image=NULL WHERE id=%s",
-                    [nc_path, post_id],
-                )
+                c.execute("UPDATE planner_posts SET video_nc_path=%s, image=NULL WHERE id=%s", [nc_path, post_id])
         else:
             with connection.cursor() as c:
                 c.execute("SELECT video_nc_path FROM planner_posts WHERE id=%s", [post_id])
@@ -1808,12 +1801,12 @@ def linkedin_post_video(request, post_id):
                 nc_path = row[0]
 
         if not nc_path:
-            return JsonResponse(
-                {'ok': False, 'error': 'Kein Video für diesen Post gespeichert.'},
-                status=400,
-            )
+            return JsonResponse({'ok': False, 'error': 'Kein Video für diesen Post gespeichert.'}, status=400)
 
-        # ── 2) Zeitpunkt bestimmen ───────────────────────────────────────────
+        _prepare_temp_video(post_id)
+        video_url = _temp_video_url(post_id)
+        print("BUFFER VIDEO URL:", video_url)
+
         scheduled_at = None
         scheduled_ms = request.POST.get('scheduled_ms')
         if scheduled_ms:
@@ -1821,139 +1814,63 @@ def linkedin_post_video(request, post_id):
             if scheduled_ts > _time.time() + 60:
                 scheduled_at = _dt.fromtimestamp(scheduled_ts, tz=_timezone.utc)
 
-        # ── 3a) GEPLANT → nur DB-Eintrag, Cron postet später ────────────────
-        if scheduled_at:
-            _ensure_scheduled_at_column()
-            with connection.cursor() as c:
+        result = _buffer_post(
+            buf_token=token['buffer_token'],
+            profile_id=token['buffer_profile_id'],
+            text=text,
+            video_url=video_url,
+            scheduled_at=scheduled_at,
+        )
+
+        buffer_update_id = None
+        try:
+            updates = result.get('updates') or []
+            if updates:
+                buffer_update_id = updates[0].get('id')
+        except Exception:
+            buffer_update_id = None
+
+        with connection.cursor() as c:
+            for sql in [
+                "ALTER TABLE planner_posts ADD COLUMN linkedin_posted TINYINT(1) NOT NULL DEFAULT 0",
+                "ALTER TABLE planner_posts ADD COLUMN buffer_update_id VARCHAR(100) DEFAULT NULL",
+                "ALTER TABLE planner_posts ADD COLUMN post_scheduled_at DATETIME NULL DEFAULT NULL",
+            ]:
                 try:
-                    c.execute(
-                        "ALTER TABLE planner_posts ADD COLUMN linkedin_posted TINYINT(1) NOT NULL DEFAULT 0"
-                    )
+                    c.execute(sql)
                 except Exception:
                     pass
-                c.execute(
-                    """
+
+            if scheduled_at:
+                c.execute("""
                     UPDATE planner_posts
                     SET content=%s,
                         status='Scheduled',
                         in_pipeline=1,
                         linkedin_posted=0,
-                        post_scheduled_at=%s
+                        post_scheduled_at=%s,
+                        buffer_update_id=%s
                     WHERE id=%s
-                    """,
-                    [text, scheduled_at.replace(tzinfo=None), post_id],
-                )
-
-            return JsonResponse({
-                'ok': True,
-                'via': 'linkedin_scheduled',
-                'scheduled': True,
-                'scheduled_at': scheduled_at.isoformat(),
-                'has_video': True,
-            })
-
-        # ── 3b) SOFORT → direkt an LinkedIn ─────────────────────────────────
-        from posts_posted.nc_storage import download_image_from_nextcloud
-        vid_bytes, _ct = download_image_from_nextcloud(nc_path)
-        if not vid_bytes:
-            return JsonResponse(
-                {'ok': False, 'error': 'Video konnte nicht aus Nextcloud geladen werden.'},
-                status=500,
-            )
-
-        # Author URN bestimmen (Firmenseite vs. Person)
-        if target == 'org' and token.get('org_id'):
-            m = _re.search(r'(\d{5,})', str(token['org_id']))
-            author = f"urn:li:organization:{m.group(1) if m else token['org_id']}"
-        else:
-            author = f"urn:li:person:{token['person_id']}"
-
-        # initializeUpload
-        init_r = _li_fetch(
-            'https://api.linkedin.com/rest/videos?action=initializeUpload',
-            token['access_token'], method='POST', version='202404',
-            body={'initializeUploadRequest': {
-                'owner': author,
-                'fileSizeBytes': len(vid_bytes),
-                'uploadCaptions': False,
-                'uploadThumbnail': False,
-            }},
-        )
-        instrs   = init_r['value']['uploadInstructions']
-        vid_urn  = init_r['value']['video']
-        up_token = init_r['value']['uploadToken']
-        up_ids   = []
-
-        for instr in instrs:
-            chunk = vid_bytes[instr['firstByte']:instr['lastByte'] + 1]
-            _requests.put(
-                instr['uploadUrl'],
-                data=chunk,
-                headers={
-                    'Authorization': f"Bearer {token['access_token']}",
-                    'Content-Type': 'application/octet-stream',
-                },
-                timeout=180,
-            )
-            up_ids.append(instr.get('partId', ''))
-
-        # finalizeUpload
-        _li_fetch(
-            'https://api.linkedin.com/rest/videos?action=finalizeUpload',
-            token['access_token'], method='POST', version='202404',
-            body={'finalizeUploadRequest': {
-                'video': vid_urn,
-                'uploadToken': up_token,
-                'uploadedPartIds': up_ids,
-            }},
-        )
-
-        # eigentlicher Post
-        result = _li_fetch(
-            'https://api.linkedin.com/rest/posts',
-            token['access_token'], method='POST', version='202404',
-            body={
-                'author': author,
-                'commentary': text,
-                'visibility': 'PUBLIC',
-                'distribution': {
-                    'feedDistribution': 'MAIN_FEED',
-                    'targetEntities': [],
-                    'thirdPartyDistributionChannels': [],
-                },
-                'content': {'media': {'id': vid_urn}},
-                'lifecycleState': 'PUBLISHED',
-            },
-        )
-
-        post_urn = result.get('id', '') if isinstance(result, dict) else ''
-
-        with connection.cursor() as c:
-            try:
-                c.execute(
-                    "ALTER TABLE planner_posts ADD COLUMN linkedin_posted TINYINT(1) NOT NULL DEFAULT 0"
-                )
-            except Exception:
-                pass
-            c.execute(
-                """
-                UPDATE planner_posts
-                SET content=%s,
-                    status='Posted',
-                    in_pipeline=1,
-                    linkedin_posted=1,
-                    post_scheduled_at=NULL
-                WHERE id=%s
-                """,
-                [text, post_id],
-            )
+                """, [text, scheduled_at.replace(tzinfo=None), buffer_update_id, post_id])
+            else:
+                c.execute("""
+                    UPDATE planner_posts
+                    SET content=%s,
+                        status='Scheduled',
+                        in_pipeline=1,
+                        linkedin_posted=0,
+                        buffer_update_id=%s
+                    WHERE id=%s
+                """, [text, buffer_update_id, post_id])
 
         return JsonResponse({
             'ok': True,
-            'via': 'linkedin',
-            'post_urn': post_urn,
-            'scheduled': False,
+            'via': 'buffer',
+            'scheduled': True,
+            'scheduled_at': scheduled_at.isoformat() if scheduled_at else None,
+            'buffer_update_id': buffer_update_id,
             'has_video': True,
+            'video_url': video_url,
         })
 
     except Exception as e:
@@ -1999,8 +1916,8 @@ def api_trigger_scheduled(request):
         return JsonResponse({'error': 'forbidden'}, status=403)
 
     token = _li_get_superuser_token()
-    if not token or not token.get('make_webhook_url'):
-        return JsonResponse({'ok': False, 'error': 'no_webhook_configured'})
+    if not token:
+        return JsonResponse({'ok': False, 'error': 'linkedin_not_connected'})
 
     _ensure_scheduled_at_column()
     with connection.cursor() as c:
