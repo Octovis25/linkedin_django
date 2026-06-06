@@ -596,17 +596,10 @@ def _temp_video_dir():
     return getattr(settings, 'BUFFER_VIDEO_TEMP_DIR', '/tmp/buffer_videos')
 
 
-def _temp_video_url(post_id, local_path=None):
-    """Build the temporary local video URL for Buffer.
-
-    Add the real filename at the end so Buffer sees a normal .mp4/.mov URL.
-    """
+def _temp_video_url(post_id):
+    """Build the temporary local video URL for Buffer."""
     video_token = _make_video_token(post_id)
-    base = f"{_public_base_url()}/planner/temp-video/{post_id}/{video_token}/"
-    if local_path:
-        filename = os.path.basename(local_path)
-        return base + urllib.parse.quote(filename)
-    return base
+    return f"{_public_base_url()}/planner/temp-video/{post_id}/{video_token}/"
 
 
 def _cleanup_temp_videos(max_age_seconds=7200):
@@ -780,12 +773,16 @@ def public_image(request, post_id, token):
 
 
 
-def temp_video(request, post_id, token, filename=None):
+def temp_video(request, post_id, token):
     """
-    Serve the locally cached temporary video to Buffer.
+    Serve the temporary video to Buffer.
 
-    This view deliberately does not fetch from Nextcloud during Buffer validation.
-    It answers HEAD quickly and serves GET with byte-range support.
+    Strategy (Render multi-instance safe):
+    1. Try to serve from local /tmp cache (fast, same instance as the original POST).
+    2. If the local file is missing (a different Render instance received this request),
+       download the video from Nextcloud into the local cache first, then serve it.
+    This ensures every Render instance can always fulfil Buffer's GET/HEAD request,
+    regardless of which instance originally ran _prepare_temp_video().
     """
     from django.http import HttpResponse, StreamingHttpResponse
     import glob as _glob
@@ -794,29 +791,32 @@ def temp_video(request, post_id, token, filename=None):
         return HttpResponse(status=403)
 
     temp_dir = _temp_video_dir()
+    pattern = os.path.join(temp_dir, f"post_{post_id}_*")
 
-    # Prefer the filename from the URL so Buffer sees a normal .mp4 URL.
-    if filename:
-        safe_filename = os.path.basename(urllib.parse.unquote(filename))
-        candidate = os.path.join(temp_dir, safe_filename)
-        if os.path.isfile(candidate) and not candidate.endswith(".part"):
-            candidates = [candidate]
-        else:
-            candidates = []
-    else:
-        pattern = os.path.join(temp_dir, f"post_{post_id}_*")
-        candidates = [p for p in _glob.glob(pattern) if os.path.isfile(p) and not p.endswith(".part")]
+    def _find_local():
+        hits = [p for p in _glob.glob(pattern) if os.path.isfile(p) and not p.endswith(".part")]
+        if not hits:
+            return None
+        best = max(hits, key=os.path.getmtime)
+        return best if os.path.getsize(best) > 0 else None
 
-    if not candidates:
+    local_path = _find_local()
+
+    # ── Fallback: this Render instance doesn't have the file → fetch from Nextcloud ──
+    if not local_path:
+        print(f"temp_video: cache miss for post {post_id}, fetching from Nextcloud …")
+        try:
+            local_path = _prepare_temp_video(post_id)
+        except Exception as e:
+            print(f"temp_video NC fallback error for post {post_id}: {e}")
+            return HttpResponse(status=404)
+
+    if not local_path or not os.path.isfile(local_path) or os.path.getsize(local_path) <= 0:
         return HttpResponse(status=404)
 
-    local_path = max(candidates, key=os.path.getmtime)
     file_size = os.path.getsize(local_path)
-    if file_size <= 0:
-        return HttpResponse(status=404)
-
-    actual_filename = os.path.basename(local_path)
-    content_type = _video_content_type(actual_filename)
+    filename = os.path.basename(local_path)
+    content_type = _video_content_type(filename)
 
     range_header = request.headers.get("Range")
     start = 0
@@ -836,7 +836,6 @@ def temp_video(request, post_id, token, filename=None):
                 if start > end or start >= file_size:
                     resp = HttpResponse(status=416)
                     resp["Content-Range"] = f"bytes */{file_size}"
-                    resp["Accept-Ranges"] = "bytes"
                     return resp
                 status = 206
         except Exception:
@@ -845,17 +844,6 @@ def temp_video(request, post_id, token, filename=None):
             status = 200
 
     length = end - start + 1
-
-    # Buffer validates with HEAD first. Return headers immediately without opening a stream.
-    if request.method == "HEAD":
-        response = HttpResponse(status=status, content_type=content_type)
-        response["Content-Length"] = str(length)
-        response["Accept-Ranges"] = "bytes"
-        response["Content-Disposition"] = f'inline; filename="{actual_filename}"'
-        response["Cache-Control"] = "public, max-age=3600"
-        if status == 206:
-            response["Content-Range"] = f"bytes {start}-{end}/{file_size}"
-        return response
 
     def file_iterator(path, start_byte, bytes_to_send, chunk_size=1024 * 1024):
         with open(path, "rb") as f:
@@ -871,11 +859,11 @@ def temp_video(request, post_id, token, filename=None):
     response = StreamingHttpResponse(
         file_iterator(local_path, start, length),
         status=status,
-        content_type=content_type
+        content_type=content_type,
     )
     response["Content-Length"] = str(length)
     response["Accept-Ranges"] = "bytes"
-    response["Content-Disposition"] = f'inline; filename="{actual_filename}"'
+    response["Content-Disposition"] = f'inline; filename="{filename}"'
     response["Cache-Control"] = "public, max-age=3600"
     if status == 206:
         response["Content-Range"] = f"bytes {start}-{end}/{file_size}"
@@ -1403,8 +1391,8 @@ def linkedin_do_post(request, post_id):
                     c.execute("SELECT video_nc_path FROM planner_posts WHERE id=%s", [post_id])
                     vrow = c.fetchone()
                 if vrow and vrow[0]:
-                    local_video_path = _prepare_temp_video(post_id)
-                    video_url = _temp_video_url(post_id, local_video_path)
+                    _prepare_temp_video(post_id)
+                    video_url = _temp_video_url(post_id)
                     print("BUFFER TEMP VIDEO URL:", video_url)
 
             if include_img and not video_url:
@@ -1643,8 +1631,8 @@ def linkedin_post_video(request, post_id):
         if not nc_path:
             return JsonResponse({'ok': False, 'error': 'Kein Video für diesen Post gespeichert.'}, status=400)
 
-        local_video_path = _prepare_temp_video(post_id)
-        video_url = _temp_video_url(post_id, local_video_path)
+        _prepare_temp_video(post_id)
+        video_url = _temp_video_url(post_id)
         print("BUFFER VIDEO URL:", video_url)
 
         scheduled_at = None
