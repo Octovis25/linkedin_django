@@ -532,24 +532,42 @@ def _make_image_token(post_id):
 
 
 def public_image(request, post_id, token):
-    """Serve a post image publicly using a signed token — used by Make.com webhook."""
+    """Serve a post image publicly using a signed token — used by Buffer."""
     from django.http import HttpResponse
+
     if token != _make_image_token(post_id):
         return HttpResponse(status=403)
+
     with connection.cursor() as c:
         c.execute("SELECT image FROM planner_posts WHERE id=%s", [post_id])
         row = c.fetchone()
+
     if not row or not row[0]:
         return HttpResponse(status=404)
+
     try:
         from posts_posted.nc_storage import download_image_from_nextcloud
-        img_content, img_content_type = download_image_from_nextcloud(row[0])
+
+        nc_path = row[0]
+
+        # If the DB only stores a short/local path like planner/post_2_x.jpg,
+        # convert it to the real Nextcloud folder path.
+        if not nc_path.startswith("Marketing"):
+            filename = nc_path.split("/")[-1]
+            nc_path = f"Marketing & Design/LinkedIn/Statistics/data/Post-Bilder/image_ready/{filename}"
+
+        img_content, img_content_type = download_image_from_nextcloud(nc_path)
+
         if img_content:
-            return HttpResponse(img_content, content_type=img_content_type or 'image/jpeg')
+            return HttpResponse(
+                img_content,
+                content_type=img_content_type or "image/jpeg"
+            )
+
     except Exception as e:
         print(f"public_image error: {e}")
-    return HttpResponse(status=404)
 
+    return HttpResponse(status=404)
 
 # ─────────────────────────────────────────────
 #  LinkedIn API Connect
