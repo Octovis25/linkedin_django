@@ -585,38 +585,25 @@ def _public_image_url(post_id):
 
 
 def _make_video_token(post_id):
-    """Generate a signed token for public video access (legacy Render proxy)."""
+    """Generate a signed token for public video access via Render streaming proxy."""
     import hmac as _hmac, hashlib as _hashlib
     secret = (getattr(settings, 'SECRET_KEY', 'fallback'))[:32]
     return _hmac.new(secret.encode(), f"video-{post_id}".encode(), _hashlib.sha256).hexdigest()[:24]
 
 
-def _public_video_share_url():
+def _public_video_url(post_id):
     """
-    Public Nextcloud share URL for Planner videos.
+    Build the public Render video URL for Buffer.
 
-    This must point to the public share of:
-    Marketing & Design/LinkedIn/Planner/Videos
-
-    Buffer needs a direct public download URL, not the slow Render proxy.
+    We use Render as a streaming proxy because Nextcloud share links often return
+    HTML instead of video/mp4, which Buffer rejects.
     """
-    return getattr(settings, 'PUBLIC_VIDEO_SHARE_URL', 'https://nc.octotrial.com/s/a6687dicKxPCDor').rstrip('/')
-
-
-def _public_video_url(video_nc_path):
-    """
-    Build the direct public Nextcloud download URL for Buffer.
-
-    Example:
-    Marketing & Design/LinkedIn/Planner/Videos/video_64_1780750040.mp4
-    -> https://nc.octotrial.com/s/a6687dicKxPCDor/download?path=%2F&files=video_64_1780750040.mp4
-    """
-    filename = str(video_nc_path or '').split('/')[-1]
-    return f"{_public_video_share_url()}/download?path=%2F&files={urllib.parse.quote(filename)}"
+    video_token = _make_video_token(post_id)
+    return f"{_public_base_url()}/planner/public-video/{post_id}/{video_token}/"
 
 
 def _upload_video_to_nextcloud(video_file, post_id):
-    """Upload one video file into the public Planner/Videos folder and return its Nextcloud path."""
+    """Upload one video file into the Planner/Videos folder and return its Nextcloud path."""
     import requests as _req, time as _time
     from posts_posted.nc_storage import _get_nc_credentials
     from urllib.parse import quote as _q2
@@ -686,8 +673,18 @@ def public_image(request, post_id, token):
 
 
 def public_video(request, post_id, token):
-    """Serve a post video publicly using a signed token — used by Buffer."""
-    from django.http import HttpResponse
+    """
+    Stream a post video publicly using a signed token — used by Buffer.
+
+    Important:
+    - Do NOT download the full video into Django memory first.
+    - Stream from Nextcloud to Buffer so Buffer gets video/mp4 quickly.
+    """
+    from django.http import HttpResponse, StreamingHttpResponse
+    import requests as _req
+    from posts_posted.nc_storage import _get_nc_credentials
+    from urllib.parse import quote as _q2
+    from requests.auth import HTTPBasicAuth as _BA
 
     if token != _make_video_token(post_id):
         return HttpResponse(status=403)
@@ -700,19 +697,74 @@ def public_video(request, post_id, token):
     if not row or not row[0]:
         return HttpResponse(status=404)
 
-    try:
-        from posts_posted.nc_storage import download_image_from_nextcloud
-        nc_path = row[0]
-        if not nc_path.startswith("Marketing"):
-            filename = nc_path.split("/")[-1]
-            nc_path = f"Marketing & Design/LinkedIn/Planner/Videos/{filename}"
-        video_content, video_content_type = download_image_from_nextcloud(nc_path)
-        if video_content:
-            return HttpResponse(video_content, content_type=video_content_type or "video/mp4")
-    except Exception as e:
-        print(f"public_video error: {e}")
+    nc_path = row[0]
+    if not nc_path.startswith("Marketing"):
+        filename = nc_path.split("/")[-1]
+        nc_path = f"Marketing & Design/LinkedIn/Planner/Videos/{filename}"
+    else:
+        filename = nc_path.split("/")[-1]
 
-    return HttpResponse(status=404)
+    nc_url, username, password = _get_nc_credentials()
+    if not all([nc_url, username, password]):
+        return HttpResponse(status=500)
+
+    download_url = f"{nc_url}/remote.php/dav/files/{username}/{_q2(nc_path, safe='/')}"
+
+    headers = {}
+    range_header = request.headers.get("Range")
+    if range_header:
+        headers["Range"] = range_header
+
+    try:
+        upstream = _req.get(
+            download_url,
+            auth=_BA(username, password),
+            headers=headers,
+            stream=True,
+            timeout=(10, 120)
+        )
+    except Exception as e:
+        print(f"public_video upstream error: {e}")
+        return HttpResponse(status=504)
+
+    if upstream.status_code not in (200, 206):
+        print(f"public_video upstream status: {upstream.status_code} {upstream.text[:200] if hasattr(upstream, 'text') else ''}")
+        upstream.close()
+        return HttpResponse(status=404)
+
+    lower_name = filename.lower()
+    if lower_name.endswith(".mov"):
+        content_type = "video/quicktime"
+    elif lower_name.endswith(".webm"):
+        content_type = "video/webm"
+    else:
+        content_type = "video/mp4"
+
+    def stream_chunks():
+        try:
+            for chunk in upstream.iter_content(chunk_size=1024 * 1024):
+                if chunk:
+                    yield chunk
+        finally:
+            upstream.close()
+
+    response = StreamingHttpResponse(
+        stream_chunks(),
+        status=206 if upstream.status_code == 206 else 200,
+        content_type=content_type
+    )
+
+    content_length = upstream.headers.get("Content-Length")
+    content_range = upstream.headers.get("Content-Range")
+    if content_length:
+        response["Content-Length"] = content_length
+    if content_range:
+        response["Content-Range"] = content_range
+    response["Accept-Ranges"] = "bytes"
+    response["Content-Disposition"] = f'inline; filename="{filename}"'
+    response["Cache-Control"] = "public, max-age=3600"
+
+    return response
 
 # ─────────────────────────────────────────────
 #  LinkedIn API Connect
@@ -1140,7 +1192,7 @@ def linkedin_do_post(request, post_id):
                     c.execute("SELECT video_nc_path FROM planner_posts WHERE id=%s", [post_id])
                     vrow = c.fetchone()
                 if vrow and vrow[0]:
-                    video_url = _public_video_url(vrow[0])
+                    video_url = _public_video_url(post_id)
                     print("BUFFER VIDEO URL:", video_url)
 
             if include_img and not video_url:
@@ -1379,7 +1431,7 @@ def linkedin_post_video(request, post_id):
         if not nc_path:
             return JsonResponse({'ok': False, 'error': 'Kein Video für diesen Post gespeichert.'}, status=400)
 
-        video_url = _public_video_url(nc_path)
+        video_url = _public_video_url(post_id)
         print("BUFFER VIDEO URL:", video_url)
 
         scheduled_at = None
