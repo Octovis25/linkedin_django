@@ -234,7 +234,7 @@
     {% for p in t.posts %}
     <div class="post-row" data-status="{{ p.status|lower }}" id="prow-{{ p.id }}">
       <span class="post-title-link"
-        onclick="openEditModal({{ p.id }},'{{ p.title|escapejs }}','{{ p.content|escapejs }}','{{ p.status }}','{{ p.planned_date|date:'Y-m-d' }}','{{ p.comment|escapejs }}','{{ p.image|escapejs }}')"
+        onclick="openEditModal({{ p.id }},'{{ p.title|escapejs }}','{{ p.content|escapejs }}','{{ p.status }}','{{ p.planned_date|date:"Y-m-d" }}','{{ p.comment|escapejs }}','{{ p.image|escapejs }}','{{ p.link|escapejs }}','{{ p.planned_time|time:"H:i" }}')"
         title="{{ p.title|default:p.content|truncatechars:120 }}">
         {{ p.title|default:p.content|truncatechars:80 }}
       </span>
@@ -243,7 +243,7 @@
       <span style="font-size:11px;padding:1px 7px;border-radius:99px;background:{{ t.accent }};color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block">{{ t.name }}</span>
       <div class="post-actions">
         <button class="pa-btn" title="Edit"
-          onclick="openEditModal({{ p.id }},'{{ p.title|escapejs }}','{{ p.content|escapejs }}','{{ p.status }}','{{ p.planned_date|date:'Y-m-d' }}','{{ p.comment|escapejs }}','{{ p.image|escapejs }}')">✏</button>
+          onclick="openEditModal({{ p.id }},'{{ p.title|escapejs }}','{{ p.content|escapejs }}','{{ p.status }}','{{ p.planned_date|date:"Y-m-d" }}','{{ p.comment|escapejs }}','{{ p.image|escapejs }}','{{ p.link|escapejs }}','{{ p.planned_time|time:"H:i" }}')">✏</button>
         <button class="pa-btn del" title="Delete" onclick="deletePost({{ p.id }})">🗑</button>
       </div>
     </div>
@@ -299,9 +299,11 @@
         {% for s in statuses %}<option>{{ s }}</option>{% endfor %}
       </select>
     </div>
-    <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
-      <label style="font-size:12px;color:#6c757d;white-space:nowrap">Planned to post</label>
-      <input type="date" id="m-date" class="fselect" style="flex:1">
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap">
+      <label style="font-size:12px;color:#6c757d;white-space:nowrap">📅 Datum</label>
+      <input type="date" id="m-date" class="fselect" style="flex:1;min-width:130px">
+      <label style="font-size:12px;color:#6c757d;white-space:nowrap">🕐 Uhrzeit</label>
+      <input type="time" id="m-time" step="60" class="fselect" style="width:100px">
     </div>
     <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
       <div class="img-drop" id="m-thumb"
@@ -333,6 +335,17 @@
         <span onclick="event.stopPropagation();clearImgPreview('m')" style="color:#ffb3b3">🗑 Remove</span>
       </div>
     </div>
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+      <label style="font-size:12px;color:#6c757d;white-space:nowrap">🎬 Video</label>
+      <input type="file" id="m-vid-input" accept="video/mp4,video/quicktime,.mp4,.mov" style="font-size:12px;flex:1" onchange="m_vidName(this)">
+      <span id="m-vid-name" style="font-size:11px;color:#008591"></span>
+      <button type="button" onclick="document.getElementById('m-vid-input').value='';document.getElementById('m-vid-name').textContent='';document.getElementById('m-vid-status').textContent=''" style="font-size:11px;padding:2px 6px;border:0.5px solid #ced4da;border-radius:4px;background:#fff;cursor:pointer;color:#888">✕</button>
+    </div>
+    <p id="m-vid-status" style="font-size:11px;color:#adb5bd;margin:-2px 0 8px 64px"></p>
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+      <label style="font-size:12px;color:#6c757d;white-space:nowrap">🔗 Link</label>
+      <input type="text" id="m-link" placeholder="https://..." class="finput" style="margin-bottom:0;flex:1">
+    </div>
     <textarea id="m-comment" placeholder="Internal comment / notes..." style="width:100%;min-height:50px;font-size:13px;padding:8px;border:0.5px solid #ced4da;border-radius:4px;resize:vertical;box-sizing:border-box;background:#fffef0"></textarea>
     <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:12px">
       <button type="button" onclick="closeModal('post-modal')" style="font-size:13px;padding:5px 14px;border:0.5px solid #ced4da;border-radius:4px;background:#fff;cursor:pointer">Cancel</button>
@@ -351,6 +364,8 @@
         {% for s in statuses %}<option>{{ s }}</option>{% endfor %}
       </select>
       <input type="date" id="e-date" class="fselect" style="flex:1">
+      <label style="font-size:12px;color:#6c757d;white-space:nowrap">🕐</label>
+      <input type="time" id="e-time" step="60" class="fselect" style="width:100px">
     </div>
     <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
       <div class="img-drop" id="e-thumb"
@@ -381,6 +396,17 @@
         <span onclick="event.stopPropagation();openLightbox(document.getElementById('e-img-preview-img').src)">🔍 Full size</span>
         <span onclick="event.stopPropagation();removeImg()" style="color:#ffb3b3">🗑 Remove</span>
       </div>
+    </div>
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+      <label style="font-size:12px;color:#6c757d;white-space:nowrap">🎬 Video</label>
+      <input type="file" id="e-vid-input" accept="video/mp4,video/quicktime,.mp4,.mov" style="font-size:12px;flex:1" onchange="e_vidName(this)">
+      <span id="e-vid-name" style="font-size:11px;color:#008591"></span>
+      <button type="button" onclick="document.getElementById('e-vid-input').value='';document.getElementById('e-vid-name').textContent='';document.getElementById('e-vid-status').textContent=''" style="font-size:11px;padding:2px 6px;border:0.5px solid #ced4da;border-radius:4px;background:#fff;cursor:pointer;color:#888">✕</button>
+    </div>
+    <p id="e-vid-status" style="font-size:11px;color:#adb5bd;margin:-2px 0 8px 64px"></p>
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+      <label style="font-size:12px;color:#6c757d;white-space:nowrap">🔗 Link</label>
+      <input type="text" id="e-link" placeholder="https://..." class="finput" style="margin-bottom:0;flex:1">
     </div>
     <textarea id="e-comment" placeholder="Internal comment / notes..." style="width:100%;min-height:50px;font-size:13px;padding:8px;border:0.5px solid #ced4da;border-radius:4px;resize:vertical;box-sizing:border-box;background:#fffef0"></textarea>
     <div style="display:flex;justify-content:space-between;align-items:center;margin-top:12px">
@@ -644,6 +670,8 @@ function openPostModal(topicId) {
   document.getElementById('m-title').value = '';
   document.getElementById('m-status').value = 'Draft';
   document.getElementById('m-date').value = '';
+  document.getElementById('m-time').value = '';
+  document.getElementById('m-link').value = '';
   document.getElementById('m-comment').value = '';
   clearEditor('m');
   clearImgPreview('m');
@@ -660,9 +688,12 @@ async function savePost() {
   const date = document.getElementById('m-date').value;
   const comment = document.getElementById('m-comment').value.trim();
   if (!content && !title) { alert('Please enter a title or content.'); return; }
+  const link = document.getElementById('m-link').value.trim();
+  const time = document.getElementById('m-time').value;
   const res = await api('/planner/api/post/', {
     action: 'create', topic_id: topicId || null, title, content, status,
-    planned_date: date || null, comment: comment || null
+    planned_date: date || null, planned_time: time || null,
+    link: link || null, comment: comment || null
   });
   if (res && res.ok) {
     const imgInput = document.getElementById('m-img-input');
@@ -671,18 +702,24 @@ async function savePost() {
       fd.append('image', imgInput.files[0]);
       await fetch(`/planner/api/image/${res.id}/`, {method:'POST', headers:{'X-CSRFToken':CSRF}, body:fd});
     }
+    const vidInput = document.getElementById('m-vid-input');
+    if (vidInput.files && vidInput.files[0]) {
+      await uploadVideoNC(res.id, vidInput, document.getElementById('m-vid-status'));
+    }
     closeModal('post-modal');
     location.reload();
   }
 }
 
 /* ── Open edit modal ── */
-function openEditModal(id, title, content, status, date, comment, image) {
+function openEditModal(id, title, content, status, date, comment, image, link, time) {
   document.getElementById('e-id').value = id;
   document.getElementById('e-title').value = title || '';
   setEditorText('e', content);
   document.getElementById('e-status').value = status || 'Draft';
   document.getElementById('e-date').value = date || '';
+  document.getElementById('e-time').value = time || '';
+  document.getElementById('e-link').value = link || '';
   document.getElementById('e-comment').value = comment || '';
   clearImgPreview('e');
   if (image) showImgPreview('e', `/planner/image/${id}/`);
@@ -697,9 +734,12 @@ async function updatePost() {
   const status = document.getElementById('e-status').value;
   const date = document.getElementById('e-date').value;
   const comment = document.getElementById('e-comment').value.trim();
+  const link = document.getElementById('e-link').value.trim();
+  const time = document.getElementById('e-time').value;
   const res = await api('/planner/api/post/', {
     action: 'update', id: parseInt(id), title, content, status,
-    planned_date: date || null, comment: comment || null,
+    planned_date: date || null, planned_time: time || null,
+    link: link || null, comment: comment || null,
     in_pipeline: status === 'Draft' ? 0 : 1
   });
   if (res && res.ok) {
@@ -709,8 +749,40 @@ async function updatePost() {
       fd.append('image', imgInput.files[0]);
       await fetch(`/planner/api/image/${id}/`, {method:'POST', headers:{'X-CSRFToken':CSRF}, body:fd});
     }
+    const vidInputE = document.getElementById('e-vid-input');
+    if (vidInputE.files && vidInputE.files[0]) {
+      await uploadVideoNC(id, vidInputE, document.getElementById('e-vid-status'));
+    }
     closeModal('edit-modal');
     location.reload();
+  }
+}
+
+function m_vidName(inp) { document.getElementById('m-vid-name').textContent = inp.files[0] ? inp.files[0].name : ''; }
+function e_vidName(inp) { document.getElementById('e-vid-name').textContent = inp.files[0] ? inp.files[0].name : ''; }
+
+async function uploadVideoNC(postId, fileInput, statusEl) {
+  const file = fileInput.files && fileInput.files[0];
+  if (!file) return;
+  statusEl.textContent = 'Video wird hochgeladen…';
+  statusEl.style.color = '#008591';
+  const form = new FormData();
+  form.append('video', file);
+  try {
+    const r = await fetch(`/planner/api/video/${postId}/`, {
+      method: 'POST', headers: {'X-CSRFToken': CSRF}, body: form
+    });
+    const d = await r.json();
+    if (d.ok) {
+      statusEl.textContent = '✓ Video auf Nextcloud gespeichert';
+      statusEl.style.color = '#1D9E75';
+    } else {
+      statusEl.textContent = 'Fehler: ' + (d.error || 'Unbekannt');
+      statusEl.style.color = '#dc3545';
+    }
+  } catch(e) {
+    statusEl.textContent = 'Netzwerkfehler: ' + e.message;
+    statusEl.style.color = '#dc3545';
   }
 }
 </script>

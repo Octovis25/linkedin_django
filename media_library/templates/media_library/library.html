@@ -1,0 +1,207 @@
+{% extends "base.html" %}
+{% block title %}Medienbibliothek{% endblock %}
+{% block content %}
+<style>
+.lib-layout{display:grid;grid-template-columns:200px 1fr;gap:0;min-height:70vh}
+.lib-sidebar{background:#f9f7f0;border-right:0.5px solid #e0e0e0;padding:1rem;font-size:13px}
+.lib-sidebar h3{font-size:11px;color:#888;text-transform:uppercase;letter-spacing:.05em;margin:1rem 0 .4rem;font-weight:500}
+.lib-sidebar h3:first-child{margin-top:0}
+.lib-nav{display:block;padding:5px 10px;border-radius:6px;color:#555;text-decoration:none;margin-bottom:2px;cursor:pointer}
+.lib-nav:hover,.lib-nav.active{background:#008591;color:#fff}
+.lib-main{padding:1.25rem}
+.img-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:10px}
+.img-card{background:#fff;border:0.5px solid #e0e0e0;border-radius:8px;overflow:hidden;cursor:pointer;transition:border-color .15s}
+.img-card:hover{border-color:#008591}
+.img-card img{width:100%;aspect-ratio:1;object-fit:cover;display:block;background:#f5f5f5}
+.img-card .img-meta{padding:6px 8px;font-size:11px;color:#555}
+.img-card .img-title{font-weight:500;color:#212529;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.img-card .img-sub{color:#888;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pill{display:inline-block;font-size:10px;padding:1px 7px;border-radius:99px;background:#e8f0fe;color:#185FA5;margin:1px}
+.modal-bg{display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:9999;align-items:center;justify-content:center}
+.modal-bg.open{display:flex}
+.modal-box{background:#fff;border-radius:12px;padding:1.5rem;width:480px;max-width:95vw;max-height:90vh;overflow-y:auto}
+.upload-zone{border:2px dashed #ced4da;border-radius:8px;padding:2rem;text-align:center;cursor:pointer;color:#888;font-size:13px}
+.upload-zone:hover{border-color:#008591;color:#008591}
+</style>
+
+<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem;flex-wrap:wrap;gap:8px">
+  <h1 style="margin:0;font-size:1.3rem">🎨 Medienbibliothek</h1>
+  <div style="display:flex;gap:8px">
+    <form method="get" style="display:flex;gap:6px">
+      <input type="text" name="q" value="{{ filter_q }}" placeholder="Suche..." style="padding:.3rem .6rem;border:1px solid #ced4da;border-radius:.25rem;font-size:.85rem;width:160px">
+      <button type="submit" class="btn btn-primary btn-sm">Suchen</button>
+      {% if filter_q or filter_person or filter_series or filter_tag %}
+      <a href="{% url 'media_library:library' %}" class="btn btn-secondary btn-sm">✕ Zurücksetzen</a>
+      {% endif %}
+    </form>
+    <button onclick="document.getElementById('modal-upload').classList.add('open')" class="btn btn-primary btn-sm">+ Bild hochladen</button>
+  </div>
+</div>
+
+<div class="lib-layout">
+  <div class="lib-sidebar">
+    <h3>Alle</h3>
+    <a class="lib-nav {% if not filter_person and not filter_series and not filter_tag %}active{% endif %}" href="{% url 'media_library:library' %}{% if filter_q %}?q={{ filter_q }}{% endif %}">
+      Alle Bilder <span style="float:right;opacity:.6">{{ items|length }}</span>
+    </a>
+
+    {% if persons %}
+    <h3>Personen</h3>
+    {% for p in persons %}
+    <a class="lib-nav {% if filter_person == p %}active{% endif %}" href="?person={{ p }}{% if filter_q %}&q={{ filter_q }}{% endif %}">{{ p }}</a>
+    {% endfor %}
+    {% endif %}
+
+    {% if series_list %}
+    <h3>Serien</h3>
+    {% for s in series_list %}
+    <a class="lib-nav {% if filter_series == s %}active{% endif %}" href="?series={{ s }}{% if filter_q %}&q={{ filter_q }}{% endif %}">{{ s }}</a>
+    {% endfor %}
+    {% endif %}
+
+    {% if tags %}
+    <h3>Motive</h3>
+    {% for t in tags %}
+    <a class="lib-nav {% if filter_tag == t %}active{% endif %}" href="?tag={{ t }}{% if filter_q %}&q={{ filter_q }}{% endif %}">{{ t }}</a>
+    {% endfor %}
+    {% endif %}
+  </div>
+
+  <div class="lib-main">
+    <p style="font-size:13px;color:#6c757d;margin-bottom:1rem">{{ items|length }} Bild{{ items|length|pluralize:"er" }}</p>
+
+    {% if items %}
+    <div class="img-grid">
+      {% for item in items %}
+      <div class="img-card" onclick="openLibItem({{ item.id }},'{{ item.title|escapejs }}','{{ item.person|escapejs }}','{{ item.series|escapejs }}','{{ item.tags|escapejs }}','{{ item.note|escapejs }}')">
+        <img src="{% url 'media_library:image' item.id %}" alt="{{ item.title }}" loading="lazy">
+        <div class="img-meta">
+          <div class="img-title">{{ item.title|default:"(kein Titel)" }}</div>
+          {% if item.person %}<div class="img-sub">👤 {{ item.person }}</div>{% endif %}
+          {% if item.series %}<div class="img-sub">📚 {{ item.series }}</div>{% endif %}
+          {% if item.tags %}
+          <div style="margin-top:3px">{% for tag in item.tags.split:',' %}<span class="pill">{{ tag|strip }}</span>{% endfor %}</div>
+          {% endif %}
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+    {% else %}
+    <div style="text-align:center;padding:3rem;color:#888">
+      <p style="font-size:2rem;margin-bottom:.5rem">🎨</p>
+      <p>Noch keine Bilder. Lade dein erstes Bild hoch!</p>
+    </div>
+    {% endif %}
+  </div>
+</div>
+
+<!-- Upload Modal -->
+<div id="modal-upload" class="modal-bg">
+  <div class="modal-box">
+    <h3 style="margin:0 0 1rem;font-size:15px">Bild hochladen</h3>
+    <form method="post" action="{% url 'media_library:upload' %}" enctype="multipart/form-data">
+      {% csrf_token %}
+      <div class="upload-zone" onclick="document.getElementById('lib-file').click()" id="upload-zone">
+        <p>📁 Klicken oder Bild hierher ziehen</p>
+        <p id="upload-filename" style="font-size:12px;color:#008591;margin-top:4px"></p>
+      </div>
+      <input type="file" id="lib-file" name="image" accept="image/*" style="display:none" onchange="document.getElementById('upload-filename').textContent=this.files[0]?.name||''">
+      <div style="margin-top:12px;display:grid;grid-template-columns:1fr 1fr;gap:8px">
+        <div>
+          <label style="font-size:12px;color:#6c757d">Titel</label>
+          <input type="text" name="title" placeholder="z.B. Dr. Anna — Erklärt" style="width:100%;font-size:13px;padding:5px 8px;border:0.5px solid #ced4da;border-radius:4px;box-sizing:border-box">
+        </div>
+        <div>
+          <label style="font-size:12px;color:#6c757d">Person / Charakter</label>
+          <input type="text" name="person" placeholder="z.B. Dr. Anna M." style="width:100%;font-size:13px;padding:5px 8px;border:0.5px solid #ced4da;border-radius:4px;box-sizing:border-box" list="persons-list">
+          <datalist id="persons-list">{% for p in persons %}<option value="{{ p }}">{% endfor %}</datalist>
+        </div>
+        <div>
+          <label style="font-size:12px;color:#6c757d">Serie</label>
+          <input type="text" name="series" placeholder='z.B. "On my way"' style="width:100%;font-size:13px;padding:5px 8px;border:0.5px solid #ced4da;border-radius:4px;box-sizing:border-box" list="series-list">
+          <datalist id="series-list">{% for s in series_list %}<option value="{{ s }}">{% endfor %}</datalist>
+        </div>
+        <div>
+          <label style="font-size:12px;color:#6c757d">Motive / Tags</label>
+          <input type="text" name="tags" placeholder="z.B. Labor, Meeting" style="width:100%;font-size:13px;padding:5px 8px;border:0.5px solid #ced4da;border-radius:4px;box-sizing:border-box">
+        </div>
+      </div>
+      <div style="margin-top:8px">
+        <label style="font-size:12px;color:#6c757d">Notiz</label>
+        <textarea name="note" placeholder="Wofür eignet sich dieses Bild?" style="width:100%;font-size:13px;padding:6px 8px;border:0.5px solid #ced4da;border-radius:4px;resize:vertical;min-height:50px;box-sizing:border-box"></textarea>
+      </div>
+      <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:12px">
+        <button type="button" onclick="document.getElementById('modal-upload').classList.remove('open')" class="btn btn-sm" style="border:0.5px solid #ced4da">Abbrechen</button>
+        <button type="submit" class="btn btn-primary btn-sm">Hochladen</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Detail / Edit Modal -->
+<div id="modal-detail" class="modal-bg">
+  <div class="modal-box">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem">
+      <h3 style="margin:0;font-size:15px" id="detail-title">Details</h3>
+      <button onclick="document.getElementById('modal-detail').classList.remove('open')" style="border:none;background:none;font-size:20px;cursor:pointer;color:#888">×</button>
+    </div>
+    <img id="detail-img" src="" alt="" style="width:100%;border-radius:8px;margin-bottom:1rem;object-fit:contain;max-height:300px;background:#f5f5f5">
+    <form id="detail-form" method="post" action="">
+      {% csrf_token %}
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+        <div>
+          <label style="font-size:12px;color:#6c757d">Titel</label>
+          <input type="text" id="d-title" name="title" style="width:100%;font-size:13px;padding:5px 8px;border:0.5px solid #ced4da;border-radius:4px;box-sizing:border-box">
+        </div>
+        <div>
+          <label style="font-size:12px;color:#6c757d">Person / Charakter</label>
+          <input type="text" id="d-person" name="person" style="width:100%;font-size:13px;padding:5px 8px;border:0.5px solid #ced4da;border-radius:4px;box-sizing:border-box" list="persons-list">
+        </div>
+        <div>
+          <label style="font-size:12px;color:#6c757d">Serie</label>
+          <input type="text" id="d-series" name="series" style="width:100%;font-size:13px;padding:5px 8px;border:0.5px solid #ced4da;border-radius:4px;box-sizing:border-box" list="series-list">
+        </div>
+        <div>
+          <label style="font-size:12px;color:#6c757d">Tags</label>
+          <input type="text" id="d-tags" name="tags" style="width:100%;font-size:13px;padding:5px 8px;border:0.5px solid #ced4da;border-radius:4px;box-sizing:border-box">
+        </div>
+      </div>
+      <div style="margin-top:8px">
+        <label style="font-size:12px;color:#6c757d">Notiz</label>
+        <textarea id="d-note" name="note" style="width:100%;font-size:13px;padding:6px 8px;border:0.5px solid #ced4da;border-radius:4px;resize:vertical;min-height:50px;box-sizing:border-box"></textarea>
+      </div>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-top:12px">
+        <form id="delete-form" method="post" action="" style="margin:0">
+          {% csrf_token %}
+          <button type="submit" onclick="return confirm('Bild wirklich löschen?')" style="font-size:12px;padding:4px 10px;border:0.5px solid #dc3545;border-radius:4px;background:#fff;color:#dc3545;cursor:pointer">🗑 Löschen</button>
+        </form>
+        <div style="display:flex;gap:8px">
+          <button type="button" onclick="document.getElementById('modal-detail').classList.remove('open')" style="font-size:13px;padding:5px 14px;border:0.5px solid #ced4da;border-radius:4px;background:#fff;cursor:pointer">Abbrechen</button>
+          <button type="submit" form="detail-form" style="font-size:13px;padding:5px 14px;background:#008080;color:#fff;border:none;border-radius:4px;cursor:pointer">Speichern</button>
+        </div>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+function openLibItem(id, title, person, series, tags, note) {
+  document.getElementById('detail-title').textContent = title || '(kein Titel)';
+  document.getElementById('detail-img').src = '/library/image/' + id + '/';
+  document.getElementById('d-title').value  = title;
+  document.getElementById('d-person').value = person;
+  document.getElementById('d-series').value = series;
+  document.getElementById('d-tags').value   = tags;
+  document.getElementById('d-note').value   = note;
+  document.getElementById('detail-form').action  = '/library/edit/'   + id + '/';
+  document.getElementById('delete-form').action  = '/library/delete/' + id + '/';
+  document.getElementById('modal-detail').classList.add('open');
+}
+document.getElementById('modal-detail').addEventListener('click', function(e) {
+  if (e.target === this) this.classList.remove('open');
+});
+document.getElementById('modal-upload').addEventListener('click', function(e) {
+  if (e.target === this) this.classList.remove('open');
+});
+</script>
+{% endblock %}

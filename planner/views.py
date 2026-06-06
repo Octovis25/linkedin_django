@@ -76,7 +76,8 @@ def planner_view(request):
         for t in topics:
             bg, fg = COLOR_MAP.get(t['color'], ('#f5f5f5', '#6c757d'))
             accent = ACCENT_MAP.get(t['color'], '#888780')
-            posts = _q(c, """SELECT id, title, content, status, planned_date, image, COALESCE(comment,'') as comment
+            posts = _q(c, """SELECT id, title, content, status, planned_date, image, COALESCE(comment,'') as comment,
+                                    COALESCE(link,'') as link, planned_time
                              FROM planner_posts
                              WHERE topic_id=%s
                              ORDER BY COALESCE(planned_date,'9999-12-31'), created_at""", [t['id']])
@@ -87,7 +88,8 @@ def planner_view(request):
                 'bg': bg, 'fg': fg, 'accent': accent,
                 'posts': [{'id': r[0], 'title': r[1] or '', 'content': r[2] or '',
                            'status': r[3], 'planned_date': r[4],
-                           'image': r[5] or '', 'comment': r[6] or ''} for r in posts],
+                           'image': r[5] or '', 'comment': r[6] or '',
+                           'link': r[7] or '', 'planned_time': r[8]} for r in posts],
                 'ideas': [{'id': r[0], 'text': r[1]} for r in ideas],
             })
 
@@ -663,24 +665,97 @@ def _li_fetch(url, token, method='GET', body=None, version=None):
         raise Exception(f"HTTP {e.code} {e.reason}: {body}")
 
 
-def _buffer_post(buf_token, profile_id, text):
-    """Post text to Buffer API which publishes to a LinkedIn company page."""
-    data = urllib.parse.urlencode([
-        ('access_token', buf_token),
-        ('profile_ids[]', profile_id),
-        ('text', text),
-        ('now', 'true'),
-    ]).encode('utf-8')
+def _buffer_graphql(buf_token, query, variables=None):
+    """Small helper for Buffer's current GraphQL API."""
+    payload = {"query": query}
+    if variables is not None:
+        payload["variables"] = variables
+
     req = urllib.request.Request(
-        'https://api.bufferapp.com/1/updates/create.json',
-        data=data, method='POST')
-    req.add_header('Content-Type', 'application/x-www-form-urlencoded')
+        "https://api.buffer.com",
+        data=json.dumps(payload).encode("utf-8"),
+        method="POST"
+    )
+    req.add_header("Authorization", f"Bearer {buf_token}")
+    req.add_header("Content-Type", "application/json")
+
     try:
         with urllib.request.urlopen(req) as resp:
-            return json.loads(resp.read().decode('utf-8'))
+            result = json.loads(resp.read().decode("utf-8"))
     except urllib.error.HTTPError as e:
-        body = e.read().decode('utf-8', errors='replace')
-        raise Exception(f"Buffer HTTP {e.code}: {body}")
+        body = e.read().decode("utf-8", errors="replace")
+        raise Exception(f"Buffer GraphQL HTTP {e.code}: {body}")
+
+    if result.get("errors"):
+        raise Exception("Buffer GraphQL errors: " + json.dumps(result["errors"], ensure_ascii=False))
+
+    return result
+
+
+def _buffer_post(buf_token, profile_id, text, image_url=None, scheduled_at=None):
+    """
+    Send a post to Buffer using the current GraphQL API.
+
+    - If scheduled_at is given, Buffer schedules the post for that exact UTC time.
+    - If scheduled_at is not given, Buffer adds the post to the next queue slot.
+    - image_url must be publicly reachable by Buffer.
+    """
+    from datetime import timezone
+
+    query = """
+    mutation CreatePost($input: CreatePostInput!) {
+      createPost(input: $input) {
+        ... on PostActionSuccess {
+          post {
+            id
+            text
+            dueAt
+            status
+            assets {
+              id
+              mimeType
+            }
+          }
+        }
+        ... on MutationError {
+          message
+        }
+      }
+    }
+    """
+
+    input_data = {
+        "text": text,
+        "channelId": profile_id,
+        "schedulingType": "automatic",
+        "mode": "addToQueue",
+        "assets": [],
+    }
+
+    if scheduled_at:
+        # Buffer expects ISO 8601 UTC for customScheduled posts.
+        if scheduled_at.tzinfo is None:
+            scheduled_at = scheduled_at.replace(tzinfo=timezone.utc)
+        else:
+            scheduled_at = scheduled_at.astimezone(timezone.utc)
+        input_data["mode"] = "customScheduled"
+        input_data["dueAt"] = scheduled_at.isoformat(timespec="milliseconds").replace("+00:00", "Z")
+
+    if image_url:
+        input_data["assets"] = [{"image": {"url": image_url}}]
+
+    result = _buffer_graphql(buf_token, query, {"input": input_data})
+    create_result = result.get("data", {}).get("createPost") or {}
+
+    if create_result.get("message"):
+        raise Exception(create_result.get("message"))
+
+    post = create_result.get("post") or {}
+    if not post.get("id"):
+        raise Exception("Buffer did not return a post id: " + json.dumps(result, ensure_ascii=False))
+
+    # Keep a shape similar to the old REST API code.
+    return {"updates": [{"id": post.get("id"), "due_at": post.get("dueAt"), "status": post.get("status")}], "raw": result}
 
 
 def _superuser_only(view_func):
@@ -860,121 +935,167 @@ def linkedin_disconnect(request):
 @login_required
 def linkedin_do_post(request, post_id):
     import time as _time
+    from datetime import datetime as _dt, timezone as _timezone
+
     if request.method != 'POST':
         return JsonResponse({'ok': False}, status=405)
+
     token = _li_get_superuser_token()
-    if not token or not token.get('access_token'):
+    if not token:
         return JsonResponse({'ok': False, 'error': 'not_connected'}, status=401)
-    data          = json.loads(request.body)
-    target        = data.get('target', 'person')
-    text          = data.get('text', '')
-    include_img   = data.get('include_image', False)
-    scheduled_ms  = data.get('scheduled_ms')   # Unix timestamp in ms or None
-    post_token    = token['access_token']
 
-    # ── Make.com webhook route: org posts go via Make webhook ──
-    if target == 'org' and token.get('make_webhook_url'):
+    data = json.loads(request.body)
+    target = data.get('target', 'person')
+    text = data.get('text', '').strip()
+    include_img = data.get('include_image', False)
+    scheduled_ms = data.get('scheduled_ms')
+
+    if not text:
+        return JsonResponse({'ok': False, 'error': 'empty_text'}, status=400)
+
+    # ─────────────────────────────────────────────
+    # Buffer route for organization/company posts
+    # ─────────────────────────────────────────────
+    if target == 'org':
+        if not token.get('buffer_token') or not token.get('buffer_profile_id'):
+            return JsonResponse({
+                'ok': False,
+                'error': 'Buffer ist nicht konfiguriert. Bitte Buffer Access Token speichern und Profil auswählen.'
+            }, status=400)
+
         try:
-            import requests as _requests
-            from datetime import datetime as _dt
-            wh_url = token['make_webhook_url']
+            image_url = None
 
-            # ── Scheduled for later? Save and return without posting ──
-            if scheduled_ms:
-                scheduled_ts = float(scheduled_ms) / 1000.0
-                if scheduled_ts > _time.time() + 60:
-                    _ensure_scheduled_at_column()
-                    scheduled_at = _dt.utcfromtimestamp(scheduled_ts)
-                    with connection.cursor() as c:
-                        try:
-                            c.execute("ALTER TABLE planner_posts ADD COLUMN linkedin_posted TINYINT(1) NOT NULL DEFAULT 0")
-                        except Exception:
-                            pass
-                        c.execute("""UPDATE planner_posts
-                                     SET content=%s, status='Scheduled', in_pipeline=1,
-                                         post_scheduled_at=%s, linkedin_posted=0
-                                     WHERE id=%s""",
-                                  [text, scheduled_at, post_id])
-                    return JsonResponse({'ok': True, 'via': 'make', 'scheduled': True,
-                                        'scheduled_at': scheduled_at.isoformat()})
-
-            # ── Post now via Make webhook ──
-            payload = {'text': text}
             if include_img:
                 with connection.cursor() as c:
                     c.execute("SELECT image FROM planner_posts WHERE id=%s", [post_id])
                     row = c.fetchone()
+
                 if row and row[0]:
                     img_token = _make_image_token(post_id)
-                    base_url = 'https://linkedin-django-wd7a.onrender.com'
-                    payload['image_url'] = f"{base_url}/planner/public-image/{post_id}/{img_token}/"
-            resp = _requests.post(wh_url, data=payload, timeout=30)
-            if resp.status_code >= 400:
-                return JsonResponse({'ok': False, 'error': f'Make webhook HTTP {resp.status_code}'}, status=500)
+                    image_url = request.build_absolute_uri(
+                        f"/planner/public-image/{post_id}/{img_token}/"
+                    )
+
+            scheduled_at = None
+            if scheduled_ms:
+                scheduled_ts = float(scheduled_ms) / 1000.0
+                if scheduled_ts > _time.time() + 60:
+                    scheduled_at = _dt.fromtimestamp(scheduled_ts, tz=_timezone.utc)
+
+            result = _buffer_post(
+                buf_token=token['buffer_token'],
+                profile_id=token['buffer_profile_id'],
+                text=text,
+                image_url=image_url,
+                scheduled_at=scheduled_at,
+            )
+
+            buffer_update_id = None
+            try:
+                updates = result.get('updates') or []
+                if updates:
+                    buffer_update_id = updates[0].get('id')
+            except Exception:
+                buffer_update_id = None
+
             with connection.cursor() as c:
-                try:
-                    c.execute("ALTER TABLE planner_posts ADD COLUMN linkedin_posted TINYINT(1) NOT NULL DEFAULT 0")
-                except Exception:
-                    pass
-                c.execute("UPDATE planner_posts SET status='Posted', in_pipeline=1, linkedin_posted=1 WHERE id=%s", [post_id])
-            return JsonResponse({'ok': True, 'via': 'make', 'has_image': bool(payload.get('image_url')), 'scheduled': False})
+                for sql in [
+                    "ALTER TABLE planner_posts ADD COLUMN linkedin_posted TINYINT(1) NOT NULL DEFAULT 0",
+                    "ALTER TABLE planner_posts ADD COLUMN buffer_update_id VARCHAR(100) DEFAULT NULL",
+                    "ALTER TABLE planner_posts ADD COLUMN post_scheduled_at DATETIME NULL DEFAULT NULL",
+                ]:
+                    try:
+                        c.execute(sql)
+                    except Exception:
+                        pass
+
+                if scheduled_at:
+                    c.execute("""
+                        UPDATE planner_posts
+                        SET content=%s,
+                            status='Scheduled',
+                            in_pipeline=1,
+                            linkedin_posted=0,
+                            post_scheduled_at=%s,
+                            buffer_update_id=%s
+                        WHERE id=%s
+                    """, [text, scheduled_at.replace(tzinfo=None), buffer_update_id, post_id])
+
+                    return JsonResponse({
+                        'ok': True,
+                        'via': 'buffer',
+                        'scheduled': True,
+                        'scheduled_at': scheduled_at.isoformat(),
+                        'buffer_update_id': buffer_update_id,
+                        'has_image': bool(image_url),
+                    })
+
+                c.execute("""
+                    UPDATE planner_posts
+                    SET content=%s,
+                        status='Scheduled',
+                        in_pipeline=1,
+                        linkedin_posted=0,
+                        buffer_update_id=%s
+                    WHERE id=%s
+                """, [text, buffer_update_id, post_id])
+
+                return JsonResponse({
+                    'ok': True,
+                    'via': 'buffer',
+                    'scheduled': True,
+                    'buffer_update_id': buffer_update_id,
+                    'has_image': bool(image_url),
+                })
+
         except Exception as e:
             return JsonResponse({'ok': False, 'error': str(e)}, status=500)
 
-    # ── Buffer route: fallback if buffer is configured ──
-    if target == 'org' and token.get('buffer_token') and token.get('buffer_profile_id'):
-        try:
-            _buffer_post(token['buffer_token'], token['buffer_profile_id'], text)
-            with connection.cursor() as c:
-                try:
-                    c.execute("ALTER TABLE planner_posts ADD COLUMN linkedin_posted TINYINT(1) NOT NULL DEFAULT 0")
-                except Exception:
-                    pass
-                c.execute("UPDATE planner_posts SET status='Posted', in_pipeline=1, linkedin_posted=1 WHERE id=%s", [post_id])
-            return JsonResponse({'ok': True, 'via': 'buffer', 'scheduled': False})
-        except Exception as e:
-            return JsonResponse({'ok': False, 'error': str(e)}, status=500)
+    # ─────────────────────────────────────────────
+    # Personal LinkedIn fallback
+    # ─────────────────────────────────────────────
+    if not token.get('access_token'):
+        return JsonResponse({'ok': False, 'error': 'linkedin_not_connected'}, status=401)
 
-    if target == 'org' and token.get('org_id'):
-        import re as _re2
-        _oid = token['org_id']
-        _m = _re2.search(r'(\d{5,})', str(_oid))
-        _oid_clean = _m.group(1) if _m else _oid
-        author = f"urn:li:organization:{_oid_clean}"
-    else:
-        author = f"urn:li:person:{token['person_id']}"
-
-    # ── Image upload via new Images API ──────────────────────────────
+    post_token = token['access_token']
+    author = f"urn:li:person:{token['person_id']}"
     image_urn = None
+
     if include_img:
         with connection.cursor() as c:
             rows = _q(c, "SELECT image FROM planner_posts WHERE id=%s", [post_id])
+
         if rows and rows[0][0]:
             try:
                 image_path = rows[0][0]
-                full_path  = os.path.join(settings.MEDIA_ROOT, image_path)
-                # Initialize upload
+                full_path = os.path.join(settings.MEDIA_ROOT, image_path)
+
                 init = _li_fetch(
                     'https://api.linkedin.com/rest/images?action=initializeUpload',
-                    post_token, method='POST',
+                    post_token,
+                    method='POST',
                     body={'initializeUploadRequest': {'owner': author}},
-                    version='202604')
+                    version='202604'
+                )
+
                 upload_url = init['value']['uploadUrl']
-                image_urn  = init['value']['image']
-                # Upload bytes
+                image_urn = init['value']['image']
+
                 with open(full_path, 'rb') as f:
                     img_bytes = f.read()
+
                 img_req = urllib.request.Request(upload_url, data=img_bytes, method='PUT')
                 img_req.add_header('Authorization', f'Bearer {post_token}')
                 img_req.add_header('Content-Type', 'image/jpeg')
                 urllib.request.urlopen(img_req)
+
             except Exception as e:
                 print(f'LI image upload error: {e}')
                 image_urn = None
 
-    # ── Build post body (new Posts API) ──────────────────────────────
     post_body = {
-        'author':     author,
+        'author': author,
         'commentary': text,
         'visibility': 'PUBLIC',
         'distribution': {
@@ -982,31 +1103,98 @@ def linkedin_do_post(request, post_id):
             'targetEntities': [],
             'thirdPartyDistributionChannels': [],
         },
+        'lifecycleState': 'PUBLISHED',
     }
+
     if image_urn:
         post_body['content'] = {'media': {'id': image_urn}}
 
-    # LinkedIn Posts API v202604 only supports lifecycleState=PUBLISHED on creation.
-    # Scheduling via the API is not available in this version.
-    post_body['lifecycleState'] = 'PUBLISHED'
-
     try:
-        result   = _li_fetch('https://api.linkedin.com/rest/posts',
-                             post_token, method='POST', body=post_body, version='202604')
+        result = _li_fetch(
+            'https://api.linkedin.com/rest/posts',
+            post_token,
+            method='POST',
+            body=post_body,
+            version='202604'
+        )
+
         post_urn = result.get('id', '') if isinstance(result, dict) else ''
-        new_status = 'Posted'
+
         with connection.cursor() as c:
             try:
                 c.execute("ALTER TABLE planner_posts ADD COLUMN linkedin_posted TINYINT(1) NOT NULL DEFAULT 0")
             except Exception:
                 pass
-            c.execute("""UPDATE planner_posts
-                         SET status=%s, in_pipeline=1, linkedin_posted=1
-                         WHERE id=%s""", [new_status, post_id])
-        return JsonResponse({'ok': True, 'post_urn': post_urn, 'scheduled': False})
+
+            c.execute("""
+                UPDATE planner_posts
+                SET content=%s,
+                    status='Posted',
+                    in_pipeline=1,
+                    linkedin_posted=1
+                WHERE id=%s
+            """, [text, post_id])
+
+        return JsonResponse({
+            'ok': True,
+            'via': 'linkedin',
+            'post_urn': post_urn,
+            'scheduled': False,
+        })
+
     except Exception as e:
         return JsonResponse({'ok': False, 'error': str(e)}, status=500)
 
+
+@login_required
+def linkedin_post_video(request, post_id):
+    """
+    Minimal safe placeholder.
+    Video via Buffer needs a publicly reachable video URL. The old Make path is intentionally disabled.
+    """
+    return JsonResponse({
+        'ok': False,
+        'error': 'Video-Posting ist für Buffer noch nicht aktiviert. Erst Text + Bild testen; Video braucht eine öffentliche Video-URL.'
+    }, status=400)
+
+
+@login_required
+def api_video(request, post_id):
+    """Upload a video file to Nextcloud and store its path in planner_posts.video_nc_path."""
+    import requests as _req, time as _time
+    if request.method != 'POST':
+        return JsonResponse({'ok': False}, status=405)
+    video_file = request.FILES.get('video')
+    if not video_file:
+        return JsonResponse({'ok': False, 'error': 'Keine Videodatei'}, status=400)
+    try:
+        video_bytes = video_file.read()
+        suffix   = os.path.splitext(video_file.name)[1] or '.mp4'
+        filename = f"video_{post_id}_{int(_time.time())}{suffix}"
+        nc_folder = "Marketing & Design/LinkedIn/Videos"
+        nc_path   = f"{nc_folder}/{filename}"
+        from posts_posted.nc_storage import _get_nc_credentials
+        from urllib.parse import quote as _q2
+        from requests.auth import HTTPBasicAuth as _BA
+        nc_url, username, password = _get_nc_credentials()
+        if not all([nc_url, username, password]):
+            return JsonResponse({'ok': False, 'error': 'Nextcloud nicht verbunden'}, status=500)
+        upload_url = f"{nc_url}/remote.php/dav/files/{username}/{_q2(nc_path, safe='/')}"
+        r = _req.put(upload_url, data=video_bytes,
+            auth=_BA(username, password),
+            headers={'Content-Type': video_file.content_type or 'video/mp4'},
+            timeout=120)
+        if r.status_code not in [200, 201, 204]:
+            return JsonResponse({'ok': False, 'error': f'NC HTTP {r.status_code}'}, status=500)
+        with connection.cursor() as c:
+            try:
+                c.execute("ALTER TABLE planner_posts ADD COLUMN video_nc_path VARCHAR(512) DEFAULT NULL")
+            except Exception:
+                pass
+            c.execute("UPDATE planner_posts SET video_nc_path=%s WHERE id=%s", [nc_path, post_id])
+        return JsonResponse({'ok': True, 'nc_path': nc_path})
+    except Exception as e:
+        return JsonResponse({'ok': False, 'error': str(e)}, status=500)
 
 def api_trigger_scheduled(request):
     """
@@ -1032,7 +1220,11 @@ def api_trigger_scheduled(request):
 
     _ensure_scheduled_at_column()
     with connection.cursor() as c:
-        c.execute("""SELECT id, content, image
+        try:
+            c.execute("ALTER TABLE planner_posts ADD COLUMN video_nc_path VARCHAR(512) DEFAULT NULL")
+        except Exception:
+            pass
+        c.execute("""SELECT id, content, image, video_nc_path
                      FROM planner_posts
                      WHERE status = 'Scheduled'
                        AND post_scheduled_at IS NOT NULL
@@ -1042,11 +1234,62 @@ def api_trigger_scheduled(request):
 
     posted = []
     errors = []
-    wh_url = token['make_webhook_url']
+    wh_url = token.get('make_webhook_url', '')
 
-    for (pid, content, image) in due_posts:
+    for (pid, content_txt, image, video_nc_path) in due_posts:
         try:
-            payload = {'text': content or ''}
+            # Video posts go directly via LinkedIn API
+            if video_nc_path:
+                from posts_posted.nc_storage import download_image_from_nextcloud
+                vid_bytes, _ = download_image_from_nextcloud(video_nc_path)
+                if not vid_bytes:
+                    errors.append({'id': pid, 'error': 'Video nicht auf Nextcloud gefunden'})
+                    continue
+                import re as _re2
+                _author = None
+                if token.get('org_id'):
+                    _m = _re2.search(r'(\d{5,})', str(token['org_id']))
+                    _author = f"urn:li:organization:{_m.group(1) if _m else token['org_id']}"
+                else:
+                    _author = f"urn:li:person:{token['person_id']}"
+                init_r = _li_fetch(
+                    'https://api.linkedin.com/rest/videos?action=initializeUpload',
+                    token['access_token'], method='POST',
+                    body={'initializeUploadRequest': {
+                        'owner': _author, 'fileSizeBytes': len(vid_bytes),
+                        'uploadCaptions': False, 'uploadThumbnail': False,
+                    }}, version='202404')
+                instrs    = init_r['value']['uploadInstructions']
+                vid_urn   = init_r['value']['video']
+                up_token  = init_r['value']['uploadToken']
+                up_ids    = []
+                for instr in instrs:
+                    chunk = vid_bytes[instr['firstByte']:instr['lastByte'] + 1]
+                    rr = _requests.put(instr['uploadUrl'], data=chunk,
+                        headers={'Authorization': f"Bearer {token['access_token']}",
+                                 'Content-Type': 'application/octet-stream'}, timeout=120)
+                    up_ids.append(instr.get('partId', ''))
+                _li_fetch('https://api.linkedin.com/rest/videos?action=finalizeUpload',
+                    token['access_token'], method='POST',
+                    body={'finalizeUploadRequest': {'video': vid_urn, 'uploadToken': up_token,
+                                                    'uploadedPartIds': up_ids}}, version='202404')
+                _li_fetch('https://api.linkedin.com/rest/posts',
+                    token['access_token'], method='POST', version='202404',
+                    body={'author': _author, 'commentary': content_txt or '',
+                          'visibility': 'PUBLIC',
+                          'distribution': {'feedDistribution': 'MAIN_FEED', 'targetEntities': [],
+                                           'thirdPartyDistributionChannels': []},
+                          'content': {'media': {'id': vid_urn}},
+                          'lifecycleState': 'PUBLISHED'})
+                with connection.cursor() as c:
+                    c.execute("UPDATE planner_posts SET status='Posted', in_pipeline=1, linkedin_posted=1, post_scheduled_at=NULL WHERE id=%s", [pid])
+                posted.append(pid)
+                continue
+            # Text/image posts via Make.com webhook
+            if not wh_url:
+                errors.append({'id': pid, 'error': 'Kein Make.com Webhook konfiguriert'})
+                continue
+            payload = {'text': content_txt or ''}
             if image:
                 img_token = _make_image_token(pid)
                 base_url = 'https://linkedin-django-wd7a.onrender.com'
@@ -1069,29 +1312,67 @@ def api_trigger_scheduled(request):
 
 @login_required
 def api_buffer_profiles(request):
-    """Fetch LinkedIn profiles connected to Buffer so the user can select the right one."""
+    """Fetch LinkedIn channels connected to Buffer using the current GraphQL API."""
     if request.method != 'POST':
         return JsonResponse({'error': 'POST only'}, status=405)
+
     data = json.loads(request.body)
     buf_token = data.get('token', '').strip()
+
     if not buf_token:
         return JsonResponse({'error': 'Kein Token angegeben'}, status=400)
+
+    org_query = """
+    query GetOrganizations {
+      account {
+        organizations {
+          id
+          name
+        }
+      }
+    }
+    """
+
+    channels_query = """
+    query GetChannels($organizationId: OrganizationId!) {
+      channels(input: { organizationId: $organizationId }) {
+        id
+        name
+        displayName
+        service
+        type
+      }
+    }
+    """
+
     try:
-        url = 'https://api.bufferapp.com/1/profiles.json?access_token=' + urllib.parse.quote(buf_token, safe='')
-        req = urllib.request.Request(url)
-        with urllib.request.urlopen(req) as resp:
-            profiles = json.loads(resp.read().decode('utf-8'))
-        li_profiles = [
-            {
-                'id':   p['_id'],
-                'name': p.get('formatted_username') or p.get('service_username') or p['_id'],
-                'type': p.get('formatted_service') or p.get('service_type', ''),
-            }
-            for p in profiles if p.get('service') == 'linkedin'
-        ]
+        org_result = _buffer_graphql(buf_token, org_query)
+        organizations = org_result.get('data', {}).get('account', {}).get('organizations', []) or []
+
+        li_profiles = []
+        for org in organizations:
+            org_id = org.get('id')
+            org_name = org.get('name') or org_id
+            if not org_id:
+                continue
+
+            ch_result = _buffer_graphql(buf_token, channels_query, {'organizationId': org_id})
+            channels = ch_result.get('data', {}).get('channels', []) or []
+
+            for ch in channels:
+                service = str(ch.get('service') or '').lower()
+                if 'linkedin' not in service:
+                    continue
+
+                name = ch.get('displayName') or ch.get('name') or ch.get('id')
+                li_profiles.append({
+                    'id': ch.get('id'),
+                    'name': f"{name} — {org_name}",
+                    'type': ch.get('service') or 'linkedin',
+                })
+
         return JsonResponse({'profiles': li_profiles})
-    except urllib.error.HTTPError as e:
-        body = e.read().decode('utf-8', errors='replace')
-        return JsonResponse({'error': f'Buffer API Fehler: {body}'}, status=400)
+
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=500)
+
