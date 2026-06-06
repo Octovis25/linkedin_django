@@ -26,6 +26,36 @@ def _topics(c):
             for r in _q(c, "SELECT id, name, color FROM planner_topics ORDER BY name")]
 
 
+def _ensure_media_columns():
+    """Ensure image/video media columns used by the planner exist."""
+    with connection.cursor() as c:
+        try:
+            c.execute("ALTER TABLE planner_posts ADD COLUMN video_nc_path VARCHAR(512) DEFAULT NULL")
+        except Exception:
+            pass
+
+
+def _attach_video_paths(posts_list):
+    """Attach video_nc_path to already built post dictionaries without changing legacy SELECTs."""
+    if not posts_list:
+        return posts_list
+    _ensure_media_columns()
+    ids = [p.get('id') for p in posts_list if p.get('id')]
+    if not ids:
+        return posts_list
+    placeholders = ','.join(['%s'] * len(ids))
+    with connection.cursor() as c:
+        try:
+            c.execute(f"SELECT id, COALESCE(video_nc_path,'') FROM planner_posts WHERE id IN ({placeholders})", ids)
+            rows = c.fetchall()
+        except Exception:
+            rows = []
+    vid_map = {r[0]: (r[1] or '') for r in rows}
+    for p in posts_list:
+        p['video_nc_path'] = vid_map.get(p.get('id'), '')
+    return posts_list
+
+
 def _posts_to_json(posts_list):
     """Safely serialize posts for embedding in a <script> block."""
     safe = []
@@ -39,6 +69,7 @@ def _posts_to_json(posts_list):
             'date': date.strftime('%Y-%m-%d') if date else '',
             'comment': p.get('comment') or '',
             'image': p.get('image') or '',
+            'video_nc_path': p.get('video_nc_path') or '',
             'topic_id': p.get('topic_id') or 0,
             'is_oj': bool(p.get('is_oj', False)),
             'link': p.get('link') or '',
@@ -132,6 +163,7 @@ def pipeline_view(request):
             'planned_time': r[13],
         })
 
+    _attach_video_paths(posts_list)
     return render(request, 'planner/pipeline.html', {'posts': posts_list, 'topics': topics, 'topic_filter': topic_filter, 'statuses': ['Draft', 'Review', 'Ready', 'Scheduled', 'Posted', 'Archive'], 'tab': 'pipeline', 'page_title': '→ Pipeline', 'posts_json': _posts_to_json(posts_list)})
 
 
@@ -162,6 +194,7 @@ def ready_view(request):
             'topic_id': r[8], 'comment': r[9] or '', 'bg': bg, 'fg': fg,
         })
 
+    _attach_video_paths(posts_list)
     return render(request, 'planner/ready.html', {'posts': posts_list, 'topics': topics, 'topic_filter': topic_filter, 'statuses': ['Draft', 'Review', 'Ready', 'Scheduled', 'Posted', 'Archive'], 'tab': 'ready', 'page_title': '🚀 Ready to post', 'posts_json': _posts_to_json(posts_list)})
 
 
@@ -204,6 +237,7 @@ def scheduled_view(request):
             'planned_time': r[13],
         })
     li_token = _li_get_superuser_token()
+    _attach_video_paths(posts_list)
     return render(request, 'planner/scheduled.html', {'posts': posts_list, 'topics': topics, 'topic_filter': topic_filter, 'statuses': ['Draft', 'Review', 'Ready', 'Scheduled', 'Posted', 'Archive'], 'tab': 'scheduled', 'page_title': '📅 Scheduled', 'posts_json': _posts_to_json(posts_list), 'li_connected': bool(li_token), 'li_org': li_token.get('org_name','') if li_token else ''})
 
 
@@ -234,6 +268,7 @@ def archive_view(request):
             'topic_id': r[8], 'comment': r[9] or '', 'bg': bg, 'fg': fg,
         })
 
+    _attach_video_paths(posts_list)
     return render(request, 'planner/archive.html', {'posts': posts_list, 'topics': topics, 'topic_filter': topic_filter, 'statuses': ['Draft', 'Review', 'Ready', 'Scheduled', 'Posted', 'Archive'], 'tab': 'archive', 'page_title': '📦 Archive', 'posts_json': _posts_to_json(posts_list)})
 
 
@@ -264,6 +299,7 @@ def all_view(request):
             'topic_id': r[8], 'comment': r[9] or '', 'bg': bg, 'fg': fg,
         })
 
+    _attach_video_paths(posts_list)
     return render(request, 'planner/all_posts.html', {
         'posts': posts_list,
         'topics': topics,
@@ -306,6 +342,7 @@ def oj_view(request):
             'linkedin_posted': bool(r[10]), 'is_oj': True,
         })
 
+    _attach_video_paths(posts_list)
     li_token = _li_get_superuser_token()
     return render(request, 'planner/oj.html', {
         'posts': posts_list,
@@ -331,7 +368,7 @@ def planner_image(request, post_id):
     # Wenn lokaler Pfad (planner/...) → Nextcloud Pfad bauen
     if not nc_path.startswith('Marketing'):
         filename = nc_path.split('/')[-1]
-        nc_path = f"Marketing & Design/LinkedIn/Statistics/data/Post-Bilder/image_ready/{filename}"
+        nc_path = f"Marketing & Design/LinkedIn/Planner/Images/{filename}"
     content, ct = download_image_from_nextcloud(nc_path)
     if not content:
         raise Http404
@@ -405,6 +442,10 @@ def api_post(request):
             return JsonResponse({'ok': True})
         elif action == 'delete_image':
             c.execute("UPDATE planner_posts SET image=NULL WHERE id=%s", [data.get('id')])
+            return JsonResponse({'ok': True})
+        elif action == 'delete_video':
+            _ensure_media_columns()
+            c.execute("UPDATE planner_posts SET video_nc_path=NULL WHERE id=%s", [data.get('id')])
             return JsonResponse({'ok': True})
         elif action == 'to_archive':
             c.execute("UPDATE planner_posts SET status='Posted', in_pipeline=1 WHERE id=%s", [data.get('id')])
@@ -498,6 +539,7 @@ def api_idea(request):
 
 @login_required
 def api_image(request, post_id):
+    _ensure_media_columns()
     if request.method == 'POST':
         image = request.FILES.get('image')
         if image:
@@ -507,7 +549,7 @@ def api_image(request, post_id):
                 nc_path = upload_image_to_nextcloud(image, filename)
                 if nc_path:
                     with connection.cursor() as c:
-                        c.execute("UPDATE planner_posts SET image=%s WHERE id=%s", [nc_path, post_id])
+                        c.execute("UPDATE planner_posts SET image=%s, video_nc_path=NULL WHERE id=%s", [nc_path, post_id])
                     return JsonResponse({'ok': True, 'image': nc_path})
             except Exception as e:
                 print(f"NC image upload error: {e}")
@@ -531,20 +573,28 @@ def _make_image_token(post_id):
     return _hmac.new(secret.encode(), str(post_id).encode(), _hashlib.sha256).hexdigest()[:24]
 
 
-
-
 def _public_base_url():
-    """
-    Public base URL used for media URLs that Buffer must fetch from the internet.
-    On Render this should be the Render service URL.
-    """
-    return getattr(settings, "PUBLIC_BASE_URL", "https://linkedin-django-wd7a.onrender.com").rstrip("/")
+    """Public base URL used for media URLs that Buffer must fetch from the internet."""
+    return getattr(settings, 'PUBLIC_BASE_URL', 'https://linkedin-django-wd7a.onrender.com').rstrip('/')
 
 
 def _public_image_url(post_id):
     """Build the public image URL for Buffer."""
     img_token = _make_image_token(post_id)
     return f"{_public_base_url()}/planner/public-image/{post_id}/{img_token}/"
+
+
+def _make_video_token(post_id):
+    """Generate a signed token for public video access (no auth required)."""
+    import hmac as _hmac, hashlib as _hashlib
+    secret = (getattr(settings, 'SECRET_KEY', 'fallback'))[:32]
+    return _hmac.new(secret.encode(), f"video-{post_id}".encode(), _hashlib.sha256).hexdigest()[:24]
+
+
+def _public_video_url(post_id):
+    """Build the public video URL for Buffer."""
+    video_token = _make_video_token(post_id)
+    return f"{_public_base_url()}/planner/public-video/{post_id}/{video_token}/"
 
 
 def public_image(request, post_id, token):
@@ -570,7 +620,7 @@ def public_image(request, post_id, token):
         # convert it to the real Nextcloud folder path.
         if not nc_path.startswith("Marketing"):
             filename = nc_path.split("/")[-1]
-            nc_path = f"Marketing & Design/LinkedIn/Statistics/data/Post-Bilder/image_ready/{filename}"
+            nc_path = f"Marketing & Design/LinkedIn/Planner/Images/{filename}"
 
         img_content, img_content_type = download_image_from_nextcloud(nc_path)
 
@@ -582,6 +632,36 @@ def public_image(request, post_id, token):
 
     except Exception as e:
         print(f"public_image error: {e}")
+
+    return HttpResponse(status=404)
+
+
+def public_video(request, post_id, token):
+    """Serve a post video publicly using a signed token — used by Buffer."""
+    from django.http import HttpResponse
+
+    if token != _make_video_token(post_id):
+        return HttpResponse(status=403)
+
+    _ensure_media_columns()
+    with connection.cursor() as c:
+        c.execute("SELECT video_nc_path FROM planner_posts WHERE id=%s", [post_id])
+        row = c.fetchone()
+
+    if not row or not row[0]:
+        return HttpResponse(status=404)
+
+    try:
+        from posts_posted.nc_storage import download_image_from_nextcloud
+        nc_path = row[0]
+        if not nc_path.startswith("Marketing"):
+            filename = nc_path.split("/")[-1]
+            nc_path = f"Marketing & Design/LinkedIn/Planner/Videos/{filename}"
+        video_content, video_content_type = download_image_from_nextcloud(nc_path)
+        if video_content:
+            return HttpResponse(video_content, content_type=video_content_type or "video/mp4")
+    except Exception as e:
+        print(f"public_video error: {e}")
 
     return HttpResponse(status=404)
 
@@ -726,13 +806,13 @@ def _buffer_graphql(buf_token, query, variables=None):
     return result
 
 
-def _buffer_post(buf_token, profile_id, text, image_url=None, scheduled_at=None):
+def _buffer_post(buf_token, profile_id, text, image_url=None, video_url=None, scheduled_at=None):
     """
     Send a post to Buffer using the current GraphQL API.
 
     - If scheduled_at is given, Buffer schedules the post for that exact UTC time.
     - If scheduled_at is not given, Buffer adds the post to the next queue slot.
-    - image_url must be publicly reachable by Buffer.
+    - image_url/video_url must be publicly reachable by Buffer.
     """
     from datetime import timezone
 
@@ -775,7 +855,9 @@ def _buffer_post(buf_token, profile_id, text, image_url=None, scheduled_at=None)
         input_data["mode"] = "customScheduled"
         input_data["dueAt"] = scheduled_at.isoformat(timespec="milliseconds").replace("+00:00", "Z")
 
-    if image_url:
+    if video_url:
+        input_data["assets"] = [{"video": {"url": video_url}}]
+    elif image_url:
         input_data["assets"] = [{"image": {"url": image_url}}]
 
     result = _buffer_graphql(buf_token, query, {"input": input_data})
@@ -866,6 +948,7 @@ def api_connect_view(request):
     _secret = (getattr(settings, 'SECRET_KEY', 'fallback'))[:32]
     _trigger_key = _hmac2.new(_secret.encode(), b'trigger-scheduled', _hashlib2.sha256).hexdigest()[:24]
     trigger_url = f"https://linkedin-django-wd7a.onrender.com/planner/api/trigger-scheduled/?key={_trigger_key}"
+    _attach_video_paths(ready_posts)
 
     return render(request, 'planner/api_connect.html', {
         'tab': 'api_connect', 'token': token, 'creds_ok': creds_ok,
@@ -982,6 +1065,7 @@ def linkedin_do_post(request, post_id):
     target = data.get('target', 'person')
     text = data.get('text', '').strip()
     include_img = data.get('include_image', False)
+    include_video = data.get('include_video', False)
     scheduled_ms = data.get('scheduled_ms')
 
     if not text:
@@ -999,8 +1083,18 @@ def linkedin_do_post(request, post_id):
 
         try:
             image_url = None
+            video_url = None
 
-            if include_img:
+            if include_video:
+                _ensure_media_columns()
+                with connection.cursor() as c:
+                    c.execute("SELECT video_nc_path FROM planner_posts WHERE id=%s", [post_id])
+                    vrow = c.fetchone()
+                if vrow and vrow[0]:
+                    video_url = _public_video_url(post_id)
+                    print("BUFFER VIDEO URL:", video_url)
+
+            if include_img and not video_url:
                 with connection.cursor() as c:
                     c.execute("SELECT image FROM planner_posts WHERE id=%s", [post_id])
                     row = c.fetchone()
@@ -1020,6 +1114,7 @@ def linkedin_do_post(request, post_id):
                 profile_id=token['buffer_profile_id'],
                 text=text,
                 image_url=image_url,
+                video_url=video_url,
                 scheduled_at=scheduled_at,
             )
 
@@ -1061,6 +1156,7 @@ def linkedin_do_post(request, post_id):
                         'scheduled_at': scheduled_at.isoformat(),
                         'buffer_update_id': buffer_update_id,
                         'has_image': bool(image_url),
+                        'has_video': bool(video_url),
                     })
 
                 c.execute("""
@@ -1079,6 +1175,7 @@ def linkedin_do_post(request, post_id):
                     'scheduled': True,
                     'buffer_update_id': buffer_update_id,
                     'has_image': bool(image_url),
+                    'has_video': bool(video_url),
                 })
 
         except Exception as e:
@@ -1193,6 +1290,7 @@ def linkedin_post_video(request, post_id):
 @login_required
 def api_video(request, post_id):
     """Upload a video file to Nextcloud and store its path in planner_posts.video_nc_path."""
+    _ensure_media_columns()
     import requests as _req, time as _time
     if request.method != 'POST':
         return JsonResponse({'ok': False}, status=405)
@@ -1203,7 +1301,7 @@ def api_video(request, post_id):
         video_bytes = video_file.read()
         suffix   = os.path.splitext(video_file.name)[1] or '.mp4'
         filename = f"video_{post_id}_{int(_time.time())}{suffix}"
-        nc_folder = "Marketing & Design/LinkedIn/Videos"
+        nc_folder = "Marketing & Design/LinkedIn/Planner/Videos"
         nc_path   = f"{nc_folder}/{filename}"
         from posts_posted.nc_storage import _get_nc_credentials
         from urllib.parse import quote as _q2
@@ -1219,11 +1317,7 @@ def api_video(request, post_id):
         if r.status_code not in [200, 201, 204]:
             return JsonResponse({'ok': False, 'error': f'NC HTTP {r.status_code}'}, status=500)
         with connection.cursor() as c:
-            try:
-                c.execute("ALTER TABLE planner_posts ADD COLUMN video_nc_path VARCHAR(512) DEFAULT NULL")
-            except Exception:
-                pass
-            c.execute("UPDATE planner_posts SET video_nc_path=%s WHERE id=%s", [nc_path, post_id])
+            c.execute("UPDATE planner_posts SET video_nc_path=%s, image=NULL WHERE id=%s", [nc_path, post_id])
         return JsonResponse({'ok': True, 'nc_path': nc_path})
     except Exception as e:
         return JsonResponse({'ok': False, 'error': str(e)}, status=500)

@@ -130,8 +130,6 @@
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" stroke="#aaa" stroke-width="1.5"/><polyline points="17,8 12,3 7,8" stroke="#aaa" stroke-width="1.5"/><line x1="12" y1="3" x2="12" y2="15" stroke="#aaa" stroke-width="1.5"/></svg>
       </div>
       <input type="file" id="pe-img-input" accept="image/*" style="display:none" onchange="pePreviewImg(this)">
-      <button type="button" onclick="libPickerOpen()" title="Aus Bibliothek wählen"
-        style="font-size:11px;padding:3px 8px;border:0.5px solid #008591;border-radius:4px;background:#fff;cursor:pointer;color:#008591;white-space:nowrap;flex-shrink:0">🎨 Bibliothek</button>
       <input type="text" id="pe-title" placeholder="Title..." onkeydown="if(event.key==='Enter')event.preventDefault()" style="font-size:13px;flex:1;padding:6px 8px;border:0.5px solid #ced4da;border-radius:4px;box-sizing:border-box">
     </div>
     <!-- Rich text editor -->
@@ -158,6 +156,14 @@
         <span onclick="event.stopPropagation();peRemoveImg()" style="color:#ffb3b3">🗑 Remove</span>
       </div>
     </div>
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;flex-wrap:wrap">
+      <label style="font-size:12px;color:#6c757d;white-space:nowrap">🎬 Video</label>
+      <input type="file" id="pe-vid-input" accept="video/mp4,video/quicktime,.mp4,.mov" style="font-size:12px;flex:1" onchange="peVidName(this)">
+      <span id="pe-vid-name" style="font-size:11px;color:#008591"></span>
+      <button type="button" onclick="peClearVideoInput()" style="font-size:11px;padding:2px 6px;border:0.5px solid #ced4da;border-radius:4px;background:#fff;cursor:pointer;color:#888">✕</button>
+      <button type="button" id="pe-remove-video-btn" onclick="peRemoveVideo()" style="display:none;font-size:11px;padding:2px 6px;border:0.5px solid #dc3545;border-radius:4px;background:#fff;cursor:pointer;color:#dc3545">Video entfernen</button>
+    </div>
+    <p id="pe-vid-status" style="font-size:11px;color:#adb5bd;margin:-2px 0 8px 54px"></p>
     <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
       <label style="font-size:12px;color:#6c757d;white-space:nowrap">🔗 Link</label>
       <input type="text" id="pe-link" placeholder="https://..." style="font-size:13px;flex:1;padding:6px 8px;border:0.5px solid #ced4da;border-radius:4px;box-sizing:border-box">
@@ -288,6 +294,7 @@ function openEdit(id) {
   } else {
     peClearPreview();
   }
+  peSetVideoState(!!p.video_nc_path, p.video_nc_path);
   document.getElementById('post-edit-modal').style.display = 'flex';
 }
 
@@ -306,6 +313,7 @@ function peDropImg(e) {
 function pePreviewImg(input) {
   const file = input.files ? input.files[0] : null;
   if (!file) return;
+  peClearVideoInput();
   const reader = new FileReader();
   reader.onload = ev => peShowPreview(ev.target.result);
   reader.readAsDataURL(file);
@@ -315,6 +323,74 @@ async function peRemoveImg() {
   const id = document.getElementById('pe-id').value;
   if (id) await peApi({action:'delete_image', id});
   peClearPreview();
+}
+
+function peVidName(input) {
+  const file = input.files ? input.files[0] : null;
+  document.getElementById('pe-vid-name').textContent = file ? file.name : '';
+  document.getElementById('pe-vid-status').textContent = file ? 'Neues Video ausgewählt — wird beim Speichern hochgeladen.' : '';
+  if (file) peClearPreview();
+}
+
+function peClearVideoInput() {
+  const inp = document.getElementById('pe-vid-input');
+  if (inp) inp.value = '';
+  const name = document.getElementById('pe-vid-name');
+  if (name) name.textContent = '';
+  const status = document.getElementById('pe-vid-status');
+  if (status) status.textContent = '';
+}
+
+function peSetVideoState(hasVideo, label) {
+  peClearVideoInput();
+  const status = document.getElementById('pe-vid-status');
+  const removeBtn = document.getElementById('pe-remove-video-btn');
+  if (hasVideo) {
+    status.textContent = '✓ Video gespeichert: ' + (label || 'Nextcloud');
+    status.style.color = '#1D9E75';
+    removeBtn.style.display = 'inline-block';
+  } else {
+    status.textContent = '';
+    status.style.color = '#adb5bd';
+    removeBtn.style.display = 'none';
+  }
+}
+
+async function peRemoveVideo() {
+  const id = document.getElementById('pe-id').value;
+  if (id) await peApi({action:'delete_video', id});
+  peSetVideoState(false, '');
+}
+
+async function peUploadVideo(postId) {
+  const input = document.getElementById('pe-vid-input');
+  const status = document.getElementById('pe-vid-status');
+  const file = input && input.files ? input.files[0] : null;
+  if (!file) return true;
+  status.textContent = 'Video wird hochgeladen…';
+  status.style.color = '#008591';
+  const form = new FormData();
+  form.append('video', file);
+  try {
+    const r = await fetch(`/planner/api/video/${postId}/`, {
+      method: 'POST',
+      headers: {'X-CSRFToken': peCSRF},
+      body: form
+    });
+    const d = await r.json();
+    if (d.ok) {
+      status.textContent = '✓ Video auf Nextcloud gespeichert';
+      status.style.color = '#1D9E75';
+      return true;
+    }
+    status.textContent = 'Video-Fehler: ' + (d.error || 'Unbekannt');
+    status.style.color = '#dc3545';
+    return false;
+  } catch(e) {
+    status.textContent = 'Video-Netzwerkfehler: ' + e.message;
+    status.style.color = '#dc3545';
+    return false;
+  }
 }
 
 async function saveEdit() {
@@ -342,14 +418,13 @@ async function saveEdit() {
       return;
     }
     const imgInput = document.getElementById('pe-img-input');
-    if (imgInput._libUrl) {
-      await peApi({action:'set_lib_image', id, lib_url: imgInput._libUrl});
-      imgInput._libUrl = null;
-    } else if (imgInput.files && imgInput.files[0]) {
+    if (imgInput.files && imgInput.files[0]) {
       const form = new FormData();
       form.append('image', imgInput.files[0]);
       await fetch('/planner/api/image/'+id+'/', {method:'POST', headers:{'X-CSRFToken':peCSRF}, body:form});
     }
+    const videoOk = await peUploadVideo(id);
+    if (!videoOk) return;
     location.reload();
   } catch(e) {
     alert('Netzwerk- oder Serverfehler: ' + e.message);
@@ -389,8 +464,15 @@ function liOpenPost(id) {
       targetEl.value = targetEl.options[0].value;
     }
   }
-  document.getElementById('li-include-img').checked = !!p.image;
-  document.getElementById('li-include-img-row').style.display = p.image ? 'flex' : 'none';
+  const hasVideo = !!p.video_nc_path;
+  document.getElementById('li-include-img').checked = !!p.image && !hasVideo;
+  document.getElementById('li-include-img-row').style.display = (p.image && !hasVideo) ? 'flex' : 'none';
+  const videoRow = document.getElementById('li-include-video-row');
+  const videoCheck = document.getElementById('li-include-video');
+  if (videoRow && videoCheck) {
+    videoRow.style.display = hasVideo ? 'flex' : 'none';
+    videoCheck.checked = hasVideo;
+  }
   // Scheduling: always show with datetime-local input
   const schedRow = document.getElementById('li-schedule-row');
   const schedCheck = document.getElementById('li-schedule-check');
@@ -442,43 +524,7 @@ async function liDoPost() {
   const res = document.getElementById('li-post-result');
   res.style.display = 'none';
 
-  const videoInput = document.getElementById('li-video-input');
-  const hasVideo   = videoInput && videoInput.files && videoInput.files[0];
-
-  // ── Video route ──
-  if (hasVideo) {
-    const schedCheck2 = document.getElementById('li-schedule-check');
-    const isScheduled2 = schedCheck2 && schedCheck2.checked;
-    const dtVal2 = document.getElementById('li-schedule-dt') && document.getElementById('li-schedule-dt').value;
-    const scheduled_ms2 = (isScheduled2 && dtVal2) ? new Date(dtVal2).getTime() : null;
-    btn.textContent = isScheduled2 ? 'Video wird gespeichert…' : 'Video wird hochgeladen…';
-    try {
-      const form = new FormData();
-      form.append('video',  videoInput.files[0]);
-      form.append('text',   document.getElementById('li-post-text').value);
-      form.append('target', document.getElementById('li-target').value);
-      if (scheduled_ms2) form.append('scheduled_ms', scheduled_ms2);
-      const r    = await fetch(`/planner/linkedin/post-video/${liCurrentId}/`, {
-        method: 'POST', headers: {'X-CSRFToken': peCSRF}, body: form
-      });
-      const data = await r.json();
-      res.style.display = 'block';
-      if (data.ok) {
-        res.style.background = '#E1F5EE'; res.style.color = '#0F6E56';
-        res.textContent = data.scheduled ? '📅 Video eingeplant!' : '✓ Video veröffentlicht!';
-        setTimeout(() => { liClosePost(); location.reload(); }, 1800);
-      } else {
-        res.style.background = '#FCEBEB'; res.style.color = '#791F1F';
-        res.textContent = 'Fehler: ' + (data.error || 'Unbekannt');
-      }
-    } catch(e) {
-      res.style.display = 'block';
-      res.style.background = '#FCEBEB'; res.style.color = '#791F1F';
-      res.textContent = 'Netzwerkfehler: ' + e.message;
-    }
-    btn.disabled = false; btn.textContent = 'Jetzt posten';
-    return;
-  }
+  const includeVideo = document.getElementById('li-include-video') && document.getElementById('li-include-video').checked;
 
   // ── Text / Image route ──
   const schedCheck  = document.getElementById('li-schedule-check');
@@ -496,7 +542,8 @@ async function liDoPost() {
       body: JSON.stringify({
         text: document.getElementById('li-post-text').value,
         target: document.getElementById('li-target').value,
-        include_image: document.getElementById('li-include-img').checked,
+        include_image: includeVideo ? false : document.getElementById('li-include-img').checked,
+        include_video: includeVideo,
         scheduled_ms: scheduled_ms,
       })
     });
@@ -525,82 +572,6 @@ if (_liModalBg) _liModalBg.addEventListener('click', function(e) {
 {% endif %}
 </script>
 
-<script>
-let _libItems = [];
-
-async function libPickerOpen() {
-  document.getElementById('lib-picker-bg').style.display = 'flex';
-  const res = await fetch('/library/api/');
-  const data = await res.json();
-  _libItems = data.items || [];
-  const sel = document.getElementById('lib-filter-person');
-  sel.innerHTML = '<option value="">Alle Personen</option>';
-  (data.persons || []).forEach(p => {
-    const o = document.createElement('option');
-    o.value = p; o.textContent = p;
-    sel.appendChild(o);
-  });
-  libRender(_libItems);
-}
-
-function libPickerClose() {
-  document.getElementById('lib-picker-bg').style.display = 'none';
-}
-
-function libFilter() {
-  const q      = document.getElementById('lib-search').value.toLowerCase();
-  const person = document.getElementById('lib-filter-person').value;
-  const filtered = _libItems.filter(i => {
-    if (person && i.person !== person) return false;
-    if (q && !((i.title+i.person+i.series+i.tags).toLowerCase().includes(q))) return false;
-    return true;
-  });
-  libRender(filtered);
-}
-
-function libRender(items) {
-  const grid = document.getElementById('lib-grid');
-  if (!items.length) { grid.innerHTML = '<div style="text-align:center;color:#888;padding:2rem;grid-column:1/-1">Keine Bilder gefunden.</div>'; return; }
-  grid.innerHTML = items.map(i => `
-    <div onclick="libPick('${i.url}')"
-      style="border:0.5px solid #e0e0e0;border-radius:8px;overflow:hidden;cursor:pointer;transition:border-color .15s"
-      onmouseover="this.style.borderColor='#008591'" onmouseout="this.style.borderColor='#e0e0e0'">
-      <img src="${i.url}" style="width:100%;aspect-ratio:1;object-fit:cover;display:block;background:#f5f5f5" loading="lazy">
-      <div style="padding:4px 6px;font-size:11px;color:#555;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">
-        ${i.title || i.person || '—'}
-      </div>
-    </div>`).join('');
-}
-
-async function libPick(url) {
-  peShowPreview(url);
-  document.getElementById('pe-img-input')._libUrl = url;
-  libPickerClose();
-}
-
-document.addEventListener('DOMContentLoaded', () => {
-  const bg = document.getElementById('lib-picker-bg');
-  if (bg) bg.addEventListener('click', e => { if (e.target === bg) libPickerClose(); });
-});
-</script>
-
-<!-- Bibliotheks-Picker Modal -->
-<div id="lib-picker-bg" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:10001;align-items:center;justify-content:center">
-  <div style="background:#fff;border-radius:12px;width:640px;max-width:95vw;max-height:88vh;overflow:hidden;display:flex;flex-direction:column">
-    <div style="padding:12px 16px;border-bottom:0.5px solid #e0e0e0;display:flex;align-items:center;gap:10px">
-      <span style="font-size:15px;font-weight:500">🎨 Aus Bibliothek wählen</span>
-      <input type="text" id="lib-search" placeholder="Suche..." oninput="libFilter()" style="font-size:13px;padding:4px 8px;border:0.5px solid #ced4da;border-radius:4px;flex:1">
-      <select id="lib-filter-person" onchange="libFilter()" style="font-size:12px;padding:4px 6px;border:0.5px solid #ced4da;border-radius:4px">
-        <option value="">Alle Personen</option>
-      </select>
-      <button onclick="libPickerClose()" style="border:none;background:none;font-size:20px;cursor:pointer;color:#888;line-height:1">×</button>
-    </div>
-    <div id="lib-grid" style="padding:12px;display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:8px;overflow-y:auto;flex:1">
-      <div style="text-align:center;color:#888;padding:2rem;grid-column:1/-1">Lade Bilder…</div>
-    </div>
-  </div>
-</div>
-
 {% if li_connected %}
 <!-- LinkedIn Post Modal -->
 <div id="li-modal-bg" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:9999;align-items:center;justify-content:center">
@@ -624,15 +595,11 @@ document.addEventListener('DOMContentLoaded', () => {
       <input type="checkbox" id="li-include-img" checked style="cursor:pointer">
       <label for="li-include-img" style="cursor:pointer;color:#444">Bild mitposten</label>
     </div>
-    <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;font-size:13px;flex-wrap:wrap">
-      <label style="color:#444;white-space:nowrap">🎬 Video hochladen</label>
-      <input type="file" id="li-video-input" accept="video/mp4,video/quicktime,video/avi,.mp4,.mov,.avi"
-        style="font-size:12px;flex:1" onchange="document.getElementById('li-video-name').textContent=this.files[0]?this.files[0].name:''">
-      <span id="li-video-name" style="font-size:11px;color:#008591"></span>
-      <button type="button" onclick="document.getElementById('li-video-input').value='';document.getElementById('li-video-name').textContent=''"
-        style="font-size:11px;padding:2px 6px;border:0.5px solid #ced4da;border-radius:4px;background:#fff;cursor:pointer;color:#888">✕</button>
+    <div id="li-include-video-row" style="display:none;align-items:center;gap:8px;margin-bottom:8px;font-size:13px">
+      <input type="checkbox" id="li-include-video" checked style="cursor:pointer">
+      <label for="li-include-video" style="cursor:pointer;color:#444">Video mitposten</label>
     </div>
-    <div style="font-size:11px;color:#adb5bd;margin:-4px 0 8px;">Max. 200 MB · MP4, MOV · Bild und Video schließen sich aus</div>
+    <div style="font-size:11px;color:#adb5bd;margin:-4px 0 8px;">Bild und Video schließen sich aus. Video wird vorher im Post gespeichert.</div>
     <div id="li-schedule-row" style="display:flex;align-items:center;gap:8px;margin-bottom:12px;font-size:13px;flex-wrap:wrap">
       <input type="checkbox" id="li-schedule-check" style="cursor:pointer">
       <label for="li-schedule-check" style="cursor:pointer;color:#444">📅 Auf LinkedIn planen:</label>
