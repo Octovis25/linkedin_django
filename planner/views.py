@@ -531,6 +531,22 @@ def _make_image_token(post_id):
     return _hmac.new(secret.encode(), str(post_id).encode(), _hashlib.sha256).hexdigest()[:24]
 
 
+
+
+def _public_base_url():
+    """
+    Public base URL used for media URLs that Buffer must fetch from the internet.
+    On Render this should be the Render service URL.
+    """
+    return getattr(settings, "PUBLIC_BASE_URL", "https://linkedin-django-wd7a.onrender.com").rstrip("/")
+
+
+def _public_image_url(post_id):
+    """Build the public image URL for Buffer."""
+    img_token = _make_image_token(post_id)
+    return f"{_public_base_url()}/planner/public-image/{post_id}/{img_token}/"
+
+
 def public_image(request, post_id, token):
     """Serve a post image publicly using a signed token — used by Buffer."""
     from django.http import HttpResponse
@@ -990,10 +1006,8 @@ def linkedin_do_post(request, post_id):
                     row = c.fetchone()
 
                 if row and row[0]:
-                    img_token = _make_image_token(post_id)
-                    image_url = request.build_absolute_uri(
-                        f"/planner/public-image/{post_id}/{img_token}/"
-                    )
+                    image_url = _public_image_url(post_id)
+                    print("BUFFER IMAGE URL:", image_url)
 
             scheduled_at = None
             if scheduled_ms:
