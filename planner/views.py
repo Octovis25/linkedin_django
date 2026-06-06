@@ -597,9 +597,28 @@ def _temp_video_dir():
 
 
 def _temp_video_url(post_id):
-    """Build the temporary local video URL for Buffer."""
+    """Build the temporary local video URL for Buffer with a real .mp4 filename."""
+    import glob as _glob
+
     video_token = _make_video_token(post_id)
-    return f"{_public_base_url()}/planner/temp-video/{post_id}/{video_token}/"
+    temp_dir = _temp_video_dir()
+    pattern = os.path.join(temp_dir, f"post_{post_id}_*")
+    hits = [p for p in _glob.glob(pattern) if os.path.isfile(p) and not p.endswith(".part")]
+
+    if hits:
+        local_path = max(hits, key=os.path.getmtime)
+        filename = os.path.basename(local_path)
+    else:
+        try:
+            nc_path = _get_video_nc_path(post_id)
+            raw_name = os.path.basename(nc_path)
+            safe_name = raw_name.replace(" ", "_").replace("/", "_").replace("\\", "_")
+            filename = f"post_{post_id}_{safe_name}"
+        except Exception:
+            filename = f"post_{post_id}_video.mp4"
+
+    filename_url = urllib.parse.quote(filename)
+    return f"{_public_base_url()}/planner/temp-video/{post_id}/{video_token}/{filename_url}"
 
 
 def _cleanup_temp_videos(max_age_seconds=7200):
@@ -773,7 +792,7 @@ def public_image(request, post_id, token):
 
 
 
-def temp_video(request, post_id, token):
+def temp_video(request, post_id, token, filename=None):
     """
     Serve the temporary video to Buffer.
 
