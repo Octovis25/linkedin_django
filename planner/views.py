@@ -585,16 +585,65 @@ def _public_image_url(post_id):
 
 
 def _make_video_token(post_id):
-    """Generate a signed token for public video access (no auth required)."""
+    """Generate a signed token for public video access (legacy Render proxy)."""
     import hmac as _hmac, hashlib as _hashlib
     secret = (getattr(settings, 'SECRET_KEY', 'fallback'))[:32]
     return _hmac.new(secret.encode(), f"video-{post_id}".encode(), _hashlib.sha256).hexdigest()[:24]
 
 
-def _public_video_url(post_id):
-    """Build the public video URL for Buffer."""
-    video_token = _make_video_token(post_id)
-    return f"{_public_base_url()}/planner/public-video/{post_id}/{video_token}/"
+def _public_video_share_url():
+    """
+    Public Nextcloud share URL for Planner videos.
+
+    This must point to the public share of:
+    Marketing & Design/LinkedIn/Planner/Videos
+
+    Buffer needs a direct public download URL, not the slow Render proxy.
+    """
+    return getattr(settings, 'PUBLIC_VIDEO_SHARE_URL', 'https://nc.octotrial.com/s/a6687dicKxPCDor').rstrip('/')
+
+
+def _public_video_url(video_nc_path):
+    """
+    Build the direct public Nextcloud download URL for Buffer.
+
+    Example:
+    Marketing & Design/LinkedIn/Planner/Videos/video_64_1780750040.mp4
+    -> https://nc.octotrial.com/s/a6687dicKxPCDor/download?path=%2F&files=video_64_1780750040.mp4
+    """
+    filename = str(video_nc_path or '').split('/')[-1]
+    return f"{_public_video_share_url()}/download?path=%2F&files={urllib.parse.quote(filename)}"
+
+
+def _upload_video_to_nextcloud(video_file, post_id):
+    """Upload one video file into the public Planner/Videos folder and return its Nextcloud path."""
+    import requests as _req, time as _time
+    from posts_posted.nc_storage import _get_nc_credentials
+    from urllib.parse import quote as _q2
+    from requests.auth import HTTPBasicAuth as _BA
+
+    suffix = os.path.splitext(video_file.name)[1] or '.mp4'
+    filename = f"video_{post_id}_{int(_time.time())}{suffix}"
+    nc_folder = "Marketing & Design/LinkedIn/Planner/Videos"
+    nc_path = f"{nc_folder}/{filename}"
+
+    nc_url, username, password = _get_nc_credentials()
+    if not all([nc_url, username, password]):
+        raise Exception('Nextcloud nicht verbunden')
+
+    video_bytes = video_file.read()
+    upload_url = f"{nc_url}/remote.php/dav/files/{username}/{_q2(nc_path, safe='/')}"
+    r = _req.put(
+        upload_url,
+        data=video_bytes,
+        auth=_BA(username, password),
+        headers={'Content-Type': video_file.content_type or 'video/mp4'},
+        timeout=120
+    )
+    if r.status_code not in [200, 201, 204]:
+        raise Exception(f'NC HTTP {r.status_code}: {r.text[:200]}')
+
+    return nc_path
 
 
 def public_image(request, post_id, token):
@@ -1091,7 +1140,7 @@ def linkedin_do_post(request, post_id):
                     c.execute("SELECT video_nc_path FROM planner_posts WHERE id=%s", [post_id])
                     vrow = c.fetchone()
                 if vrow and vrow[0]:
-                    video_url = _public_video_url(post_id)
+                    video_url = _public_video_url(vrow[0])
                     print("BUFFER VIDEO URL:", video_url)
 
             if include_img and not video_url:
@@ -1278,49 +1327,150 @@ def linkedin_do_post(request, post_id):
 @login_required
 def linkedin_post_video(request, post_id):
     """
-    Minimal safe placeholder.
-    Video via Buffer needs a publicly reachable video URL. The old Make path is intentionally disabled.
+    Post a video to Buffer.
+
+    The uploaded video is stored in Nextcloud Planner/Videos and Buffer receives
+    the public Nextcloud download URL instead of the slow Render proxy URL.
     """
-    return JsonResponse({
-        'ok': False,
-        'error': 'Video-Posting ist für Buffer noch nicht aktiviert. Erst Text + Bild testen; Video braucht eine öffentliche Video-URL.'
-    }, status=400)
+    import time as _time
+    from datetime import datetime as _dt, timezone as _timezone
+
+    if request.method != 'POST':
+        return JsonResponse({'ok': False, 'error': 'POST only'}, status=405)
+
+    token = _li_get_superuser_token()
+    if not token:
+        return JsonResponse({'ok': False, 'error': 'not_connected'}, status=401)
+
+    if not token.get('buffer_token') or not token.get('buffer_profile_id'):
+        return JsonResponse({
+            'ok': False,
+            'error': 'Buffer ist nicht konfiguriert. Bitte Buffer Access Token speichern und Profil auswählen.'
+        }, status=400)
+
+    target = request.POST.get('target', 'org')
+    if target != 'org':
+        return JsonResponse({
+            'ok': False,
+            'error': 'Video-Posting ist aktuell nur über Buffer für die Unternehmensseite aktiviert.'
+        }, status=400)
+
+    text = (request.POST.get('text') or '').strip()
+    if not text:
+        return JsonResponse({'ok': False, 'error': 'empty_text'}, status=400)
+
+    try:
+        _ensure_media_columns()
+
+        video_file = request.FILES.get('video')
+        nc_path = None
+
+        if video_file:
+            nc_path = _upload_video_to_nextcloud(video_file, post_id)
+            with connection.cursor() as c:
+                c.execute("UPDATE planner_posts SET video_nc_path=%s, image=NULL WHERE id=%s", [nc_path, post_id])
+        else:
+            with connection.cursor() as c:
+                c.execute("SELECT video_nc_path FROM planner_posts WHERE id=%s", [post_id])
+                row = c.fetchone()
+            if row and row[0]:
+                nc_path = row[0]
+
+        if not nc_path:
+            return JsonResponse({'ok': False, 'error': 'Kein Video für diesen Post gespeichert.'}, status=400)
+
+        video_url = _public_video_url(nc_path)
+        print("BUFFER VIDEO URL:", video_url)
+
+        scheduled_at = None
+        scheduled_ms = request.POST.get('scheduled_ms')
+        if scheduled_ms:
+            scheduled_ts = float(scheduled_ms) / 1000.0
+            if scheduled_ts > _time.time() + 60:
+                scheduled_at = _dt.fromtimestamp(scheduled_ts, tz=_timezone.utc)
+
+        result = _buffer_post(
+            buf_token=token['buffer_token'],
+            profile_id=token['buffer_profile_id'],
+            text=text,
+            video_url=video_url,
+            scheduled_at=scheduled_at,
+        )
+
+        buffer_update_id = None
+        try:
+            updates = result.get('updates') or []
+            if updates:
+                buffer_update_id = updates[0].get('id')
+        except Exception:
+            buffer_update_id = None
+
+        with connection.cursor() as c:
+            for sql in [
+                "ALTER TABLE planner_posts ADD COLUMN linkedin_posted TINYINT(1) NOT NULL DEFAULT 0",
+                "ALTER TABLE planner_posts ADD COLUMN buffer_update_id VARCHAR(100) DEFAULT NULL",
+                "ALTER TABLE planner_posts ADD COLUMN post_scheduled_at DATETIME NULL DEFAULT NULL",
+            ]:
+                try:
+                    c.execute(sql)
+                except Exception:
+                    pass
+
+            if scheduled_at:
+                c.execute("""
+                    UPDATE planner_posts
+                    SET content=%s,
+                        status='Scheduled',
+                        in_pipeline=1,
+                        linkedin_posted=0,
+                        post_scheduled_at=%s,
+                        buffer_update_id=%s
+                    WHERE id=%s
+                """, [text, scheduled_at.replace(tzinfo=None), buffer_update_id, post_id])
+            else:
+                c.execute("""
+                    UPDATE planner_posts
+                    SET content=%s,
+                        status='Scheduled',
+                        in_pipeline=1,
+                        linkedin_posted=0,
+                        buffer_update_id=%s
+                    WHERE id=%s
+                """, [text, buffer_update_id, post_id])
+
+        return JsonResponse({
+            'ok': True,
+            'via': 'buffer',
+            'scheduled': True,
+            'scheduled_at': scheduled_at.isoformat() if scheduled_at else None,
+            'buffer_update_id': buffer_update_id,
+            'has_video': True,
+            'video_url': video_url,
+        })
+
+    except Exception as e:
+        return JsonResponse({'ok': False, 'error': str(e)}, status=500)
 
 
 @login_required
 def api_video(request, post_id):
     """Upload a video file to Nextcloud and store its path in planner_posts.video_nc_path."""
     _ensure_media_columns()
-    import requests as _req, time as _time
     if request.method != 'POST':
         return JsonResponse({'ok': False}, status=405)
+
     video_file = request.FILES.get('video')
     if not video_file:
         return JsonResponse({'ok': False, 'error': 'Keine Videodatei'}, status=400)
+
     try:
-        video_bytes = video_file.read()
-        suffix   = os.path.splitext(video_file.name)[1] or '.mp4'
-        filename = f"video_{post_id}_{int(_time.time())}{suffix}"
-        nc_folder = "Marketing & Design/LinkedIn/Planner/Videos"
-        nc_path   = f"{nc_folder}/{filename}"
-        from posts_posted.nc_storage import _get_nc_credentials
-        from urllib.parse import quote as _q2
-        from requests.auth import HTTPBasicAuth as _BA
-        nc_url, username, password = _get_nc_credentials()
-        if not all([nc_url, username, password]):
-            return JsonResponse({'ok': False, 'error': 'Nextcloud nicht verbunden'}, status=500)
-        upload_url = f"{nc_url}/remote.php/dav/files/{username}/{_q2(nc_path, safe='/')}"
-        r = _req.put(upload_url, data=video_bytes,
-            auth=_BA(username, password),
-            headers={'Content-Type': video_file.content_type or 'video/mp4'},
-            timeout=120)
-        if r.status_code not in [200, 201, 204]:
-            return JsonResponse({'ok': False, 'error': f'NC HTTP {r.status_code}'}, status=500)
+        nc_path = _upload_video_to_nextcloud(video_file, post_id)
         with connection.cursor() as c:
             c.execute("UPDATE planner_posts SET video_nc_path=%s, image=NULL WHERE id=%s", [nc_path, post_id])
         return JsonResponse({'ok': True, 'nc_path': nc_path})
     except Exception as e:
         return JsonResponse({'ok': False, 'error': str(e)}, status=500)
+
 
 def api_trigger_scheduled(request):
     """
