@@ -24,12 +24,22 @@
 
 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1.25rem;flex-wrap:wrap;gap:8px">
   <h1 style="margin:0;font-size:1.4rem">{{ title }}</h1>
-  <form method="get" style="display:flex;gap:8px">
-    <select name="topic" onchange="this.form.submit()" style="font-size:13px;padding:4px 8px;border:0.5px solid #ced4da;border-radius:4px">
-      <option value="">All topics</option>
-      {% for t in topics %}<option value="{{ t.id }}" {% if topic_filter == t.id|stringformat:"s" %}selected{% endif %}>{{ t.name }}</option>{% endfor %}
-    </select>
-  </form>
+  <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+    {% if allow_create %}
+    <button type="button" onclick="openCreate()"
+       style="font-size:13px;padding:4px 10px;border:0.5px solid #008080;border-radius:4px;background:#008080;color:#fff;cursor:pointer;white-space:nowrap"
+       title="Neuen Post direkt in Progress anlegen">＋ Neuer Post</button>
+    {% endif %}
+    <a href="https://publish.buffer.com/" target="_blank" rel="noopener"
+       style="font-size:13px;padding:4px 10px;border:0.5px solid #2c4bff;border-radius:4px;background:#fff;color:#2c4bff;text-decoration:none;white-space:nowrap"
+       title="Buffer öffnen, um Videos vorübergehend manuell zu planen">🎬 Buffer öffnen</a>
+    <form method="get" style="display:flex;gap:8px;margin:0">
+      <select name="topic" onchange="this.form.submit()" style="font-size:13px;padding:4px 8px;border:0.5px solid #ced4da;border-radius:4px">
+        <option value="">All topics</option>
+        {% for t in topics %}<option value="{{ t.id }}" {% if topic_filter == t.id|stringformat:"s" %}selected{% endif %}>{{ t.name }}</option>{% endfor %}
+      </select>
+    </form>
+  </div>
 </div>
 
 <p style="font-size:13px;color:#6c757d;margin-bottom:1rem">{{ posts|length }} posts</p>
@@ -156,14 +166,6 @@
         <span onclick="event.stopPropagation();peRemoveImg()" style="color:#ffb3b3">🗑 Remove</span>
       </div>
     </div>
-    <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;flex-wrap:wrap">
-      <label style="font-size:12px;color:#6c757d;white-space:nowrap">🎬 Video</label>
-      <input type="file" id="pe-vid-input" accept="video/mp4,video/quicktime,.mp4,.mov" style="font-size:12px;flex:1" onchange="peVidName(this)">
-      <span id="pe-vid-name" style="font-size:11px;color:#008591"></span>
-      <button type="button" onclick="peClearVideoInput()" style="font-size:11px;padding:2px 6px;border:0.5px solid #ced4da;border-radius:4px;background:#fff;cursor:pointer;color:#888">✕</button>
-      <button type="button" id="pe-remove-video-btn" onclick="peRemoveVideo()" style="display:none;font-size:11px;padding:2px 6px;border:0.5px solid #dc3545;border-radius:4px;background:#fff;cursor:pointer;color:#dc3545">Video entfernen</button>
-    </div>
-    <p id="pe-vid-status" style="font-size:11px;color:#adb5bd;margin:-2px 0 8px 54px"></p>
     <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
       <label style="font-size:12px;color:#6c757d;white-space:nowrap">🔗 Link</label>
       <input type="text" id="pe-link" placeholder="https://..." style="font-size:13px;flex:1;padding:6px 8px;border:0.5px solid #ced4da;border-radius:4px;box-sizing:border-box">
@@ -276,6 +278,22 @@ async function peDeletePost(id) {
   location.reload();
 }
 
+function openCreate() {
+  document.getElementById('pe-id').value = '';
+  document.getElementById('pe-title').value = '';
+  document.getElementById('pe-content').innerHTML = '';
+  document.getElementById('pe-status').value = 'Draft';
+  document.getElementById('pe-date').value = '';
+  document.getElementById('pe-time').value = '';
+  document.getElementById('pe-link').value = '';
+  document.getElementById('pe-comment').value = '';
+  document.getElementById('pe-img-input').value = '';
+  const topicSelect = document.getElementById('pe-topic');
+  if (topicSelect && topicSelect.options.length > 0) topicSelect.selectedIndex = 0;
+  peClearPreview();
+  document.getElementById('post-edit-modal').style.display = 'flex';
+}
+
 function openEdit(id) {
   const p = PE_POSTS.find(x => x.id == id);
   if (!p) return;
@@ -294,7 +312,6 @@ function openEdit(id) {
   } else {
     peClearPreview();
   }
-  peSetVideoState(!!p.video_nc_path, p.video_nc_path);
   document.getElementById('post-edit-modal').style.display = 'flex';
 }
 
@@ -313,7 +330,6 @@ function peDropImg(e) {
 function pePreviewImg(input) {
   const file = input.files ? input.files[0] : null;
   if (!file) return;
-  peClearVideoInput();
   const reader = new FileReader();
   reader.onload = ev => peShowPreview(ev.target.result);
   reader.readAsDataURL(file);
@@ -325,79 +341,12 @@ async function peRemoveImg() {
   peClearPreview();
 }
 
-function peVidName(input) {
-  const file = input.files ? input.files[0] : null;
-  document.getElementById('pe-vid-name').textContent = file ? file.name : '';
-  document.getElementById('pe-vid-status').textContent = file ? 'Neues Video ausgewählt — wird beim Speichern hochgeladen.' : '';
-  if (file) peClearPreview();
-}
-
-function peClearVideoInput() {
-  const inp = document.getElementById('pe-vid-input');
-  if (inp) inp.value = '';
-  const name = document.getElementById('pe-vid-name');
-  if (name) name.textContent = '';
-  const status = document.getElementById('pe-vid-status');
-  if (status) status.textContent = '';
-}
-
-function peSetVideoState(hasVideo, label) {
-  peClearVideoInput();
-  const status = document.getElementById('pe-vid-status');
-  const removeBtn = document.getElementById('pe-remove-video-btn');
-  if (hasVideo) {
-    status.textContent = '✓ Video gespeichert: ' + (label || 'Nextcloud');
-    status.style.color = '#1D9E75';
-    removeBtn.style.display = 'inline-block';
-  } else {
-    status.textContent = '';
-    status.style.color = '#adb5bd';
-    removeBtn.style.display = 'none';
-  }
-}
-
-async function peRemoveVideo() {
-  const id = document.getElementById('pe-id').value;
-  if (id) await peApi({action:'delete_video', id});
-  peSetVideoState(false, '');
-}
-
-async function peUploadVideo(postId) {
-  const input = document.getElementById('pe-vid-input');
-  const status = document.getElementById('pe-vid-status');
-  const file = input && input.files ? input.files[0] : null;
-  if (!file) return true;
-  status.textContent = 'Video wird hochgeladen…';
-  status.style.color = '#008591';
-  const form = new FormData();
-  form.append('video', file);
-  try {
-    const r = await fetch(`/planner/api/video/${postId}/`, {
-      method: 'POST',
-      headers: {'X-CSRFToken': peCSRF},
-      body: form
-    });
-    const d = await r.json();
-    if (d.ok) {
-      status.textContent = '✓ Video auf Nextcloud gespeichert';
-      status.style.color = '#1D9E75';
-      return true;
-    }
-    status.textContent = 'Video-Fehler: ' + (d.error || 'Unbekannt');
-    status.style.color = '#dc3545';
-    return false;
-  } catch(e) {
-    status.textContent = 'Video-Netzwerkfehler: ' + e.message;
-    status.style.color = '#dc3545';
-    return false;
-  }
-}
-
 async function saveEdit() {
-  const id = document.getElementById('pe-id').value;
+  let id = document.getElementById('pe-id').value;
   try {
-    const res = await peApi({
-      action:'update', id,
+    const isNew = !id;
+    const payload = {
+      action: isNew ? 'create' : 'update',
       topic_id: document.getElementById('pe-topic').value,
       title: document.getElementById('pe-title').value,
       content: document.getElementById('pe-content').innerHTML,
@@ -406,7 +355,10 @@ async function saveEdit() {
       status: document.getElementById('pe-status').value,
       planned_date: document.getElementById('pe-date').value || null,
       planned_time: document.getElementById('pe-time').value || null,
-    });
+    };
+    if (!isNew) payload.id = id;
+    const res = await peApi(payload);
+    if (isNew && res && res.id) id = res.id;
     if (res && res.error === 'session_expired') {
       if (confirm('Deine Sitzung ist abgelaufen. Jetzt neu einloggen?')) {
         window.location.href = '/login/?next=' + encodeURIComponent(window.location.pathname);
@@ -423,8 +375,6 @@ async function saveEdit() {
       form.append('image', imgInput.files[0]);
       await fetch('/planner/api/image/'+id+'/', {method:'POST', headers:{'X-CSRFToken':peCSRF}, body:form});
     }
-    const videoOk = await peUploadVideo(id);
-    if (!videoOk) return;
     location.reload();
   } catch(e) {
     alert('Netzwerk- oder Serverfehler: ' + e.message);
@@ -464,15 +414,8 @@ function liOpenPost(id) {
       targetEl.value = targetEl.options[0].value;
     }
   }
-  const hasVideo = !!p.video_nc_path;
-  document.getElementById('li-include-img').checked = !!p.image && !hasVideo;
-  document.getElementById('li-include-img-row').style.display = (p.image && !hasVideo) ? 'flex' : 'none';
-  const videoRow = document.getElementById('li-include-video-row');
-  const videoCheck = document.getElementById('li-include-video');
-  if (videoRow && videoCheck) {
-    videoRow.style.display = hasVideo ? 'flex' : 'none';
-    videoCheck.checked = hasVideo;
-  }
+  document.getElementById('li-include-img').checked = !!p.image;
+  document.getElementById('li-include-img-row').style.display = p.image ? 'flex' : 'none';
   // Scheduling: always show with datetime-local input
   const schedRow = document.getElementById('li-schedule-row');
   const schedCheck = document.getElementById('li-schedule-check');
@@ -506,6 +449,17 @@ function liClosePost() {
   liCurrentId = null;
 }
 
+async function liCopyTextAndOpenBuffer() {
+  const textEl = document.getElementById('li-post-text');
+  const txt = textEl ? textEl.value : '';
+  try {
+    if (txt && navigator.clipboard) await navigator.clipboard.writeText(txt);
+  } catch(e) {
+    console.warn('Clipboard copy failed:', e);
+  }
+  window.open('https://publish.buffer.com/', '_blank', 'noopener');
+}
+
 async function liCancelPost(id) {
   if (!confirm('LinkedIn-Scheduling für diesen Post wirklich abbrechen?')) return;
   await peApi({action: 'cancel_linkedin', id});
@@ -524,7 +478,43 @@ async function liDoPost() {
   const res = document.getElementById('li-post-result');
   res.style.display = 'none';
 
-  const includeVideo = document.getElementById('li-include-video') && document.getElementById('li-include-video').checked;
+  const videoInput = document.getElementById('li-video-input');
+  const hasVideo   = videoInput && videoInput.files && videoInput.files[0];
+
+  // ── Video route ──
+  if (hasVideo) {
+    const schedCheck2 = document.getElementById('li-schedule-check');
+    const isScheduled2 = schedCheck2 && schedCheck2.checked;
+    const dtVal2 = document.getElementById('li-schedule-dt') && document.getElementById('li-schedule-dt').value;
+    const scheduled_ms2 = (isScheduled2 && dtVal2) ? new Date(dtVal2).getTime() : null;
+    btn.textContent = isScheduled2 ? 'Video wird gespeichert…' : 'Video wird hochgeladen…';
+    try {
+      const form = new FormData();
+      form.append('video',  videoInput.files[0]);
+      form.append('text',   document.getElementById('li-post-text').value);
+      form.append('target', document.getElementById('li-target').value);
+      if (scheduled_ms2) form.append('scheduled_ms', scheduled_ms2);
+      const r    = await fetch(`/planner/linkedin/post-video/${liCurrentId}/`, {
+        method: 'POST', headers: {'X-CSRFToken': peCSRF}, body: form
+      });
+      const data = await r.json();
+      res.style.display = 'block';
+      if (data.ok) {
+        res.style.background = '#E1F5EE'; res.style.color = '#0F6E56';
+        res.textContent = data.scheduled ? '📅 Video eingeplant!' : '✓ Video veröffentlicht!';
+        setTimeout(() => { liClosePost(); location.reload(); }, 1800);
+      } else {
+        res.style.background = '#FCEBEB'; res.style.color = '#791F1F';
+        res.textContent = 'Fehler: ' + (data.error || 'Unbekannt');
+      }
+    } catch(e) {
+      res.style.display = 'block';
+      res.style.background = '#FCEBEB'; res.style.color = '#791F1F';
+      res.textContent = 'Netzwerkfehler: ' + e.message;
+    }
+    btn.disabled = false; btn.textContent = 'Jetzt posten';
+    return;
+  }
 
   // ── Text / Image route ──
   const schedCheck  = document.getElementById('li-schedule-check');
@@ -542,8 +532,7 @@ async function liDoPost() {
       body: JSON.stringify({
         text: document.getElementById('li-post-text').value,
         target: document.getElementById('li-target').value,
-        include_image: includeVideo ? false : document.getElementById('li-include-img').checked,
-        include_video: includeVideo,
+        include_image: document.getElementById('li-include-img').checked,
         scheduled_ms: scheduled_ms,
       })
     });
@@ -595,20 +584,30 @@ if (_liModalBg) _liModalBg.addEventListener('click', function(e) {
       <input type="checkbox" id="li-include-img" checked style="cursor:pointer">
       <label for="li-include-img" style="cursor:pointer;color:#444">Bild mitposten</label>
     </div>
-    <div id="li-include-video-row" style="display:none;align-items:center;gap:8px;margin-bottom:8px;font-size:13px">
-      <input type="checkbox" id="li-include-video" checked style="cursor:pointer">
-      <label for="li-include-video" style="cursor:pointer;color:#444">Video mitposten</label>
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;font-size:13px;flex-wrap:wrap">
+      <label style="color:#444;white-space:nowrap">🎬 Video hochladen</label>
+      <input type="file" id="li-video-input" accept="video/mp4,video/quicktime,video/avi,.mp4,.mov,.avi"
+        style="font-size:12px;flex:1" onchange="document.getElementById('li-video-name').textContent=this.files[0]?this.files[0].name:''">
+      <span id="li-video-name" style="font-size:11px;color:#008591"></span>
+      <button type="button" onclick="document.getElementById('li-video-input').value='';document.getElementById('li-video-name').textContent=''"
+        style="font-size:11px;padding:2px 6px;border:0.5px solid #ced4da;border-radius:4px;background:#fff;cursor:pointer;color:#888">✕</button>
     </div>
-    <div style="font-size:11px;color:#adb5bd;margin:-4px 0 8px;">Bild und Video schließen sich aus. Video wird vorher im Post gespeichert.</div>
+    <div style="font-size:11px;color:#adb5bd;margin:-4px 0 8px;">Max. 200 MB · MP4, MOV · Bild und Video schließen sich aus</div>
     <div id="li-schedule-row" style="display:flex;align-items:center;gap:8px;margin-bottom:12px;font-size:13px;flex-wrap:wrap">
       <input type="checkbox" id="li-schedule-check" style="cursor:pointer">
       <label for="li-schedule-check" style="cursor:pointer;color:#444">📅 Auf LinkedIn planen:</label>
       <input type="datetime-local" id="li-schedule-dt" style="font-size:13px;padding:4px 8px;border:0.5px solid #ced4da;border-radius:4px">
     </div>
     <div id="li-post-result" style="display:none;padding:8px 12px;border-radius:6px;font-size:13px;margin-bottom:10px"></div>
-    <div style="display:flex;justify-content:flex-end;gap:8px">
-      <button onclick="liClosePost()" style="font-size:13px;padding:5px 14px;border:0.5px solid #ced4da;border-radius:4px;background:#fff;cursor:pointer">Abbrechen</button>
-      <button id="li-submit-btn" onclick="liDoPost()" style="font-size:13px;padding:5px 16px;background:#0077B5;color:#fff;border:none;border-radius:4px;cursor:pointer;font-weight:600">Jetzt posten</button>
+    <div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap">
+      <button type="button" onclick="liCopyTextAndOpenBuffer()"
+        style="font-size:13px;padding:5px 12px;border:0.5px solid #2c4bff;border-radius:4px;background:#fff;cursor:pointer;color:#2c4bff">
+        Text kopieren & Buffer öffnen
+      </button>
+      <div style="display:flex;justify-content:flex-end;gap:8px">
+        <button onclick="liClosePost()" style="font-size:13px;padding:5px 14px;border:0.5px solid #ced4da;border-radius:4px;background:#fff;cursor:pointer">Abbrechen</button>
+        <button id="li-submit-btn" onclick="liDoPost()" style="font-size:13px;padding:5px 16px;background:#0077B5;color:#fff;border:none;border-radius:4px;cursor:pointer;font-weight:600">Jetzt posten</button>
+      </div>
     </div>
   </div>
 </div>
