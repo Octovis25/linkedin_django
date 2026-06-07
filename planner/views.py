@@ -164,7 +164,7 @@ def pipeline_view(request):
         })
 
     _attach_video_paths(posts_list)
-    return render(request, 'planner/pipeline.html', {'posts': posts_list, 'topics': topics, 'topic_filter': topic_filter, 'statuses': ['Draft', 'Review', 'Ready', 'Scheduled', 'Posted', 'Archive'], 'tab': 'pipeline', 'page_title': '→ Pipeline', 'posts_json': _posts_to_json(posts_list)})
+    return render(request, 'planner/pipeline.html', {'posts': posts_list, 'topics': topics, 'topic_filter': topic_filter, 'statuses': ['Draft', 'Review', 'Ready', 'Scheduled', 'Posted', 'Archive'], 'tab': 'pipeline', 'page_title': '→ Pipeline', 'posts_json': _posts_to_json(posts_list), 'allow_create': True})
 
 
 @login_required
@@ -181,7 +181,7 @@ def ready_view(request):
         if topic_filter:
             sql += " AND p.topic_id=%s"
             params.append(topic_filter)
-        sql += " ORDER BY COALESCE(p.planned_date,'9999-12-31'), p.created_at"
+        sql += " ORDER BY p.created_at ASC"
         posts = _q(c, sql, params)
 
     posts_list = []
@@ -219,7 +219,15 @@ def scheduled_view(request):
         if topic_filter:
             sql += " AND p.topic_id=%s"
             params.append(topic_filter)
-        sql += " ORDER BY COALESCE(p.planned_date,'9999-12-31'), p.created_at"
+        sql += """
+                 ORDER BY
+                   CASE
+                     WHEN p.post_scheduled_at IS NOT NULL THEN p.post_scheduled_at
+                     WHEN p.planned_date IS NOT NULL THEN TIMESTAMP(p.planned_date, COALESCE(p.planned_time, '00:00:00'))
+                     ELSE '9999-12-31 23:59:59'
+                   END ASC,
+                   p.created_at ASC
+              """
         posts = _q(c, sql, params)
 
     posts_list = []
@@ -247,7 +255,8 @@ def archive_view(request):
     with connection.cursor() as c:
         topics = _topics(c)
         sql = """SELECT p.id, p.title, p.content, p.status, p.planned_date,
-                        p.image, t.name, t.color, p.topic_id, p.comment
+                        p.image, t.name, t.color, p.topic_id, p.comment,
+                        p.updated_at
                  FROM planner_posts p
                  LEFT JOIN planner_topics t ON p.topic_id = t.id
                  WHERE p.status IN ('Posted', 'Archive')"""
@@ -255,7 +264,7 @@ def archive_view(request):
         if topic_filter:
             sql += " AND p.topic_id=%s"
             params.append(topic_filter)
-        sql += " ORDER BY COALESCE(p.planned_date,'9999-12-31') DESC, p.created_at DESC"
+        sql += " ORDER BY p.updated_at DESC, p.created_at DESC"
         posts = _q(c, sql, params)
 
     posts_list = []
@@ -266,6 +275,7 @@ def archive_view(request):
             'status': r[3], 'planned_date': r[4], 'image': r[5] or '',
             'topic_name': r[6] or '', 'topic_color': r[7] or 'gray',
             'topic_id': r[8], 'comment': r[9] or '', 'bg': bg, 'fg': fg,
+            'updated_at': r[10],
         })
 
     _attach_video_paths(posts_list)
