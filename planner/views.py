@@ -950,7 +950,7 @@ def public_video(request, post_id, token):
 LINKEDIN_AUTH_URL  = 'https://www.linkedin.com/oauth/v2/authorization'
 LINKEDIN_TOKEN_URL = 'https://www.linkedin.com/oauth/v2/accessToken'
 LINKEDIN_API_BASE  = 'https://api.linkedin.com/v2'
-LINKEDIN_SCOPES    = 'openid profile w_member_social'
+LINKEDIN_SCOPES    = 'openid profile w_member_social w_organization_social r_organization_social rw_organization_admin'
 
 
 def _li_credentials_ok():
