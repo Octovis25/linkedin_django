@@ -950,7 +950,7 @@ def public_video(request, post_id, token):
 LINKEDIN_AUTH_URL  = 'https://www.linkedin.com/oauth/v2/authorization'
 LINKEDIN_TOKEN_URL = 'https://www.linkedin.com/oauth/v2/accessToken'
 LINKEDIN_API_BASE  = 'https://api.linkedin.com/v2'
-LINKEDIN_SCOPES    = 'openid profile w_member_social'
+LINKEDIN_SCOPES    = 'openid profile w_member_social w_organization_social r_organization_social rw_organization_admin'
 
 
 def _li_credentials_ok():
@@ -1327,6 +1327,86 @@ def linkedin_disconnect(request):
     return redirect('/planner/api-connect/')
 
 
+@login_required
+def linkedin_diag(request):
+    """
+    Diagnostic endpoint to verify which LinkedIn scopes / org permissions
+    the stored token really has. Hit GET /planner/api/linkedin-diag/.
+    """
+    import requests as _requests
+    import json as _json
+
+    token = _li_get_superuser_token()
+    if not token or not token.get('access_token'):
+        return JsonResponse({'ok': False, 'error': 'No LinkedIn token stored'}, status=401)
+
+    report = {
+        'stored_in_db': {
+            'person_id': token.get('person_id'),
+            'name':      token.get('name'),
+            'org_id':    token.get('org_id'),
+            'org_name':  token.get('org_name'),
+            'expires_at': str(token.get('expires_at')),
+            'token_prefix': (token.get('access_token') or '')[:12] + '…',
+        },
+        'tests': {},
+    }
+
+    headers = {
+        'Authorization': f"Bearer {token['access_token']}",
+        'Linkedin-Version': '202604',
+        'X-Restli-Protocol-Version': '2.0.0',
+    }
+
+    # Test 1: /v2/userinfo — does the token still authenticate at all?
+    try:
+        r = _requests.get('https://api.linkedin.com/v2/userinfo', headers=headers, timeout=15)
+        report['tests']['userinfo'] = {'status': r.status_code, 'body': r.text[:400]}
+    except Exception as e:
+        report['tests']['userinfo'] = {'error': str(e)}
+
+    # Test 2: organizationAcls — does the token have org-posting permission?
+    # If empty → no org admin role for this token. If 403 → no scope at all.
+    try:
+        r = _requests.get(
+            'https://api.linkedin.com/rest/organizationAcls?q=roleAssignee&role=ADMINISTRATOR&state=APPROVED',
+            headers=headers, timeout=15,
+        )
+        body = r.text[:1200]
+        elements = []
+        try:
+            j = r.json()
+            for el in (j.get('elements') or []):
+                elements.append({
+                    'role': el.get('role'),
+                    'state': el.get('state'),
+                    'organization': el.get('organization'),
+                })
+        except Exception:
+            pass
+        report['tests']['organizationAcls'] = {
+            'status': r.status_code,
+            'admin_orgs_found': elements,
+            'raw_body': body if not elements else '(parsed above)',
+        }
+    except Exception as e:
+        report['tests']['organizationAcls'] = {'error': str(e)}
+
+    # Interpretation hint for the user
+    hints = []
+    acls = report['tests'].get('organizationAcls', {})
+    if acls.get('status') == 403:
+        hints.append("403 on organizationAcls → token has NO w_organization_social / r_organization_admin scope. Reconnect LinkedIn.")
+    elif acls.get('status') == 200 and not acls.get('admin_orgs_found'):
+        hints.append("Scope is granted but the user is NOT an ADMINISTRATOR on any LinkedIn page.")
+    elif acls.get('admin_orgs_found'):
+        ids = [e.get('organization') for e in acls['admin_orgs_found']]
+        hints.append(f"Token CAN post to: {ids}. Make sure token.org_id matches one of these.")
+    report['hints'] = hints
+
+    return JsonResponse(report, json_dumps_params={'indent': 2})
+
+
 def _linkedin_author_urn(token, target='org'):
     """Build the LinkedIn author URN for organization/company or personal posting."""
     import re as _re
@@ -1375,6 +1455,20 @@ def _post_linkedin_video_now(token, post_id, text, target='org'):
         raise Exception("Video konnte nicht aus Nextcloud geladen werden.")
 
     author = _linkedin_author_urn(token, target)
+
+    # ── Diagnostic logging ───────────────────────────────────────────
+    print("=" * 60)
+    print(f"LINKEDIN VIDEO POST DIAGNOSTIC (post_id={post_id})")
+    print(f"  target           : {target}")
+    print(f"  token.org_id     : {token.get('org_id')!r}")
+    print(f"  token.org_name   : {token.get('org_name')!r}")
+    print(f"  token.person_id  : {token.get('person_id')!r}")
+    print(f"  author URN sent  : {author}")
+    print(f"  video size       : {len(vid_bytes)} bytes")
+    _atok = token.get('access_token') or ''
+    print(f"  token prefix     : {_atok[:12]}…{_atok[-4:] if len(_atok) > 16 else ''}")
+    print("=" * 60)
+    # ────────────────────────────────────────────────────────────────
 
     init_r = _li_fetch(
         'https://api.linkedin.com/rest/videos?action=initializeUpload',

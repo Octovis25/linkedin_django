@@ -133,6 +133,46 @@ def planner_view(request):
 
 
 @login_required
+def draft_view(request):
+    topic_filter = request.GET.get('topic', '')
+    with connection.cursor() as c:
+        topics = _topics(c)
+        sql = """SELECT p.id, p.title, p.content, p.status, p.planned_date,
+                        p.image, t.name, t.color, p.topic_id, COALESCE(p.comment,'') as comment,
+                        COALESCE(p.link,'') as link, p.planned_time
+                 FROM planner_posts p
+                 LEFT JOIN planner_topics t ON p.topic_id = t.id
+                 WHERE p.status = 'Draft' AND COALESCE(p.is_oj,0) = 0"""
+        params = []
+        if topic_filter:
+            sql += " AND p.topic_id=%s"
+            params.append(topic_filter)
+        sql += " ORDER BY COALESCE(p.planned_date,'9999-12-31'), p.created_at"
+        posts = _q(c, sql, params)
+
+    posts_list = []
+    for r in posts:
+        bg, fg = COLOR_MAP.get(r[7] or 'gray', ('#f5f5f5', '#6c757d'))
+        posts_list.append({
+            'id': r[0], 'title': r[1] or '', 'content': r[2] or '',
+            'status': r[3], 'planned_date': r[4], 'image': r[5] or '',
+            'topic_name': r[6] or '', 'topic_color': r[7] or 'gray',
+            'topic_id': r[8], 'comment': r[9] or '', 'bg': bg, 'fg': fg,
+            'link': r[10] or '', 'planned_time': r[11],
+        })
+
+    li_token = _li_get_superuser_token()
+    return render(request, 'planner/draft.html', {
+        'posts': posts_list, 'topics': topics, 'topic_filter': topic_filter,
+        'statuses': ['Draft', 'Review', 'Ready', 'Scheduled', 'Posted', 'Archive'],
+        'tab': 'draft', 'page_title': '✏️ Draft',
+        'posts_json': _posts_to_json(posts_list),
+        'li_connected': bool(li_token),
+        'li_org': li_token.get('org_name', '') if li_token else '',
+    })
+
+
+@login_required
 def pipeline_view(request):
     topic_filter = request.GET.get('topic', '')
     with connection.cursor() as c:
@@ -143,7 +183,7 @@ def pipeline_view(request):
                         p.planned_time
                  FROM planner_posts p
                  LEFT JOIN planner_topics t ON p.topic_id = t.id
-                 WHERE p.status IN ('Draft', 'Review') AND COALESCE(p.is_oj,0) = 0"""
+                 WHERE p.status = 'Review' AND COALESCE(p.is_oj,0) = 0"""
         params = []
         if topic_filter:
             sql += " AND p.topic_id=%s"
@@ -420,23 +460,16 @@ def api_post(request):
             if 'in_pipeline' in data:
                 in_pipeline = data.get('in_pipeline')
             try:
-                link_sent = data.get('link')
+                link_sent = data.get('link')  # None = leer (JS sendet null wenn leer)
+                link_val = (link_sent or '').strip() or None  # '' → None, URL → URL
                 pt = data.get('planned_time') or None
-                if link_sent is not None:
-                    c.execute("""UPDATE planner_posts SET topic_id=%s, title=%s, content=%s,
-                                status=%s, planned_date=%s, planned_time=%s, comment=%s, link=%s, in_pipeline=%s WHERE id=%s""",
-                        [data.get('topic_id') or None, data.get('title'),
-                         data.get('content'), status,
-                         data.get('planned_date') or None, pt,
-                         data.get('comment') or None,
-                         link_sent.strip() or None, in_pipeline, data.get('id')])
-                else:
-                    c.execute("""UPDATE planner_posts SET topic_id=%s, title=%s, content=%s,
-                                status=%s, planned_date=%s, planned_time=%s, comment=%s, in_pipeline=%s WHERE id=%s""",
-                        [data.get('topic_id') or None, data.get('title'),
-                         data.get('content'), status,
-                         data.get('planned_date') or None, pt,
-                         data.get('comment') or None, in_pipeline, data.get('id')])
+                c.execute("""UPDATE planner_posts SET topic_id=%s, title=%s, content=%s,
+                            status=%s, planned_date=%s, planned_time=%s, comment=%s, link=%s, in_pipeline=%s WHERE id=%s""",
+                    [data.get('topic_id') or None, data.get('title'),
+                     data.get('content'), status,
+                     data.get('planned_date') or None, pt,
+                     data.get('comment') or None,
+                     link_val, in_pipeline, data.get('id')])
             except Exception as e:
                 return JsonResponse({'ok': False, 'error': str(e)})
             return JsonResponse({'ok': True})
