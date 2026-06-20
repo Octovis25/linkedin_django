@@ -1,0 +1,2490 @@
+{% extends "core/base.html" %}
+{% block title %}🎨 Image Studio{% endblock %}
+{% block content %}
+<style>
+  .studio-wrap { display: flex; gap: 1rem; align-items: flex-start; }
+  .studio-sidebar { width: 380px; flex-shrink: 0; display:flex; flex-direction:column; gap:0; }
+  .studio-main { flex: 1; min-width: 0; }
+  .sidebar-section { background: #fff; border-radius: 6px; box-shadow: 0 1px 4px rgba(0,0,0,.1); padding: .75rem; margin-bottom: .5rem; }
+  .sidebar-section h3 { font-size: .85rem; color: var(--octo-petrol); margin-bottom: .5rem; cursor:pointer; user-select:none; display:flex; justify-content:space-between; align-items:center; }
+  .sidebar-section h3::after { content:'▾'; font-size:.7rem; color:#aaa; transition:transform .2s; }
+  .sidebar-section.collapsed h3::after { transform:rotate(-90deg); }
+  .sidebar-section.collapsed .section-body { display:none; }
+  .tpl-grid { display:grid; grid-template-columns:1fr 1fr 1fr; gap:.3rem; max-height:120px; overflow-y:auto; }
+  .tpl-thumb { width: 100%; aspect-ratio:16/9; object-fit:cover; border-radius: 4px; cursor: pointer; border: 2px solid transparent; transition: border-color .2s; }
+  .tpl-thumb:hover, .tpl-thumb.selected { border-color: var(--octo-orange); }
+  .tpl-label { font-size: .75rem; color: #555; margin-bottom: .4rem; display: block; }
+  .lib-grid { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: .3rem; max-height: 220px; overflow-y: auto; }
+  .lib-thumb { width: 100%; aspect-ratio:1; object-fit:cover; border-radius: 4px; cursor: grab; border: 2px solid transparent; transition: border-color .2s; }
+  .lib-thumb:hover { border-color: var(--octo-orange); }
+  .lib-thumb.dragging { opacity: .5; cursor: grabbing; }
+  #canvas-wrap { position: relative; border-radius: 6px; display: inline-block; line-height: 0; }
+  #canvas-wrap.drag-over { outline: 3px dashed var(--octo-orange); }
+  #main-canvas { display: block; cursor: crosshair; }
+  .toolbar { display: flex; gap: .5rem; flex-wrap: wrap; margin-bottom: .5rem; align-items: center; }
+  .toolbar label { font-size: .85rem; color: var(--octo-petrol); font-weight: 500; }
+  .toolbar input[type=text], .toolbar input[type=number], .toolbar select {
+    padding: .25rem .4rem; border: 2px solid var(--octo-light-gray); border-radius: 4px; font-size: .85rem; width: auto; }
+  .toolbar input[type=color] { width: 30px; height: 26px; border: none; padding: 0; cursor: pointer; border-radius: 4px; }
+  #title-input { width: 180px; }
+  .selected-box { outline: 2px dashed var(--octo-orange); outline-offset: 2px; }
+  .save-row { display: flex; gap: .5rem; align-items: center; margin-top: .5rem; flex-wrap:wrap; }
+  #status-msg { font-size: .85rem; color: green; }
+  .lib-search { width: 100%; margin-bottom: .4rem; padding: .25rem .4rem; border: 2px solid var(--octo-light-gray); border-radius: 4px; font-size: .8rem; }
+  .no-templates { font-size: .85rem; color: #888; }
+  a.manage-link { font-size: .75rem; color: var(--octo-petrol); }
+  /* Post-Info kompakt */
+  .post-banner { background:#f0faf9; border:1px solid #61CEBC; border-radius:6px; padding:8px 12px; margin-bottom:.5rem; display:flex; gap:10px; align-items:center; font-size:.8rem; }
+  .post-banner img { width:40px; height:40px; border-radius:4px; object-fit:cover; border:2px solid #61CEBC; flex-shrink:0; }
+  .post-banner .post-info { flex:1; min-width:0; }
+  .post-banner .post-info strong { color:var(--octo-dark-petrol); font-size:.82rem; }
+  .post-banner .post-info p { margin:2px 0 0; color:#888; font-size:.72rem; }
+  .post-banner .post-actions { display:flex; gap:4px; flex-shrink:0; }
+  .post-banner .post-actions button { font-size:10px; padding:3px 8px; white-space:nowrap; }
+  /* Auswahl-Toolbar über Canvas */
+  .canvas-toolbar { display:flex; gap:4px; margin-bottom:4px; flex-wrap:wrap; align-items:center; min-height:28px; }
+  .canvas-toolbar button { font-size:11px; padding:3px 8px; border-radius:4px; border:1px solid #ccc; background:#fff; cursor:pointer; }
+  .canvas-toolbar button:hover { background:#f0f0f0; }
+  .canvas-toolbar button.danger { color:#dc3545; border-color:#dc3545; }
+  .canvas-toolbar button.danger:hover { background:#fff5f5; }
+</style>
+
+<h1 style="margin-bottom:.5rem">🎨 Image Studio</h1>
+{% if post_data %}
+<div class="post-banner">
+  {% if post_data.image %}
+  <img id="post-existing-img" src="/library/studio/api/post-image/{{ post_data.id }}/" alt="">
+  {% endif %}
+  <div class="post-info">
+    <strong>📌 Post #{{ post_data.id }}: {{ post_data.title|default:"Ohne Titel" }}</strong>
+    <p>Bild wird beim Speichern am Post angehängt.</p>
+  </div>
+  {% if post_data.image %}
+  <div class="post-actions">
+    {% if post_data.canvas_json %}<button class="btn btn-primary btn-sm" onclick="restorePostCanvas()">✏️ Weiterbearbeiten</button>{% endif %}
+    <button class="btn btn-secondary btn-sm" onclick="loadPostImageAsBackground()">🖼 Hintergrund</button>
+    <button class="btn btn-secondary btn-sm" onclick="loadPostImageAsOverlay()">📐 Overlay</button>
+  </div>
+  {% endif %}
+</div>
+{% elif post_id %}
+<div class="post-banner"><div class="post-info"><strong>📌 Post #{{ post_id }}</strong><p>Bild wird beim Speichern am Post angehängt.</p></div></div>
+{% elif lib_data %}
+<div class="post-banner">
+  <img src="{{ lib_data.image_url }}" alt="">
+  <div class="post-info"><strong>📷 Bibliotheksbild bearbeiten</strong>
+    <p>{% if lib_data.canvas_json %}Canvas wird wiederhergestellt.{% else %}Bild wird als Hintergrund geladen.{% endif %}</p>
+  </div>
+</div>
+{% endif %}
+
+<div class="studio-wrap">
+
+  <!-- LEFT SIDEBAR: Tools -->
+  <div class="studio-sidebar">
+
+    <div class="sidebar-section">
+      <h3 onclick="this.parentElement.classList.toggle('collapsed')">📐 Templates</h3>
+      <div class="section-body">
+        <div id="tpl-list" class="tpl-grid"><span class="no-templates">Lädt…</span></div>
+        <a class="manage-link" href="/library/studio/templates/">+ Verwalten</a>
+      </div>
+    </div>
+
+    <div class="sidebar-section">
+      <h3 onclick="this.parentElement.classList.toggle('collapsed')">✏️ Text</h3>
+      <div class="section-body">
+        <input type="text" id="text-input" placeholder="Text eingeben…" style="width:100%;margin-bottom:4px;padding:.25rem .4rem;border:1px solid #ccc;border-radius:4px;font-size:.8rem">
+        <div style="display:flex;gap:3px;margin-bottom:4px;align-items:center">
+          <select id="font-size" style="width:55px;padding:.2rem;font-size:.75rem">
+            <option>16</option><option>20</option><option>24</option><option>28</option>
+            <option selected>32</option><option>40</option><option>48</option><option>64</option><option>80</option>
+          </select>
+          <input type="color" id="text-color" value="#ffffff" style="width:26px;height:24px;border:none;padding:0;cursor:pointer;border-radius:3px">
+          <select id="font-weight" style="width:65px;padding:.2rem;font-size:.75rem">
+            <option value="normal">Normal</option>
+            <option value="bold" selected>Fett</option>
+          </select>
+          <button id="text-action-btn" class="btn btn-primary btn-sm" onclick="addText()" style="font-size:11px;padding:2px 8px;margin-left:auto">+ Text</button>
+        </div>
+        <div style="display:flex;gap:2px;align-items:center">
+          <div onclick="document.getElementById('text-color').value='#ffffff'" title="Weiß"      style="width:18px;height:18px;border-radius:3px;background:#ffffff;border:1px solid #ccc;cursor:pointer"></div>
+          <div onclick="document.getElementById('text-color').value='#F56E28'" title="Orange"    style="width:18px;height:18px;border-radius:3px;background:#F56E28;cursor:pointer"></div>
+          <div onclick="document.getElementById('text-color').value='#008591'" title="Petrol"    style="width:18px;height:18px;border-radius:3px;background:#008591;cursor:pointer"></div>
+          <div onclick="document.getElementById('text-color').value='#61CEBC'" title="Türkis"    style="width:18px;height:18px;border-radius:3px;background:#61CEBC;cursor:pointer"></div>
+          <div onclick="document.getElementById('text-color').value='#005F68'" title="Dunkel"    style="width:18px;height:18px;border-radius:3px;background:#005F68;cursor:pointer"></div>
+          <div onclick="document.getElementById('text-color').value='#161616'" title="Schwarz"   style="width:18px;height:18px;border-radius:3px;background:#161616;cursor:pointer"></div>
+          <span style="font-size:.65rem;color:#aaa;margin-left:4px">Doppelklick = bearbeiten</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="sidebar-section">
+      <h3 onclick="this.parentElement.classList.toggle('collapsed')">🎬 Video erstellen</h3>
+      <div class="section-body">
+        <div id="cutouts-panel" style="display:none;margin-bottom:8px">
+          <div style="font-size:.7rem;font-weight:600;color:var(--octo-dark-petrol);margin-bottom:4px">✂ Freigestellte Elemente:</div>
+          <div id="cutouts-grid" style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:4px"></div>
+          <button class="btn btn-primary btn-sm" onclick="placeAllCutouts()" style="font-size:10px;width:100%">▶ Alle platzieren & animieren</button>
+        </div>
+
+        <div id="elem-anim-panel" style="background:#f8f9fa;border-radius:4px;padding:6px;margin-bottom:8px;display:none">
+          <div style="font-size:.75rem;font-weight:600;color:var(--octo-dark-petrol);margin-bottom:4px" id="elem-anim-label">Element #1</div>
+          <div style="margin-bottom:4px">
+            <label style="font-size:.7rem;color:#555">Animation:</label>
+            <select id="elem-anim-type" onchange="setElemAnim()" style="width:100%;padding:2px;font-size:.75rem;border:1px solid #ccc;border-radius:3px">
+              <option value="none">Keine (statisch)</option>
+              <option value="fadeIn">Einblenden</option>
+              <option value="flyTo">Fliegen zu Position ✈️</option>
+              <option value="slideLeft">Von links</option>
+              <option value="slideRight">Von rechts</option>
+              <option value="slideUp">Von unten</option>
+              <option value="slideDown">Von oben</option>
+              <option value="zoomIn">Reinzoomen</option>
+              <option value="zoomOut">Rauszoomen (verschwinden)</option>
+              <option value="pulse">Pulsieren 💫</option>
+              <option value="blink">Blinken ⚡</option>
+              <option value="bounce">Hin & Her ↔</option>
+              <option value="dashedGlow">Gestrichelte Umrandung ✨</option>
+              <option value="typewriter">Schreibmaschine (Text)</option>
+            </select>
+          </div>
+          <div id="flyto-hint" style="display:none;font-size:.65rem;color:#F56E28;margin-bottom:4px">
+            ⚡ Klick auf Canvas = Startposition setzen. Element fliegt von dort zur aktuellen Position.
+          </div>
+          <div style="display:flex;gap:4px;margin-bottom:4px">
+            <div style="flex:1">
+              <label style="font-size:.7rem;color:#555">Verzögerung (ms):</label>
+              <input type="number" id="elem-anim-delay" value="0" min="0" max="10000" step="100" onchange="setElemAnim()" style="width:100%;padding:2px;font-size:.75rem;border:1px solid #ccc;border-radius:3px">
+            </div>
+            <div style="flex:1">
+              <label style="font-size:.7rem;color:#555">Dauer (ms):</label>
+              <input type="number" id="elem-anim-dur" value="1500" min="100" max="5000" step="100" onchange="setElemAnim()" style="width:100%;padding:2px;font-size:.75rem;border:1px solid #ccc;border-radius:3px">
+            </div>
+          </div>
+          <button class="btn btn-secondary btn-sm" onclick="setFlyToMode()" id="flyto-btn" style="font-size:10px;width:100%;display:none">🎯 Startposition per Klick setzen</button>
+        </div>
+
+        <div style="font-size:.7rem;color:#888;margin-bottom:6px" id="elem-anim-none">Klicke ein Element in der Liste unten (🎭 Auf dem Canvas), um seine Animation einzustellen.</div>
+
+        <fieldset style="border:1px solid #ddd;border-radius:4px;padding:6px;margin-bottom:6px">
+          <legend style="font-size:.7rem;font-weight:600;color:var(--octo-dark-petrol);padding:0 4px">⚡ Schnell-Animationen</legend>
+          <div style="font-size:.65rem;color:#888;margin-bottom:4px">Nur Elemente, die auf „Keine" stehen, werden animiert. Statisch gesetzte bleiben unverändert.</div>
+          <div style="display:flex;gap:4px;flex-wrap:wrap">
+            <button class="btn btn-secondary btn-sm" onclick="flyAllSequential('edges')" style="font-size:10px" title="Von allen Seiten nacheinander einfliegen">🎯 Einfliegen</button>
+            <button class="btn btn-secondary btn-sm" onclick="flyAllSequential('top')" style="font-size:10px">⬇ Von oben</button>
+            <button class="btn btn-secondary btn-sm" onclick="flyAllSequential('left')" style="font-size:10px">➡ Von links</button>
+            <button class="btn btn-secondary btn-sm" onclick="flyAllSequential('fade')" style="font-size:10px">✨ Einblenden</button>
+            <button class="btn btn-secondary btn-sm" onclick="resetAllAnimations()" style="font-size:10px;color:#dc3545" title="Alle Animationen zurücksetzen">↩ Reset</button>
+          </div>
+        </fieldset>
+
+        <div id="anim-timeline" style="margin-bottom:6px"></div>
+
+        <div style="margin-bottom:6px">
+          <label style="font-size:.75rem;color:#555">Video-Dauer (Sek):</label>
+          <input type="number" id="vid-duration" value="5" min="2" max="30" style="width:50px;padding:2px 4px;font-size:.8rem;border:1px solid #ccc;border-radius:3px">
+        </div>
+        <div style="display:flex;gap:4px;margin-bottom:4px">
+          <button class="btn btn-primary btn-sm" onclick="startVideoPreview()" style="font-size:11px;flex:1">▶ Vorschau</button>
+          <button class="btn btn-secondary btn-sm" onclick="recordVideo()" style="font-size:11px;flex:1" id="vid-record-btn">⏺ Aufnehmen</button>
+        </div>
+        <div id="vid-result" style="display:none;background:#f0f8f0;border-radius:4px;padding:6px;margin-bottom:4px">
+          <video id="vid-preview" controls style="width:100%;border-radius:4px;margin-bottom:4px;max-height:160px"></video>
+          <div id="vid-size" style="font-size:.65rem;color:#555;margin-bottom:4px"></div>
+          <div style="display:flex;gap:4px;flex-wrap:wrap">
+            <button class="btn btn-primary btn-sm" onclick="saveVideoToNC()" style="font-size:10px;flex:1" id="vid-nc-btn">☁ Nextcloud</button>
+            <button class="btn btn-secondary btn-sm" onclick="downloadVideo()" style="font-size:10px;flex:1">⬇ Download</button>
+            <button class="btn btn-secondary btn-sm" onclick="recordVideo()" style="font-size:10px;flex:1">🔄 Nochmal</button>
+          </div>
+        </div>
+        <div id="vid-status" style="font-size:.7rem;color:#888;margin-top:4px"></div>
+      </div>
+    </div>
+
+    <!-- Element Board -->
+    <div class="sidebar-section">
+      <h3 onclick="this.parentElement.classList.toggle('collapsed')">🧩 Element-Board <span style="font-size:.6rem;font-weight:normal;color:#999">(Klick = platzieren)</span></h3>
+      <div class="section-body">
+        <div id="elem-board" style="display:flex;flex-wrap:wrap;gap:6px;min-height:36px;border:1px dashed #ccc;border-radius:4px;padding:4px;background:#fafafa">
+          <p id="elem-board-empty" style="margin:0;padding:6px;color:#bbb;font-size:.65rem;text-align:center;width:100%">Klick 📤 um Elemente hochzuladen oder aus der Bibliothek hierher ziehen.</p>
+        </div>
+        <div style="display:flex;gap:4px;margin-top:4px">
+          <button class="btn btn-primary btn-sm" onclick="document.getElementById('elem-upload').click()" style="font-size:10px;flex:1">📤 PNGs hochladen</button>
+          <button class="btn btn-secondary btn-sm" onclick="clearElementBoard()" style="font-size:10px" title="Board leeren">🗑</button>
+        </div>
+        <input type="file" id="elem-upload" multiple accept="image/png,image/webp,image/gif,image/jpeg" style="display:none" onchange="handleElemUpload(this)">
+      </div>
+    </div>
+
+    <!-- Canvas Elements -->
+    <div class="sidebar-section">
+      <h3 onclick="this.parentElement.classList.toggle('collapsed')">🎭 Auf dem Canvas</h3>
+      <div class="section-body">
+        <div id="canvas-elem-list" style="font-size:.7rem;color:#888">Keine Elemente.</div>
+      </div>
+    </div>
+
+  </div><!-- /left sidebar -->
+
+  <!-- CANVAS AREA -->
+  <div class="studio-main">
+    <div class="toolbar">
+      <label>Titel:</label>
+      <input type="text" id="title-input" placeholder="Bildtitel…" value="{% if post_data %}{{ post_data.title|default_if_none:'' }}{% elif post_id %}Post_{{ post_id }}{% endif %}">
+      <label style="margin-left:8px">Ordner:</label>
+      <select id="save-folder" style="padding:4px 6px;border:1px solid #ccc;border-radius:4px;font-size:.85rem">
+        <option value="">Unsortiert</option>
+        {% for f in folders %}
+        <option value="{{ f.id }}">{{ f.name }}</option>
+        {% endfor %}
+      </select>
+      {% if post_id %}
+      <input type="hidden" id="post-id" value="{{ post_id }}">
+      {% endif %}
+    </div>
+
+    <!-- Object toolbar above canvas -->
+    <div class="canvas-toolbar" id="obj-toolbar">
+      <button onclick="deleteSelected()" class="danger" title="Ausgewähltes Element löschen">🗑 Löschen</button>
+      <button id="bg-toggle-btn" onclick="toggleBg()" title="Hintergrund ein-/ausschalten">🖼 BG anzeigen</button>
+      <button onclick="bringForward()" title="Nach vorne">⬆</button>
+      <button onclick="sendBackward()" title="Nach hinten">⬇</button>
+      <button onclick="startCropMode()" id="crop-btn" title="Bereich als eigenes Element ausschneiden">✂ Ausschneiden</button>
+      <button onclick="startAutoDetectMode()" id="autodetect-btn" title="Bereich markieren → Elemente darin automatisch erkennen">🔍 Auto-Erkennung</button>
+      <span id="sel-info" style="font-size:.7rem;color:#888;margin-left:auto"></span>
+    </div>
+
+    <div id="canvas-wrap">
+      <canvas id="main-canvas" width="1200" height="628"></canvas>
+    </div>
+
+    <div class="save-row">
+      <button class="btn btn-secondary" onclick="saveImage()" style="font-size:.85rem">💾 Speichern</button>
+      <button class="btn btn-primary btn-sm" onclick="downloadImage()" style="font-size:.85rem">⬇ Download</button>
+      <button class="btn btn-sm" onclick="deleteCurrentImage()" style="font-size:.85rem;color:#dc3545;border:1px solid #dc3545;background:#fff" title="Bild aus Bibliothek löschen">🗑 Löschen</button>
+      <span id="status-msg"></span>
+    </div>
+  </div>
+
+  <!-- RIGHT SIDEBAR: Bibliothek + Bilder/Videos/Video-Bilder -->
+  <div class="studio-right-sidebar" style="width:280px;flex-shrink:0;display:flex;flex-direction:column;gap:0;max-height:calc(100vh - 60px);overflow-y:auto">
+
+    <!-- Bibliothek -->
+    <div class="sidebar-section">
+      <h3 onclick="this.parentElement.classList.toggle('collapsed')">🖼 Bibliothek</h3>
+      <div class="section-body">
+        <div style="display:flex;gap:4px;margin-bottom:4px">
+          <select id="lib-folder-filter" style="flex:1;padding:.2rem .3rem;border:1px solid #ccc;border-radius:4px;font-size:.75rem">
+            <option value="all">Alle Ordner</option>
+          </select>
+          <input class="lib-search" id="lib-search" type="text" placeholder="Suchen…" style="flex:1;margin-bottom:0">
+        </div>
+        <div class="lib-grid" id="lib-grid"><span style="font-size:.8rem;color:#888">Lädt…</span></div>
+      </div>
+    </div>
+
+    <!-- Gespeicherte Bilder -->
+    <div class="sidebar-section">
+      <h3 onclick="this.parentElement.classList.toggle('collapsed')">🖼 Bilder</h3>
+      <div class="section-body">
+        <div id="saved-images-grid" style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:.3rem;max-height:150px;overflow-y:auto">
+          <span style="font-size:.75rem;color:#888">Lädt…</span>
+        </div>
+        <div style="margin-top:3px;font-size:.6rem;color:#999">Klick = im Studio öffnen</div>
+      </div>
+    </div>
+
+    <!-- Gespeicherte Videos -->
+    <div class="sidebar-section">
+      <h3 onclick="this.parentElement.classList.toggle('collapsed')">🎬 Videos</h3>
+      <div class="section-body">
+        <div id="saved-videos-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:.3rem;max-height:150px;overflow-y:auto">
+          <span style="font-size:.75rem;color:#888">Lädt…</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Video-Bilder -->
+    <div class="sidebar-section">
+      <h3 onclick="this.parentElement.classList.toggle('collapsed')">🖼🎬 Video-Bilder</h3>
+      <div class="section-body">
+        <p style="font-size:10px;color:#888;margin:0 0 6px">💡 Titel eingeben → <strong>Speichern</strong> → wird automatisch als Video-Bild gesichert wenn Animationen aktiv sind.</p>
+        <div id="vtpl-status" style="font-size:10px;color:#888;margin-bottom:4px"></div>
+        <input id="vtpl-title" style="display:none">
+        <div id="vtpl-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:.3rem;max-height:180px;overflow-y:auto">
+          <span style="font-size:.75rem;color:#888">Lädt…</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Help (collapsed) -->
+    <div class="sidebar-section collapsed" style="margin-top:auto">
+      <h3 onclick="this.parentElement.classList.toggle('collapsed')">❓ Anleitung</h3>
+      <div class="section-body">
+        <ol style="margin:0;padding-left:1.2em;line-height:1.6;font-size:.7rem;color:#888">
+          <li>Template wählen (= Hintergrund)</li>
+          <li>Bilder aus Bibliothek auf Canvas ziehen oder ➕ ins Board laden</li>
+          <li>Elemente positionieren & skalieren</li>
+          <li>Animation pro Element einstellen (links)</li>
+          <li>Vorschau / Video aufnehmen</li>
+        </ol>
+      </div>
+    </div>
+
+  </div>
+
+</div><!-- /studio-wrap -->
+
+<script>
+const canvas = document.getElementById('main-canvas');
+const ctx    = canvas.getContext('2d');
+const POST_ID = document.getElementById('post-id')?.value || '';
+
+// ── State ──
+let objects = [];   // [{type:'img'|'text', x,y,w,h, img?, text?,fontSize?,color?,fontWeight?}]
+let selIdx   = -1;
+let mode     = 'idle'; // 'idle' | 'drag' | 'resize'
+let dragOffX = 0, dragOffY = 0;
+let resizeHandle = ''; // 'se' | 'sw' | 'ne' | 'nw'
+let resizeStartX = 0, resizeStartY = 0;
+let resizeStartObj = null;
+let bgImage  = null;
+let bgVideo  = null;  // HTMLVideoElement als laufender Hintergrund
+let currentTemplateId = null;
+const HANDLE = 12; // resize handle size px (canvas coords)
+
+// ── Scale canvas to fit screen ──
+function scaleCanvas() {
+  // Use full window width minus sidebar and padding
+  const totalW = window.innerWidth || document.documentElement.clientWidth;
+  const sidebarW = 340 + 280 + 40; // left + right sidebar + gaps
+  const available = Math.max(300, totalW - sidebarW - 40);
+  const maxPx = Math.min(700, available);
+  const scale = maxPx / Math.max(canvas.width, canvas.height);
+  canvas.style.width  = Math.round(canvas.width  * scale) + 'px';
+  canvas.style.height = Math.round(canvas.height * scale) + 'px';
+}
+window.addEventListener('resize', scaleCanvas);
+
+// ── Render ──
+function render() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  drawCleanBg(ctx);
+  objects.forEach((obj, i) => {
+    if (obj.type === 'img') {
+      ctx.drawImage(obj.img, obj.x, obj.y, obj.w, obj.h);
+    } else if (obj.type === 'text') {
+      ctx.save();
+      ctx.font = `${obj.fontWeight||'bold'} ${obj.fontSize||32}px Roboto, Arial, sans-serif`;
+      ctx.fillStyle = obj.color || '#ffffff';
+      ctx.shadowColor = 'rgba(0,0,0,0.6)';
+      ctx.shadowBlur  = 4;
+      // y is top of text box; offset by fontSize so baseline is inside box
+      wrapText(ctx, obj.text, obj.x, obj.y + (obj.fontSize||32), obj.w, (obj.fontSize||32) * 1.3);
+      ctx.restore();
+    }
+    if (i === selIdx) {
+      ctx.save();
+      ctx.strokeStyle = '#F56E28';
+      ctx.lineWidth   = 2;
+      ctx.setLineDash([6,3]);
+      ctx.strokeRect(obj.x - 2, obj.y - 2, obj.w + 4, obj.h + 4);
+      ctx.setLineDash([]);
+      // Draw resize handles at corners
+      const hx = [obj.x - 2, obj.x + obj.w - HANDLE/2 + 2];
+      const hy = [obj.y - 2, obj.y + obj.h - HANDLE/2 + 2];
+      ctx.fillStyle = '#F56E28';
+      for (const hxi of hx) for (const hyi of hy) {
+        ctx.fillRect(hxi, hyi, HANDLE, HANDLE);
+      }
+      ctx.restore();
+    }
+  });
+  if (typeof updateSelInfo === 'function') updateSelInfo();
+  if (typeof updateCanvasElemList === 'function') updateCanvasElemList();
+}
+
+function wrapText(ctx, text, x, y, maxW, lineH) {
+  const words = text.split(' ');
+  let line = '';
+  let curY = y;
+  words.forEach((w, n) => {
+    const test = line + w + ' ';
+    if (ctx.measureText(test).width > maxW && n > 0) {
+      ctx.fillText(line, x, curY);
+      line = w + ' ';
+      curY += lineH;
+    } else { line = test; }
+  });
+  ctx.fillText(line, x, curY);
+}
+
+// ── Canvas coords (account for CSS scale) ──
+function canvasXY(e) {
+  const rect  = canvas.getBoundingClientRect();
+  const scaleX = canvas.width  / rect.width;
+  const scaleY = canvas.height / rect.height;
+  return { x: (e.clientX - rect.left) * scaleX, y: (e.clientY - rect.top) * scaleY };
+}
+
+function hitTest(x, y) {
+  for (let i = objects.length - 1; i >= 0; i--) {
+    const o = objects[i];
+    if (x >= o.x && x <= o.x + o.w && y >= o.y && y <= o.y + o.h) return i;
+  }
+  return -1;
+}
+
+function getResizeHandle(obj, x, y) {
+  if (!obj) return '';
+  const H = HANDLE;
+  const corners = {
+    nw: [obj.x - 2,           obj.y - 2],
+    ne: [obj.x + obj.w - H/2, obj.y - 2],
+    sw: [obj.x - 2,           obj.y + obj.h - H/2],
+    se: [obj.x + obj.w - H/2, obj.y + obj.h - H/2],
+  };
+  for (const [name, [cx, cy]] of Object.entries(corners)) {
+    if (x >= cx && x <= cx + H && y >= cy && y <= cy + H) return name;
+  }
+  return '';
+}
+
+canvas.addEventListener('mousedown', e => {
+  const {x, y} = canvasXY(e);
+  // Check resize handle first (only if something selected)
+  if (selIdx >= 0) {
+    const handle = getResizeHandle(objects[selIdx], x, y);
+    if (handle) {
+      mode = 'resize';
+      resizeHandle  = handle;
+      resizeStartX  = x;
+      resizeStartY  = y;
+      resizeStartObj = {...objects[selIdx]};
+      return;
+    }
+  }
+  // Otherwise try to select/drag
+  const hit = hitTest(x, y);
+  selIdx = hit;
+  if (hit >= 0) {
+    mode     = 'drag';
+    dragOffX = x - objects[hit].x;
+    dragOffY = y - objects[hit].y;
+  } else {
+    mode = 'idle';
+  }
+  render();
+});
+
+canvas.addEventListener('mousemove', e => {
+  const {x, y} = canvasXY(e);
+  if (mode === 'drag' && selIdx >= 0) {
+    objects[selIdx].x = x - dragOffX;
+    objects[selIdx].y = y - dragOffY;
+    render();
+  } else if (mode === 'resize' && selIdx >= 0 && resizeStartObj) {
+    const dx = x - resizeStartX;
+    const dy = y - resizeStartY;
+    const o  = objects[selIdx];
+    const s  = resizeStartObj;
+    if (resizeHandle === 'se') {
+      o.w = Math.max(20, s.w + dx);
+      o.h = Math.max(20, s.h + dy);
+    } else if (resizeHandle === 'sw') {
+      o.w = Math.max(20, s.w - dx);
+      o.x = s.x + s.w - o.w;
+      o.h = Math.max(20, s.h + dy);
+    } else if (resizeHandle === 'ne') {
+      o.w = Math.max(20, s.w + dx);
+      o.h = Math.max(20, s.h - dy);
+      o.y = s.y + s.h - o.h;
+    } else if (resizeHandle === 'nw') {
+      o.w = Math.max(20, s.w - dx);
+      o.x = s.x + s.w - o.w;
+      o.h = Math.max(20, s.h - dy);
+      o.y = s.y + s.h - o.h;
+    }
+    render();
+  } else {
+    // Update cursor based on hover
+    if (selIdx >= 0) {
+      const handle = getResizeHandle(objects[selIdx], x, y);
+      if (handle === 'se' || handle === 'nw') canvas.style.cursor = 'nwse-resize';
+      else if (handle === 'sw' || handle === 'ne') canvas.style.cursor = 'nesw-resize';
+      else if (hitTest(x, y) >= 0) canvas.style.cursor = 'move';
+      else canvas.style.cursor = 'crosshair';
+    }
+  }
+});
+
+canvas.addEventListener('mouseup', () => { mode = 'idle'; resizeStartObj = null; });
+canvas.addEventListener('mouseleave', () => { mode = 'idle'; resizeStartObj = null; });
+
+
+// ── Doppelklick → Text-Objekt in Sidebar laden zum Bearbeiten ──
+canvas.addEventListener('dblclick', e => {
+  const {x, y} = canvasXY(e);
+  const hit = hitTest(x, y);
+  if (hit >= 0 && objects[hit].type === 'text') {
+    const obj = objects[hit];
+    document.getElementById('text-input').value    = obj.text;
+    document.getElementById('font-size').value     = obj.fontSize || 32;
+    document.getElementById('text-color').value    = obj.color || '#ffffff';
+    document.getElementById('font-weight').value   = obj.fontWeight || 'bold';
+    // Swap button to "Update"
+    const btn = document.getElementById('text-action-btn');
+    btn.textContent = '✏️ Text aktualisieren';
+    btn.onclick = () => updateSelectedText();
+    selIdx = hit;
+    render();
+  }
+});
+
+function updateSelectedText() {
+  if (selIdx < 0 || !objects[selIdx] || objects[selIdx].type !== 'text') return;
+  const obj = objects[selIdx];
+  obj.text       = document.getElementById('text-input').value.trim() || obj.text;
+  obj.fontSize   = parseInt(document.getElementById('font-size').value) || 32;
+  obj.color      = document.getElementById('text-color').value;
+  obj.fontWeight = document.getElementById('font-weight').value;
+  // Remeasure width
+  ctx.font = `${obj.fontWeight} ${obj.fontSize}px Roboto, Arial, sans-serif`;
+  obj.w = Math.min(ctx.measureText(obj.text).width + 20, canvas.width - 60);
+  obj.h = obj.fontSize * 1.6;
+  render();
+  // Reset button back to "Hinzufügen"
+  const btn = document.getElementById('text-action-btn');
+  btn.textContent = '+ Text einfügen';
+  btn.onclick = () => addText();
+}
+
+// ── Text ──
+function addText() {
+  const text = document.getElementById('text-input').value.trim();
+  if (!text) return;
+  const fontSize   = parseInt(document.getElementById('font-size').value) || 32;
+  const color      = document.getElementById('text-color').value;
+  const fontWeight = document.getElementById('font-weight').value;
+  // Measure actual text width for hit-testing
+  ctx.font = `${fontWeight} ${fontSize}px Roboto, Arial, sans-serif`;
+  const measured = ctx.measureText(text).width;
+  const w = Math.min(measured + 20, canvas.width - 60);
+  const h = fontSize * 1.6;
+  objects.push({ type:'text', x:60, y:canvas.height/2, w, h,
+                 text, fontSize, color, fontWeight });
+  selIdx = objects.length - 1;
+  render();
+}
+
+// ── Delete ──
+function deleteSelected() {
+  if (selIdx < 0) return;
+  objects.splice(selIdx, 1);
+  selIdx = -1;
+  render();
+}
+
+// ── Z-order ──
+function bringForward() {
+  if (selIdx < 0 || selIdx >= objects.length - 1) return;
+  [objects[selIdx], objects[selIdx+1]] = [objects[selIdx+1], objects[selIdx]];
+  selIdx++; render();
+}
+function sendBackward() {
+  if (selIdx <= 0) return;
+  [objects[selIdx], objects[selIdx-1]] = [objects[selIdx-1], objects[selIdx]];
+  selIdx--; render();
+}
+
+// ── Update selection info ──
+function updateSelInfo() {
+  const info = document.getElementById('sel-info');
+  if (selIdx < 0) { info.textContent = 'Nichts ausgewählt'; return; }
+  const o = objects[selIdx];
+  info.textContent = o.type === 'img' ? `Bild ${Math.round(o.w)}×${Math.round(o.h)}` : `Text: "${(o.text||'').substring(0,20)}"`;
+  updateBgButton();
+}
+
+// ── Remove background from selected image ──
+function removeImageBg() {
+  if (selIdx < 0 || objects[selIdx]?.type !== 'img') {
+    alert('Bitte erst ein Bild-Overlay auswählen.');
+    return;
+  }
+  const obj = objects[selIdx];
+  const tmp = document.createElement('canvas');
+  const W = obj.img.naturalWidth || obj.w;
+  const H = obj.img.naturalHeight || obj.h;
+  tmp.width = W; tmp.height = H;
+  const tctx = tmp.getContext('2d');
+  tctx.drawImage(obj.img, 0, 0, W, H);
+  const imgData = tctx.getImageData(0, 0, W, H);
+  const d = imgData.data;
+  const tolerance = 45; // color distance threshold
+
+  // Sample background color from the four corners (average)
+  function getPixel(px, py) {
+    const i = (py * W + px) * 4;
+    return [d[i], d[i+1], d[i+2], d[i+3]];
+  }
+  const corners = [getPixel(0,0), getPixel(W-1,0), getPixel(0,H-1), getPixel(W-1,H-1)];
+  // Use top-left corner as reference (most likely background)
+  const bgR = corners[0][0], bgG = corners[0][1], bgB = corners[0][2];
+
+  function colorDist(i) {
+    const dr = d[i] - bgR, dg = d[i+1] - bgG, db = d[i+2] - bgB;
+    return Math.sqrt(dr*dr + dg*dg + db*db);
+  }
+  // Also detect checkerboard: two alternating grays
+  function isCheckerboard(i) {
+    const r = d[i], g = d[i+1], b = d[i+2];
+    if (Math.abs(r-g) > 8 || Math.abs(g-b) > 8) return false; // not gray
+    return (r > 180 && r < 255); // gray range typical for checkerboard
+  }
+
+  // Flood-fill from all four edges
+  const visited = new Uint8Array(W * H);
+  const queue = [];
+  // Seed from all edge pixels
+  for (let x = 0; x < W; x++) { queue.push(x); queue.push(0); queue.push(x); queue.push(H-1); }
+  for (let y = 1; y < H-1; y++) { queue.push(0); queue.push(y); queue.push(W-1); queue.push(y); }
+
+  let qi = 0;
+  while (qi < queue.length) {
+    const x = queue[qi++], y = queue[qi++];
+    if (x < 0 || x >= W || y < 0 || y >= H) continue;
+    const idx = y * W + x;
+    if (visited[idx]) continue;
+    visited[idx] = 1;
+    const pi = idx * 4;
+    if (d[pi+3] === 0) continue; // already transparent
+    if (colorDist(pi) > tolerance && !isCheckerboard(pi)) continue; // not background
+    d[pi+3] = 0; // make transparent
+    // Expand to neighbors
+    queue.push(x-1, y, x+1, y, x, y-1, x, y+1);
+  }
+
+  // Soften edges: semi-transparent border pixels
+  const edgeData = new Uint8Array(W * H);
+  for (let y = 1; y < H-1; y++) {
+    for (let x = 1; x < W-1; x++) {
+      const idx = y * W + x;
+      if (d[idx*4+3] > 0) {
+        // Check if any neighbor is transparent
+        const neighbors = [(y-1)*W+x, (y+1)*W+x, y*W+x-1, y*W+x+1];
+        for (const ni of neighbors) {
+          if (d[ni*4+3] === 0) { edgeData[idx] = 1; break; }
+        }
+      }
+    }
+  }
+  for (let i = 0; i < edgeData.length; i++) {
+    if (edgeData[i]) d[i*4+3] = Math.min(d[i*4+3], 180); // soften edge
+  }
+
+  tctx.putImageData(imgData, 0, 0);
+  const cleaned = new Image();
+  const dataUrl = tmp.toDataURL('image/png');
+  cleaned.onload = () => {
+    if (!obj.originalUrl) obj.originalUrl = obj.url;
+    obj.img = cleaned; obj.url = dataUrl; obj.bgRemoved = true;
+    render(); updateBgButton();
+  };
+  cleaned.src = dataUrl;
+}
+
+// ── Load template ──
+function loadTemplate(tplId, url, w, h) {
+  currentTemplateId = tplId;
+  const img = new Image();
+  img.onload = () => {
+    canvas.width  = img.naturalWidth;
+    canvas.height = img.naturalHeight;
+    bgImage = img; objects = []; selIdx = -1;
+    render();
+    scaleCanvas();
+  };
+  img.src = url + '?t=' + Date.now();
+  document.querySelectorAll('.tpl-thumb').forEach(el => el.classList.remove('selected'));
+  document.getElementById('tpl-' + tplId)?.classList.add('selected');
+}
+
+// ── Add library image at position ──
+function addLibraryImage(url, dropX, dropY) {
+  const img = new Image();
+  // Set crossOrigin only for external URLs (not same-origin)
+  if (url.startsWith('http') && !url.startsWith(location.origin)) img.crossOrigin = 'anonymous';
+  img.onload = () => {
+    let w = img.naturalWidth, h = img.naturalHeight;
+    const maxSize = Math.min(canvas.width, canvas.height) * 0.4;
+    if (w > maxSize) { h = h * maxSize / w; w = maxSize; }
+    const x = (dropX !== undefined) ? Math.max(0, dropX - w/2) : (canvas.width/2 - w/2);
+    const y = (dropY !== undefined) ? Math.max(0, dropY - h/2) : (canvas.height/2 - h/2);
+    objects.push({ type:'img', x, y, w, h, img, url, originalUrl: url });
+    selIdx = objects.length - 1;
+    render();
+    // Auto-remove background
+    autoRemoveBg(objects.length - 1);
+  };
+  img.onerror = () => console.error('Bild konnte nicht geladen werden:', url);
+  img.src = url;
+}
+
+// Auto-remove BG for a given object index (non-interactive version of removeImageBg)
+function autoRemoveBg(idx) {
+  const obj = objects[idx];
+  if (!obj || obj.type !== 'img') return;
+  try {
+    const tmp = document.createElement('canvas');
+    const W = obj.img.naturalWidth || obj.w;
+    const H = obj.img.naturalHeight || obj.h;
+    tmp.width = W; tmp.height = H;
+    const tctx = tmp.getContext('2d');
+    tctx.drawImage(obj.img, 0, 0, W, H);
+    const imgData = tctx.getImageData(0, 0, W, H);
+    const d = imgData.data;
+    const tolerance = 45;
+    function getPixel(px, py) { const i = (py * W + px) * 4; return [d[i], d[i+1], d[i+2], d[i+3]]; }
+    const bgC = getPixel(0,0);
+    const bgR = bgC[0], bgG = bgC[1], bgB = bgC[2];
+    function colorDist(i) { const dr=d[i]-bgR, dg=d[i+1]-bgG, db=d[i+2]-bgB; return Math.sqrt(dr*dr+dg*dg+db*db); }
+    function isCheckerboard(i) { const r=d[i],g=d[i+1],b=d[i+2]; if(Math.abs(r-g)>8||Math.abs(g-b)>8)return false; return(r>180&&r<255); }
+    const visited = new Uint8Array(W * H);
+    const queue = [];
+    for (let x=0;x<W;x++){queue.push(x,0,x,H-1);}
+    for (let y=1;y<H-1;y++){queue.push(0,y,W-1,y);}
+    let qi = 0;
+    while (qi < queue.length) {
+      const x=queue[qi++], y=queue[qi++];
+      if(x<0||x>=W||y<0||y>=H)continue;
+      const idx2=y*W+x;
+      if(visited[idx2])continue; visited[idx2]=1;
+      const pi=idx2*4;
+      if(d[pi+3]===0)continue;
+      if(colorDist(pi)>tolerance&&!isCheckerboard(pi))continue;
+      d[pi+3]=0;
+      queue.push(x-1,y,x+1,y,x,y-1,x,y+1);
+    }
+    // Soften edges
+    const edgeData = new Uint8Array(W * H);
+    for(let y=1;y<H-1;y++){for(let x=1;x<W-1;x++){const i=y*W+x;if(d[i*4+3]>0){const nb=[(y-1)*W+x,(y+1)*W+x,y*W+x-1,y*W+x+1];for(const ni of nb){if(d[ni*4+3]===0){edgeData[i]=1;break;}}}}}
+    for(let i=0;i<edgeData.length;i++){if(edgeData[i])d[i*4+3]=Math.min(d[i*4+3],180);}
+    tctx.putImageData(imgData, 0, 0);
+    const cleaned = new Image();
+    const dataUrl = tmp.toDataURL('image/png');
+    cleaned.onload = () => { obj.img = cleaned; obj.url = dataUrl; obj.bgRemoved = true; render(); };
+    cleaned.src = dataUrl;
+  } catch(e) { console.warn('Auto BG removal failed:', e); }
+}
+
+// Restore original background for selected image
+function restoreImageBg() {
+  if (selIdx < 0 || objects[selIdx]?.type !== 'img') { alert('Bitte erst ein Bild auswählen.'); return; }
+  const obj = objects[selIdx];
+  if (!obj.originalUrl) { alert('Kein Original-Hintergrund vorhanden.'); return; }
+  const img = new Image();
+  img.onload = () => { obj.img = img; obj.url = obj.originalUrl; obj.bgRemoved = false; render(); };
+  img.onerror = () => alert('Original konnte nicht geladen werden.');
+  img.src = obj.originalUrl + (obj.originalUrl.includes('?') ? '&' : '?') + 't=' + Date.now();
+}
+
+// Toggle BG: if removed → restore, if present → remove
+function toggleBg() {
+  if (selIdx < 0 || objects[selIdx]?.type !== 'img') { alert('Bitte erst ein Bild auswählen.'); return; }
+  const obj = objects[selIdx];
+  if (obj.bgRemoved) { restoreImageBg(); } else { removeImageBg(); }
+}
+
+// Update BG toggle button label based on selection
+function updateBgButton() {
+  const btn = document.getElementById('bg-toggle-btn');
+  if (!btn) return;
+  if (selIdx >= 0 && objects[selIdx]?.type === 'img' && objects[selIdx].bgRemoved) {
+    btn.textContent = '🖼 BG anzeigen';
+    btn.title = 'Original-Hintergrund wiederherstellen';
+  } else {
+    btn.textContent = '🪄 BG entfernen';
+    btn.title = 'Hintergrund automatisch entfernen';
+  }
+}
+
+// ── Post canvas_json from server (nur für Post-Daten, nicht für lib_data) ──
+{% if post_data and post_data.canvas_json %}
+const POST_CANVAS_JSON = {{ post_data.canvas_json|safe }};
+const POST_TEMPLATE_ID = {{ post_data.template_id|default:"null" }};
+{% else %}
+const POST_CANVAS_JSON = null;
+const POST_TEMPLATE_ID = null;
+{% endif %}
+
+const LIB_ITEM_ID = {{ lib_data.item_id|default:"null" }};
+const LIB_IMAGE_URL = {% if lib_data %}"{{ lib_data.image_url }}"{% else %}null{% endif %};
+
+function restorePostCanvas() {
+  if (!POST_CANVAS_JSON) return;
+  let bgUrl = null;
+  if (POST_TEMPLATE_ID) {
+    bgUrl = `/library/studio/template/image/${POST_TEMPLATE_ID}/`;
+  }
+  restoreCanvas(typeof POST_CANVAS_JSON === 'string' ? POST_CANVAS_JSON : JSON.stringify(POST_CANVAS_JSON), bgUrl);
+}
+
+// Lade eine URL als Canvas-Hintergrund
+function loadBackground(url) {
+  const img = new Image();
+  img.onload = () => {
+    canvas.width  = img.naturalWidth  || 1200;
+    canvas.height = img.naturalHeight || 628;
+    bgImage = img;
+    objects = []; selIdx = -1;
+    render();
+    scaleCanvas();
+  };
+  img.onerror = () => console.error('loadBackground error:', url);
+  img.src = url;
+}
+
+// If opened from library without canvas_json, load the image as background
+async function restoreLibImage() {
+  if (POST_CANVAS_JSON || !LIB_IMAGE_URL || !LIB_ITEM_ID) return;
+  let info = null;
+  try {
+    const res = await fetch('/library/item/studio-info/' + LIB_ITEM_ID + '/');
+    info = await res.json();
+    console.log('studio-info:', info);
+  } catch(e) { console.warn('studio-info error:', e); }
+
+  const isVideo = info && info.is_video;
+
+  if (isVideo) {
+    // Video: Snapshot-PNG aus canvas_json laden (falls vorhanden), sonst ersten Frame
+    if (info && info.has_canvas && info.canvas_json) {
+      try {
+        const state = JSON.parse(typeof info.canvas_json === 'string' ? info.canvas_json : JSON.stringify(info.canvas_json));
+        if (state.snapshotDataUrl) {
+          // Snapshot als Hintergrund laden → direkt bearbeitbar
+          loadSnapshotAndObjects(state);
+          return;
+        }
+      } catch(e) {}
+    }
+    loadVideoFrameWithObjects(LIB_IMAGE_URL, info);
+  } else if (info && info.has_canvas && info.canvas_json) {
+    // Bild mit Canvas-JSON → wiederherstellen
+    const bgUrl = info.template_id ? `/library/studio/template/image/${info.template_id}/` : null;
+    restoreCanvas(typeof info.canvas_json === 'string' ? info.canvas_json : JSON.stringify(info.canvas_json), bgUrl);
+  } else {
+    // Bild ohne Canvas-JSON → als Hintergrund laden
+    loadBackground(LIB_IMAGE_URL);
+  }
+}
+
+// Einen laufenden Video-Loop im Canvas starten (für Vorschau/Bearbeitung)
+let bgVideoAnimFrame = null;
+function startBgVideoLoop() {
+  if (bgVideoAnimFrame) cancelAnimationFrame(bgVideoAnimFrame);
+  function tick() {
+    if (!bgVideo || bgVideo.paused || bgVideo.ended) { bgVideoAnimFrame = null; return; }
+    render();
+    bgVideoAnimFrame = requestAnimationFrame(tick);
+  }
+  bgVideoAnimFrame = requestAnimationFrame(tick);
+}
+
+// Video-Hintergrund starten / stoppen (Toggle)
+function toggleBgVideo() {
+  if (!bgVideo) return;
+  if (bgVideo.paused) {
+    bgVideo.play();
+    startBgVideoLoop();
+    document.getElementById('bg-video-btn').textContent = '⏸ Pause';
+  } else {
+    bgVideo.pause();
+    document.getElementById('bg-video-btn').textContent = '▶ Video abspielen';
+    render(); // Standbild zeigen
+  }
+}
+
+// Ersten Frame eines Videos laden + gespeicherte Objekte (Text, Bilder) darüber legen
+function loadVideoFrameWithObjects(url, info) {
+  console.log('loadVideoFrameWithObjects:', url);
+  const vid = document.createElement('video');
+  vid.preload = 'auto';
+  vid.muted = true;
+  vid.loop = true;
+  vid.playsInline = true;
+  let drawn = false;
+
+  function drawFrame() {
+    if (drawn) return;
+    drawn = true;
+    const w = vid.videoWidth  || 1080;
+    const h = vid.videoHeight || 1080;
+
+    // bgVideo für laufenden Hintergrund setzen
+    bgVideo = vid;
+    bgImage = null;
+    canvas.width  = w;
+    canvas.height = h;
+    objects = [];
+    selIdx  = -1;
+
+    // Canvas-Objekte wiederherstellen falls vorhanden
+    if (info && info.has_canvas && info.canvas_json) {
+      try {
+        const state = JSON.parse(typeof info.canvas_json === 'string' ? info.canvas_json : JSON.stringify(info.canvas_json));
+        let pending = 0;
+        const tryRender = () => { if (pending === 0) { scaleCanvas(); render(); } };
+        (state.objects || []).forEach(o => {
+          if (o.type === 'text') {
+            objects.push(o);
+          } else if (o.type === 'img' && o.imgSrc) {
+            pending++;
+            const img2 = new Image();
+            img2.onload  = () => { objects.push({...o, img: img2}); pending--; tryRender(); };
+            img2.onerror = () => { pending--; tryRender(); };
+            img2.src = o.imgSrc;
+          }
+        });
+        tryRender();
+      } catch(e) { console.warn('Objekte restore Fehler:', e); scaleCanvas(); render(); }
+    } else {
+      scaleCanvas(); render();
+    }
+
+    // Play-Button anzeigen
+    showBgVideoControls();
+  }
+
+  vid.addEventListener('canplay',    () => { vid.currentTime = 0; });
+  vid.addEventListener('seeked',     drawFrame);
+  vid.addEventListener('loadeddata', () => { vid.currentTime = 0; });
+  vid.addEventListener('error', (e) => {
+    console.error('Video load Fehler:', e, vid.error);
+    canvas.width = 1080; canvas.height = 1080;
+    render(); scaleCanvas();
+  });
+  vid.src = url;
+  vid.load();
+}
+
+// Snapshot-PNG als Hintergrund laden + Objekte wiederherstellen
+function loadSnapshotAndObjects(state) {
+  const img = new Image();
+  img.onload = () => {
+    bgImage = img;
+    bgVideo = null;
+    canvas.width  = state.w || img.naturalWidth;
+    canvas.height = state.h || img.naturalHeight;
+    objects = []; selIdx = -1;
+    let pending = 0;
+    const tryRender = () => { if (pending === 0) { scaleCanvas(); render(); } };
+    (state.objects || []).forEach(o => {
+      if (o.type === 'text') {
+        objects.push(o);
+      } else if (o.type === 'img' && o.imgSrc) {
+        pending++;
+        const oi = new Image();
+        oi.onload  = () => { objects.push({...o, img: oi}); pending--; tryRender(); };
+        oi.onerror = () => { pending--; tryRender(); };
+        oi.src = o.imgSrc;
+      }
+    });
+    tryRender();
+  };
+  img.onerror = () => { console.warn('Snapshot load error'); scaleCanvas(); render(); };
+  img.src = state.snapshotDataUrl;
+}
+
+function showBgVideoControls() {
+  let bar = document.getElementById('bg-video-bar');
+  if (!bar) {
+    bar = document.createElement('div');
+    bar.id = 'bg-video-bar';
+    bar.style.cssText = 'position:absolute;top:8px;left:50%;transform:translateX(-50%);z-index:20;background:rgba(0,0,0,.65);border-radius:20px;padding:4px 14px;display:flex;gap:8px;align-items:center;font-size:13px;color:#fff';
+    bar.innerHTML = `<span style="opacity:.8">🎬 Video-Hintergrund</span>
+      <button id="bg-video-btn" onclick="toggleBgVideo()" style="background:#F56E28;border:none;color:#fff;border-radius:12px;padding:3px 12px;cursor:pointer;font-size:12px">▶ Video abspielen</button>
+      <button onclick="stopBgVideo()" style="background:#555;border:none;color:#fff;border-radius:12px;padding:3px 10px;cursor:pointer;font-size:12px">✕ Standbild</button>`;
+    document.querySelector('.studio-main').style.position = 'relative';
+    document.querySelector('.studio-main').appendChild(bar);
+  }
+  bar.style.display = 'flex';
+}
+
+function stopBgVideo() {
+  if (bgVideo) { bgVideo.pause(); bgVideo = null; }
+  if (bgVideoAnimFrame) { cancelAnimationFrame(bgVideoAnimFrame); bgVideoAnimFrame = null; }
+  const bar = document.getElementById('bg-video-bar');
+  if (bar) bar.style.display = 'none';
+  render();
+}
+
+// ── Canvas-Zustand wiederherstellen ──
+function restoreCanvas(jsonStr, bgUrl) {
+  try {
+    const state = JSON.parse(jsonStr);
+    canvas.width  = state.w || 1200;
+    canvas.height = state.h || 628;
+    objects = []; selIdx = -1;
+
+    // Hintergrund laden
+    const loadBg = new Promise(resolve => {
+      if (bgUrl) {
+        const img = new Image();
+        img.onload = () => { bgImage = img; resolve(); };
+        img.onerror = () => { bgImage = null; resolve(); };
+        img.src = bgUrl + '?t=' + Date.now();
+      } else { bgImage = null; resolve(); }
+    });
+
+    // Objekte wiederherstellen
+    let pending = 0;
+    const tryRender = () => { if (pending === 0) { render(); scaleCanvas(); } };
+
+    loadBg.then(() => {
+      (state.objects || []).forEach(o => {
+        if (o.type === 'text') {
+          objects.push(o);
+        } else if (o.type === 'img' && o.imgSrc) {
+          pending++;
+          const img = new Image();
+          img.onload = () => {
+            objects.push({ ...o, img, url: o.imgSrc, bgRemoved: o.bgRemoved || false, originalUrl: o.originalUrl || '' });
+            pending--; tryRender();
+          };
+          img.onerror = () => { pending--; tryRender(); };
+          img.src = o.imgSrc;
+        }
+      });
+      tryRender();
+    });
+  } catch(e) { console.error('Canvas restore error:', e); }
+}
+
+// ── Post-Bild laden ──
+function loadPostImageAsBackground() {
+  const url = `/library/studio/api/post-image/${POST_ID}/`;
+  const img = new Image();
+  img.crossOrigin = 'anonymous';
+  img.onload = () => {
+    canvas.width  = img.naturalWidth;
+    canvas.height = img.naturalHeight;
+    bgImage = img; objects = []; selIdx = -1;
+    render();
+    scaleCanvas();
+  };
+  img.onerror = () => alert('Bild konnte nicht geladen werden.');
+  img.src = url + '?t=' + Date.now();
+}
+
+function loadPostImageAsOverlay() {
+  const url = `/library/studio/api/post-image/${POST_ID}/`;
+  addLibraryImage(url + '?t=' + Date.now());
+}
+
+// ── Drag & Drop auf Canvas ──
+const canvasWrap = document.getElementById('canvas-wrap');
+canvasWrap.addEventListener('dragover', e => {
+  e.preventDefault();
+  e.dataTransfer.dropEffect = 'copy';
+  canvasWrap.classList.add('drag-over');
+});
+canvasWrap.addEventListener('dragleave', () => {
+  canvasWrap.classList.remove('drag-over');
+});
+canvasWrap.addEventListener('drop', e => {
+  e.preventDefault();
+  canvasWrap.classList.remove('drag-over');
+
+  const rect   = canvas.getBoundingClientRect();
+  const scaleX = canvas.width  / rect.width;
+  const scaleY = canvas.height / rect.height;
+  const dropX  = (e.clientX - rect.left) * scaleX;
+  const dropY  = (e.clientY - rect.top)  * scaleY;
+
+  // 1) Datei vom Desktop gedroppt (z.B. PNG/JPG)
+  if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+    const file = e.dataTransfer.files[0];
+    if (!file.type.startsWith('image/')) return;
+    const reader = new FileReader();
+    reader.onload = ev => addLibraryImage(ev.target.result, dropX, dropY);
+    reader.readAsDataURL(file);
+    return;
+  }
+
+  // 2) Bild-URL aus HTML extrahieren (z.B. Drag aus Browser/Google Bilder)
+  const html = e.dataTransfer.getData('text/html');
+  if (html) {
+    const m = html.match(/<img[^>]+src=["']([^"']+)["']/i);
+    if (m && m[1]) {
+      addLibraryImage(m[1], dropX, dropY);
+      return;
+    }
+  }
+
+  // 3) Direkte URL (text/uri-list oder text/plain)
+  const uri = e.dataTransfer.getData('text/uri-list') || e.dataTransfer.getData('text/plain');
+  if (uri && /\.(png|jpe?g|gif|webp|svg)/i.test(uri)) {
+    addLibraryImage(uri.trim(), dropX, dropY);
+    return;
+  }
+  // Auch ohne Bild-Endung versuchen (manche URLs haben keine)
+  if (uri && uri.startsWith('http')) {
+    addLibraryImage(uri.trim(), dropX, dropY);
+  }
+});
+
+// ── Save to library ──
+async function deleteCurrentImage() {
+  // Get lib_item from URL
+  const params = new URLSearchParams(location.search);
+  const libId = params.get('lib_item');
+  if (!libId) { alert('Kein gespeichertes Bild zum Löschen vorhanden.'); return; }
+  if (!confirm('Bild unwiderruflich aus der Bibliothek löschen?')) return;
+  const res = await fetch('/media-library/delete/' + libId + '/', {
+    method: 'POST',
+    headers: {'X-CSRFToken': getCookie('csrftoken')}
+  });
+  if (res.ok || res.redirected) {
+    // Reset canvas and redirect to fresh studio
+    location.href = '/library/studio/';
+  } else {
+    alert('Fehler beim Löschen.');
+  }
+}
+
+function _hasAnimations() {
+  return objects.some(o => o.animType && o.animType !== 'none');
+}
+
+function _buildCanvasJson() {
+  // Snapshot des aktuellen Canvas
+  let snapshotDataUrl = null;
+  try {
+    const sc = document.createElement('canvas');
+    sc.width = canvas.width; sc.height = canvas.height;
+    const sctx = sc.getContext('2d');
+    if (bgImage) sctx.drawImage(bgImage, 0, 0, sc.width, sc.height);
+    else { sctx.fillStyle = '#1a1a2e'; sctx.fillRect(0, 0, sc.width, sc.height); }
+    objects.forEach(o => { if (o.type === 'img' && o.img) sctx.drawImage(o.img, o.x, o.y, o.w, o.h); });
+    snapshotDataUrl = sc.toDataURL('image/png');
+  } catch(e) { console.warn('Snapshot error:', e); }
+
+  return JSON.stringify({
+    w: canvas.width, h: canvas.height,
+    snapshotDataUrl,
+    objects: objects.map(o => {
+      const s = {...o};
+      if (s.img) {
+        try {
+          const tc = document.createElement('canvas');
+          tc.width = s.img.naturalWidth || s.img.width;
+          tc.height = s.img.naturalHeight || s.img.height;
+          tc.getContext('2d').drawImage(s.img, 0, 0);
+          s.imgSrc = tc.toDataURL('image/png');
+        } catch(e) { s.imgSrc = s.url || ''; }
+        delete s.img;
+      }
+      return s;
+    })
+  });
+}
+
+async function saveImage() {
+  const msg   = document.getElementById('status-msg');
+  const titleEl = document.getElementById('title-input');
+  const title = titleEl.value.trim();
+
+  // Titel ist Pflicht
+  if (!title) {
+    titleEl.style.border = '2px solid #dc3545';
+    titleEl.focus();
+    msg.textContent = '⚠️ Bitte zuerst einen Titel eingeben!';
+    msg.style.color = '#dc3545';
+    setTimeout(() => { titleEl.style.border = ''; msg.textContent = ''; }, 3000);
+    return;
+  }
+  titleEl.style.border = '';
+
+  const hasAnim = _hasAnimations();
+  msg.textContent = hasAnim ? '💾 Als Video-Bild speichern…' : '💾 Speichert…';
+  msg.style.color = '#008591';
+
+  const dataUrl    = canvas.toDataURL('image/png');
+  const canvasJson = _buildCanvasJson();
+  const folderId   = document.getElementById('save-folder').value || null;
+
+  if (hasAnim) {
+    // → Video-Bild speichern (studio_video_templates)
+    document.getElementById('vtpl-title').value = title;
+    const fd = new FormData();
+    fd.append('title', title);
+    fd.append('canvas_json', canvasJson);
+    try {
+      const res = await fetch('/library/studio/video-template/save/', {
+        method: 'POST',
+        headers: {'X-CSRFToken': getCookie('csrftoken')},
+        body: fd
+      });
+      const d = await res.json();
+      if (d.ok) {
+        msg.textContent = '✅ Als Video-Bild gespeichert! 🎬';
+        msg.style.color = 'green';
+        document.getElementById('vtpl-title').value = '';
+        loadVideoTemplates();
+      } else {
+        msg.textContent = '❌ ' + (d.error || 'Fehler');
+        msg.style.color = 'red';
+      }
+    } catch(e) { msg.textContent = '❌ ' + e; msg.style.color = 'red'; }
+
+  } else {
+    // → Normales Bild speichern (studio/save)
+    try {
+      const res = await fetch('/library/studio/save/', {
+        method: 'POST',
+        headers: {'Content-Type':'application/json','X-CSRFToken': getCookie('csrftoken')},
+        body: JSON.stringify({ dataUrl, title, post_id: POST_ID,
+          templateId: currentTemplateId, folderId, canvasJson })
+      });
+      const d = await res.json();
+      if (d.ok) {
+        msg.textContent = '✅ Bild gespeichert!';
+        msg.style.color = 'green';
+        if (d.lib_id && !POST_ID) {
+          history.replaceState(null, '', '/library/studio/?lib_item=' + d.lib_id);
+        }
+        loadLibrarySidebar(document.getElementById('lib-search')?.value || '');
+        loadSavedItems();
+        if (POST_ID) setTimeout(() => { msg.textContent = '✅ Bild am Post angehängt!'; }, 500);
+      } else {
+        msg.textContent = '❌ ' + (d.error || 'Fehler');
+        msg.style.color = 'red';
+      }
+    } catch(e) { msg.textContent = '❌ ' + e; msg.style.color = 'red'; }
+  }
+}
+
+function downloadImage() {
+  const a = document.createElement('a');
+  a.download = (document.getElementById('title-input').value.trim() || 'studio') + '.png';
+  a.href = canvas.toDataURL('image/png');
+  a.click();
+}
+
+function getCookie(name) {
+  let v = null;
+  document.cookie.split(';').forEach(c => {
+    c = c.trim();
+    if (c.startsWith(name + '=')) v = decodeURIComponent(c.slice(name.length + 1));
+  });
+  return v;
+}
+
+// ── Load templates sidebar ──
+async function loadTemplateSidebar() {
+  const res  = await fetch('/library/studio/api/templates/');
+  const data = await res.json();
+  const el   = document.getElementById('tpl-list');
+  if (!data.templates.length) {
+    el.innerHTML = '<span class="no-templates">Noch keine Templates. <a href="/library/studio/templates/">Templates hinzufügen →</a></span>';
+    return;
+  }
+  el.innerHTML = '';
+  data.templates.forEach(t => {
+    const img = document.createElement('img');
+    img.src   = t.url + '?t=' + Date.now();
+    img.id    = 'tpl-' + t.id;
+    img.className = 'tpl-thumb';
+    img.title = t.title;
+    img.onclick = () => loadTemplate(t.id, t.url, t.width, t.height);
+    el.appendChild(img);
+  });
+  // preselect if URL param
+  const urlP = new URLSearchParams(location.search);
+  const pre  = urlP.get('template');
+  if (pre) {
+    const t = data.templates.find(x => x.id == pre);
+    if (t) loadTemplate(t.id, t.url, t.width, t.height);
+  }
+}
+
+// ── Load library sidebar ──
+let libFoldersLoaded = false;
+async function loadLibrarySidebar(q='') {
+  const folderSel = document.getElementById('lib-folder-filter');
+  const folder = folderSel.value || 'all';
+  const res  = await fetch('/library/studio/api/library/?q=' + encodeURIComponent(q) + '&folder=' + folder);
+  const data = await res.json();
+  // Populate folder dropdown once
+  if (!libFoldersLoaded && data.folders) {
+    libFoldersLoaded = true;
+    (data.folders || []).forEach(f => {
+      const opt = document.createElement('option');
+      opt.value = f.id;
+      opt.textContent = '📁 ' + f.name;
+      folderSel.appendChild(opt);
+    });
+    const noneOpt = document.createElement('option');
+    noneOpt.value = 'none';
+    noneOpt.textContent = '📂 Unsortiert';
+    folderSel.appendChild(noneOpt);
+  }
+  const el   = document.getElementById('lib-grid');
+  if (!data.items.length) {
+    el.innerHTML = '<span style="font-size:.8rem;color:#888">Keine Bilder</span>';
+    return;
+  }
+  el.innerHTML = '';
+  data.items.forEach(item => {
+    const wrap = document.createElement('div');
+    wrap.style.cssText = 'position:relative;cursor:pointer';
+    wrap.title = (item.title || 'Bild') + ' – klicken zum Einfügen';
+
+    const img = document.createElement('img');
+    img.src       = item.url;
+    img.className = 'lib-thumb';
+    img.setAttribute('draggable', 'false'); // Eigenes Browser-Drag unterdrücken
+
+    wrap.appendChild(img);
+
+    // Drag & Drop → Bild an Drop-Position auf Canvas einfügen
+    let wasDragged = false;
+    wrap.setAttribute('draggable', 'true');
+    wrap.addEventListener('dragstart', e => {
+      wasDragged = true;
+      e.dataTransfer.setData('text/plain', item.url);
+      e.dataTransfer.effectAllowed = 'copy';
+      // Drag-Preview aus dem Thumbnail-Bild erzeugen
+      e.dataTransfer.setDragImage(img, img.width / 2, img.height / 2);
+      img.classList.add('dragging');
+    });
+    wrap.addEventListener('dragend', () => {
+      img.classList.remove('dragging');
+      setTimeout(() => { wasDragged = false; }, 0);
+    });
+
+    // Klick → Bild auf Canvas einfügen
+    wrap.addEventListener('click', () => {
+      if (wasDragged) return;
+      addLibraryImage(item.url);
+      wrap.style.outline = '2px solid #F56E28';
+      setTimeout(() => wrap.style.outline = '', 600);
+    });
+
+    el.appendChild(wrap);
+  });
+
+}
+
+// ── Right sidebar: load studio-saved images & videos ──
+async function loadSavedItems() {
+  const res = await fetch('/library/studio/api/saved/');
+  const data = await res.json();
+
+  // Images
+  const imgGrid = document.getElementById('saved-images-grid');
+  if (data.images && data.images.length) {
+    imgGrid.innerHTML = '';
+    data.images.forEach(item => {
+      const img = document.createElement('img');
+      img.src = item.url;
+      img.title = (item.title || 'Bild') + ' – klicken zum Bearbeiten';
+      img.style.cssText = 'width:100%;aspect-ratio:1;object-fit:cover;border-radius:4px;cursor:pointer;border:2px solid transparent;transition:border-color .2s';
+      img.addEventListener('mouseenter', () => img.style.borderColor = '#F56E28');
+      img.addEventListener('mouseleave', () => img.style.borderColor = 'transparent');
+      img.addEventListener('click', () => {
+        location.href = '/library/studio/?lib_item=' + item.id;
+      });
+      imgGrid.appendChild(img);
+    });
+  } else {
+    imgGrid.innerHTML = '<span style="font-size:.75rem;color:#888">Keine Bilder</span>';
+  }
+
+  // Videos
+  const vidGrid = document.getElementById('saved-videos-grid');
+  if (data.videos && data.videos.length) {
+    vidGrid.innerHTML = '';
+    data.videos.forEach(item => {
+      const wrap = document.createElement('div');
+      wrap.style.cssText = 'position:relative;background:#1a1a2e;border-radius:4px;overflow:hidden';
+
+      // Video preview
+      const vid = document.createElement('video');
+      vid.src = item.url;
+      vid.style.cssText = 'width:100%;aspect-ratio:16/9;object-fit:cover;cursor:pointer;display:block';
+      vid.muted = true;
+      vid.preload = 'metadata';
+      vid.title = 'Klick = Abspielen';
+      vid.addEventListener('click', () => { vid.paused ? vid.play() : vid.pause(); });
+      vid.addEventListener('ended', () => { vid.currentTime = 0; });
+      wrap.appendChild(vid);
+
+      // Label + action buttons
+      const bar = document.createElement('div');
+      bar.style.cssText = 'display:flex;align-items:center;gap:2px;padding:2px 3px;background:rgba(0,0,0,.7)';
+
+      const label = document.createElement('span');
+      label.textContent = item.title || 'Video';
+      label.style.cssText = 'flex:1;font-size:.55rem;color:#fff;overflow:hidden;text-overflow:ellipsis;white-space:nowrap';
+      bar.appendChild(label);
+
+      // Klick auf gesamten Wrap → direkt im Studio öffnen
+      wrap.style.cursor = 'pointer';
+      wrap.title = 'Klick = Im Studio bearbeiten';
+      wrap.addEventListener('click', () => {
+        location.href = '/library/studio/?lib_item=' + item.id;
+      });
+
+      wrap.appendChild(bar);
+      vidGrid.appendChild(wrap);
+    });
+  } else {
+    vidGrid.innerHTML = '<span style="font-size:.75rem;color:#888">Keine Videos</span>';
+  }
+
+  // Animierte Studio-Bilder (legacy) → ins Video-Bilder Grid einhängen
+  if (data.anim_images && data.anim_images.length) {
+    const vtplGrid = document.getElementById('vtpl-grid');
+    if (vtplGrid) {
+      // Bestehende Legacy-Einträge entfernen bevor neu laden
+      vtplGrid.querySelectorAll('.legacy-anim-item').forEach(el => el.remove());
+      data.anim_images.forEach(item => {
+        const wrap = document.createElement('div');
+        wrap.className = 'legacy-anim-item';
+        wrap.style.cssText = 'position:relative;border-radius:4px;overflow:hidden;cursor:pointer;border:2px solid transparent;transition:border-color .2s';
+        wrap.addEventListener('mouseenter', () => wrap.style.borderColor = '#F56E28');
+        wrap.addEventListener('mouseleave', () => wrap.style.borderColor = 'transparent');
+        wrap.addEventListener('click', () => { location.href = '/library/studio/?lib_item=' + item.id; });
+
+        const img = document.createElement('img');
+        img.src = item.url;
+        img.style.cssText = 'width:100%;aspect-ratio:1;object-fit:cover;display:block';
+        img.title = (item.title || 'Video-Bild') + ' – klicken zum Bearbeiten';
+        wrap.appendChild(img);
+
+        const badge = document.createElement('div');
+        badge.textContent = '🎬';
+        badge.style.cssText = 'position:absolute;top:3px;right:3px;font-size:12px;background:rgba(0,0,0,.6);border-radius:4px;padding:1px 3px;line-height:1.3';
+        wrap.appendChild(badge);
+
+        const label = document.createElement('div');
+        label.style.cssText = 'position:absolute;bottom:0;left:0;right:0;background:rgba(0,0,0,.7);color:#fff;font-size:.55rem;padding:2px 4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap';
+        label.textContent = item.title || 'Video-Bild';
+        wrap.appendChild(label);
+
+        vtplGrid.appendChild(wrap);
+      });
+    }
+  }
+}
+
+// ── Video-Vorlagen ──
+async function loadVideoTemplates() {
+  const grid = document.getElementById('vtpl-grid');
+  if (!grid) return;
+  try {
+    const res = await fetch('/library/studio/video-template/list/');
+    const data = await res.json();
+    if (!data.templates || !data.templates.length) {
+      grid.innerHTML = '<span style="font-size:.75rem;color:#888">Keine Video-Bilder</span>';
+      return;
+    }
+    grid.innerHTML = '';
+    data.templates.forEach(tpl => {
+      const wrap = document.createElement('div');
+      wrap.style.cssText = 'position:relative;border-radius:4px;overflow:hidden;cursor:pointer;border:2px solid transparent;transition:border-color .2s';
+      wrap.addEventListener('mouseenter', () => wrap.style.borderColor = '#F56E28');
+      wrap.addEventListener('mouseleave', () => wrap.style.borderColor = 'transparent');
+
+      const img = document.createElement('img');
+      img.src = tpl.preview_url;
+      img.style.cssText = 'width:100%;aspect-ratio:1;object-fit:cover;display:block';
+      img.title = tpl.title + ' – klicken zum Laden';
+      wrap.appendChild(img);
+
+      // 🎬 Badge oben rechts
+      const badge = document.createElement('div');
+      badge.textContent = '🎬';
+      badge.style.cssText = 'position:absolute;top:3px;right:3px;font-size:12px;background:rgba(0,0,0,.6);border-radius:4px;padding:1px 3px;line-height:1.3';
+      wrap.appendChild(badge);
+
+      const label = document.createElement('div');
+      label.style.cssText = 'position:absolute;bottom:0;left:0;right:0;background:rgba(0,0,0,.7);color:#fff;font-size:.55rem;padding:2px 4px;display:flex;justify-content:space-between;align-items:center';
+      label.innerHTML = `<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1">${tpl.title}</span>
+        <span onclick="event.stopPropagation();deleteVideoTemplate(${tpl.id},this)" style="color:#ff6b6b;cursor:pointer;font-size:10px;padding-left:4px" title="Löschen">✕</span>`;
+      wrap.appendChild(label);
+
+      wrap.addEventListener('click', () => loadVideoTemplate(tpl.id));
+      grid.appendChild(wrap);
+    });
+  } catch(e) {
+    grid.innerHTML = '<span style="font-size:.75rem;color:#f00">Fehler</span>';
+  }
+}
+
+async function saveVideoTemplate(silent = false) {
+  const title = document.getElementById('vtpl-title').value.trim() || 'Video-Bild';
+  const status = document.getElementById('vtpl-status');
+  if (!silent) status.textContent = '💾 Speichert…';
+
+  // canvas_json mit Snapshot
+  let snapshotDataUrl = null;
+  try {
+    const sc = document.createElement('canvas');
+    sc.width = canvas.width; sc.height = canvas.height;
+    const sctx = sc.getContext('2d');
+    if (bgImage) sctx.drawImage(bgImage, 0, 0, sc.width, sc.height);
+    else { sctx.fillStyle = '#1a1a2e'; sctx.fillRect(0, 0, sc.width, sc.height); }
+    objects.forEach(o => { if (o.type === 'img' && o.img) sctx.drawImage(o.img, o.x, o.y, o.w, o.h); });
+    snapshotDataUrl = sc.toDataURL('image/png');
+  } catch(e) { console.warn('Snapshot error:', e); }
+
+  const cj = JSON.stringify({
+    w: canvas.width, h: canvas.height,
+    snapshotDataUrl,
+    objects: objects.map(o => {
+      const s = {...o};
+      if (s.img) {
+        try {
+          const tc = document.createElement('canvas');
+          tc.width = s.img.naturalWidth || s.img.width;
+          tc.height = s.img.naturalHeight || s.img.height;
+          tc.getContext('2d').drawImage(s.img, 0, 0);
+          s.imgSrc = tc.toDataURL('image/png');
+        } catch(e) { s.imgSrc = s.url || ''; }
+        delete s.img;
+      }
+      return s;
+    })
+  });
+
+  const fd = new FormData();
+  fd.append('title', title);
+  fd.append('canvas_json', cj);
+  try {
+    const res = await fetch('/library/studio/video-template/save/', {
+      method: 'POST',
+      headers: {'X-CSRFToken': getCookie('csrftoken')},
+      body: fd
+    });
+    const d = await res.json();
+    if (d.ok) {
+      if (!silent) {
+        status.textContent = '✅ Video-Bild gespeichert!';
+        document.getElementById('vtpl-title').value = '';
+        setTimeout(() => { status.textContent = ''; }, 3000);
+      }
+      loadVideoTemplates();
+    } else {
+      if (!silent) status.textContent = '❌ Fehler';
+    }
+  } catch(e) {
+    if (!silent) status.textContent = '❌ ' + e;
+  }
+}
+
+async function loadVideoTemplate(tplId) {
+  try {
+    const res = await fetch('/library/studio/video-template/load/' + tplId + '/');
+    const d = await res.json();
+    if (!d.ok || !d.canvas_json) return;
+    const state = JSON.parse(d.canvas_json);
+    document.getElementById('title-input').value = d.title || '';
+    if (state.snapshotDataUrl) {
+      loadSnapshotAndObjects(state);
+    } else {
+      // Kein Snapshot → Objekte ohne Hintergrund laden
+      canvas.width  = state.w || 1080;
+      canvas.height = state.h || 1080;
+      bgImage = null; objects = []; selIdx = -1;
+      let pending = 0;
+      const tryRender = () => { if (pending === 0) { scaleCanvas(); render(); } };
+      (state.objects || []).forEach(o => {
+        if (o.type === 'text') { objects.push(o); }
+        else if (o.type === 'img' && o.imgSrc) {
+          pending++;
+          const img = new Image();
+          img.onload  = () => { objects.push({...o, img}); pending--; tryRender(); };
+          img.onerror = () => { pending--; tryRender(); };
+          img.src = o.imgSrc;
+        }
+      });
+      tryRender();
+    }
+  } catch(e) { console.error('loadVideoTemplate error:', e); }
+}
+
+async function deleteVideoTemplate(tplId, el) {
+  if (!confirm('Vorlage löschen?')) return;
+  await fetch('/library/studio/video-template/delete/' + tplId + '/', {
+    method: 'POST',
+    headers: {'X-CSRFToken': getCookie('csrftoken')}
+  });
+  loadVideoTemplates();
+}
+
+document.getElementById('lib-search').addEventListener('input', function() {
+  loadLibrarySidebar(this.value);
+});
+document.getElementById('lib-folder-filter').addEventListener('change', function() {
+  loadLibrarySidebar(document.getElementById('lib-search').value);
+});
+
+// ══════════════════════════════════════════
+// ── CROP / AUSSCHNITT MODE ──
+// ══════════════════════════════════════════
+
+let cropMode = false;
+let cropStart = null;
+let cropRect = null;
+let cutouts = []; // {src, origX, origY, w, h, placed, fillColor}
+
+function startCropMode() {
+  cropMode = true;
+  cropStart = null;
+  cropRect = null;
+  selIdx = -1;
+  canvas.style.cursor = 'crosshair';
+  document.getElementById('crop-btn').style.background = '#F56E28';
+  document.getElementById('crop-btn').style.color = '#fff';
+  document.getElementById('sel-info').textContent = '✂ Ziehe ein Rechteck über den Bereich, den du ausschneiden willst';
+  render();
+}
+
+function endCropMode() {
+  cropMode = false;
+  autoDetectMode = false;
+  cropStart = null;
+  cropRect = null;
+  canvas.style.cursor = 'crosshair';
+  document.getElementById('crop-btn').style.background = '';
+  document.getElementById('crop-btn').style.color = '';
+  document.getElementById('autodetect-btn').style.background = '';
+  document.getElementById('autodetect-btn').style.color = '';
+  render();
+}
+
+let autoDetectMode = false;
+
+function startAutoDetectMode() {
+  if (!bgImage) { alert('Bitte zuerst ein Template/Bild laden.'); return; }
+  autoDetectMode = true;
+  cropMode = true;
+  cropStart = null;
+  cropRect = null;
+  canvas.style.cursor = 'crosshair';
+  document.getElementById('autodetect-btn').style.background = '#F56E28';
+  document.getElementById('autodetect-btn').style.color = '#fff';
+  document.getElementById('sel-info').textContent = '🔍 Ziehe ein Rechteck um den Bereich, der in Einzelteile zerlegt werden soll';
+}
+
+// ── Auto-detect distinct elements in a region ──
+// If cropRect is set, only analyze that area; otherwise whole canvas
+function autoDetectElements() {
+  if (!bgImage) { alert('Bitte zuerst ein Template/Bild laden.'); return; }
+  document.getElementById('sel-info').textContent = '🔍 Analysiere Bereich…';
+
+  // Draw clean image
+  const fullTc = document.createElement('canvas');
+  fullTc.width = canvas.width; fullTc.height = canvas.height;
+  const fctx = fullTc.getContext('2d');
+  fctx.drawImage(bgImage, 0, 0, canvas.width, canvas.height);
+
+  // Region to analyze
+  const rx = cropRect ? cropRect.x : 0;
+  const ry = cropRect ? cropRect.y : 0;
+  const tw = cropRect ? cropRect.w : canvas.width;
+  const th = cropRect ? cropRect.h : canvas.height;
+
+  const imgData = fctx.getImageData(rx, ry, tw, th);
+  const d = imgData.data;
+
+  // Sample background color from corners of the region
+  let bgR = 0, bgG = 0, bgB = 0, cnt = 0;
+  const sampleBlock = (sx, sy) => {
+    for (let y = sy; y < sy + 8 && y < th; y++) {
+      for (let x = sx; x < sx + 8 && x < tw; x++) {
+        const i = (y * tw + x) * 4;
+        bgR += d[i]; bgG += d[i+1]; bgB += d[i+2]; cnt++;
+      }
+    }
+  };
+  sampleBlock(0, 0); sampleBlock(tw - 8, 0);
+  sampleBlock(0, th - 8); sampleBlock(tw - 8, th - 8);
+  bgR = Math.round(bgR/cnt); bgG = Math.round(bgG/cnt); bgB = Math.round(bgB/cnt);
+
+  // Strategy: find bright/white areas (cards are light-colored on a teal/dark background)
+  // A pixel is "bright" if its luminance is high AND it differs from background
+  const tol = 52;
+  const mask = new Uint8Array(tw * th);
+  for (let i = 0; i < tw * th; i++) {
+    const idx = i * 4;
+    const r = d[idx], g = d[idx+1], b = d[idx+2];
+    const lum = 0.299*r + 0.587*g + 0.114*b;
+    const dr = r-bgR, dg = g-bgG, db = b-bgB;
+    const bgDist = Math.sqrt(dr*dr+dg*dg+db*db);
+    // Mark as foreground if: bright enough AND different from bg
+    if (lum > 160 && bgDist >= tol) mask[i] = 1;
+  }
+
+  // Erode then dilate (morphological open) to remove small noise
+  // Skip for speed — connected components with min-size filter works well enough
+
+  // Connected component labeling (BFS)
+  const labels = new Int32Array(tw * th);
+  let nextLabel = 1;
+  const components = []; // [{minX, minY, maxX, maxY, size}]
+
+  for (let i = 0; i < tw * th; i++) {
+    if (mask[i] === 0 || labels[i] !== 0) continue;
+    const label = nextLabel++;
+    let minX = tw, minY = th, maxX = 0, maxY = 0, size = 0;
+    const q = [i];
+    let qi = 0;
+    while (qi < q.length) {
+      const pos = q[qi++];
+      if (pos < 0 || pos >= tw * th || labels[pos] !== 0 || mask[pos] === 0) continue;
+      labels[pos] = label;
+      size++;
+      const x = pos % tw, y = (pos - x) / tw;
+      if (x < minX) minX = x; if (x > maxX) maxX = x;
+      if (y < minY) minY = y; if (y > maxY) maxY = y;
+      // 4-connected neighbors
+      if (x > 0) q.push(pos - 1);
+      if (x < tw - 1) q.push(pos + 1);
+      if (y > 0) q.push(pos - tw);
+      if (y < th - 1) q.push(pos + tw);
+    }
+    components.push({label, minX, minY, maxX, maxY, size});
+  }
+
+  // Filter: keep components of card-like size (not tiny noise, not the whole scene)
+  const minSize = tw * th * 0.001;  // at least 0.1% of image
+  const maxSize = tw * th * 0.15;   // at most 15% of image (individual elements, not whole scene)
+  const minDim = 25;                // at least 25px in each dimension
+  const maxAspect = 4;              // not too elongated
+  const kept = components.filter(c => {
+    const w = c.maxX - c.minX + 1, h = c.maxY - c.minY + 1;
+    const aspect = Math.max(w/h, h/w);
+    return c.size >= minSize && c.size <= maxSize && w >= minDim && h >= minDim && aspect <= maxAspect;
+  });
+
+  if (kept.length === 0) {
+    document.getElementById('sel-info').textContent = '🔍 Keine Elemente erkannt. Versuche manuelles Ausschneiden.';
+    return;
+  }
+
+  // Merge overlapping/close bounding boxes (generous padding to group card parts)
+  const pad = 15;
+  const merged = [];
+  const used = new Uint8Array(kept.length);
+  for (let i = 0; i < kept.length; i++) {
+    if (used[i]) continue;
+    let {minX, minY, maxX, maxY} = kept[i];
+    used[i] = 1;
+    let changed = true;
+    while (changed) {
+      changed = false;
+      for (let j = 0; j < kept.length; j++) {
+        if (used[j]) continue;
+        const c = kept[j];
+        // Check overlap with padding
+        if (c.minX - pad <= maxX && c.maxX + pad >= minX &&
+            c.minY - pad <= maxY && c.maxY + pad >= minY) {
+          minX = Math.min(minX, c.minX);
+          minY = Math.min(minY, c.minY);
+          maxX = Math.max(maxX, c.maxX);
+          maxY = Math.max(maxY, c.maxY);
+          used[j] = 1;
+          changed = true;
+        }
+      }
+    }
+    merged.push({minX, minY, maxX, maxY});
+  }
+
+  // Sort by position (top-to-bottom, left-to-right)
+  merged.sort((a, b) => (a.minY + a.maxY)/2 - (b.minY + b.maxY)/2 || (a.minX + a.maxX)/2 - (b.minX + b.maxX)/2);
+
+  // Clear existing cutouts
+  cutouts.length = 0;
+
+  // Create cutouts from detected regions with flood-fill background removal
+  merged.forEach(r => {
+    const lx = Math.max(0, r.minX - 3), ly = Math.max(0, r.minY - 3);
+    const ew = Math.min(tw, r.maxX + 4) - lx, eh = Math.min(th, r.maxY + 4) - ly;
+    // Convert to full-canvas coordinates
+    const ex = lx + rx, ey = ly + ry;
+
+    // Extract region from full canvas
+    const regionData = fctx.getImageData(ex, ey, ew, eh);
+    const rd = regionData.data;
+
+    // Flood-fill from border to remove background
+    const visited = new Uint8Array(ew * eh);
+    const fq = [];
+    for (let x = 0; x < ew; x++) { fq.push(x); fq.push((eh-1)*ew + x); }
+    for (let y = 1; y < eh-1; y++) { fq.push(y*ew); fq.push(y*ew + ew-1); }
+    let fqi = 0;
+    while (fqi < fq.length) {
+      const pos = fq[fqi++];
+      if (pos < 0 || pos >= ew*eh || visited[pos]) continue;
+      const idx = pos * 4;
+      const dr = rd[idx]-bgR, dg = rd[idx+1]-bgG, db = rd[idx+2]-bgB;
+      if (Math.sqrt(dr*dr+dg*dg+db*db) >= tol) continue;
+      visited[pos] = 1;
+      rd[idx+3] = 0;
+      const x = pos % ew, y = (pos-x) / ew;
+      if (x > 0) fq.push(pos-1);
+      if (x < ew-1) fq.push(pos+1);
+      if (y > 0) fq.push(pos-ew);
+      if (y < eh-1) fq.push(pos+ew);
+    }
+
+    const ec = document.createElement('canvas');
+    ec.width = ew; ec.height = eh;
+    ec.getContext('2d').putImageData(regionData, 0, 0);
+
+    const fillColor = `rgb(${bgR},${bgG},${bgB})`;
+    cutouts.push({
+      src: ec.toDataURL('image/png'),
+      origX: ex, origY: ey,
+      w: ew, h: eh,
+      maskX: ex, maskY: ey, maskW: ew, maskH: eh,
+      placed: false,
+      fillColor: fillColor
+    });
+  });
+
+  rebuildCleanBg();
+  updateCutoutsPanel();
+  render();
+  document.getElementById('sel-info').textContent = `🔍 ${cutouts.length} Elemente erkannt! Wähle aus, welche du animieren möchtest.`;
+}
+
+// Sample fill color from edges around a rectangle
+function sampleEdgeColor(rx, ry, rw, rh) {
+  // Draw clean bg to temp canvas to sample
+  const tc = document.createElement('canvas');
+  tc.width = canvas.width; tc.height = canvas.height;
+  const tctx = tc.getContext('2d');
+  if (bgImage) tctx.drawImage(bgImage, 0, 0, canvas.width, canvas.height);
+  // Sample many points along all 4 edges, just outside the rect
+  let sr = 0, sg = 0, sb = 0, cnt = 0;
+  const pad = 6;
+  const step = 8;
+  // Top & bottom edges
+  for (let x = rx; x < rx + rw; x += step) {
+    for (const py of [ry - pad, ry + rh + pad]) {
+      const sy = Math.max(0, Math.min(canvas.height - 1, Math.round(py)));
+      const sx = Math.max(0, Math.min(canvas.width - 1, Math.round(x)));
+      const d = tctx.getImageData(sx, sy, 1, 1).data;
+      sr += d[0]; sg += d[1]; sb += d[2]; cnt++;
+    }
+  }
+  // Left & right edges
+  for (let y = ry; y < ry + rh; y += step) {
+    for (const px of [rx - pad, rx + rw + pad]) {
+      const sx = Math.max(0, Math.min(canvas.width - 1, Math.round(px)));
+      const sy = Math.max(0, Math.min(canvas.height - 1, Math.round(y)));
+      const d = tctx.getImageData(sx, sy, 1, 1).data;
+      sr += d[0]; sg += d[1]; sb += d[2]; cnt++;
+    }
+  }
+  if (cnt === 0) return 'rgb(0,128,128)';
+  return `rgb(${Math.round(sr/cnt)},${Math.round(sg/cnt)},${Math.round(sb/cnt)})`;
+}
+
+function updateCutoutsPanel() {
+  const panel = document.getElementById('cutouts-panel');
+  const grid = document.getElementById('cutouts-grid');
+  if (cutouts.length === 0) { panel.style.display = 'none'; return; }
+  panel.style.display = 'block';
+  grid.innerHTML = '';
+  cutouts.forEach((co, i) => {
+    const wrap = document.createElement('div');
+    wrap.style.cssText = 'position:relative;cursor:pointer;border:2px solid #ccc;border-radius:4px;overflow:hidden;width:60px;height:60px;background:#f0f0f0';
+    wrap.title = `Element ${i+1} — Klick = auf Canvas setzen`;
+    const img = document.createElement('img');
+    img.src = co.src;
+    img.style.cssText = 'width:100%;height:100%;object-fit:contain';
+    wrap.appendChild(img);
+    if (co.placed) {
+      const badge = document.createElement('div');
+      badge.style.cssText = 'position:absolute;top:0;right:0;background:#61CEBC;color:#fff;font-size:10px;padding:1px 3px;border-radius:0 0 0 4px';
+      badge.textContent = '✓';
+      wrap.appendChild(badge);
+      wrap.style.borderColor = '#61CEBC';
+    }
+    // Delete button
+    const del = document.createElement('div');
+    del.style.cssText = 'position:absolute;top:-2px;left:-2px;background:#e74c3c;color:#fff;font-size:9px;width:14px;height:14px;border-radius:50%;display:flex;align-items:center;justify-content:center;cursor:pointer;line-height:1';
+    del.textContent = '✕';
+    del.title = 'Cutout löschen';
+    del.onclick = (ev) => { ev.stopPropagation(); removeCutout(i); };
+    wrap.appendChild(del);
+    wrap.onclick = () => placeCutout(i);
+    grid.appendChild(wrap);
+  });
+}
+
+function placeCutout(idx) {
+  const co = cutouts[idx];
+  if (co.placed) {
+    const objIdx = objects.findIndex(o => o._cutoutIdx === idx);
+    if (objIdx >= 0) { selIdx = objIdx; render(); showElemAnimPanel(); }
+    return;
+  }
+  const img = new window.Image();
+  img.onload = function() {
+    const placedCount = cutouts.filter(c => c.placed).length;
+    objects.push({
+      type: 'img', img: img, src: co.src,
+      x: co.origX, y: co.origY, w: co.w, h: co.h,
+      _cutoutIdx: idx,
+      animType: 'flyTo',
+      animDelay: placedCount * 400,
+      animDur: 1500,
+      animStartX: -co.w,
+      animStartY: co.origY + co.h / 2
+    });
+    co.placed = true;
+    selIdx = objects.length - 1;
+    updateCutoutsPanel();
+    render();
+    showElemAnimPanel();
+  };
+  img.src = co.src;
+}
+
+function placeAllCutouts() {
+  cutouts.forEach((co, i) => { if (!co.placed) placeCutout(i); });
+}
+
+function removeCutout(idx) {
+  const co = cutouts[idx];
+  // Remove the corresponding canvas object if placed
+  if (co.placed) {
+    const objIdx = objects.findIndex(o => o._cutoutIdx === idx);
+    if (objIdx >= 0) {
+      objects.splice(objIdx, 1);
+      if (selIdx === objIdx) selIdx = -1;
+      else if (selIdx > objIdx) selIdx--;
+    }
+  }
+  cutouts.splice(idx, 1);
+  // Re-index remaining objects' _cutoutIdx
+  objects.forEach(o => {
+    if (o._cutoutIdx !== undefined && o._cutoutIdx > idx) o._cutoutIdx--;
+  });
+  rebuildCleanBg();
+  updateCutoutsPanel();
+  render();
+}
+
+// ── Element Board (right sidebar) ──
+let boardElements = [];  // {name, img, w, h}
+
+function handleElemUpload(input) {
+  const files = Array.from(input.files);
+  files.forEach(f => {
+    const reader = new FileReader();
+    reader.onload = e => {
+      const img = new Image();
+      img.onload = () => {
+        boardElements.push({name: f.name.replace(/\.[^.]+$/, ''), img, w: img.width, h: img.height});
+        renderElemBoard();
+        // Also upload to library via AJAX
+        const fd = new FormData();
+        fd.append('image', f);
+        fd.append('title', f.name.replace(/\.[^.]+$/, ''));
+        fetch('/media-library/upload/', {method: 'POST', body: fd, headers: {'X-CSRFToken': getCookie('csrftoken'), 'X-Requested-With': 'XMLHttpRequest'}})
+          .then(r => r.json()).then(() => loadLibrarySidebar(document.getElementById('lib-search').value)).catch(() => {});
+      };
+      img.src = e.target.result;
+    };
+    reader.readAsDataURL(f);
+  });
+  input.value = '';
+}
+
+function renderElemBoard() {
+  const board = document.getElementById('elem-board');
+  const empty = document.getElementById('elem-board-empty');
+  if (boardElements.length === 0) {
+    board.innerHTML = '<p id="elem-board-empty" style="margin:0;padding:8px;color:#bbb;font-size:.65rem;text-align:center;width:100%">Noch keine Elemente.</p>';
+    return;
+  }
+  board.innerHTML = '';
+  boardElements.forEach((el, i) => {
+    const div = document.createElement('div');
+    div.style.cssText = 'width:50px;height:50px;border:1px solid #ddd;border-radius:4px;cursor:pointer;position:relative;background:#fff;display:flex;align-items:center;justify-content:center;overflow:hidden';
+    div.title = el.name + ' — Klick = auf Canvas setzen';
+    div.onclick = () => placeElemOnCanvas(i);
+    const thumb = document.createElement('img');
+    thumb.src = el.img.src;
+    thumb.style.cssText = 'max-width:46px;max-height:46px;object-fit:contain';
+    div.appendChild(thumb);
+    // Delete button
+    const del = document.createElement('span');
+    del.textContent = '✕';
+    del.style.cssText = 'position:absolute;top:-2px;right:1px;font-size:9px;color:red;cursor:pointer;background:rgba(255,255,255,.8);border-radius:50%;width:12px;height:12px;display:flex;align-items:center;justify-content:center;line-height:1';
+    del.onclick = e => { e.stopPropagation(); boardElements.splice(i, 1); renderElemBoard(); };
+    div.appendChild(del);
+    board.appendChild(div);
+  });
+}
+
+function placeElemOnCanvas(idx) {
+  const el = boardElements[idx];
+  // Scale element to fit nicely (max 150px wide)
+  let w = el.w, h = el.h;
+  if (w > 150) { h = h * 150 / w; w = 150; }
+  const obj = {
+    type: 'img',
+    img: el.img,
+    url: el.img.src,
+    x: canvas.width / 2 - w / 2,
+    y: canvas.height / 2 - h / 2,
+    w: w,
+    h: h,
+    name: el.name
+  };
+  objects.push(obj);
+  selIdx = objects.length - 1;
+  render();
+  updateCanvasElemList();
+}
+
+function updateCanvasElemList() {
+  const list = document.getElementById('canvas-elem-list');
+  if (objects.length === 0) {
+    list.innerHTML = '<span style="color:#bbb">Keine Elemente.</span>';
+    return;
+  }
+  list.innerHTML = '';
+  objects.forEach((o, i) => {
+    const div = document.createElement('div');
+    div.style.cssText = 'display:flex;align-items:center;gap:3px;padding:3px 2px;border-bottom:1px solid #eee;cursor:pointer';
+    div.onclick = () => { selIdx = i; render(); showElemAnimPanel(); };
+    if (i === selIdx) div.style.background = '#e8f0fe';
+
+    // Thumbnail
+    if (o.type === 'img' && o.img) {
+      const thumb = document.createElement('img');
+      thumb.src = o.img.src;
+      thumb.style.cssText = 'width:22px;height:22px;object-fit:contain;border-radius:2px;flex-shrink:0';
+      div.appendChild(thumb);
+    } else if (o.type === 'text') {
+      const icon = document.createElement('span');
+      icon.textContent = 'T';
+      icon.style.cssText = 'width:22px;height:22px;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:bold;color:var(--octo-petrol);background:#e8f0fe;border-radius:2px;flex-shrink:0';
+      div.appendChild(icon);
+    }
+
+    // Name
+    const label = document.createElement('span');
+    label.textContent = o.name || o.text?.substring(0,12) || ('Element ' + (i + 1));
+    label.style.cssText = 'flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:.7rem';
+    div.appendChild(label);
+
+    // Inline animation selector
+    const animSel = document.createElement('select');
+    animSel.style.cssText = 'font-size:9px;padding:1px 2px;border:1px solid #ddd;border-radius:3px;width:65px;flex-shrink:0';
+    const animOpts = [
+      ['none','Keine'],['fadeIn','Einblend.'],['flyTo','Fliegen'],
+      ['slideLeft','← Links'],['slideRight','→ Rechts'],['slideUp','↑ Unten'],['slideDown','↓ Oben'],
+      ['zoomIn','Zoom+'],['pulse','Puls'],['bounce','Bounce']
+    ];
+    animOpts.forEach(([v,t]) => {
+      const opt = document.createElement('option');
+      opt.value = v; opt.textContent = t;
+      if ((o.animType || 'none') === v) opt.selected = true;
+      animSel.appendChild(opt);
+    });
+    animSel.onclick = e => e.stopPropagation();
+    animSel.onchange = e => {
+      e.stopPropagation();
+      o.animType = animSel.value;
+      if (animSel.value === 'none') { delete o.animStartX; delete o.animStartY; o.animDelay = 0; }
+      selIdx = i;
+      render();
+      updateTimeline();
+      showElemAnimPanel();
+    };
+    div.appendChild(animSel);
+
+    // Delete button
+    const del = document.createElement('span');
+    del.textContent = '✕';
+    del.title = 'Entfernen';
+    del.style.cssText = 'font-size:10px;color:#dc3545;cursor:pointer;padding:0 2px;flex-shrink:0';
+    del.onclick = e => {
+      e.stopPropagation();
+      objects.splice(i, 1);
+      if (selIdx === i) selIdx = -1;
+      else if (selIdx > i) selIdx--;
+      render();
+      updateCanvasElemList();
+      updateTimeline();
+    };
+    div.appendChild(del);
+    list.appendChild(div);
+  });
+}
+
+function clearElementBoard() {
+  if (boardElements.length === 0) return;
+  if (!confirm('Alle Elemente vom Board entfernen?')) return;
+  boardElements = [];
+  renderElemBoard();
+}
+
+// Build a clean background image with cutout regions painted over
+// Called once after each cutout operation; result cached in cleanBgCanvas
+let cleanBgCanvas = null;
+
+function rebuildCleanBg() {
+  if (!bgImage) return;
+  cleanBgCanvas = document.createElement('canvas');
+  cleanBgCanvas.width = canvas.width;
+  cleanBgCanvas.height = canvas.height;
+  const c = cleanBgCanvas.getContext('2d');
+  c.drawImage(bgImage, 0, 0, canvas.width, canvas.height);
+
+  // Paint over each cutout region with sampled edge color (fully opaque)
+  cutouts.forEach(co => {
+    const pad = 4;
+    const mx = co.maskX !== undefined ? co.maskX : co.origX;
+    const my = co.maskY !== undefined ? co.maskY : co.origY;
+    const mw = co.maskW !== undefined ? co.maskW : co.w;
+    const mh = co.maskH !== undefined ? co.maskH : co.h;
+    c.save();
+    c.fillStyle = co.fillColor;
+    c.fillRect(mx - pad, my - pad, mw + pad * 2, mh + pad * 2);
+    c.restore();
+  });
+
+  // Second pass: blur the filled areas to blend edges with surrounding bg
+  cutouts.forEach(co => {
+    const pad = 14;
+    const mx = co.maskX !== undefined ? co.maskX : co.origX;
+    const my = co.maskY !== undefined ? co.maskY : co.origY;
+    const mw = co.maskW !== undefined ? co.maskW : co.w;
+    const mh = co.maskH !== undefined ? co.maskH : co.h;
+    const x = mx - pad, y = my - pad;
+    const w = mw + pad * 2, h = mh + pad * 2;
+    c.save();
+    c.beginPath();
+    c.rect(x, y, w, h);
+    c.clip();
+    c.filter = 'blur(10px)';
+    // Re-draw the already-patched canvas onto itself within the clipped region
+    c.drawImage(cleanBgCanvas, 0, 0);
+    c.filter = 'none';
+    c.restore();
+  });
+}
+
+// Draw the clean background (without cutout cards) instead of original bgImage
+function drawCleanBg(targetCtx) {
+  if (bgVideo && !bgVideo.paused && !bgVideo.ended) {
+    targetCtx.drawImage(bgVideo, 0, 0, canvas.width, canvas.height);
+  } else if (cleanBgCanvas && cutouts.length > 0) {
+    targetCtx.drawImage(cleanBgCanvas, 0, 0, canvas.width, canvas.height);
+  } else if (bgImage) {
+    targetCtx.drawImage(bgImage, 0, 0, canvas.width, canvas.height);
+  } else {
+    targetCtx.fillStyle = '#1a1a2e';
+    targetCtx.fillRect(0, 0, canvas.width, canvas.height);
+  }
+}
+
+// Mouse handlers for crop mode (capture phase to intercept before normal handlers)
+canvas.addEventListener('mousedown', function cropDown(e) {
+  if (!cropMode) return;
+  e.stopImmediatePropagation();
+  const {x, y} = canvasXY(e);
+  cropStart = {x, y};
+  cropRect = {x, y, w: 0, h: 0};
+}, true);
+
+canvas.addEventListener('mousemove', function cropMove(e) {
+  if (!cropMode || !cropStart) return;
+  e.stopImmediatePropagation();
+  const {x, y} = canvasXY(e);
+  cropRect = {
+    x: Math.min(cropStart.x, x), y: Math.min(cropStart.y, y),
+    w: Math.abs(x - cropStart.x), h: Math.abs(y - cropStart.y)
+  };
+  render();
+  ctx.save();
+  ctx.fillStyle = 'rgba(0,0,0,0.4)';
+  ctx.fillRect(0, 0, canvas.width, cropRect.y);
+  ctx.fillRect(0, cropRect.y, cropRect.x, cropRect.h);
+  ctx.fillRect(cropRect.x + cropRect.w, cropRect.y, canvas.width - cropRect.x - cropRect.w, cropRect.h);
+  ctx.fillRect(0, cropRect.y + cropRect.h, canvas.width, canvas.height - cropRect.y - cropRect.h);
+  ctx.strokeStyle = '#F56E28';
+  ctx.lineWidth = 2;
+  ctx.setLineDash([6, 3]);
+  ctx.strokeRect(cropRect.x, cropRect.y, cropRect.w, cropRect.h);
+  ctx.restore();
+}, true);
+
+canvas.addEventListener('mouseup', function cropUp(e) {
+  if (!cropMode || !cropStart || !cropRect) return;
+  e.stopImmediatePropagation();
+  if (cropRect.w < 10 || cropRect.h < 10) { endCropMode(); return; }
+
+  // Auto-detect mode: analyze the selected region for sub-elements
+  if (autoDetectMode) {
+    // Save cropRect before endCropMode clears it
+    const savedRect = {x: cropRect.x, y: cropRect.y, w: cropRect.w, h: cropRect.h};
+    endCropMode();
+    cropRect = savedRect; // restore for autoDetectElements
+    autoDetectElements();
+    cropRect = null;
+    return;
+  }
+
+  // Render clean (no selection, no masks) to get pixel data
+  selIdx = -1;
+  // Draw bg + existing objects cleanly
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  if (bgImage) ctx.drawImage(bgImage, 0, 0, canvas.width, canvas.height);
+  objects.forEach(o => {
+    if (o.type === 'img' && o.img) ctx.drawImage(o.img, o.x, o.y, o.w, o.h);
+  });
+
+  // Sample fill color for masking
+  const fillColor = sampleEdgeColor(cropRect.x, cropRect.y, cropRect.w, cropRect.h);
+
+  // Extract region and flood-fill remove background from corners
+  const imgData = ctx.getImageData(cropRect.x, cropRect.y, cropRect.w, cropRect.h);
+  const d = imgData.data;
+  const pw = cropRect.w, ph = cropRect.h;
+
+  // Use the 4 corner pixels as reference colors (they should be background)
+  const corners = [
+    0,                          // top-left
+    (pw - 1) * 4,              // top-right
+    ((ph - 1) * pw) * 4,      // bottom-left
+    ((ph - 1) * pw + pw - 1) * 4 // bottom-right
+  ];
+  // Average corner colors
+  let bgR = 0, bgG = 0, bgB = 0, cc = 0;
+  corners.forEach(ci => {
+    bgR += d[ci]; bgG += d[ci+1]; bgB += d[ci+2]; cc++;
+  });
+  bgR = Math.round(bgR / cc); bgG = Math.round(bgG / cc); bgB = Math.round(bgB / cc);
+
+  const tol = 48; // generous tolerance
+
+  // Flood-fill from all edge pixels
+  const visited = new Uint8Array(pw * ph);
+  const q = [];
+  // Seed all border pixels
+  for (let x = 0; x < pw; x++) { q.push(x); q.push((ph-1)*pw + x); }
+  for (let y = 1; y < ph-1; y++) { q.push(y*pw); q.push(y*pw + pw-1); }
+
+  let qi = 0;
+  while (qi < q.length) {
+    const pos = q[qi++];
+    if (pos < 0 || pos >= pw*ph || visited[pos]) continue;
+    const idx = pos * 4;
+    const dr = d[idx]-bgR, dg = d[idx+1]-bgG, db = d[idx+2]-bgB;
+    if (Math.sqrt(dr*dr+dg*dg+db*db) >= tol) continue;
+    visited[pos] = 1;
+    d[idx+3] = 0;
+    const x = pos % pw, y = (pos-x) / pw;
+    if (x > 0) q.push(pos-1);
+    if (x < pw-1) q.push(pos+1);
+    if (y > 0) q.push(pos-pw);
+    if (y < ph-1) q.push(pos+pw);
+  }
+
+  // Anti-alias: soften edges of remaining opaque pixels next to transparent
+  const d2 = new Uint8ClampedArray(d);
+  for (let y = 1; y < ph-1; y++) {
+    for (let x = 1; x < pw-1; x++) {
+      const pos = y*pw+x;
+      if (d[pos*4+3] === 0) continue;
+      // Count transparent neighbors
+      let tn = 0;
+      if (d[(pos-1)*4+3]===0) tn++;
+      if (d[(pos+1)*4+3]===0) tn++;
+      if (d[(pos-pw)*4+3]===0) tn++;
+      if (d[(pos+pw)*4+3]===0) tn++;
+      if (tn > 0) d2[pos*4+3] = Math.round(d[pos*4+3] * (1 - tn*0.2));
+    }
+  }
+  for (let i = 3; i < d.length; i += 4) d[i] = d2[i];
+
+  // Tight bounding box
+  let minX = pw, minY = ph, maxX = 0, maxY = 0;
+  for (let y = 0; y < ph; y++) {
+    for (let x = 0; x < pw; x++) {
+      if (d[(y*pw+x)*4+3] > 0) {
+        if (x < minX) minX = x; if (x > maxX) maxX = x;
+        if (y < minY) minY = y; if (y > maxY) maxY = y;
+      }
+    }
+  }
+  if (maxX < minX) { minX=0; minY=0; maxX=pw-1; maxY=ph-1; }
+  const trimW = maxX-minX+1, trimH = maxY-minY+1;
+
+  const fullTc = document.createElement('canvas');
+  fullTc.width = pw; fullTc.height = ph;
+  fullTc.getContext('2d').putImageData(imgData, 0, 0);
+  const tc = document.createElement('canvas');
+  tc.width = trimW; tc.height = trimH;
+  tc.getContext('2d').drawImage(fullTc, minX, minY, trimW, trimH, 0, 0, trimW, trimH);
+  const actualX = cropRect.x + minX, actualY = cropRect.y + minY;
+
+  cutouts.push({
+    src: tc.toDataURL('image/png'),
+    origX: actualX, origY: actualY,
+    w: trimW, h: trimH,
+    maskX: cropRect.x, maskY: cropRect.y, maskW: cropRect.w, maskH: cropRect.h,
+    placed: false,
+    fillColor: fillColor
+  });
+
+  rebuildCleanBg();
+  updateCutoutsPanel();
+  endCropMode();
+  document.getElementById('sel-info').textContent = `✂ Element ${cutouts.length} ausgeschnitten! Klick "Ausschneiden" für weitere, oder "Alle platzieren".`;
+}, true);
+
+// ══════════════════════════════════════════
+// ── VIDEO / PER-ELEMENT ANIMATION ──
+// ══════════════════════════════════════════
+
+let isAnimating = false;
+let flyToMode = false; // when true, next canvas click sets start position
+
+function easeOutCubic(t) { return 1 - Math.pow(1 - t, 3); }
+function easeInCubic(t) { return t * t * t; }
+
+// ── Per-element animation properties ──
+// Each object can have: animType, animDelay, animDur, animStartX, animStartY
+
+function showElemAnimPanel() {
+  const panel = document.getElementById('elem-anim-panel');
+  const none = document.getElementById('elem-anim-none');
+  if (selIdx < 0) {
+    panel.style.display = 'none';
+    none.style.display = 'block';
+    return;
+  }
+  panel.style.display = 'block';
+  none.style.display = 'none';
+  const obj = objects[selIdx];
+  const label = obj.type === 'img' ? `Bild #${selIdx+1}` : `Text: "${(obj.text||'').substring(0,15)}"`;
+  document.getElementById('elem-anim-label').textContent = label;
+  document.getElementById('elem-anim-type').value = obj.animType || 'none';
+  document.getElementById('elem-anim-delay').value = obj.animDelay || 0;
+  document.getElementById('elem-anim-dur').value = obj.animDur || 1500;
+  updateFlyToUI();
+  updateTimeline();
+}
+
+function setElemAnim() {
+  if (selIdx < 0) return;
+  const obj = objects[selIdx];
+  obj.animType = document.getElementById('elem-anim-type').value;
+  obj.animDelay = parseInt(document.getElementById('elem-anim-delay').value) || 0;
+  obj.animDur = parseInt(document.getElementById('elem-anim-dur').value) || 800;
+  updateFlyToUI();
+  updateTimeline();
+}
+
+function updateFlyToUI() {
+  const isFly = document.getElementById('elem-anim-type').value === 'flyTo';
+  document.getElementById('flyto-hint').style.display = isFly ? 'block' : 'none';
+  document.getElementById('flyto-btn').style.display = isFly ? 'block' : 'none';
+}
+
+function setFlyToMode() {
+  if (selIdx < 0) return;
+  flyToMode = true;
+  document.getElementById('flyto-btn').textContent = '🎯 Klick jetzt auf Canvas…';
+  document.getElementById('flyto-btn').style.background = '#F56E28';
+  document.getElementById('flyto-btn').style.color = '#fff';
+  canvas.style.cursor = 'crosshair';
+}
+
+// Hook into canvas click for flyTo mode
+canvas.addEventListener('click', function(e) {
+  if (!flyToMode || selIdx < 0) return;
+  const rect = canvas.getBoundingClientRect();
+  const scaleX = canvas.width / rect.width;
+  const scaleY = canvas.height / rect.height;
+  const x = (e.clientX - rect.left) * scaleX;
+  const y = (e.clientY - rect.top) * scaleY;
+  objects[selIdx].animStartX = x;
+  objects[selIdx].animStartY = y;
+  flyToMode = false;
+  canvas.style.cursor = 'crosshair';
+  document.getElementById('flyto-btn').textContent = '🎯 Startposition setzen ✅';
+  document.getElementById('flyto-btn').style.background = '';
+  document.getElementById('flyto-btn').style.color = '';
+  // Draw a marker briefly
+  render();
+  ctx.save();
+  ctx.beginPath();
+  ctx.arc(x, y, 12, 0, Math.PI*2);
+  ctx.fillStyle = 'rgba(245,110,40,0.5)';
+  ctx.fill();
+  ctx.strokeStyle = '#F56E28';
+  ctx.lineWidth = 2;
+  ctx.stroke();
+  // Draw arrow from start to current position
+  const obj = objects[selIdx];
+  ctx.beginPath();
+  ctx.setLineDash([6,4]);
+  ctx.moveTo(x, y);
+  ctx.lineTo(obj.x + obj.w/2, obj.y + obj.h/2);
+  ctx.stroke();
+  ctx.restore();
+  setTimeout(render, 1500);
+});
+
+// ── Quick-action: animate unanmated elements sequentially ──
+function flyAllSequential(mode) {
+  // Only touch elements that have NO animation set (none/undefined)
+  const candidates = objects.filter(o => !o.animType || o.animType === 'none');
+  if (candidates.length === 0) {
+    alert('Alle Elemente haben bereits eine Animation.\nKlicke "↩ Reset" um sie zurückzusetzen.');
+    return;
+  }
+
+  // Count already-animated elements for delay offset
+  const alreadyAnimated = objects.filter(o => o.animType && o.animType !== 'none').length;
+
+  const edgeStarts = [
+    () => ({x: canvas.width / 2, y: -80}),
+    () => ({x: -80, y: canvas.height / 2}),
+    () => ({x: canvas.width + 80, y: canvas.height / 2}),
+    () => ({x: canvas.width / 2, y: canvas.height + 80}),
+  ];
+
+  candidates.forEach((obj, i) => {
+    const globalIdx = i + alreadyAnimated;
+    obj.animDelay = globalIdx * 500;
+    obj.animDur = 800;
+
+    if (mode === 'fade') {
+      obj.animType = 'fadeIn';
+    } else {
+      obj.animType = 'flyTo';
+      let start;
+      if (mode === 'top') start = {x: obj.x + obj.w/2, y: -80};
+      else if (mode === 'left') start = {x: -80, y: obj.y + obj.h/2};
+      else start = edgeStarts[i % edgeStarts.length](); // 'edges' default
+      obj.animStartX = start.x;
+      obj.an
