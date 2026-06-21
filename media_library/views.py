@@ -984,6 +984,7 @@ def studio_api_library(request):
         tags = {t.strip().lower() for t in (item.get('tags') or '').split(',') if t.strip()}
         return bool(tags & STUDIO_TAGS)
     items = [i for i in items if not _is_studio(i)]
+
     data = [{'id': i['id'], 'title': i['title'], 'url': f"/library/image/{i['id']}/"} for i in items]
     return JsonResponse({'items': data, 'folders': [{'id': f['id'], 'name': f['name']} for f in folders]})
 

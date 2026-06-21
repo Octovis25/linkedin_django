@@ -1594,8 +1594,14 @@ let libFoldersLoaded = false;
 async function loadLibrarySidebar(q='') {
   const folderSel = document.getElementById('lib-folder-filter');
   const folder = folderSel.value || 'all';
-  const res  = await fetch('/library/studio/api/library/?q=' + encodeURIComponent(q) + '&folder=' + folder);
-  const data = await res.json();
+  let data;
+  try {
+    const res = await fetch('/library/studio/api/library/?q=' + encodeURIComponent(q) + '&folder=' + folder);
+    data = await res.json();
+  } catch(e) {
+    document.getElementById('lib-grid').innerHTML = '<span style="color:red;font-size:.7rem">Fehler: ' + e + '</span>';
+    return;
+  }
   // Populate folder dropdown once
   if (!libFoldersLoaded && data.folders) {
     libFoldersLoaded = true;
@@ -1623,8 +1629,10 @@ async function loadLibrarySidebar(q='') {
 
     const img = document.createElement('img');
     img.src       = item.url;
+    img.loading   = 'lazy';
     img.className = 'lib-thumb';
     img.setAttribute('draggable', 'false'); // Eigenes Browser-Drag unterdrücken
+    img.onerror   = () => { img.style.display='none'; wrap.style.background='#eee'; wrap.title += ' (Bild nicht ladbar)'; };
 
     wrap.appendChild(img);
 
@@ -1659,8 +1667,15 @@ async function loadLibrarySidebar(q='') {
 
 // ── Right sidebar: load studio-saved images & videos ──
 async function loadSavedItems() {
-  const res = await fetch('/library/studio/api/saved/');
-  const data = await res.json();
+  let data;
+  try {
+    const res = await fetch('/library/studio/api/saved/');
+    data = await res.json();
+  } catch(e) {
+    console.error('loadSavedItems error:', e);
+    document.getElementById('saved-images-grid').innerHTML = '<span style="color:red;font-size:.7rem">Fehler beim Laden</span>';
+    return;
+  }
 
   // Images
   const imgGrid = document.getElementById('saved-images-grid');
