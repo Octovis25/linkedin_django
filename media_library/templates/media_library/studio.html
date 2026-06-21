@@ -3066,7 +3066,7 @@ async function recordVideo() {
   status.textContent = '💾 Video-Bild wird gespeichert…';
   status.style.color = '#008591';
   const fd = new FormData();
-  fd.append('title', titleVal + ' – ' + new Date().toLocaleDateString('de-DE'));
+  fd.append('title', titleVal);  // Kein Datum → Duplikat-Check greift bei gleichem Titel
   fd.append('canvas_json', _buildCanvasJson());
   await fetch('/library/studio/video-template/save/', {
     method: 'POST', headers: {'X-CSRFToken': getCookie('csrftoken')}, body: fd

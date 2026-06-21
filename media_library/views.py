@@ -775,8 +775,13 @@ def _ensure_video_template_table():
                 title           VARCHAR(255) DEFAULT '',
                 canvas_json     LONGTEXT NOT NULL,
                 preview_nc_path VARCHAR(512) DEFAULT NULL,
+                preview_data    LONGTEXT DEFAULT NULL,
                 created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )""")
+        except Exception: pass
+        # Add preview_data column if it doesn't exist yet (migration)
+        try:
+            c.execute("ALTER TABLE studio_video_templates ADD COLUMN preview_data LONGTEXT DEFAULT NULL")
         except Exception: pass
 
 
@@ -815,10 +820,28 @@ def studio_video_template_save(request):
     except Exception as e:
         print("Video template preview error:", e)
 
+    # Extract preview_data (base64 PNG) for DB storage — survives Render redeploys
+    preview_data = None
+    try:
+        import json as _json2
+        state2 = _json2.loads(canvas_json)
+        snap = state2.get('snapshotDataUrl', '')
+        if snap and snap.startswith('data:image'):
+            preview_data = snap
+    except Exception: pass
+
     with connection.cursor() as c:
-        c.execute("""INSERT INTO studio_video_templates (title, canvas_json, preview_nc_path)
-                     VALUES (%s, %s, %s)""", [title, canvas_json, preview_nc_path])
-        tpl_id = c.lastrowid
+        # Duplicate check: if same title already exists → update instead of insert
+        existing = _safe(c, "SELECT id FROM studio_video_templates WHERE title=%s LIMIT 1", [title])
+        if existing:
+            tpl_id = existing[0][0]
+            c.execute("""UPDATE studio_video_templates
+                         SET canvas_json=%s, preview_nc_path=%s, preview_data=%s
+                         WHERE id=%s""", [canvas_json, preview_nc_path, preview_data, tpl_id])
+        else:
+            c.execute("""INSERT INTO studio_video_templates (title, canvas_json, preview_nc_path, preview_data)
+                         VALUES (%s, %s, %s, %s)""", [title, canvas_json, preview_nc_path, preview_data])
+            tpl_id = c.lastrowid
     return JsonResponse({'ok': True, 'id': tpl_id, 'preview_nc_path': preview_nc_path})
 
 
@@ -826,9 +849,21 @@ def studio_video_template_save(request):
 def studio_video_template_list(request):
     _ensure_video_template_table()
     with connection.cursor() as c:
-        rows = _safe(c, "SELECT id, title, preview_nc_path, created_at FROM studio_video_templates ORDER BY created_at DESC")
-    data = [{'id': r[0], 'title': r[1] or '', 'preview_url': f"/library/studio/video-template/preview/{r[0]}/"}
-            for r in (rows or [])]
+        # De-duplicate: keep only the latest entry per title
+        try:
+            c.execute("""DELETE FROM studio_video_templates
+                         WHERE id NOT IN (
+                           SELECT id FROM (
+                             SELECT MAX(id) as id FROM studio_video_templates GROUP BY title
+                           ) t
+                         )""")
+        except Exception: pass
+        rows = _safe(c, "SELECT id, title, preview_nc_path, created_at, preview_data FROM studio_video_templates ORDER BY created_at DESC")
+    data = []
+    for r in (rows or []):
+        # Use preview_data (inline base64) if available, else fall back to server route
+        preview_url = r[4] if r[4] else f"/library/studio/video-template/preview/{r[0]}/"
+        data.append({'id': r[0], 'title': r[1] or '', 'preview_url': preview_url})
     return JsonResponse({'templates': data})
 
 
