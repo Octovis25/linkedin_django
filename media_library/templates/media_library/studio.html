@@ -1564,11 +1564,15 @@ function restoreCanvas(jsonStr, bgUrl) {
         } else if (o.type === 'img' && o.imgSrc) {
           pending++;
           const img = new Image();
+          if (o.imgSrc.startsWith('http') || o.imgSrc.startsWith('/')) img.crossOrigin = 'anonymous';
           img.onload = () => {
             objects.push({ ...o, img, url: o.imgSrc, bgRemoved: o.bgRemoved || false, originalUrl: o.originalUrl || '' });
             pending--; tryRender();
           };
-          img.onerror = () => { pending--; tryRender(); };
+          img.onerror = () => {
+            console.warn('Failed to load canvas image:', o.imgSrc);
+            pending--; tryRender();
+          };
           img.src = o.imgSrc;
         }
       });
@@ -1698,7 +1702,7 @@ function _buildCanvasJson() {
           tc.height = s.img.naturalHeight || s.img.height;
           tc.getContext('2d').drawImage(s.img, 0, 0);
           s.imgSrc = tc.toDataURL('image/png');
-        } catch(e) { s.imgSrc = s.url || ''; }
+        } catch(e) { s.imgSrc = s.url || s.originalUrl || s.img.src || ''; }
         delete s.img;
       }
       return s;
@@ -1726,7 +1730,24 @@ async function saveImage() {
   msg.textContent = hasAnim ? '💾 Als Video-Bild speichern…' : '💾 Speichert…';
   msg.style.color = '#008591';
 
-  const dataUrl    = canvas.toDataURL('image/png');
+  let dataUrl;
+  try { dataUrl = canvas.toDataURL('image/png'); }
+  catch(e) {
+    // Canvas tainted by cross-origin images — render without them
+    const fc = document.createElement('canvas');
+    fc.width = canvas.width; fc.height = canvas.height;
+    const fctx = fc.getContext('2d');
+    if (bgImage) { try { fctx.drawImage(bgImage, 0, 0, fc.width, fc.height); } catch(x) {} }
+    else { fctx.fillStyle = '#1a1a2e'; fctx.fillRect(0, 0, fc.width, fc.height); }
+    objects.forEach(o => {
+      try {
+        if (o.type === 'img' && o.img) fctx.drawImage(o.img, o.x, o.y, o.w, o.h);
+        else if (o.type === 'shape') drawShape(fctx, o);
+        else if (o.type === 'text') drawText(fctx, o);
+      } catch(x) {}
+    });
+    try { dataUrl = fc.toDataURL('image/png'); } catch(x) { dataUrl = ''; }
+  }
   const canvasJson = _buildCanvasJson();
   const folderId   = document.getElementById('save-folder').value || null;
 
@@ -2068,11 +2089,23 @@ async function saveVideoTemplate(silent = false) {
     const sctx = sc.getContext('2d');
     if (bgImage) sctx.drawImage(bgImage, 0, 0, sc.width, sc.height);
     else { sctx.fillStyle = '#1a1a2e'; sctx.fillRect(0, 0, sc.width, sc.height); }
+    // Nur nicht-cross-origin Objekte in Snapshot zeichnen
     objects.forEach(o => {
-      if (o.type === 'img' && o.img) sctx.drawImage(o.img, o.x, o.y, o.w, o.h);
-      else if (o.type === 'shape') drawShape(sctx, o);
+      try {
+        if (o.type === 'img' && o.img) sctx.drawImage(o.img, o.x, o.y, o.w, o.h);
+        else if (o.type === 'shape') drawShape(sctx, o);
+      } catch(ce) { /* cross-origin image, skip in snapshot */ }
     });
-    snapshotDataUrl = sc.toDataURL('image/png');
+    try { snapshotDataUrl = sc.toDataURL('image/png'); }
+    catch(te) {
+      // Canvas tainted — Fallback: nur Hintergrund
+      const sc2 = document.createElement('canvas');
+      sc2.width = canvas.width; sc2.height = canvas.height;
+      const sctx2 = sc2.getContext('2d');
+      if (bgImage) { try { sctx2.drawImage(bgImage, 0, 0, sc2.width, sc2.height); } catch(x) {} }
+      else { sctx2.fillStyle = '#1a1a2e'; sctx2.fillRect(0, 0, sc2.width, sc2.height); }
+      try { snapshotDataUrl = sc2.toDataURL('image/png'); } catch(x) {}
+    }
   } catch(e) { console.warn('Snapshot error:', e); }
 
   const cj = JSON.stringify({
@@ -2087,7 +2120,10 @@ async function saveVideoTemplate(silent = false) {
           tc.height = s.img.naturalHeight || s.img.height;
           tc.getContext('2d').drawImage(s.img, 0, 0);
           s.imgSrc = tc.toDataURL('image/png');
-        } catch(e) { s.imgSrc = s.url || ''; }
+        } catch(e) {
+          // CORS: originale URL beibehalten (Nextcloud-URL)
+          s.imgSrc = s.url || s.originalUrl || s.img.src || '';
+        }
         delete s.img;
       }
       return s;
@@ -3405,20 +3441,28 @@ async function saveVideoToNC() {
         const sc = document.createElement('canvas');
         sc.width = canvas.width; sc.height = canvas.height;
         const sctx = sc.getContext('2d');
-        // Hintergrund
         if (bgImage) sctx.drawImage(bgImage, 0, 0, sc.width, sc.height);
         else { sctx.fillStyle = '#1a1a2e'; sctx.fillRect(0, 0, sc.width, sc.height); }
-        // Objekte (ohne Auswahl-Handles)
         objects.forEach(o => {
-          if (o.type === 'img' && o.img) sctx.drawImage(o.img, o.x, o.y, o.w, o.h);
-          else if (o.type === 'shape') drawShape(sctx, o);
+          try {
+            if (o.type === 'img' && o.img) sctx.drawImage(o.img, o.x, o.y, o.w, o.h);
+            else if (o.type === 'shape') drawShape(sctx, o);
+          } catch(ce) { /* cross-origin, skip */ }
         });
-        snapshotDataUrl = sc.toDataURL('image/png');
+        try { snapshotDataUrl = sc.toDataURL('image/png'); }
+        catch(te) {
+          const sc2 = document.createElement('canvas');
+          sc2.width = canvas.width; sc2.height = canvas.height;
+          const sctx2 = sc2.getContext('2d');
+          if (bgImage) { try { sctx2.drawImage(bgImage, 0, 0, sc2.width, sc2.height); } catch(x) {} }
+          else { sctx2.fillStyle = '#1a1a2e'; sctx2.fillRect(0, 0, sc2.width, sc2.height); }
+          try { snapshotDataUrl = sc2.toDataURL('image/png'); } catch(x) {}
+        }
       } catch(e) { console.warn('Snapshot error:', e); }
 
       const cj = JSON.stringify({
         w: canvas.width, h: canvas.height,
-        snapshotDataUrl,   // Hintergrundbild eingebettet
+        snapshotDataUrl,
         objects: objects.map(o => {
           const s = {...o};
           if (s.img) {
@@ -3428,7 +3472,7 @@ async function saveVideoToNC() {
               tc.height = s.img.naturalHeight || s.img.height;
               tc.getContext('2d').drawImage(s.img, 0, 0);
               s.imgSrc = tc.toDataURL('image/png');
-            } catch(e) { s.imgSrc = s.url || ''; }
+            } catch(e) { s.imgSrc = s.url || s.originalUrl || s.img.src || ''; }
             delete s.img;
           }
           return s;
