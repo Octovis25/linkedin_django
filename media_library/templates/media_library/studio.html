@@ -142,14 +142,9 @@
           </select>
           <button id="text-action-btn" class="btn btn-primary btn-sm" onclick="addText()" style="font-size:11px;padding:2px 8px;margin-left:auto">+ Text</button>
         </div>
-        <div style="display:flex;gap:2px;align-items:center">
-          <div onclick="document.getElementById('text-color').value='#ffffff'" title="Weiß"      style="width:18px;height:18px;border-radius:3px;background:#ffffff;border:1px solid #ccc;cursor:pointer"></div>
-          <div onclick="document.getElementById('text-color').value='#F56E28'" title="Orange"    style="width:18px;height:18px;border-radius:3px;background:#F56E28;cursor:pointer"></div>
-          <div onclick="document.getElementById('text-color').value='#008591'" title="Petrol"    style="width:18px;height:18px;border-radius:3px;background:#008591;cursor:pointer"></div>
-          <div onclick="document.getElementById('text-color').value='#61CEBC'" title="Türkis"    style="width:18px;height:18px;border-radius:3px;background:#61CEBC;cursor:pointer"></div>
-          <div onclick="document.getElementById('text-color').value='#005F68'" title="Dunkel"    style="width:18px;height:18px;border-radius:3px;background:#005F68;cursor:pointer"></div>
-          <div onclick="document.getElementById('text-color').value='#161616'" title="Schwarz"   style="width:18px;height:18px;border-radius:3px;background:#161616;cursor:pointer"></div>
-          <span style="font-size:.65rem;color:#aaa;margin-left:4px">Doppelklick = bearbeiten</span>
+        <div style="display:flex;gap:4px;align-items:flex-end;flex-wrap:wrap">
+          <div id="palette-row" style="display:flex;gap:4px;align-items:flex-end"></div>
+          <a href="/library/studio/templates/" style="font-size:.6rem;color:#aaa;text-decoration:underline;white-space:nowrap" title="Farbpalette in Templates verwalten">⚙ anpassen</a>
         </div>
       </div>
     </div>
@@ -195,14 +190,9 @@
             <span style="font-size:.65rem;color:#999">°</span>
           </div>
         </div>
-        <div style="display:flex;gap:2px;align-items:center">
-          <div onclick="document.getElementById('shape-color').value='#F56E28'" title="Orange"  style="width:18px;height:18px;border-radius:3px;background:#F56E28;cursor:pointer"></div>
-          <div onclick="document.getElementById('shape-color').value='#ffffff'" title="Weiß"    style="width:18px;height:18px;border-radius:3px;background:#ffffff;border:1px solid #ccc;cursor:pointer"></div>
-          <div onclick="document.getElementById('shape-color').value='#008591'" title="Petrol"  style="width:18px;height:18px;border-radius:3px;background:#008591;cursor:pointer"></div>
-          <div onclick="document.getElementById('shape-color').value='#61CEBC'" title="Türkis"  style="width:18px;height:18px;border-radius:3px;background:#61CEBC;cursor:pointer"></div>
-          <div onclick="document.getElementById('shape-color').value='#161616'" title="Schwarz" style="width:18px;height:18px;border-radius:3px;background:#161616;cursor:pointer"></div>
-          <div onclick="document.getElementById('shape-color').value='#e74c3c'" title="Rot"     style="width:18px;height:18px;border-radius:3px;background:#e74c3c;cursor:pointer"></div>
-          <div onclick="document.getElementById('shape-color').value='#3498db'" title="Blau"    style="width:18px;height:18px;border-radius:3px;background:#3498db;cursor:pointer"></div>
+        <div style="display:flex;gap:4px;align-items:flex-end;flex-wrap:wrap">
+          <div id="shape-palette-row" style="display:flex;gap:4px;align-items:flex-end"></div>
+          <a href="/library/studio/templates/" style="font-size:.6rem;color:#aaa;text-decoration:underline;white-space:nowrap" title="Farbpalette in Templates verwalten">⚙ anpassen</a>
         </div>
       </div>
     </div>
@@ -446,6 +436,103 @@
 const canvas = document.getElementById('main-canvas');
 const ctx    = canvas.getContext('2d');
 const POST_ID = document.getElementById('post-id')?.value || '';
+
+// ══════════════════════════════════════════
+// ── ZENTRALE FARBPALETTE ──
+// Quelle der Wahrheit: static/css/brand.css
+// Das Studio liest die CSS-Variablen (--brand-c1 bis --brand-c6)
+// und fällt auf Hardcode-Werte zurück wenn brand.css nicht geladen.
+// Für dauerhafte Änderungen → brand.css bearbeiten, nicht hier!
+// ══════════════════════════════════════════
+const PALETTE_STORAGE_KEY = 'studio_palette_v1';
+
+function _readBrandColors() {
+  const style = getComputedStyle(document.documentElement);
+  const get = (v, fallback) => style.getPropertyValue(v).trim() || fallback;
+  return {
+    c1: get('--brand-c1', '#ffffff'),
+    c2: get('--brand-c2', '#F56E28'),
+    c3: get('--brand-c3', '#008591'),
+    c4: get('--brand-c4', '#61CEBC'),
+    c5: get('--brand-c5', '#005F68'),
+    c6: get('--brand-c6', '#161616'),
+  };
+}
+const PALETTE_DEFAULT = _readBrandColors();
+
+function _loadPalette() {
+  try {
+    const stored = sessionStorage.getItem(PALETTE_STORAGE_KEY);
+    if (stored) return Object.assign({}, PALETTE_DEFAULT, JSON.parse(stored));
+  } catch(e) {}
+  return Object.assign({}, PALETTE_DEFAULT);
+}
+let PALETTE = _loadPalette();
+
+function savePalette() {
+  try { sessionStorage.setItem(PALETTE_STORAGE_KEY, JSON.stringify(PALETTE)); } catch(e) {}
+}
+
+// Alle UI-Elemente die Palettenfarben nutzen aktualisieren
+function applyPaletteToUI() {
+  // Text-Farb-Standardwert
+  const tc = document.getElementById('text-color');
+  if (tc) tc.value = PALETTE.c1;
+  // Shape-Farb-Standardwert
+  const sc = document.getElementById('shape-color');
+  if (sc) sc.value = PALETTE.c2;
+  // Palette-Swatches rendern (ohne PALETTE zu überschreiben)
+  const palette = Object.values(PALETTE);
+  ['palette-row', 'shape-palette-row'].forEach(rowId => {
+    const row = document.getElementById(rowId);
+    if (!row) return;
+    row.innerHTML = '';
+    palette.forEach((col, i) => { row.appendChild(_makeSwatch(col, col, i + 1)); });
+  });
+  // CSS-Variablen für dynamische UI-Elemente
+  document.documentElement.style.setProperty('--studio-c1', PALETTE.c1);
+  document.documentElement.style.setProperty('--studio-c2', PALETTE.c2);
+  document.documentElement.style.setProperty('--studio-c3', PALETTE.c3);
+  document.documentElement.style.setProperty('--studio-c4', PALETTE.c4);
+  document.documentElement.style.setProperty('--studio-c5', PALETTE.c5);
+  document.documentElement.style.setProperty('--studio-c6', PALETTE.c6);
+}
+
+// Palette-Editor aufbauen
+function buildPaletteEditor() {
+  const grid = document.getElementById('palette-editor-grid');
+  if (!grid) return;
+  const labels = ['1 Weiß/Hell','2 Akzent','3 Primär','4 Sekundär','5 Dunkel','6 Schwarz'];
+  const keys = ['c1','c2','c3','c4','c5','c6'];
+  grid.innerHTML = '';
+  keys.forEach((k, i) => {
+    const wrap = document.createElement('div');
+    wrap.style.cssText = 'display:flex;flex-direction:column;gap:2px;align-items:center';
+    const inp = document.createElement('input');
+    inp.type = 'color';
+    inp.value = PALETTE[k];
+    inp.title = labels[i];
+    inp.style.cssText = 'width:32px;height:28px;border:none;padding:0;cursor:pointer;border-radius:3px;border:1px solid #ddd';
+    inp.addEventListener('input', () => {
+      PALETTE[k] = inp.value;
+      savePalette();
+      applyPaletteToUI();
+    });
+    const lbl = document.createElement('span');
+    lbl.textContent = String(i+1);
+    lbl.style.cssText = 'font-size:9px;color:#666;font-weight:700';
+    wrap.appendChild(inp);
+    wrap.appendChild(lbl);
+    grid.appendChild(wrap);
+  });
+}
+
+function resetPalette() {
+  Object.assign(PALETTE, PALETTE_DEFAULT);
+  savePalette();
+  applyPaletteToUI();
+  buildPaletteEditor();
+}
 
 // ── State ──
 let objects = [];   // [{type:'img'|'text', x,y,w,h, img?, text?,fontSize?,color?,fontWeight?}]
@@ -992,19 +1079,133 @@ function removeImageBg() {
 }
 
 // ── Load template ──
-function loadTemplate(tplId, url, w, h) {
+// Global template color palette (up to 6 colors, set when a template is loaded)
+let templateColors = [];
+
+function loadTemplate(tplId, url, w, h, colors) {
   currentTemplateId = tplId;
   const img = new Image();
+  img.crossOrigin = 'anonymous';
   img.onload = () => {
     canvas.width  = img.naturalWidth;
     canvas.height = img.naturalHeight;
     bgImage = img; objects = []; selIdx = -1;
     render();
     scaleCanvas();
+    // Extract dominant colors from the template image
+    const extracted = extractDominantColors(img, 6);
+    templateColors = extracted;
+    applyTemplatePalette(extracted);
   };
   img.src = url + '?t=' + Date.now();
   document.querySelectorAll('.tpl-thumb').forEach(el => el.classList.remove('selected'));
   document.getElementById('tpl-' + tplId)?.classList.add('selected');
+}
+
+function extractDominantColors(imgEl, count) {
+  try {
+    // Sample the image into a small canvas for speed
+    const SIZE = 80;
+    const sc = document.createElement('canvas');
+    sc.width = SIZE; sc.height = SIZE;
+    const sctx = sc.getContext('2d');
+    sctx.drawImage(imgEl, 0, 0, SIZE, SIZE);
+    const data = sctx.getImageData(0, 0, SIZE, SIZE).data;
+
+    // Quantize: bucket each pixel into 32-step RGB bins
+    const buckets = {};
+    for (let i = 0; i < data.length; i += 4) {
+      const a = data[i + 3];
+      if (a < 128) continue; // skip transparent
+      const r = Math.round(data[i]   / 32) * 32;
+      const g = Math.round(data[i+1] / 32) * 32;
+      const b = Math.round(data[i+2] / 32) * 32;
+      const key = `${r},${g},${b}`;
+      buckets[key] = (buckets[key] || 0) + 1;
+    }
+
+    // Sort by frequency, pick top N that are visually distinct
+    const sorted = Object.entries(buckets).sort((a, b) => b[1] - a[1]);
+    const chosen = [];
+    for (const [key] of sorted) {
+      const [r, g, b] = key.split(',').map(Number);
+      // Skip near-white (too light) and near-black only if we already have enough
+      const lum = 0.299*r + 0.587*g + 0.114*b;
+      // Check distinctness from already chosen colors
+      const tooClose = chosen.some(([cr, cg, cb]) =>
+        Math.abs(cr - r) < 48 && Math.abs(cg - g) < 48 && Math.abs(cb - b) < 48
+      );
+      if (tooClose) continue;
+      chosen.push([r, g, b]);
+      if (chosen.length >= count) break;
+    }
+    return chosen.map(([r, g, b]) => '#' + [r, g, b].map(v => v.toString(16).padStart(2, '0')).join(''));
+  } catch(e) {
+    console.warn('Color extraction failed:', e);
+    return [];
+  }
+}
+
+function applyTemplatePalette(colors) {
+  // If colors given (from template extraction), update PALETTE
+  if (colors && colors.length) {
+    const keys = ['c1','c2','c3','c4','c5','c6'];
+    colors.forEach((col, i) => { if (keys[i]) PALETTE[keys[i]] = col; });
+    savePalette();
+  }
+  const palette = Object.values(PALETTE);
+  ['palette-row', 'shape-palette-row'].forEach(rowId => {
+    const row = document.getElementById(rowId);
+    if (!row) return;
+    row.innerHTML = '';
+    palette.forEach((col, i) => {
+      row.appendChild(_makeSwatch(col, col, i + 1));
+    });
+  });
+  // Also update pickers to reflect current palette c2 as shape default
+  const sc = document.getElementById('shape-color');
+  if (sc) sc.value = PALETTE.c2;
+  // Palette-Editor synchronisieren
+  buildPaletteEditor();
+}
+
+function _makeSwatch(col, title, num) {
+  const wrap = document.createElement('div');
+  wrap.style.cssText = 'display:flex;flex-direction:column;align-items:center;gap:1px';
+
+  // Hidden color input for editing
+  const picker = document.createElement('input');
+  picker.type = 'color';
+  picker.value = col;
+  picker.style.cssText = 'position:absolute;opacity:0;width:0;height:0;pointer-events:none';
+  picker.oninput = () => {
+    swatch.style.background = picker.value;
+    document.getElementById('text-color').value = picker.value;
+    document.getElementById('shape-color').value = picker.value;
+    // Update templateColors array
+    if (num >= 1 && num <= templateColors.length) templateColors[num - 1] = picker.value;
+  };
+
+  const swatch = document.createElement('div');
+  swatch.title = col + ' — Klick: Farbe verwenden | Rechtsklick/Lang: anpassen';
+  swatch.style.cssText = `width:20px;height:20px;border-radius:3px;background:${col};border:1px solid #ccc;cursor:pointer;position:relative`;
+  swatch.appendChild(picker);
+
+  // Single click → apply color
+  swatch.addEventListener('click', (e) => {
+    e.stopPropagation();
+    document.getElementById('text-color').value = picker.value;
+    document.getElementById('shape-color').value = picker.value;
+  });
+  // Right-click or long-press → open picker to adjust
+  swatch.addEventListener('contextmenu', (e) => { e.preventDefault(); picker.click(); });
+
+  const label = document.createElement('span');
+  label.textContent = num;
+  label.style.cssText = 'font-size:8px;color:#888;font-weight:700;line-height:1';
+  wrap.appendChild(swatch);
+  wrap.appendChild(label);
+  return wrap;
 }
 
 // ── Add library image at position ──
@@ -1594,8 +1795,8 @@ async function loadTemplateSidebar() {
     img.src   = t.url + '?t=' + Date.now();
     img.id    = 'tpl-' + t.id;
     img.className = 'tpl-thumb';
-    img.title = t.title;
-    img.onclick = () => loadTemplate(t.id, t.url, t.width, t.height);
+    img.title = t.title + (t.colors?.length ? ' 🎨' : '');
+    img.onclick = () => loadTemplate(t.id, t.url, t.width, t.height, t.colors || []);
     el.appendChild(img);
   });
   // preselect if URL param
@@ -1603,7 +1804,7 @@ async function loadTemplateSidebar() {
   const pre  = urlP.get('template');
   if (pre) {
     const t = data.templates.find(x => x.id == pre);
-    if (t) loadTemplate(t.id, t.url, t.width, t.height);
+    if (t) loadTemplate(t.id, t.url, t.width, t.height, t.colors || []);
   }
 }
 
@@ -2422,7 +2623,7 @@ function updateCanvasElemList() {
     // Animation type badge (read-only, click to open anim panel)
     if (o.animType && o.animType !== 'none') {
       const badge = document.createElement('span');
-      const ANIM_COLORS = {fadeIn:'#61CEBC',flyTo:'#F56E28',slideLeft:'#008591',slideRight:'#008591',slideUp:'#008591',slideDown:'#008591',zoomIn:'#9b59b6',zoomOut:'#9b59b6',pulse:'#e74c3c',blink:'#e74c3c',bounce:'#e67e22',dashedGlow:'#3498db',typewriter:'#27ae60'};
+      const ANIM_COLORS = getAnimColors();
       badge.textContent = o.animType;
       badge.style.cssText = `font-size:8px;background:${ANIM_COLORS[o.animType]||'#888'};color:#fff;border-radius:3px;padding:1px 4px;flex-shrink:0;white-space:nowrap`;
       div.appendChild(badge);
@@ -2836,7 +3037,13 @@ function resetAllAnimations() {
 }
 
 // ── Interactive Timeline with sliders ──
-const ANIM_COLORS = {none:'#ccc',fadeIn:'#61CEBC',flyTo:'#F56E28',slideLeft:'#008591',slideRight:'#008591',slideUp:'#008591',slideDown:'#008591',zoomIn:'#005F68',zoomOut:'#dc3545',typewriter:'#6f42c1',pulse:'#e67e22',blink:'#f1c40f',bounce:'#3498db',dashedGlow:'#F56E28'};
+// ANIM_COLORS uses PALETTE so animation colors follow the palette
+function getAnimColors() {
+  return {none:'#ccc',fadeIn:PALETTE.c4,flyTo:PALETTE.c2,slideLeft:PALETTE.c3,slideRight:PALETTE.c3,
+    slideUp:PALETTE.c3,slideDown:PALETTE.c3,zoomIn:PALETTE.c5,zoomOut:'#dc3545',
+    typewriter:'#6f42c1',pulse:'#e67e22',blink:'#f1c40f',bounce:'#3498db',dashedGlow:PALETTE.c2};
+}
+const ANIM_COLORS = new Proxy({}, { get: (_, k) => getAnimColors()[k] });
 
 function updateTimelineBar(i) {
   const vidMs = (parseFloat(document.getElementById('vid-duration').value) || 5) * 1000;
@@ -3342,6 +3549,10 @@ async function handleDrawioExport(dataUrl) {
     btn.disabled = false;
   }
 }
+
+// ── Init: Farbpalette laden und Editor aufbauen ──
+applyPaletteToUI();
+buildPaletteEditor();
 
 // ── Init ──
 loadTemplateSidebar();
