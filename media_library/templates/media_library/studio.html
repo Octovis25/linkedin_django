@@ -65,7 +65,24 @@
   .tl-slider::-moz-range-thumb { width:14px; height:14px; border-radius:50%; border:2px solid #fff; box-shadow:0 1px 3px rgba(0,0,0,.3); }
   .tl-slider.tl-start::-moz-range-thumb { background:#61CEBC; }
   .tl-slider.tl-dur::-moz-range-thumb { background:#F56E28; }
+  /* draw.io overlay */
+  #drawio-overlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,.7); z-index:9999; flex-direction:column; }
+  #drawio-overlay.active { display:flex; }
+  #drawio-toolbar { background:#fff; padding:6px 12px; display:flex; align-items:center; gap:8px; border-bottom:2px solid #e0e0e0; flex-shrink:0; }
+  #drawio-frame { flex:1; border:none; width:100%; }
 </style>
+
+<!-- draw.io Overlay -->
+<div id="drawio-overlay">
+  <div id="drawio-toolbar">
+    <strong style="color:var(--octo-petrol);font-size:.9rem">🔷 draw.io Diagramm</strong>
+    <span style="flex:1"></span>
+    <label style="font-size:.8rem">Titel: <input id="drawio-title" type="text" value="Diagramm" style="padding:3px 6px;border:1px solid #ccc;border-radius:4px;font-size:.8rem;width:160px"></label>
+    <button id="drawio-export-btn" onclick="drawioExportPng()" style="background:var(--octo-petrol);color:#fff;border:none;padding:5px 14px;border-radius:4px;cursor:pointer;font-size:.82rem">📥 Als PNG ins Studio</button>
+    <button onclick="closeDrawio()" style="background:#dc3545;color:#fff;border:none;padding:5px 12px;border-radius:4px;cursor:pointer;font-size:.82rem">✕ Schließen</button>
+  </div>
+  <iframe id="drawio-frame" src="" allow="clipboard-read; clipboard-write"></iframe>
+</div>
 
 <h1 style="margin-bottom:.5rem">🎨 Image Studio</h1>
 {% if post_data %}
@@ -332,6 +349,7 @@
       <button onclick="sendBackward()" title="Nach hinten">⬇</button>
       <button onclick="startCropMode()" id="crop-btn" title="Bereich als eigenes Element ausschneiden">✂ Ausschneiden</button>
       <button onclick="startAutoDetectMode()" id="autodetect-btn" title="Bereich markieren → Elemente darin automatisch erkennen">🔍 Auto-Erkennung</button>
+      <button onclick="openDrawio()" title="draw.io Diagramm erstellen und als PNG auf Canvas einfügen" style="color:var(--octo-petrol);font-weight:600">🔷 draw.io</button>
       <span id="sel-info" style="font-size:.7rem;color:#888;margin-left:auto"></span>
     </div>
 
@@ -3215,6 +3233,115 @@ updateSelInfo = function() {
   showElemAnimPanel();
   updateShapeRotatePanel();
 };
+
+// ══════════════════════════════════════════
+// ── draw.io INTEGRATION ──
+// ══════════════════════════════════════════
+const DRAWIO_NC_URL = '{{ nc_url }}';
+
+function openDrawio() {
+  const overlay = document.getElementById('drawio-overlay');
+  const frame   = document.getElementById('drawio-frame');
+  overlay.classList.add('active');
+
+  // draw.io embed URL — use Nextcloud draw.io if available, else drawio.com
+  let drawioUrl;
+  if (DRAWIO_NC_URL) {
+    drawioUrl = DRAWIO_NC_URL + '/apps/drawio/?embed=1&chrome=0&dark=0&lang=de';
+  } else {
+    drawioUrl = 'https://embed.diagrams.net/?embed=1&spin=1&proto=json&libraries=1&lang=de';
+  }
+  frame.src = drawioUrl;
+
+  // Listen for messages from draw.io
+  window._drawioListener = function(evt) {
+    if (!evt.data || typeof evt.data !== 'string') return;
+    let msg;
+    try { msg = JSON.parse(evt.data); } catch(e) { return; }
+
+    if (msg.event === 'init') {
+      // draw.io is ready — send empty diagram to start fresh
+      frame.contentWindow.postMessage(JSON.stringify({action:'load', autosave:0, xml:'<mxGraphModel/>'}), '*');
+    } else if (msg.event === 'export') {
+      // PNG data received
+      handleDrawioExport(msg.data);
+    } else if (msg.event === 'exit') {
+      closeDrawio();
+    }
+  };
+  window.addEventListener('message', window._drawioListener);
+}
+
+function closeDrawio() {
+  document.getElementById('drawio-overlay').classList.remove('active');
+  document.getElementById('drawio-frame').src = '';
+  if (window._drawioListener) {
+    window.removeEventListener('message', window._drawioListener);
+    window._drawioListener = null;
+  }
+}
+
+function drawioExportPng() {
+  const frame = document.getElementById('drawio-frame');
+  // Request PNG export from draw.io
+  frame.contentWindow.postMessage(JSON.stringify({
+    action: 'export',
+    format: 'png',
+    spin: 'Exportiert…',
+    scale: 2,
+    border: 20
+  }), '*');
+}
+
+async function handleDrawioExport(dataUrl) {
+  if (!dataUrl || !dataUrl.startsWith('data:image/png')) {
+    alert('Export fehlgeschlagen – kein PNG erhalten.');
+    return;
+  }
+  const title = document.getElementById('drawio-title').value.trim() || 'Diagramm';
+  const btn   = document.getElementById('drawio-export-btn');
+  btn.textContent = '⏳ Speichert…';
+  btn.disabled = true;
+
+  try {
+    // 1. Save to Nextcloud via backend
+    const fd = new FormData();
+    fd.append('title', title);
+    fd.append('data_url', dataUrl);
+    const res = await fetch('/library/studio/drawio/save/', {
+      method: 'POST', headers: {'X-CSRFToken': getCookie('csrftoken')}, body: fd
+    });
+    const d = await res.json();
+
+    if (d.ok) {
+      // 2. Add the PNG to the canvas directly (load from data URL)
+      const img = new Image();
+      img.onload = () => {
+        const maxW = Math.round(canvas.width * 0.7);
+        const maxH = Math.round(canvas.height * 0.7);
+        let w = img.naturalWidth, h = img.naturalHeight;
+        if (w > maxW) { h = Math.round(h * maxW / w); w = maxW; }
+        if (h > maxH) { w = Math.round(w * maxH / h); h = maxH; }
+        const x = Math.round((canvas.width  - w) / 2);
+        const y = Math.round((canvas.height - h) / 2);
+        objects.push({type:'img', img, x, y, w, h, name: title, animType:'none', animDelay:0, animDur:800});
+        selIdx = objects.length - 1;
+        render(); updateCanvasElemList(); updateTimeline();
+        btn.textContent = '✅ Eingefügt!';
+        setTimeout(() => { btn.textContent = '📥 Als PNG ins Studio'; btn.disabled = false; }, 2000);
+        closeDrawio();
+      };
+      img.onerror = () => { btn.textContent = '❌ Fehler'; btn.disabled = false; };
+      img.src = d.url;
+    } else {
+      btn.textContent = '❌ ' + (d.error || 'Fehler');
+      btn.disabled = false;
+    }
+  } catch(e) {
+    btn.textContent = '❌ ' + e;
+    btn.disabled = false;
+  }
+}
 
 // ── Init ──
 loadTemplateSidebar();
