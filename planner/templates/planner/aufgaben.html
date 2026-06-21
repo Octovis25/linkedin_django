@@ -1,0 +1,148 @@
+{% extends "core/base.html" %}
+{% block title %}🤖 Claude Aufgaben{% endblock %}
+{% block content %}
+<style>
+  .aufgaben-wrap { max-width: 900px; margin: 0 auto; padding: 1rem; }
+  .aufgaben-header { display:flex; align-items:center; gap:12px; margin-bottom:1rem; }
+  .aufgaben-header h2 { margin:0; font-size:1.2rem; color:var(--octo-dark-petrol); }
+  .aufgabe-form { display:flex; gap:8px; margin-bottom:1.5rem; }
+  .aufgabe-form textarea { flex:1; min-height:60px; padding:8px 12px; border:1px solid #ccc; border-radius:6px; font-size:.85rem; resize:vertical; font-family:inherit; }
+  .aufgabe-form select { padding:6px; border:1px solid #ccc; border-radius:6px; font-size:.8rem; }
+  .aufgabe-card { border:1px solid #e8e8e8; border-radius:8px; padding:12px 16px; margin-bottom:8px; background:#fff; }
+  .aufgabe-card.offen { border-left:4px solid #F56E28; }
+  .aufgabe-card.erledigt { border-left:4px solid #61CEBC; opacity:.7; }
+  .aufgabe-card.in_arbeit { border-left:4px solid #008591; }
+  .aufgabe-meta { display:flex; gap:8px; align-items:center; font-size:.7rem; color:#999; margin-top:6px; }
+  .aufgabe-meta .badge { padding:2px 8px; border-radius:10px; font-size:.65rem; font-weight:600; color:#fff; }
+  .badge-offen { background:#F56E28; }
+  .badge-erledigt { background:#61CEBC; }
+  .badge-in_arbeit { background:#008591; }
+  .aufgabe-result { margin-top:8px; padding:8px 12px; background:#f0faf8; border-radius:4px; font-size:.8rem; white-space:pre-wrap; }
+  .filter-tabs { display:flex; gap:4px; margin-bottom:1rem; }
+  .filter-tabs button { padding:4px 12px; border:1px solid #ddd; border-radius:16px; background:#fff; font-size:.75rem; cursor:pointer; }
+  .filter-tabs button.active { background:var(--octo-petrol); color:#fff; border-color:var(--octo-petrol); }
+  .aufgabe-actions { display:flex; gap:6px; margin-left:auto; }
+  .aufgabe-actions button { background:none; border:none; cursor:pointer; font-size:14px; padding:2px 4px; }
+</style>
+
+<div class="aufgaben-wrap">
+  <div class="aufgaben-header">
+    <h2>🤖 Claude Aufgaben</h2>
+    <span style="font-size:.75rem;color:#888">Aufgaben für Claude hinterlegen — werden in der nächsten Cowork-Session abgearbeitet</span>
+  </div>
+
+  <div class="aufgabe-form">
+    <textarea id="aufgabe-text" placeholder="Was soll Claude tun? z.B. 'Schreibe einen LinkedIn-Post über klinische Studien' oder 'Stelle das Bild frei'"></textarea>
+    <div style="display:flex;flex-direction:column;gap:4px">
+      <select id="aufgabe-typ">
+        <option value="text">✍️ Text schreiben</option>
+        <option value="bild">🖼 Bild bearbeiten</option>
+        <option value="freistellen">✂️ Freistellen</option>
+        <option value="post">📝 Post erstellen</option>
+        <option value="sonstiges">📋 Sonstiges</option>
+      </select>
+      <button class="btn btn-primary btn-sm" onclick="createAufgabe()" style="white-space:nowrap">+ Aufgabe</button>
+    </div>
+  </div>
+
+  <div class="filter-tabs">
+    <button class="active" onclick="filterAufgaben('', this)">Alle</button>
+    <button onclick="filterAufgaben('offen', this)">🔶 Offen</button>
+    <button onclick="filterAufgaben('in_arbeit', this)">🔷 In Arbeit</button>
+    <button onclick="filterAufgaben('erledigt', this)">✅ Erledigt</button>
+  </div>
+
+  <div id="aufgaben-list"></div>
+</div>
+
+<script>
+let currentFilter = '';
+
+async function loadAufgaben() {
+  const url = '/planner/aufgaben/api/' + (currentFilter ? '?status=' + currentFilter : '');
+  const res = await fetch(url);
+  const data = await res.json();
+  const list = document.getElementById('aufgaben-list');
+
+  if (!data.aufgaben.length) {
+    list.innerHTML = '<p style="color:#bbb;text-align:center;padding:2rem">Keine Aufgaben vorhanden.</p>';
+    return;
+  }
+
+  list.innerHTML = data.aufgaben.map(a => {
+    const TYP_ICONS = {text:'✍️',bild:'🖼',freistellen:'✂️',post:'📝',sonstiges:'📋'};
+    return `
+    <div class="aufgabe-card ${a.status}">
+      <div style="display:flex;align-items:flex-start;gap:8px">
+        <span style="font-size:18px">${TYP_ICONS[a.typ] || '📋'}</span>
+        <div style="flex:1">
+          <div style="font-size:.85rem;color:#333">${escHtml(a.aufgabe)}</div>
+          ${a.ergebnis ? `<div class="aufgabe-result">${escHtml(a.ergebnis)}</div>` : ''}
+          <div class="aufgabe-meta">
+            <span class="badge badge-${a.status}">${a.status}</span>
+            <span>${a.created_at.substring(0,16)}</span>
+            ${a.post_id ? `<span>Post #${a.post_id}</span>` : ''}
+            ${a.done_at && a.done_at !== 'None' ? `<span>✅ ${a.done_at.substring(0,16)}</span>` : ''}
+          </div>
+        </div>
+        <div class="aufgabe-actions">
+          ${a.status === 'offen' ? `<button title="Als erledigt markieren" onclick="updateStatus(${a.id},'erledigt')">✅</button>` : ''}
+          ${a.status === 'erledigt' ? `<button title="Wieder öffnen" onclick="updateStatus(${a.id},'offen')">🔄</button>` : ''}
+          <button title="Löschen" onclick="deleteAufgabe(${a.id})">🗑</button>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function escHtml(s) {
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>');
+}
+
+async function createAufgabe() {
+  const text = document.getElementById('aufgabe-text').value.trim();
+  if (!text) return;
+  const typ = document.getElementById('aufgabe-typ').value;
+  await fetch('/planner/aufgaben/api/', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json', 'X-CSRFToken': getCookie('csrftoken')},
+    body: JSON.stringify({action:'create', aufgabe: text, typ})
+  });
+  document.getElementById('aufgabe-text').value = '';
+  loadAufgaben();
+}
+
+async function deleteAufgabe(id) {
+  if (!confirm('Aufgabe löschen?')) return;
+  await fetch('/planner/aufgaben/api/', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json', 'X-CSRFToken': getCookie('csrftoken')},
+    body: JSON.stringify({action:'delete', id})
+  });
+  loadAufgaben();
+}
+
+async function updateStatus(id, status) {
+  await fetch('/planner/aufgaben/api/', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json', 'X-CSRFToken': getCookie('csrftoken')},
+    body: JSON.stringify({action:'update_status', id, status})
+  });
+  loadAufgaben();
+}
+
+function filterAufgaben(status, btn) {
+  currentFilter = status;
+  document.querySelectorAll('.filter-tabs button').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  loadAufgaben();
+}
+
+function getCookie(name) {
+  const v = document.cookie.match('(^|;)\\s*' + name + '\\s*=\\s*([^;]+)');
+  return v ? v.pop() : '';
+}
+
+loadAufgaben();
+</script>
+{% endblock %}

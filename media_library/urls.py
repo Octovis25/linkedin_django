@@ -27,6 +27,7 @@ urlpatterns = [
     path('studio/api/library/',           views.studio_api_library,     name='studio_api_library'),
     path('studio/api/saved/',             views.studio_api_saved,       name='studio_api_saved'),
     path('studio/api/post-image/<int:post_id>/', views.studio_api_post_image, name='studio_api_post_image'),
+    path('studio/drawio/save/',                  views.studio_drawio_save,    name='studio_drawio_save'),
     # Video-Vorlagen
     path('studio/flowcharts/',            views.studio_flowcharts_view, name='studio_flowcharts'),
     path('studio/video-template/save/',                 views.studio_video_template_save,    name='studio_video_template_save'),

@@ -207,14 +207,61 @@ def list_templates(request):
 
 @csrf_exempt
 @require_api_key
+def list_aufgaben(request):
+    """Offene Aufgaben abrufen."""
+    status = request.GET.get('status', 'offen')
+    with connection.cursor() as c:
+        rows = _safe(c, "SELECT id, aufgabe, typ, status, ergebnis, post_id, created_at FROM claude_aufgaben WHERE status=%s ORDER BY id ASC", [status]) or []
+    return JsonResponse({'aufgaben': [
+        {'id': r[0], 'aufgabe': r[1], 'typ': r[2], 'status': r[3],
+         'ergebnis': r[4] or '', 'post_id': r[5], 'created_at': str(r[6] or '')}
+        for r in rows
+    ]})
+
+
+@csrf_exempt
+@require_api_key
+def update_aufgabe(request, aufgabe_id):
+    """Aufgabe aktualisieren (Status, Ergebnis)."""
+    if request.method != 'POST':
+        return JsonResponse({'error': 'POST required'}, status=405)
+    try:
+        data = json.loads(request.body)
+    except Exception:
+        return JsonResponse({'error': 'Invalid JSON'}, status=400)
+
+    updates = []
+    params = []
+    if 'status' in data:
+        updates.append("status=%s")
+        params.append(data['status'])
+    if 'ergebnis' in data:
+        updates.append("ergebnis=%s")
+        params.append(data['ergebnis'])
+    if data.get('status') == 'erledigt':
+        updates.append("done_at=NOW()")
+
+    if not updates:
+        return JsonResponse({'error': 'Nothing to update'}, status=400)
+
+    params.append(aufgabe_id)
+    with connection.cursor() as c:
+        c.execute(f"UPDATE claude_aufgaben SET {', '.join(updates)} WHERE id=%s", params)
+    return JsonResponse({'ok': True})
+
+
+@csrf_exempt
+@require_api_key
 def api_status(request):
     """Prüft ob die API erreichbar ist."""
     with connection.cursor() as c:
         img_count = (_safe(c, "SELECT COUNT(*) FROM media_library_items") or [[0]])[0][0]
         post_count = (_safe(c, "SELECT COUNT(*) FROM planner_posts") or [[0]])[0][0]
+        aufgaben_count = (_safe(c, "SELECT COUNT(*) FROM claude_aufgaben WHERE status='offen'") or [[0]])[0][0]
     return JsonResponse({
         'ok': True,
         'project': 'linkedin_django',
         'images': img_count,
-        'posts': post_count
+        'posts': post_count,
+        'offene_aufgaben': aufgaben_count
     })

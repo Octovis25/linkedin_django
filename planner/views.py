@@ -99,6 +99,71 @@ ACCENT_MAP = {
 }
 
 
+def _ensure_aufgaben_table():
+    with connection.cursor() as c:
+        c.execute("""CREATE TABLE IF NOT EXISTS claude_aufgaben (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            aufgabe TEXT NOT NULL,
+            typ VARCHAR(50) DEFAULT 'text',
+            status VARCHAR(20) DEFAULT 'offen',
+            ergebnis LONGTEXT,
+            post_id INT,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            done_at DATETIME
+        )""")
+
+
+@login_required
+def aufgaben_view(request):
+    _ensure_aufgaben_table()
+    return render(request, 'planner/aufgaben.html')
+
+
+@csrf_exempt
+@login_required
+def aufgaben_api(request):
+    _ensure_aufgaben_table()
+    if request.method == 'GET':
+        status = request.GET.get('status', '')
+        sql = "SELECT id, aufgabe, typ, status, ergebnis, post_id, created_at, done_at FROM claude_aufgaben"
+        params = []
+        if status:
+            sql += " WHERE status=%s"
+            params.append(status)
+        sql += " ORDER BY id DESC LIMIT 50"
+        with connection.cursor() as c:
+            c.execute(sql, params)
+            rows = c.fetchall()
+        return JsonResponse({'aufgaben': [
+            {'id': r[0], 'aufgabe': r[1], 'typ': r[2], 'status': r[3],
+             'ergebnis': r[4] or '', 'post_id': r[5], 'created_at': str(r[6] or ''), 'done_at': str(r[7] or '')}
+            for r in rows
+        ]})
+    elif request.method == 'POST':
+        data = json.loads(request.body)
+        action = data.get('action', 'create')
+        if action == 'create':
+            aufgabe = data.get('aufgabe', '').strip()
+            typ = data.get('typ', 'text')
+            post_id = data.get('post_id')
+            if not aufgabe:
+                return JsonResponse({'error': 'Aufgabe darf nicht leer sein'}, status=400)
+            with connection.cursor() as c:
+                c.execute("INSERT INTO claude_aufgaben (aufgabe, typ, post_id) VALUES (%s, %s, %s)",
+                          [aufgabe, typ, post_id])
+                return JsonResponse({'ok': True, 'id': c.lastrowid})
+        elif action == 'delete':
+            with connection.cursor() as c:
+                c.execute("DELETE FROM claude_aufgaben WHERE id=%s", [data.get('id')])
+            return JsonResponse({'ok': True})
+        elif action == 'update_status':
+            with connection.cursor() as c:
+                c.execute("UPDATE claude_aufgaben SET status=%s WHERE id=%s",
+                          [data.get('status', 'offen'), data.get('id')])
+            return JsonResponse({'ok': True})
+    return JsonResponse({'error': 'Method not allowed'}, status=405)
+
+
 @login_required
 def planner_view(request):
     with connection.cursor() as c:

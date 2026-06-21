@@ -104,6 +104,7 @@
     <a href="/planner/archive/" {% if '/archive/' in request.path %}class="active"{% endif %}>Archive</a>
     <a href="/planner/all/" {% if '/all/' in request.path %}class="active"{% endif %}>All</a>
     <a href="/planner/oj/" {% if '/oj/' in request.path %}class="active"{% endif %}>OJ</a>
+    {% if user.is_superuser %}<a href="/planner/aufgaben/" {% if '/aufgaben/' in request.path %}class="active"{% endif %}>🤖 Claude Aufgaben</a>{% endif %}
     {% if user.is_superuser %}<a href="/planner/api-connect/" {% if '/api-connect/' in request.path %}class="active"{% endif %}>API Connect</a>{% endif %}
   </div>
   {% endif %}

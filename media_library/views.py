@@ -541,8 +541,15 @@ def studio_view(request):
         except Exception as e:
             print("Studio lib lookup:", e)
     folders = _all_folders()
+    # Pass Nextcloud base URL for draw.io embed
+    try:
+        from posts_posted.nc_storage import _get_nc_credentials
+        nc_url_val, _, _ = _get_nc_credentials()
+    except Exception:
+        nc_url_val = ''
     return render(request, 'media_library/studio.html', {
-        'post_id': post_id, 'post_data': post_data, 'lib_data': lib_data, 'folders': folders})
+        'post_id': post_id, 'post_data': post_data, 'lib_data': lib_data,
+        'folders': folders, 'nc_url': (nc_url_val or '').rstrip('/')})
 
 
 @login_required
@@ -1008,3 +1015,54 @@ def studio_api_post_image(request, post_id):
     resp = HttpResponse(content, content_type=ct or 'image/jpeg')
     resp['Cache-Control'] = 'no-cache'
     return resp
+
+
+NC_STUDIO_DIAGRAMS_FOLDER = "Marketing & Design/LinkedIn/Studio/Diagramme"
+
+
+@login_required
+def studio_drawio_save(request):
+    """Receive a draw.io PNG export (base64 or file) and save to Nextcloud Studio/Diagramme."""
+    if request.method != 'POST':
+        return JsonResponse({'error': 'POST required'}, status=405)
+    import time, base64 as _b64, re as _re
+    _ensure_table()
+
+    title = request.POST.get('title', f'Diagramm_{int(time.time())}')
+    folder_id = request.POST.get('folder_id') or None
+    if folder_id:
+        try: folder_id = int(folder_id)
+        except: folder_id = None
+
+    # Accept either uploaded file or base64 data URL
+    img_bytes = None
+    if request.FILES.get('file'):
+        img_bytes = request.FILES['file'].read()
+    else:
+        data_url = request.POST.get('data_url', '')
+        if data_url and 'base64,' in data_url:
+            img_bytes = _b64.b64decode(data_url.split('base64,', 1)[1])
+
+    if not img_bytes:
+        return JsonResponse({'error': 'Kein Bild erhalten'}, status=400)
+
+    safe_title = _re.sub(r'[^a-zA-Z0-9_-]', '_', title)
+    filename = f"{safe_title}_{int(time.time())}.png"
+    nc_path = _nc_upload(img_bytes, f"{NC_STUDIO_DIAGRAMS_FOLDER}/{filename}", 'image/png')
+
+    if not nc_path:
+        # Local fallback
+        from django.conf import settings as _s
+        local_dir = os.path.join(_s.BASE_DIR, 'media', 'studio', 'diagramme')
+        os.makedirs(local_dir, exist_ok=True)
+        with open(os.path.join(local_dir, filename), 'wb') as fh:
+            fh.write(img_bytes)
+        nc_path = f"__local__/studio/diagramme/{filename}"
+
+    with connection.cursor() as c:
+        c.execute("""INSERT INTO media_library_items (nc_path, title, series, tags, folder_id)
+                     VALUES (%s, %s, 'Studio', 'diagramm', %s)""", [nc_path, title, folder_id])
+        lib_id = c.lastrowid
+
+    return JsonResponse({'ok': True, 'nc_path': nc_path, 'lib_id': lib_id,
+                         'url': f"/library/image/{lib_id}/"})
