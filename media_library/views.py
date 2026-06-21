@@ -448,6 +448,15 @@ def _optimize_canvas_json(canvas_json_str, nc_folder, title_prefix):
             if nc:
                 state['snapshotDataUrl'] = f"nc://{nc}"
 
+        # Preview (with all objects) for sidebar thumbnail
+        preview = state.get('previewDataUrl', '')
+        if preview and preview.startswith('data:image'):
+            b64 = preview.split(',', 1)[1]
+            img_bytes = base64.b64decode(b64)
+            nc = _nc_upload(img_bytes, f"{nc_folder}/{safe}_{ts}_preview.png", 'image/png')
+            if nc:
+                state['previewDataUrl'] = f"nc://{nc}"
+
         for i, obj in enumerate(state.get('objects', [])):
             src = obj.get('imgSrc', '')
             if src and src.startswith('data:image'):
@@ -477,11 +486,13 @@ def _resolve_nc_refs_in_json(canvas_json_str):
         nc_url, _, _ = _get_nc_credentials()
         nc_host = nc_url.rstrip('/') if nc_url else ''
 
+        from urllib.parse import quote
+
         def _proxy(src):
             if not src:
                 return src
             if src.startswith('nc://'):
-                return f"/library/studio/nc-image/?p={src[5:]}"
+                return f"/library/studio/nc-image/?p={quote(src[5:], safe='/')}"
             # Direct Nextcloud URLs → proxy
             if nc_host and src.startswith(nc_host):
                 # Extract NC path from full URL
@@ -494,6 +505,8 @@ def _resolve_nc_refs_in_json(canvas_json_str):
 
         state = _json.loads(canvas_json_str)
         state['snapshotDataUrl'] = _proxy(state.get('snapshotDataUrl', ''))
+        if 'previewDataUrl' in state:
+            state['previewDataUrl'] = _proxy(state.get('previewDataUrl', ''))
         for obj in state.get('objects', []):
             obj['imgSrc'] = _proxy(obj.get('imgSrc', ''))
         return _json.dumps(state)
@@ -990,17 +1003,17 @@ def studio_video_template_save(request):
     # Upload base64 images to NC, replace with nc:// references
     canvas_json = _optimize_canvas_json(canvas_json, NC_STUDIO_VIDEO_TEMPLATES_FOLDER, title)
 
-    # Extract preview NC path from optimized JSON
+    # Extract preview NC path from optimized JSON (prefer previewDataUrl over snapshotDataUrl)
     preview_nc_path = None
+    preview_data = None
     try:
         state = _json.loads(canvas_json)
-        snap = state.get('snapshotDataUrl', '')
-        if snap and snap.startswith('nc://'):
-            preview_nc_path = snap[5:]
+        prev = state.get('previewDataUrl', '') or state.get('snapshotDataUrl', '')
+        if prev and prev.startswith('nc://'):
+            preview_nc_path = prev[5:]
+            preview_data = prev
     except Exception:
         pass
-
-    preview_data = f"nc://{preview_nc_path}" if preview_nc_path else None
 
     with connection.cursor() as c:
         existing = _safe(c, "SELECT id FROM studio_video_templates WHERE title=%s LIMIT 1", [title])
@@ -1043,7 +1056,8 @@ def studio_video_template_list(request):
     for r in (rows or []):
         preview_data = r[4] if len(r) > 4 else None
         if preview_data and preview_data.startswith('nc://'):
-            preview_url = f"/library/studio/nc-image/?p={preview_data[5:]}"
+            from urllib.parse import quote as _q
+            preview_url = f"/library/studio/nc-image/?p={_q(preview_data[5:], safe='/')}"
         elif preview_data and preview_data.startswith('data:image'):
             preview_url = preview_data
         else:
