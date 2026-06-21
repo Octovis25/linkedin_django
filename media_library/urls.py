@@ -32,6 +32,7 @@ urlpatterns = [
     path('studio/brand-colors/save/',            views.studio_brand_colors_save,    name='studio_brand_colors_save'),
     # Video-Vorlagen
     path('studio/flowcharts/',            views.studio_flowcharts_view, name='studio_flowcharts'),
+    path('studio/nc-image/',                             views.studio_nc_image_proxy,         name='studio_nc_image_proxy'),
     path('studio/video-template/save/',                 views.studio_video_template_save,    name='studio_video_template_save'),
     path('studio/video-template/list/',                 views.studio_video_template_list,    name='studio_video_template_list'),
     path('studio/video-template/load/<int:tpl_id>/',    views.studio_video_template_load,    name='studio_video_template_load'),

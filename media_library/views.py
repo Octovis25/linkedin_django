@@ -415,8 +415,9 @@ def item_studio_info(request, item_id):
                                   ORDER BY created_at DESC LIMIT 1""", [nc_path])
         if studio_rows and studio_rows[0][1]:
             r = studio_rows[0]
+            cj = _resolve_nc_refs_in_json(r[1])
             return JsonResponse({'has_canvas': True, 'studio_id': r[0], 'post_id': r[3],
-                                 'template_id': r[2], 'canvas_json': r[1], 'is_video': is_video})
+                                 'template_id': r[2], 'canvas_json': cj, 'is_video': is_video})
     return JsonResponse({'has_canvas': False, 'is_video': is_video})
 
 
@@ -426,6 +427,94 @@ def item_studio_info(request, item_id):
 NC_STUDIO_TEMPLATES_FOLDER = "Marketing & Design/LinkedIn/Studio/Templates"
 NC_STUDIO_LIBRARY_FOLDER   = "Marketing & Design/LinkedIn/Studio/Bibliothek"
 NC_STUDIO_VIDEOS_FOLDER    = "Marketing & Design/LinkedIn/Studio/Videos"
+
+
+def _optimize_canvas_json(canvas_json_str, nc_folder, title_prefix):
+    """Extract base64 images from canvas_json, upload to NC, replace with nc:// refs.
+    Returns optimized JSON string."""
+    import json as _json, base64, re as _re, time
+    if not canvas_json_str:
+        return canvas_json_str
+    try:
+        state = _json.loads(canvas_json_str)
+        safe = _re.sub(r'[^a-zA-Z0-9_-]', '_', title_prefix)
+        ts = int(time.time())
+
+        snap = state.get('snapshotDataUrl', '')
+        if snap and snap.startswith('data:image'):
+            b64 = snap.split(',', 1)[1]
+            img_bytes = base64.b64decode(b64)
+            nc = _nc_upload(img_bytes, f"{nc_folder}/{safe}_{ts}_snap.png", 'image/png')
+            if nc:
+                state['snapshotDataUrl'] = f"nc://{nc}"
+
+        for i, obj in enumerate(state.get('objects', [])):
+            src = obj.get('imgSrc', '')
+            if src and src.startswith('data:image'):
+                try:
+                    ext = 'png' if 'png' in src.split(';')[0] else 'jpg'
+                    b64 = src.split(',', 1)[1]
+                    img_bytes = base64.b64decode(b64)
+                    nc = _nc_upload(img_bytes, f"{nc_folder}/{safe}_{ts}_obj{i}.{ext}", f"image/{ext}")
+                    if nc:
+                        obj['imgSrc'] = f"nc://{nc}"
+                except Exception:
+                    pass
+
+        return _json.dumps(state)
+    except Exception:
+        return canvas_json_str
+
+
+def _resolve_nc_refs_in_json(canvas_json_str):
+    """Replace nc:// references and direct Nextcloud URLs in canvas_json
+    with same-origin proxy URLs to avoid CORS tainting."""
+    import json as _json
+    if not canvas_json_str:
+        return canvas_json_str
+    try:
+        from posts_posted.nc_storage import _get_nc_credentials
+        nc_url, _, _ = _get_nc_credentials()
+        nc_host = nc_url.rstrip('/') if nc_url else ''
+
+        def _proxy(src):
+            if not src:
+                return src
+            if src.startswith('nc://'):
+                return f"/library/studio/nc-image/?p={src[5:]}"
+            # Direct Nextcloud URLs → proxy
+            if nc_host and src.startswith(nc_host):
+                # Extract NC path from full URL
+                import re
+                m = re.search(r'/remote\.php/dav/files/[^/]+/(.+)', src)
+                if m:
+                    from urllib.parse import unquote
+                    return f"/library/studio/nc-image/?p={unquote(m.group(1))}"
+            return src
+
+        state = _json.loads(canvas_json_str)
+        state['snapshotDataUrl'] = _proxy(state.get('snapshotDataUrl', ''))
+        for obj in state.get('objects', []):
+            obj['imgSrc'] = _proxy(obj.get('imgSrc', ''))
+        return _json.dumps(state)
+    except Exception:
+        return canvas_json_str
+
+
+def _nc_ensure_folder(nc_url, username, password, folder_path):
+    """Create Nextcloud folder (and parents) via MKCOL if it doesn't exist."""
+    from urllib.parse import quote
+    import requests as _req
+    from requests.auth import HTTPBasicAuth
+    parts = folder_path.strip('/').split('/')
+    current = ''
+    for part in parts:
+        current = f"{current}/{part}" if current else part
+        url = f"{nc_url.rstrip('/')}/remote.php/dav/files/{username}/{quote(current, safe='/')}"
+        try:
+            _req.request('MKCOL', url, auth=HTTPBasicAuth(username, password), timeout=15)
+        except Exception:
+            pass
 
 
 def _nc_upload(content_bytes, nc_path, content_type='image/png'):
@@ -438,6 +527,10 @@ def _nc_upload(content_bytes, nc_path, content_type='image/png'):
     if not all([nc_url, username, password]):
         return None
     try:
+        # Ensure parent folder exists
+        folder = '/'.join(nc_path.split('/')[:-1])
+        if folder:
+            _nc_ensure_folder(nc_url, username, password, folder)
         upload_url = f"{nc_url.rstrip('/')}/remote.php/dav/files/{username}/{quote(nc_path, safe='/')}"
         r = _req.put(upload_url, data=content_bytes,
                      auth=HTTPBasicAuth(username, password),
@@ -767,11 +860,14 @@ def studio_save(request):
                      VALUES (%s, %s, 'Studio', 'studio', %s)""", [nc_path, title, folder_id])
         lib_id = c.lastrowid
 
+    # Optimize canvas_json: upload base64 images to NC
+    if canvas_json:
+        canvas_json = _optimize_canvas_json(canvas_json, NC_STUDIO_LIBRARY_FOLDER, title)
+
     # Save studio metadata (upsert per post_id if given)
     studio_image_id = None
     with connection.cursor() as c:
         if post_id:
-            # Update existing studio_image for this post, or insert new
             rows = _safe(c, "SELECT id FROM studio_images WHERE post_id=%s ORDER BY created_at DESC LIMIT 1", [post_id])
             if rows:
                 studio_image_id = rows[0][0]
@@ -833,6 +929,7 @@ def studio_save_video(request):
     # Save canvas state so video can be reopened for editing
     canvas_json = request.POST.get('canvas_json', '')
     if canvas_json:
+        canvas_json = _optimize_canvas_json(canvas_json, NC_STUDIO_VIDEOS_FOLDER, title)
         with connection.cursor() as c:
             c.execute("""INSERT INTO studio_images (nc_path, title, canvas_json)
                          VALUES (%s, %s, %s)""", [nc_path, title, canvas_json])
@@ -879,51 +976,33 @@ def _ensure_video_template_table():
 
 @login_required
 def studio_video_template_save(request):
-    """Save current canvas state as a video template."""
+    """Save current canvas state as a video template.
+    Uses _optimize_canvas_json to upload base64 images to NC and replace with nc:// refs."""
     if request.method != 'POST':
         return JsonResponse({'error': 'POST required'}, status=405)
     _ensure_video_template_table()
-    import time, base64, re as _re
+    import time, json as _json
     title = request.POST.get('title', f'Video-Vorlage {int(time.time())}')
     canvas_json = request.POST.get('canvas_json', '')
     if not canvas_json:
         return JsonResponse({'error': 'Kein canvas_json'}, status=400)
 
-    # Save preview PNG to Nextcloud (base64 from canvas_json snapshotDataUrl)
+    # Upload base64 images to NC, replace with nc:// references
+    canvas_json = _optimize_canvas_json(canvas_json, NC_STUDIO_VIDEO_TEMPLATES_FOLDER, title)
+
+    # Extract preview NC path from optimized JSON
     preview_nc_path = None
     try:
-        import json as _json
         state = _json.loads(canvas_json)
-        snapshot = state.get('snapshotDataUrl', '')
-        if snapshot and snapshot.startswith('data:image/png;base64,'):
-            b64 = snapshot.split(',', 1)[1]
-            img_bytes = base64.b64decode(b64)
-            safe_title = _re.sub(r'[^a-zA-Z0-9_-]', '_', title)
-            fname = f"{safe_title}_{int(time.time())}.png"
-            preview_nc_path = _nc_upload(img_bytes,
-                f"{NC_STUDIO_VIDEO_TEMPLATES_FOLDER}/{fname}", 'image/png')
-            if not preview_nc_path:
-                from django.conf import settings as _s
-                local_dir = os.path.join(_s.BASE_DIR, 'media', 'studio', 'video_templates')
-                os.makedirs(local_dir, exist_ok=True)
-                with open(os.path.join(local_dir, fname), 'wb') as fh:
-                    fh.write(img_bytes)
-                preview_nc_path = f"__local__/studio/video_templates/{fname}"
-    except Exception as e:
-        print("Video template preview error:", e)
+        snap = state.get('snapshotDataUrl', '')
+        if snap and snap.startswith('nc://'):
+            preview_nc_path = snap[5:]
+    except Exception:
+        pass
 
-    # Extract preview_data (base64 PNG) for DB storage — survives Render redeploys
-    preview_data = None
-    try:
-        import json as _json2
-        state2 = _json2.loads(canvas_json)
-        snap = state2.get('snapshotDataUrl', '')
-        if snap and snap.startswith('data:image'):
-            preview_data = snap
-    except Exception: pass
+    preview_data = f"nc://{preview_nc_path}" if preview_nc_path else None
 
     with connection.cursor() as c:
-        # Duplicate check: if same title already exists → update instead of insert
         existing = _safe(c, "SELECT id FROM studio_video_templates WHERE title=%s LIMIT 1", [title])
         if existing:
             tpl_id = existing[0][0]
@@ -963,7 +1042,12 @@ def studio_video_template_list(request):
     data = []
     for r in (rows or []):
         preview_data = r[4] if len(r) > 4 else None
-        preview_url = preview_data if preview_data else f"/library/studio/video-template/preview/{r[0]}/"
+        if preview_data and preview_data.startswith('nc://'):
+            preview_url = f"/library/studio/nc-image/?p={preview_data[5:]}"
+        elif preview_data and preview_data.startswith('data:image'):
+            preview_url = preview_data
+        else:
+            preview_url = f"/library/studio/video-template/preview/{r[0]}/"
         data.append({'id': r[0], 'title': r[1] or '', 'preview_url': preview_url})
     return JsonResponse({'templates': data})
 
@@ -975,7 +1059,23 @@ def studio_video_template_load(request, tpl_id):
         rows = _safe(c, "SELECT title, canvas_json FROM studio_video_templates WHERE id=%s", [tpl_id])
     if not rows:
         raise Http404
-    return JsonResponse({'ok': True, 'title': rows[0][0], 'canvas_json': rows[0][1]})
+    canvas_json = _resolve_nc_refs_in_json(rows[0][1])
+    return JsonResponse({'ok': True, 'title': rows[0][0], 'canvas_json': canvas_json})
+
+
+@login_required
+def studio_nc_image_proxy(request):
+    """Proxy Nextcloud images through Django so they're same-origin (no CORS tainting)."""
+    nc_path = request.GET.get('p', '')
+    if not nc_path:
+        raise Http404
+    from posts_posted.nc_storage import download_image_from_nextcloud
+    content, ct = download_image_from_nextcloud(nc_path)
+    if not content:
+        raise Http404
+    resp = HttpResponse(content, content_type=ct or 'image/png')
+    resp['Cache-Control'] = 'public, max-age=3600'
+    return resp
 
 
 @login_required
