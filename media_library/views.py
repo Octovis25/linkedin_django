@@ -462,6 +462,41 @@ def _nc_delete(nc_path):
     delete_image_from_nextcloud(nc_path)
 
 
+def _ensure_brand_colors_table():
+    with connection.cursor() as c:
+        try:
+            c.execute("""CREATE TABLE IF NOT EXISTS brand_colors (
+                id   INT AUTO_INCREMENT PRIMARY KEY,
+                c1   VARCHAR(20) DEFAULT '#ffffff',
+                c2   VARCHAR(20) DEFAULT '#F56E28',
+                c3   VARCHAR(20) DEFAULT '#008591',
+                c4   VARCHAR(20) DEFAULT '#61CEBC',
+                c5   VARCHAR(20) DEFAULT '#005F68',
+                c6   VARCHAR(20) DEFAULT '#161616'
+            )""")
+        except Exception: pass
+        # Sicherstellen dass immer genau eine Zeile existiert
+        try:
+            c.execute("SELECT COUNT(*) FROM brand_colors")
+            if c.fetchone()[0] == 0:
+                c.execute("INSERT INTO brand_colors (c1,c2,c3,c4,c5,c6) VALUES ('#ffffff','#F56E28','#008591','#61CEBC','#005F68','#161616')")
+        except Exception: pass
+
+
+def get_brand_colors():
+    """Gibt die aktuellen Brand-Farben als Dict zurück."""
+    _ensure_brand_colors_table()
+    defaults = {'c1':'#ffffff','c2':'#F56E28','c3':'#008591','c4':'#61CEBC','c5':'#005F68','c6':'#161616'}
+    try:
+        with connection.cursor() as c:
+            c.execute("SELECT c1,c2,c3,c4,c5,c6 FROM brand_colors LIMIT 1")
+            row = c.fetchone()
+            if row:
+                return dict(zip(['c1','c2','c3','c4','c5','c6'], row))
+    except Exception: pass
+    return defaults
+
+
 def _ensure_studio_tables():
     with connection.cursor() as c:
         try:
@@ -471,8 +506,13 @@ def _ensure_studio_tables():
                 title      VARCHAR(255) DEFAULT '',
                 width      INT DEFAULT 1080,
                 height     INT DEFAULT 1080,
+                colors     VARCHAR(512) DEFAULT NULL,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )""")
+        except Exception: pass
+        # Migration: add colors column if missing
+        try:
+            c.execute("ALTER TABLE studio_templates ADD COLUMN colors VARCHAR(512) DEFAULT NULL")
         except Exception: pass
         try:
             c.execute("""CREATE TABLE IF NOT EXISTS studio_images (
@@ -556,11 +596,42 @@ def studio_view(request):
 def studio_templates_view(request):
     _ensure_studio_tables()
     with connection.cursor() as c:
-        rows = _safe(c, "SELECT id, title, width, height, created_at FROM studio_templates ORDER BY created_at DESC")
-    templates = [{'id': r[0], 'title': r[1], 'width': r[2], 'height': r[3],
-                  'url': f"/library/studio/template/image/{r[0]}/"}
-                 for r in (rows or [])]
-    return render(request, 'media_library/studio_templates.html', {'templates': templates})
+        rows = _safe(c, "SELECT id, title, width, height, colors, created_at FROM studio_templates ORDER BY created_at DESC")
+    templates = []
+    for r in (rows or []):
+        colors = []
+        if r[4]:
+            try: colors = json.loads(r[4])
+            except: pass
+        templates.append({'id': r[0], 'title': r[1], 'width': r[2], 'height': r[3], 'colors': colors,
+                          'url': f"/library/studio/template/image/{r[0]}/"})
+    brand = get_brand_colors()
+    return render(request, 'media_library/studio_templates.html', {'templates': templates, 'brand': brand})
+
+
+@login_required
+def studio_brand_colors_save(request):
+    """Speichert die 6 Brand-Farben in der DB."""
+    if request.method != 'POST':
+        return JsonResponse({'ok': False})
+    _ensure_brand_colors_table()
+    c1 = request.POST.get('c1', '#ffffff')
+    c2 = request.POST.get('c2', '#F56E28')
+    c3 = request.POST.get('c3', '#008591')
+    c4 = request.POST.get('c4', '#61CEBC')
+    c5 = request.POST.get('c5', '#005F68')
+    c6 = request.POST.get('c6', '#161616')
+    try:
+        with connection.cursor() as cur:
+            cur.execute("SELECT COUNT(*) FROM brand_colors")
+            if cur.fetchone()[0] > 0:
+                cur.execute("UPDATE brand_colors SET c1=%s,c2=%s,c3=%s,c4=%s,c5=%s,c6=%s", [c1,c2,c3,c4,c5,c6])
+            else:
+                cur.execute("INSERT INTO brand_colors (c1,c2,c3,c4,c5,c6) VALUES (%s,%s,%s,%s,%s,%s)", [c1,c2,c3,c4,c5,c6])
+        messages.success(request, 'Brand-Farben gespeichert.')
+    except Exception as e:
+        messages.error(request, f'Fehler: {e}')
+    return redirect('/library/studio/templates/')
 
 
 @login_required
@@ -587,10 +658,29 @@ def studio_template_upload(request):
         with open(os.path.join(local_dir, filename), 'wb') as fh:
             fh.write(content)
         nc_path = f"__local__/studio/templates/{filename}"
+    # Collect up to 6 colors
+    import json as _j
+    colors = [request.POST.get(f'color{i}', '').strip() for i in range(1, 7)]
+    colors = [c for c in colors if c]  # remove empty
+    colors_json = _j.dumps(colors) if colors else None
     with connection.cursor() as c:
-        c.execute("INSERT INTO studio_templates (nc_path, title, width, height) VALUES (%s,%s,%s,%s)",
-                  [nc_path, title, width, height])
+        c.execute("INSERT INTO studio_templates (nc_path, title, width, height, colors) VALUES (%s,%s,%s,%s,%s)",
+                  [nc_path, title, width, height, colors_json])
     messages.success(request, 'Template gespeichert!')
+    return redirect('media_library:studio_templates')
+
+
+@login_required
+def studio_template_colors(request, tpl_id):
+    """Update the color palette of a template."""
+    if request.method != 'POST':
+        return redirect('media_library:studio_templates')
+    import json as _j
+    colors = [request.POST.get(f'color{i}', '').strip() for i in range(1, 7)]
+    colors = [c for c in colors if c]
+    with connection.cursor() as c:
+        c.execute("UPDATE studio_templates SET colors=%s WHERE id=%s", [_j.dumps(colors), tpl_id])
+    messages.success(request, 'Farben gespeichert!')
     return redirect('media_library:studio_templates')
 
 
@@ -753,21 +843,16 @@ def studio_save_video(request):
 def studio_api_templates(request):
     _ensure_studio_tables()
     with connection.cursor() as c:
-        rows = _safe(c, "SELECT id, title, width, height FROM studio_templates ORDER BY created_at DESC")
-    data = [{'id': r[0], 'title': r[1] or '', 'width': r[2], 'height': r[3],
-             'url': f"/library/studio/template/image/{r[0]}/"}
-            for r in (rows or [])]
-    return JsonResponse({'templates': data})
-
-
-@login_required
-def studio_api_templates(request):
-    _ensure_studio_tables()
-    with connection.cursor() as c:
-        rows = _safe(c, "SELECT id, title, width, height FROM studio_templates ORDER BY created_at DESC")
-    data = [{'id': r[0], 'title': r[1] or '', 'width': r[2], 'height': r[3],
-             'url': f"/library/studio/template/image/{r[0]}/"}
-            for r in (rows or [])]
+        rows = _safe(c, "SELECT id, title, width, height, colors FROM studio_templates ORDER BY created_at DESC")
+    data = []
+    for r in (rows or []):
+        colors = []
+        if r[4]:
+            try:
+                import json as _j; colors = _j.loads(r[4])
+            except Exception: pass
+        data.append({'id': r[0], 'title': r[1] or '', 'width': r[2], 'height': r[3],
+                     'url': f"/library/studio/template/image/{r[0]}/", 'colors': colors})
     return JsonResponse({'templates': data})
 
 

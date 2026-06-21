@@ -1,0 +1,45 @@
+/*
+ * ══════════════════════════════════════════
+ *  Octotrial Brand — zentrale Farbpalette
+ *  Eine Datei für alle Farben im Portal.
+ *  Änderungen hier wirken sich auf alle
+ *  Seiten und das Image Studio aus.
+ * ══════════════════════════════════════════
+ *
+ *  Palette-Übersicht:
+ *   c1 / --brand-c1   Weiß / heller Text     #ffffff
+ *   c2 / --brand-c2   Orange / Akzent        #F56E28
+ *   c3 / --brand-c3   Petrol / Primär        #008591
+ *   c4 / --brand-c4   Türkis / Sekundär      #61CEBC
+ *   c5 / --brand-c5   Dunkel Petrol          #005F68
+ *   c6 / --brand-c6   Schwarz / Text         #161616
+ *
+ *  Semantische Aliase (für Templates und Studio):
+ */
+
+:root {
+  /* ── Kern-Palette (c1–c6) ───────────────── */
+  --brand-c1: #ffffff;   /* 1 Weiß / hell      */
+  --brand-c2: #F56E28;   /* 2 Orange / Akzent  */
+  --brand-c3: #008591;   /* 3 Petrol / Primär  */
+  --brand-c4: #61CEBC;   /* 4 Türkis / Sek.    */
+  --brand-c5: #005F68;   /* 5 Dunkel Petrol    */
+  --brand-c6: #161616;   /* 6 Schwarz / Text   */
+
+  /* ── Semantische Aliase ─────────────────── */
+  --octo-white:       var(--brand-c1);
+  --octo-orange:      var(--brand-c2);
+  --octo-petrol:      var(--brand-c3);
+  --octo-turquoise:   var(--brand-c4);
+  --octo-dark-petrol: var(--brand-c5);
+  --octo-text:        var(--brand-c6);
+  --octo-light-gray:  #F9F7F0;   /* Hintergrund, kein Brand-Ton */
+
+  /* ── Studio-Aliase (werden beim Laden gesetzt) */
+  --studio-c1: var(--brand-c1);
+  --studio-c2: var(--brand-c2);
+  --studio-c3: var(--brand-c3);
+  --studio-c4: var(--brand-c4);
+  --studio-c5: var(--brand-c5);
+  --studio-c6: var(--brand-c6);
+}

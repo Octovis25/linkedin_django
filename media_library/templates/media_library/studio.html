@@ -144,7 +144,6 @@
         </div>
         <div style="display:flex;gap:4px;align-items:flex-end;flex-wrap:wrap">
           <div id="palette-row" style="display:flex;gap:4px;align-items:flex-end"></div>
-          <a href="/library/studio/templates/" style="font-size:.6rem;color:#aaa;text-decoration:underline;white-space:nowrap" title="Farbpalette in Templates verwalten">⚙ anpassen</a>
         </div>
       </div>
     </div>
@@ -192,43 +191,53 @@
         </div>
         <div style="display:flex;gap:4px;align-items:flex-end;flex-wrap:wrap">
           <div id="shape-palette-row" style="display:flex;gap:4px;align-items:flex-end"></div>
-          <a href="/library/studio/templates/" style="font-size:.6rem;color:#aaa;text-decoration:underline;white-space:nowrap" title="Farbpalette in Templates verwalten">⚙ anpassen</a>
         </div>
       </div>
     </div>
 
+    <!-- Auf dem Canvas + Animationen -->
     <div class="sidebar-section">
-      <h3 onclick="this.parentElement.classList.toggle('collapsed')">🎬 Video erstellen</h3>
+      <h3 onclick="this.parentElement.classList.toggle('collapsed')">🎨 Auf dem Canvas</h3>
       <div class="section-body">
+        <div style="margin-bottom:6px">
+          <button class="btn btn-primary btn-sm" onclick="document.getElementById('elem-upload').click()" style="font-size:10px;width:100%">📤 PNGs hochladen</button>
+        </div>
+        <input type="file" id="elem-upload" multiple accept="image/png,image/webp,image/gif,image/jpeg" style="display:none" onchange="handleElemUpload(this)">
+        <div id="elem-board" style="display:none"></div>
+        <div id="elem-board-empty" style="display:none"></div>
+
         <div id="cutouts-panel" style="display:none;margin-bottom:8px">
           <div style="font-size:.7rem;font-weight:600;color:var(--octo-dark-petrol);margin-bottom:4px">✂ Freigestellte Elemente:</div>
           <div id="cutouts-grid" style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:4px"></div>
           <button class="btn btn-primary btn-sm" onclick="placeAllCutouts()" style="font-size:10px;width:100%">▶ Alle platzieren & animieren</button>
         </div>
 
-        <div id="elem-anim-panel" style="background:#f8f9fa;border-radius:4px;padding:6px;margin-bottom:8px;display:none">
+        <div id="canvas-elem-list" style="font-size:.7rem;color:#888">Keine Elemente auf dem Canvas.</div>
+
+        <!-- Einzel-Animation (erscheint wenn Element angeklickt) -->
+        <div id="elem-anim-panel" style="background:#f8f9fa;border-radius:4px;padding:6px;margin-top:8px;display:none">
           <div style="font-size:.75rem;font-weight:600;color:var(--octo-dark-petrol);margin-bottom:4px" id="elem-anim-label">Element #1</div>
           <div style="margin-bottom:4px">
             <label style="font-size:.7rem;color:#555">Animation:</label>
             <select id="elem-anim-type" onchange="setElemAnim()" style="width:100%;padding:2px;font-size:.75rem;border:1px solid #ccc;border-radius:3px">
               <option value="none">Keine (statisch)</option>
               <option value="fadeIn">Einblenden</option>
-              <option value="flyTo">Fliegen zu Position ✈️</option>
+              <option value="flyTo">Fliegen zu Position</option>
               <option value="slideLeft">Von links</option>
               <option value="slideRight">Von rechts</option>
               <option value="slideUp">Von unten</option>
               <option value="slideDown">Von oben</option>
               <option value="zoomIn">Reinzoomen</option>
-              <option value="zoomOut">Rauszoomen (verschwinden)</option>
-              <option value="pulse">Pulsieren 💫</option>
-              <option value="blink">Blinken ⚡</option>
-              <option value="bounce">Hin & Her ↔</option>
-              <option value="dashedGlow">Gestrichelte Umrandung ✨</option>
+              <option value="zoomOut">Rauszoomen</option>
+              <option value="pulse">Pulsieren</option>
+              <option value="blink">Blinken</option>
+              <option value="bounce">Hin & Her</option>
+              <option value="dashedGlow">Gestrichelte Umrandung</option>
               <option value="typewriter">Schreibmaschine (Text)</option>
             </select>
           </div>
           <div id="flyto-hint" style="display:none;font-size:.65rem;color:#F56E28;margin-bottom:4px">
-            ⚡ Klick auf Canvas = Startposition setzen. Element fliegt von dort zur aktuellen Position.
+            Klick auf Canvas = Startposition setzen.
           </div>
           <div style="display:flex;gap:4px;margin-bottom:4px">
             <div style="flex:1">
@@ -243,34 +252,22 @@
           <button class="btn btn-secondary btn-sm" onclick="setFlyToMode()" id="flyto-btn" style="font-size:10px;width:100%;display:none">🎯 Startposition per Klick setzen</button>
         </div>
 
-        <div style="font-size:.7rem;color:#888;margin-bottom:6px" id="elem-anim-none">Klicke ein Element in der Liste unten (🎭 Auf dem Canvas), um seine Animation einzustellen.</div>
+        <div style="font-size:.7rem;color:#888;margin-top:6px" id="elem-anim-none">👆 Klick auf ein Element auf dem Canvas um die Animation einzustellen.</div>
 
-        <fieldset style="border:1px solid #ddd;border-radius:4px;padding:6px;margin-bottom:6px">
-          <legend style="font-size:.7rem;font-weight:600;color:var(--octo-dark-petrol);padding:0 4px">⚡ Schnell-Animationen</legend>
-          <div style="font-size:.65rem;color:#888;margin-bottom:6px">Nur Elemente ohne Animation werden gesetzt. Bereits gesetzte bleiben unverändert.</div>
-          <div style="display:flex;gap:4px;align-items:center;margin-bottom:6px;flex-wrap:wrap">
-            <label style="font-size:.65rem;color:#555;white-space:nowrap">Abstand:</label>
-            <input type="number" id="seq-delay-ms" value="400" min="100" max="2000" step="100"
-              style="width:55px;padding:2px 4px;font-size:.75rem;border:1px solid #ccc;border-radius:3px">
-            <label style="font-size:.65rem;color:#555;white-space:nowrap">ms &nbsp; Dauer:</label>
-            <input type="number" id="seq-dur-ms" value="700" min="200" max="3000" step="100"
-              style="width:55px;padding:2px 4px;font-size:.75rem;border:1px solid #ccc;border-radius:3px">
-            <label style="font-size:.65rem;color:#555;white-space:nowrap">ms</label>
-          </div>
-          <div style="display:flex;gap:4px;flex-wrap:wrap">
-            <button class="btn btn-secondary btn-sm" onclick="flyAllSequential('edges')" style="font-size:10px" title="Von allen Seiten nacheinander einfliegen">🎯 Einfliegen</button>
-            <button class="btn btn-secondary btn-sm" onclick="flyAllSequential('top')" style="font-size:10px">⬇ Von oben</button>
-            <button class="btn btn-secondary btn-sm" onclick="flyAllSequential('left')" style="font-size:10px">➡ Von links</button>
-            <button class="btn btn-secondary btn-sm" onclick="flyAllSequential('right')" style="font-size:10px">⬅ Von rechts</button>
-            <button class="btn btn-secondary btn-sm" onclick="flyAllSequential('fade')" style="font-size:10px">✨ Einblenden</button>
-            <button class="btn btn-secondary btn-sm" onclick="flyAllSequential('zoom')" style="font-size:10px">🔍 Reinzoomen</button>
-            <button class="btn btn-secondary btn-sm" onclick="resetAllAnimations()" style="font-size:10px;color:#dc3545" title="Alle Animationen zurücksetzen">↩ Reset</button>
-          </div>
-        </fieldset>
+        <!-- Hidden inputs for seq-delay/dur (used by flyAllSequential if called from timeline) -->
+        <input type="hidden" id="seq-delay-ms" value="400">
+        <input type="hidden" id="seq-dur-ms" value="700">
+      </div>
+    </div>
 
-        <div style="margin-bottom:6px">
-          <label style="font-size:.75rem;color:#555">Video-Dauer (Sek):</label>
+    <!-- Video -->
+    <div class="sidebar-section">
+      <h3 onclick="this.parentElement.classList.toggle('collapsed')">🎬 Video</h3>
+      <div class="section-body">
+        <div style="display:flex;gap:4px;align-items:center;margin-bottom:6px">
+          <label style="font-size:.75rem;color:#555">Dauer:</label>
           <input type="number" id="vid-duration" value="5" min="2" max="30" style="width:50px;padding:2px 4px;font-size:.8rem;border:1px solid #ccc;border-radius:3px">
+          <label style="font-size:.75rem;color:#555">Sek</label>
         </div>
         <div style="display:flex;gap:4px;margin-bottom:4px">
           <button class="btn btn-primary btn-sm" onclick="startVideoPreview()" style="font-size:11px;flex:1">▶ Vorschau</button>
@@ -286,29 +283,6 @@
           </div>
         </div>
         <div id="vid-status" style="font-size:.7rem;color:#888;margin-top:4px"></div>
-      </div>
-    </div>
-
-    <!-- Element Board -->
-    <div class="sidebar-section">
-      <h3 onclick="this.parentElement.classList.toggle('collapsed')">🧩 Element-Board <span style="font-size:.6rem;font-weight:normal;color:#999">(Klick = platzieren)</span></h3>
-      <div class="section-body">
-        <div id="elem-board" style="display:flex;flex-wrap:wrap;gap:6px;min-height:36px;border:1px dashed #ccc;border-radius:4px;padding:4px;background:#fafafa">
-          <p id="elem-board-empty" style="margin:0;padding:6px;color:#bbb;font-size:.65rem;text-align:center;width:100%">Klick 📤 um Elemente hochzuladen oder aus der Bibliothek hierher ziehen.</p>
-        </div>
-        <div style="display:flex;gap:4px;margin-top:4px">
-          <button class="btn btn-primary btn-sm" onclick="document.getElementById('elem-upload').click()" style="font-size:10px;flex:1">📤 PNGs hochladen</button>
-          <button class="btn btn-secondary btn-sm" onclick="clearElementBoard()" style="font-size:10px" title="Board leeren">🗑</button>
-        </div>
-        <input type="file" id="elem-upload" multiple accept="image/png,image/webp,image/gif,image/jpeg" style="display:none" onchange="handleElemUpload(this)">
-      </div>
-    </div>
-
-    <!-- Canvas Elements -->
-    <div class="sidebar-section">
-      <h3 onclick="this.parentElement.classList.toggle('collapsed')">🎭 Auf dem Canvas</h3>
-      <div class="section-body">
-        <div id="canvas-elem-list" style="font-size:.7rem;color:#888">Keine Elemente.</div>
       </div>
     </div>
 
@@ -2506,14 +2480,24 @@ let boardElements = [];  // {name, img, w, h}
 
 function handleElemUpload(input) {
   const files = Array.from(input.files);
-  files.forEach(f => {
+  files.forEach((f, idx) => {
     const reader = new FileReader();
     reader.onload = e => {
       const img = new Image();
       img.onload = () => {
-        boardElements.push({name: f.name.replace(/\.[^.]+$/, ''), img, w: img.width, h: img.height});
-        renderElemBoard();
-        // Also upload to library via AJAX
+        // Place directly on canvas instead of board
+        const scale = Math.min(1, 300 / Math.max(img.width, img.height));
+        const w = Math.round(img.width * scale);
+        const h = Math.round(img.height * scale);
+        const cx = canvas.width / 2 - w / 2 + idx * 20;
+        const cy = canvas.height / 2 - h / 2 + idx * 20;
+        objects.push({type:'img', img, url: e.target.result, imgSrc: e.target.result, x:cx, y:cy, w, h, name: f.name.replace(/\.[^.]+$/,''), bgRemoved:false, originalUrl:e.target.result});
+        selectedIndex = objects.length - 1;
+        render();
+        updateCanvasElemList();
+        updateTimeline();
+        updateSelInfo();
+        // Also upload to library
         const fd = new FormData();
         fd.append('image', f);
         fd.append('title', f.name.replace(/\.[^.]+$/, ''));

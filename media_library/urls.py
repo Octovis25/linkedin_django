@@ -20,6 +20,7 @@ urlpatterns = [
     path('studio/templates/',             views.studio_templates_view,  name='studio_templates'),
     path('studio/template/upload/',       views.studio_template_upload, name='studio_template_upload'),
     path('studio/template/delete/<int:tpl_id>/', views.studio_template_delete, name='studio_template_delete'),
+    path('studio/template/colors/<int:tpl_id>/', views.studio_template_colors, name='studio_template_colors'),
     path('studio/template/image/<int:tpl_id>/',  views.studio_template_image,  name='studio_template_image'),
     path('studio/save/',                  views.studio_save,            name='studio_save'),
     path('studio/save-video/',            views.studio_save_video,      name='studio_save_video'),
@@ -27,7 +28,8 @@ urlpatterns = [
     path('studio/api/library/',           views.studio_api_library,     name='studio_api_library'),
     path('studio/api/saved/',             views.studio_api_saved,       name='studio_api_saved'),
     path('studio/api/post-image/<int:post_id>/', views.studio_api_post_image, name='studio_api_post_image'),
-    path('studio/drawio/save/',                  views.studio_drawio_save,    name='studio_drawio_save'),
+    path('studio/drawio/save/',                  views.studio_drawio_save,          name='studio_drawio_save'),
+    path('studio/brand-colors/save/',            views.studio_brand_colors_save,    name='studio_brand_colors_save'),
     # Video-Vorlagen
     path('studio/flowcharts/',            views.studio_flowcharts_view, name='studio_flowcharts'),
     path('studio/video-template/save/',                 views.studio_video_template_save,    name='studio_video_template_save'),

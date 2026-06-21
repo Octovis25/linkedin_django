@@ -222,13 +222,14 @@ def list_aufgaben(request):
 @csrf_exempt
 @require_api_key
 def update_aufgabe(request, aufgabe_id):
-    """Aufgabe aktualisieren (Status, Ergebnis)."""
-    if request.method != 'POST':
-        return JsonResponse({'error': 'POST required'}, status=405)
-    try:
-        data = json.loads(request.body)
-    except Exception:
-        return JsonResponse({'error': 'Invalid JSON'}, status=400)
+    """Aufgabe aktualisieren (Status, Ergebnis). Akzeptiert POST (JSON) oder GET (Query-Params)."""
+    if request.method == 'POST':
+        try:
+            data = json.loads(request.body)
+        except Exception:
+            return JsonResponse({'error': 'Invalid JSON'}, status=400)
+    else:
+        data = request.GET.dict()
 
     updates = []
     params = []

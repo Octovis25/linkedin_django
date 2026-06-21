@@ -13,11 +13,66 @@
   .upload-box h2 { font-size:1rem; margin-bottom:.75rem; }
   .form-row { display:flex; gap:.75rem; }
   .form-row .form-group { flex:1; }
+  .color-swatch-wrap { display:flex; flex-direction:column; align-items:center; gap:4px; }
+  .color-swatch-input { width:52px; height:52px; border-radius:8px; border:2px solid #ddd; overflow:hidden; position:relative; }
+  .color-swatch-input input[type=color] { position:absolute; top:-8px; left:-8px; width:68px; height:68px; border:none; cursor:pointer; padding:0; }
 </style>
 
 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem">
   <h1>📐 Studio Templates</h1>
   <a href="/library/studio/" class="btn btn-primary">→ Zum Editor</a>
+</div>
+
+{% if messages %}
+  {% for m in messages %}<div class="alert alert-{{ m.tags }}">{{ m }}</div>{% endfor %}
+{% endif %}
+
+<!-- ══════════════════════════════════════════
+     🎨 Brand-Farbpalette — zentrale Verwaltung
+     Änderungen hier wirken auf das gesamte Portal
+     ══════════════════════════════════════════ -->
+<div class="card" style="margin-bottom:1.5rem;padding:1.25rem">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.25rem">
+    <h2 style="margin:0">🎨 Brand-Farbpalette</h2>
+    <span style="font-size:.8rem;color:#888">Änderungen wirken sofort auf Navigation, Buttons und das gesamte Portal</span>
+  </div>
+  <p style="font-size:.8rem;color:#aaa;margin-bottom:1rem">Klick auf eine Farbe zum Ändern → Speichern</p>
+  <form method="post" action="/library/studio/brand-colors/save/">
+    {% csrf_token %}
+    <div style="display:flex;gap:1.25rem;align-items:flex-end;flex-wrap:wrap;margin-bottom:1rem">
+      <div class="color-swatch-wrap">
+        <div class="color-swatch-input"><input type="color" name="c1" value="{{ brand.c1 }}"></div>
+        <span style="font-size:.8rem;font-weight:700;color:var(--octo-dark-petrol)">1</span>
+        <span style="font-size:.7rem;color:#888">Weiß/Hell</span>
+      </div>
+      <div class="color-swatch-wrap">
+        <div class="color-swatch-input"><input type="color" name="c2" value="{{ brand.c2 }}"></div>
+        <span style="font-size:.8rem;font-weight:700;color:var(--octo-dark-petrol)">2</span>
+        <span style="font-size:.7rem;color:#888">Akzent</span>
+      </div>
+      <div class="color-swatch-wrap">
+        <div class="color-swatch-input"><input type="color" name="c3" value="{{ brand.c3 }}"></div>
+        <span style="font-size:.8rem;font-weight:700;color:var(--octo-dark-petrol)">3</span>
+        <span style="font-size:.7rem;color:#888">Primär</span>
+      </div>
+      <div class="color-swatch-wrap">
+        <div class="color-swatch-input"><input type="color" name="c4" value="{{ brand.c4 }}"></div>
+        <span style="font-size:.8rem;font-weight:700;color:var(--octo-dark-petrol)">4</span>
+        <span style="font-size:.7rem;color:#888">Sekundär</span>
+      </div>
+      <div class="color-swatch-wrap">
+        <div class="color-swatch-input"><input type="color" name="c5" value="{{ brand.c5 }}"></div>
+        <span style="font-size:.8rem;font-weight:700;color:var(--octo-dark-petrol)">5</span>
+        <span style="font-size:.7rem;color:#888">Dunkel</span>
+      </div>
+      <div class="color-swatch-wrap">
+        <div class="color-swatch-input"><input type="color" name="c6" value="{{ brand.c6 }}"></div>
+        <span style="font-size:.8rem;font-weight:700;color:var(--octo-dark-petrol)">6</span>
+        <span style="font-size:.7rem;color:#888">Schwarz/Text</span>
+      </div>
+    </div>
+    <button type="submit" class="btn btn-secondary">💾 Farben speichern</button>
+  </form>
 </div>
 
 <div class="upload-box">
@@ -26,7 +81,7 @@
     {% csrf_token %}
     <div class="form-group">
       <label>Bild (PNG/JPG aus Canva)</label>
-      <input type="file" name="image" accept="image/*" required>
+      <input type="file" name="template" accept="image/*" required>
     </div>
     <div class="form-group">
       <label>Titel</label>
@@ -42,13 +97,10 @@
         <input type="number" name="height" value="628">
       </div>
     </div>
+    <p style="font-size:.75rem;color:#888;margin-top:.5rem">💡 Farben werden automatisch aus dem Template-Bild erkannt wenn es im Studio geöffnet wird.</p>
     <button type="submit" class="btn btn-secondary" style="margin-top:.5rem">Hochladen</button>
   </form>
 </div>
-
-{% if messages %}
-  {% for m in messages %}<div class="alert alert-{{ m.tags }}">{{ m }}</div>{% endfor %}
-{% endif %}
 
 {% if templates %}
 <div class="tpl-grid">
@@ -58,7 +110,33 @@
     <div class="tpl-card-body">
       <h3>{{ t.title }}</h3>
       <small>{{ t.width }} × {{ t.height }} px</small>
-      <div class="tpl-card-actions">
+      {% if t.colors %}
+      <div style="display:flex;gap:4px;margin-top:6px;align-items:center">
+        {% for col in t.colors %}
+        <div title="{{ col }}" style="width:20px;height:20px;border-radius:3px;background:{{ col }};border:1px solid #ddd;position:relative">
+          <span style="position:absolute;bottom:-14px;left:50%;transform:translateX(-50%);font-size:9px;color:#888;font-weight:700">{{ forloop.counter }}</span>
+        </div>
+        {% endfor %}
+      </div>
+      <div style="margin-top:18px">
+        <form method="post" action="/library/studio/template/colors/{{ t.id }}/" style="display:flex;gap:4px;flex-wrap:wrap;align-items:center">
+          {% csrf_token %}
+          {% for col in t.colors %}
+          <input type="color" name="color{{ forloop.counter }}" value="{{ col }}" style="width:28px;height:28px;border:none;padding:0;cursor:pointer;border-radius:3px" title="Farbe {{ forloop.counter }}">
+          {% endfor %}
+          <button type="submit" class="btn btn-sm" style="font-size:10px;padding:2px 8px">💾</button>
+        </form>
+      </div>
+      {% else %}
+      <form method="post" action="/library/studio/template/colors/{{ t.id }}/" style="display:flex;gap:4px;flex-wrap:wrap;align-items:center;margin-top:8px">
+        {% csrf_token %}
+        {% for i in "123456" %}
+        <input type="color" name="color{{ i }}" value="#008591" style="width:28px;height:28px;border:none;padding:0;cursor:pointer;border-radius:3px" title="Farbe {{ i }}">
+        {% endfor %}
+        <button type="submit" class="btn btn-sm" style="font-size:10px;padding:2px 8px">🎨 Farben setzen</button>
+      </form>
+      {% endif %}
+      <div class="tpl-card-actions" style="margin-top:8px">
         <a href="/library/studio/?template={{ t.id }}" class="btn btn-primary btn-sm">Im Editor öffnen</a>
         <form method="post" action="/library/studio/template/delete/{{ t.id }}/" style="display:inline">
           {% csrf_token %}
