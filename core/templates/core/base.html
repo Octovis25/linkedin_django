@@ -82,6 +82,7 @@
     <a href="/data/posts/" {% if '/data/' in request.path %}class="active"{% endif %}>Data</a>
     <a href="/collectives/" {% if '/collectives/' in request.path %}class="active"{% endif %}>Collectives</a>
     <a href="/planner/" {% if '/planner/' in request.path %}class="active"{% endif %}>Create Posts</a>
+    <a href="/library/studio/" {% if '/library/' in request.path %}class="active"{% endif %}>Image Studio</a>
     <a href="/statistics/" {% if '/statistics/' in request.path %}class="active"{% endif %}>Statistics</a>
     {% if user.is_superuser %}
     <a href="/db-admin/" {% if '/db-admin/' in request.path %}class="active"{% endif %}>DB Verwaltung</a>
@@ -104,6 +105,14 @@
     <a href="/planner/all/" {% if '/all/' in request.path %}class="active"{% endif %}>All</a>
     <a href="/planner/oj/" {% if '/oj/' in request.path %}class="active"{% endif %}>OJ</a>
     {% if user.is_superuser %}<a href="/planner/api-connect/" {% if '/api-connect/' in request.path %}class="active"{% endif %}>API Connect</a>{% endif %}
+  </div>
+  {% endif %}
+  {% if '/library/' in request.path %}
+  <div class="sub-nav">
+    <a href="/library/studio/" {% if '/studio/' in request.path and '/flowcharts/' not in request.path and '/templates/' not in request.path %}class="active"{% endif %}>🎨 Studio</a>
+    <a href="/library/studio/templates/" {% if '/studio/templates/' in request.path %}class="active"{% endif %}>📐 Templates</a>
+    <a href="/library/studio/flowcharts/" {% if '/flowcharts/' in request.path %}class="active"{% endif %}>🔀 Flowcharts</a>
+    <a href="/library/" {% if request.path == '/library/' %}class="active"{% endif %}>📚 Bibliothek</a>
   </div>
   {% endif %}
   {% if '/statistics/' in request.path %}

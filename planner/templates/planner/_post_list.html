@@ -84,6 +84,10 @@
         style="font-size:12px;padding:3px 10px;border:0.5px solid #008080;border-radius:4px;background:#fff;cursor:pointer;color:#008080;white-space:nowrap">
         ✏️ Edit
       </button>
+      <a href="/library/studio/?post_id={{ p.id }}" target="_blank"
+        style="font-size:12px;padding:3px 10px;border:0.5px solid #61CEBC;border-radius:4px;background:#fff;cursor:pointer;color:#008591;white-space:nowrap;text-decoration:none">
+        🎨 Bild
+      </a>
       {% if li_connected and tab in 'scheduled,oj' %}
       <button type="button"
         onclick="liOpenPost({{ p.id }})"
@@ -140,6 +144,9 @@
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" stroke="#aaa" stroke-width="1.5"/><polyline points="17,8 12,3 7,8" stroke="#aaa" stroke-width="1.5"/><line x1="12" y1="3" x2="12" y2="15" stroke="#aaa" stroke-width="1.5"/></svg>
       </div>
       <input type="file" id="pe-img-input" accept="image/*" style="display:none" onchange="pePreviewImg(this)">
+      <button type="button" onclick="peOpenStudio()"
+        style="font-size:11px;padding:4px 8px;border:0.5px solid #61CEBC;border-radius:4px;background:#fff;cursor:pointer;color:#008591;white-space:nowrap;flex-shrink:0"
+        title="Bild im Studio erstellen/bearbeiten">🎨 Studio</button>
       <input type="text" id="pe-title" placeholder="Title..." onkeydown="if(event.key==='Enter')event.preventDefault()" style="font-size:13px;flex:1;padding:6px 8px;border:0.5px solid #ced4da;border-radius:4px;box-sizing:border-box">
     </div>
     <!-- Rich text editor -->
@@ -292,6 +299,15 @@ function openCreate() {
   if (topicSelect && topicSelect.options.length > 0) topicSelect.selectedIndex = 0;
   peClearPreview();
   document.getElementById('post-edit-modal').style.display = 'flex';
+}
+
+function peOpenStudio() {
+  const id = document.getElementById('pe-id').value;
+  if (id) {
+    window.open('/library/studio/?post_id=' + id, '_blank');
+  } else {
+    alert('Bitte erst den Post speichern, bevor du das Studio öffnest.');
+  }
 }
 
 function openEdit(id) {

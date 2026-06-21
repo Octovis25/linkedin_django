@@ -1,4 +1,4 @@
-{% extends "base.html" %}
+{% extends "core/base.html" %}
 {% block title %}Medienbibliothek{% endblock %}
 {% block content %}
 <style>
@@ -8,7 +8,7 @@
 .lib-sidebar h3:first-child{margin-top:0}
 .lib-nav{display:block;padding:5px 10px;border-radius:6px;color:#555;text-decoration:none;margin-bottom:2px;cursor:pointer}
 .lib-nav:hover,.lib-nav.active{background:#008591;color:#fff}
-.lib-main{padding:1.25rem}
+.lib-main{padding:1.25rem;position:relative}
 .img-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:10px}
 .img-card{background:#fff;border:0.5px solid #e0e0e0;border-radius:8px;overflow:hidden;cursor:pointer;transition:border-color .15s}
 .img-card:hover{border-color:#008591}
@@ -22,6 +22,27 @@
 .modal-box{background:#fff;border-radius:12px;padding:1.5rem;width:480px;max-width:95vw;max-height:90vh;overflow-y:auto}
 .upload-zone{border:2px dashed #ced4da;border-radius:8px;padding:2rem;text-align:center;cursor:pointer;color:#888;font-size:13px}
 .upload-zone:hover{border-color:#008591;color:#008591}
+.folder-nav{display:flex;align-items:center;gap:6px;padding:5px 10px;border-radius:6px;color:#555;text-decoration:none;margin-bottom:2px;cursor:pointer}
+.folder-nav:hover,.folder-nav.active{background:#008591;color:#fff}
+.folder-nav.drag-over{outline:2px dashed #F56E28;outline-offset:-2px}
+.folder-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0}
+.folder-name{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.folder-actions{opacity:0;display:flex;gap:2px;flex-shrink:0}
+.folder-nav:hover .folder-actions{opacity:1}
+.folder-actions button{border:none;background:none;cursor:pointer;font-size:11px;padding:0 2px;color:inherit}
+.img-card.dragging{opacity:.4}
+.img-card{position:relative}
+.img-card .img-check{position:absolute;top:6px;left:6px;width:18px;height:18px;border-radius:4px;border:1.5px solid #fff;background:rgba(0,0,0,.3);cursor:pointer;display:none;align-items:center;justify-content:center;color:#fff;font-size:12px}
+.img-card:hover .img-check{display:flex}
+.img-quick-actions{position:absolute;top:6px;right:6px;display:none;gap:3px;z-index:2}
+.img-card:hover .img-quick-actions{display:flex}
+.quick-btn{width:24px;height:24px;border-radius:4px;border:none;cursor:pointer;font-size:12px;display:flex;align-items:center;justify-content:center;text-decoration:none;line-height:1}
+.studio-btn{background:rgba(97,206,188,.9);color:#fff}
+.del-btn{background:rgba(220,53,69,.85);color:#fff}
+.quick-btn:hover{transform:scale(1.15)}
+.img-card.selected .img-check{display:flex;background:#008591;border-color:#008591}
+.bulk-bar{display:none;position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#fff;border:1px solid #e0e0e0;border-radius:10px;padding:8px 16px;box-shadow:0 4px 12px rgba(0,0,0,.15);z-index:100;gap:10px;align-items:center;font-size:13px}
+.bulk-bar.show{display:flex}
 </style>
 
 <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem;flex-wrap:wrap;gap:8px">
@@ -41,8 +62,63 @@
 <div class="lib-layout">
   <div class="lib-sidebar">
     <h3>Alle</h3>
-    <a class="lib-nav {% if not filter_person and not filter_series and not filter_tag %}active{% endif %}" href="{% url 'media_library:library' %}{% if filter_q %}?q={{ filter_q }}{% endif %}">
-      Alle Bilder <span style="float:right;opacity:.6">{{ items|length }}</span>
+    <a class="lib-nav {% if not filter_person and not filter_series and not filter_tag and not filter_folder %}active{% endif %}"
+       href="{% url 'media_library:library' %}{% if filter_q %}?q={{ filter_q }}{% endif %}"
+       ondragover="event.preventDefault();this.classList.add('drag-over')" ondragleave="this.classList.remove('drag-over')"
+       ondrop="event.preventDefault();this.classList.remove('drag-over');moveItemsToFolder(null)">
+      Alle Bilder
+    </a>
+    <a class="lib-nav {% if filter_folder == 'none' %}active{% endif %}"
+       href="?folder=none{% if filter_q %}&q={{ filter_q }}{% endif %}"
+       style="font-size:12px;color:#888">
+      📂 Unsortiert
+    </a>
+
+    <h3 style="display:flex;justify-content:space-between;align-items:center">
+      Ordner
+      <button onclick="promptNewFolder()" style="border:none;background:none;cursor:pointer;font-size:13px;color:#008591" title="Neuer Ordner">+</button>
+    </h3>
+    <div id="folder-tree"></div>
+    <script>
+    const ALL_FOLDERS = {{ folders_json|safe }};
+    const FILTER_FOLDER = '{{ filter_folder|default:"" }}';
+    const FILTER_Q = '{{ filter_q|default:"" }}';
+    function buildFolderTree(parentId, depth) {
+      const children = ALL_FOLDERS.filter(f => (f.parent_id || null) == parentId);
+      if (!children.length) return '';
+      let html = '';
+      children.forEach(f => {
+        const isActive = FILTER_FOLDER === String(f.id);
+        const qParam = FILTER_Q ? '&q=' + encodeURIComponent(FILTER_Q) : '';
+        const indent = depth * 16;
+        const subHtml = buildFolderTree(f.id, depth + 1);
+        html += '<div class="folder-nav ' + (isActive ? 'active' : '') + '"'
+          + ' data-folder-id="' + f.id + '"'
+          + ' style="padding-left:' + (8 + indent) + 'px"'
+          + ' onclick="location.href=\'?folder=' + f.id + qParam + '\'"'
+          + ' ondragover="event.preventDefault();this.classList.add(\'drag-over\')"'
+          + ' ondragleave="this.classList.remove(\'drag-over\')"'
+          + ' ondrop="event.preventDefault();this.classList.remove(\'drag-over\');moveItemsToFolder(' + f.id + ')">'
+          + '<span class="folder-dot" style="background:' + f.color + '"></span>'
+          + '<span class="folder-name">' + f.name + '</span>'
+          + '<span class="folder-actions" onclick="event.stopPropagation()">'
+          + '<button onclick="promptNewFolder(' + f.id + ')" title="Unterordner">+</button>'
+          + '<button onclick="renameFolder(' + f.id + ',\'' + f.name.replace(/'/g, "\\'") + '\')" title="Umbenennen">✏️</button>'
+          + '<button onclick="deleteFolder(' + f.id + ',\'' + f.name.replace(/'/g, "\\'") + '\')" title="Löschen">🗑</button>'
+          + '</span></div>';
+        html += subHtml;
+      });
+      return html;
+    }
+    document.getElementById('folder-tree').innerHTML = buildFolderTree(null, 0);
+    </script>
+
+    <h3 style="display:flex;justify-content:space-between;align-items:center;margin-top:1rem">
+      📐 Templates
+      <a href="/library/studio/templates/" style="border:none;background:none;cursor:pointer;font-size:12px;color:#008591;text-decoration:none" title="Templates verwalten">Verwalten →</a>
+    </h3>
+    <a class="lib-nav" href="/library/studio/templates/" style="font-size:12px">
+      📐 Templates verwalten ({{ templates_count }} vorhanden)
     </a>
 
     {% if persons %}
@@ -52,35 +128,41 @@
     {% endfor %}
     {% endif %}
 
-    {% if series_list %}
-    <h3>Serien</h3>
-    {% for s in series_list %}
-    <a class="lib-nav {% if filter_series == s %}active{% endif %}" href="?series={{ s }}{% if filter_q %}&q={{ filter_q }}{% endif %}">{{ s }}</a>
-    {% endfor %}
-    {% endif %}
-
-    {% if tags %}
-    <h3>Motive</h3>
-    {% for t in tags %}
-    <a class="lib-nav {% if filter_tag == t %}active{% endif %}" href="?tag={{ t }}{% if filter_q %}&q={{ filter_q }}{% endif %}">{{ t }}</a>
-    {% endfor %}
-    {% endif %}
   </div>
 
-  <div class="lib-main">
+  <div class="lib-main" id="lib-main"
+       ondragover="handleLibDragOver(event)" ondragleave="handleLibDragLeave(event)" ondrop="handleLibDrop(event)">
+    <!-- Drop overlay -->
+    <div id="lib-drop-overlay" style="display:none;position:absolute;inset:0;background:rgba(0,133,145,.12);border:3px dashed #008591;border-radius:8px;z-index:90;pointer-events:none;align-items:center;justify-content:center">
+      <div style="text-align:center;color:#008591;font-size:1.1rem;font-weight:600">
+        <p style="font-size:2.5rem;margin:0">📤</p>
+        <p style="margin:6px 0 0">Bilder hier ablegen zum Hochladen</p>
+      </div>
+    </div>
     <p style="font-size:13px;color:#6c757d;margin-bottom:1rem">{{ items|length }} Bild{{ items|length|pluralize:"er" }}</p>
 
     {% if items %}
     <div class="img-grid">
       {% for item in items %}
-      <div class="img-card" onclick="openLibItem({{ item.id }},'{{ item.title|escapejs }}','{{ item.person|escapejs }}','{{ item.series|escapejs }}','{{ item.tags|escapejs }}','{{ item.note|escapejs }}')">
-        <img src="{% url 'media_library:image' item.id %}" alt="{{ item.title }}" loading="lazy">
+      <div class="img-card" data-item-id="{{ item.id }}" draggable="true"
+           ondragstart="onCardDragStart(event, {{ item.id }})" ondragend="onCardDragEnd(event)"
+           onclick="openLibItem({{ item.id }},'{{ item.title|escapejs }}','{{ item.person|escapejs }}','{{ item.series|escapejs }}','{{ item.tags|escapejs }}','{{ item.note|escapejs }}',{{ item.is_video|yesno:'true,false' }})">
+        <div class="img-check" onclick="event.stopPropagation();toggleSelect({{ item.id }}, this)">✓</div>
+        <div class="img-quick-actions">
+          <a href="/library/studio/?lib_item={{ item.id }}" onclick="event.stopPropagation()" title="Im Studio bearbeiten" class="quick-btn studio-btn">🎨</a>
+          <button onclick="event.stopPropagation();quickDelete({{ item.id }}, this)" title="Löschen" class="quick-btn del-btn">🗑</button>
+        </div>
+        {% if item.is_video %}
+        <video src="{% url 'media_library:image' item.id %}" style="width:100%;aspect-ratio:1;object-fit:cover;display:block;background:#1a1a2e" muted preload="metadata" onmouseenter="this.play()" onmouseleave="this.pause();this.currentTime=0"></video>
+        {% else %}
+        <img src="{% url 'media_library:image' item.id %}" alt="{{ item.title }}" loading="lazy" draggable="false">
+        {% endif %}
         <div class="img-meta">
           <div class="img-title">{{ item.title|default:"(kein Titel)" }}</div>
           {% if item.person %}<div class="img-sub">👤 {{ item.person }}</div>{% endif %}
           {% if item.series %}<div class="img-sub">📚 {{ item.series }}</div>{% endif %}
           {% if item.tags %}
-          <div style="margin-top:3px">{% for tag in item.tags.split:',' %}<span class="pill">{{ tag|strip }}</span>{% endfor %}</div>
+          <div style="margin-top:3px">{% for tag in item.tags_list %}<span class="pill">{{ tag }}</span>{% endfor %}</div>
           {% endif %}
         </div>
       </div>
@@ -101,6 +183,7 @@
     <h3 style="margin:0 0 1rem;font-size:15px">Bild hochladen</h3>
     <form method="post" action="{% url 'media_library:upload' %}" enctype="multipart/form-data">
       {% csrf_token %}
+      {% if filter_folder and filter_folder != 'none' %}<input type="hidden" name="folder_id" value="{{ filter_folder }}">{% endif %}
       <div class="upload-zone" onclick="document.getElementById('lib-file').click()" id="upload-zone">
         <p>📁 Klicken oder Bild hierher ziehen</p>
         <p id="upload-filename" style="font-size:12px;color:#008591;margin-top:4px"></p>
@@ -146,6 +229,7 @@
       <button onclick="document.getElementById('modal-detail').classList.remove('open')" style="border:none;background:none;font-size:20px;cursor:pointer;color:#888">×</button>
     </div>
     <img id="detail-img" src="" alt="" style="width:100%;border-radius:8px;margin-bottom:1rem;object-fit:contain;max-height:300px;background:#f5f5f5">
+    <video id="detail-video" src="" controls style="width:100%;border-radius:8px;margin-bottom:1rem;max-height:300px;background:#1a1a2e;display:none"></video>
     <form id="detail-form" method="post" action="">
       {% csrf_token %}
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
@@ -176,6 +260,7 @@
           <button type="submit" onclick="return confirm('Bild wirklich löschen?')" style="font-size:12px;padding:4px 10px;border:0.5px solid #dc3545;border-radius:4px;background:#fff;color:#dc3545;cursor:pointer">🗑 Löschen</button>
         </form>
         <div style="display:flex;gap:8px">
+          <a id="studio-edit-btn" href="#" style="font-size:13px;padding:5px 14px;background:#61CEBC;color:#fff;border:none;border-radius:4px;cursor:pointer;text-decoration:none;display:inline-flex;align-items:center;gap:4px">🎨 Studio</a>
           <button type="button" onclick="document.getElementById('modal-detail').classList.remove('open')" style="font-size:13px;padding:5px 14px;border:0.5px solid #ced4da;border-radius:4px;background:#fff;cursor:pointer">Abbrechen</button>
           <button type="submit" form="detail-form" style="font-size:13px;padding:5px 14px;background:#008080;color:#fff;border:none;border-radius:4px;cursor:pointer">Speichern</button>
         </div>
@@ -184,10 +269,164 @@
   </div>
 </div>
 
+<!-- Bulk action bar -->
+<div class="bulk-bar" id="bulk-bar">
+  <span id="bulk-count">0</span> ausgewählt
+  <select id="bulk-folder-select" style="font-size:12px;padding:3px 6px;border:1px solid #ced4da;border-radius:4px">
+    <option value="">→ Ordner wählen…</option>
+    <option value="null">📂 Unsortiert</option>
+    {% for f in folders %}
+    <option value="{{ f.id }}">{{ f.name }}</option>
+    {% endfor %}
+  </select>
+  <button onclick="bulkMove()" class="btn btn-primary btn-sm" style="font-size:12px">Verschieben</button>
+  <button onclick="bulkDelete()" class="btn btn-danger btn-sm" style="font-size:12px">🗑 Löschen</button>
+  <button onclick="clearSelection()" style="border:none;background:none;cursor:pointer;font-size:16px;color:#888">✕</button>
+</div>
+
 <script>
-function openLibItem(id, title, person, series, tags, note) {
+const csrfToken = '{{ csrf_token }}';
+let selectedIds = new Set();
+
+function toggleSelect(id, el) {
+  const card = el.closest('.img-card');
+  if (selectedIds.has(id)) {
+    selectedIds.delete(id);
+    card.classList.remove('selected');
+  } else {
+    selectedIds.add(id);
+    card.classList.add('selected');
+  }
+  updateBulkBar();
+}
+
+function updateBulkBar() {
+  const bar = document.getElementById('bulk-bar');
+  document.getElementById('bulk-count').textContent = selectedIds.size;
+  bar.classList.toggle('show', selectedIds.size > 0);
+}
+
+function clearSelection() {
+  selectedIds.clear();
+  document.querySelectorAll('.img-card.selected').forEach(c => c.classList.remove('selected'));
+  updateBulkBar();
+}
+
+function onCardDragStart(e, id) {
+  // If card not in selection, drag just this one; otherwise drag all selected
+  if (!selectedIds.has(id)) {
+    clearSelection();
+    selectedIds.add(id);
+    e.target.classList.add('selected');
+    updateBulkBar();
+  }
+  e.dataTransfer.setData('application/x-lib-items', JSON.stringify([...selectedIds]));
+  e.dataTransfer.effectAllowed = 'move';
+  e.target.classList.add('dragging');
+}
+
+function onCardDragEnd(e) {
+  e.target.classList.remove('dragging');
+}
+
+function moveItemsToFolder(folderId) {
+  // Get dragged items from selection
+  const ids = [...selectedIds];
+  if (!ids.length) return;
+  fetch('/library/item/move/', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrfToken},
+    body: JSON.stringify({item_ids: ids, folder_id: folderId})
+  }).then(r => r.json()).then(d => {
+    if (d.ok) location.reload();
+  });
+}
+
+function bulkMove() {
+  const sel = document.getElementById('bulk-folder-select');
+  const val = sel.value;
+  if (val === '') return;
+  moveItemsToFolder(val === 'null' ? null : parseInt(val));
+}
+
+// ── Quick Delete (single) ──
+function quickDelete(itemId, btn) {
+  if (!confirm('Bild wirklich löschen?')) return;
+  fetch(`/library/delete/${itemId}/`, {
+    method: 'POST',
+    headers: {'X-CSRFToken': csrfToken}
+  }).then(r => {
+    if (r.ok) {
+      const card = btn.closest('.img-card');
+      if (card) card.remove();
+    } else { alert('Fehler beim Löschen'); }
+  });
+}
+
+// ── Bulk Delete ──
+function bulkDelete() {
+  if (selectedIds.size === 0) return;
+  if (!confirm(`${selectedIds.size} Bild(er) wirklich löschen?`)) return;
+  const promises = [...selectedIds].map(id =>
+    fetch(`/library/delete/${id}/`, { method: 'POST', headers: {'X-CSRFToken': csrfToken} })
+  );
+  Promise.all(promises).then(() => location.reload());
+}
+
+// ── Folder CRUD ──
+function promptNewFolder(parentId) {
+  const label = parentId ? 'Neuer Unterordner:' : 'Neuer Ordnername:';
+  const name = prompt(label);
+  if (!name || !name.trim()) return;
+  const color = '#008591';
+  const body = {name: name.trim(), color};
+  if (parentId) body.parent_id = parentId;
+  fetch('/library/folder/create/', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrfToken},
+    body: JSON.stringify(body)
+  }).then(r => r.json()).then(d => {
+    if (d.ok) location.reload();
+  });
+}
+
+function renameFolder(id, currentName) {
+  const name = prompt('Ordner umbenennen:', currentName);
+  if (!name || !name.trim() || name.trim() === currentName) return;
+  fetch(`/library/folder/rename/${id}/`, {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrfToken},
+    body: JSON.stringify({name: name.trim()})
+  }).then(r => r.json()).then(d => {
+    if (d.ok) location.reload();
+  });
+}
+
+function deleteFolder(id, name) {
+  if (!confirm(`Ordner "${name}" löschen? Bilder werden nicht gelöscht, nur aus dem Ordner entfernt.`)) return;
+  fetch(`/library/folder/delete/${id}/`, {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrfToken},
+    body: JSON.stringify({})
+  }).then(r => r.json()).then(d => {
+    if (d.ok) location.reload();
+  });
+}
+
+function openLibItem(id, title, person, series, tags, note, isVideo) {
   document.getElementById('detail-title').textContent = title || '(kein Titel)';
-  document.getElementById('detail-img').src = '/library/image/' + id + '/';
+  const img = document.getElementById('detail-img');
+  const vid = document.getElementById('detail-video');
+  if (isVideo) {
+    img.style.display = 'none';
+    vid.style.display = 'block';
+    vid.src = '/library/image/' + id + '/';
+  } else {
+    vid.style.display = 'none';
+    vid.pause();
+    img.style.display = 'block';
+    img.src = '/library/image/' + id + '/';
+  }
   document.getElementById('d-title').value  = title;
   document.getElementById('d-person').value = person;
   document.getElementById('d-series').value = series;
@@ -195,6 +434,7 @@ function openLibItem(id, title, person, series, tags, note) {
   document.getElementById('d-note').value   = note;
   document.getElementById('detail-form').action  = '/library/edit/'   + id + '/';
   document.getElementById('delete-form').action  = '/library/delete/' + id + '/';
+  document.getElementById('studio-edit-btn').href = '/library/studio/?lib_item=' + id;
   document.getElementById('modal-detail').classList.add('open');
 }
 document.getElementById('modal-detail').addEventListener('click', function(e) {
@@ -203,5 +443,86 @@ document.getElementById('modal-detail').addEventListener('click', function(e) {
 document.getElementById('modal-upload').addEventListener('click', function(e) {
   if (e.target === this) this.classList.remove('open');
 });
+
+// ── Prevent browser from opening dropped files ──
+document.addEventListener('dragover', e => { e.preventDefault(); });
+document.addEventListener('drop', e => { e.preventDefault(); });
+
+// ── Drag & Drop Upload auf lib-main ──
+let libDragCounter = 0;
+function handleLibDragOver(e) {
+  e.preventDefault();
+  e.dataTransfer.dropEffect = 'copy';
+  libDragCounter++;
+  document.getElementById('lib-drop-overlay').style.display = 'flex';
+}
+function handleLibDragLeave(e) {
+  libDragCounter--;
+  if (libDragCounter <= 0) {
+    libDragCounter = 0;
+    document.getElementById('lib-drop-overlay').style.display = 'none';
+  }
+}
+function handleLibDrop(e) {
+  e.preventDefault();
+  e.stopPropagation();
+  libDragCounter = 0;
+  document.getElementById('lib-drop-overlay').style.display = 'none';
+
+  if (!e.dataTransfer.files || !e.dataTransfer.files.length) return;
+  const files = Array.from(e.dataTransfer.files).filter(f => f.type.startsWith('image/'));
+  if (!files.length) { alert('Nur Bilddateien werden unterstützt.'); return; }
+
+  // Upload-Fortschritt anzeigen
+  const overlay = document.getElementById('lib-drop-overlay');
+  overlay.style.display = 'flex';
+  overlay.style.pointerEvents = 'auto';
+  overlay.innerHTML = '<div style="text-align:center;color:#008591"><p style="font-size:1.5rem;margin:0">⏳</p><p id="drop-progress">0 / ' + files.length + ' hochgeladen…</p></div>';
+
+  let done = 0;
+  const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]').value;
+
+  files.forEach(f => {
+    const fd = new FormData();
+    fd.append('image', f);
+    fd.append('title', f.name.replace(/\.[^.]+$/, ''));
+    if (FILTER_FOLDER && FILTER_FOLDER !== 'none') fd.append('folder_id', FILTER_FOLDER);
+    fetch('{% url "media_library:upload" %}', {
+      method: 'POST', body: fd,
+      headers: {'X-CSRFToken': csrfToken, 'X-Requested-With': 'XMLHttpRequest'}
+    }).then(r => r.json()).catch(() => ({})).then(() => {
+      done++;
+      const prog = document.getElementById('drop-progress');
+      if (prog) prog.textContent = done + ' / ' + files.length + ' hochgeladen…';
+      if (done >= files.length) {
+        setTimeout(() => location.reload(), 400);
+      }
+    });
+  });
+}
+
+// ── Upload-Zone im Modal: Drag & Drop ──
+const uploadZone = document.getElementById('upload-zone');
+if (uploadZone) {
+  uploadZone.addEventListener('dragover', e => {
+    e.preventDefault(); e.stopPropagation();
+    uploadZone.style.borderColor = '#F56E28';
+    uploadZone.style.background = 'rgba(0,133,145,.08)';
+  });
+  uploadZone.addEventListener('dragleave', e => {
+    uploadZone.style.borderColor = '';
+    uploadZone.style.background = '';
+  });
+  uploadZone.addEventListener('drop', e => {
+    e.preventDefault(); e.stopPropagation();
+    uploadZone.style.borderColor = '';
+    uploadZone.style.background = '';
+    const fileInput = document.getElementById('lib-file');
+    if (e.dataTransfer.files.length) {
+      fileInput.files = e.dataTransfer.files;
+      document.getElementById('upload-filename').textContent = e.dataTransfer.files[0].name;
+    }
+  });
+}
 </script>
 {% endblock %}

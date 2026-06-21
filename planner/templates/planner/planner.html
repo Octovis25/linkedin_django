@@ -313,6 +313,9 @@
            ondrop="handleImgDrop(event,'m')">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" stroke="#aaa" stroke-width="1.5"/><polyline points="17,8 12,3 7,8" stroke="#aaa" stroke-width="1.5"/><line x1="12" y1="3" x2="12" y2="15" stroke="#aaa" stroke-width="1.5"/></svg>
       </div>
+      <button type="button" onclick="openStudioForPost('m')"
+        style="font-size:11px;padding:4px 8px;border:0.5px solid #61CEBC;border-radius:4px;background:#fff;cursor:pointer;color:#008591;white-space:nowrap;flex-shrink:0"
+        title="Post erst speichern, dann Bild im Studio erstellen">🎨 Studio</button>
       <input type="file" id="m-img-input" accept="image/*" style="display:none" onchange="previewImg('m',this)">
       <input type="text" id="m-title" placeholder="Title (optional)..." class="finput" style="margin-bottom:0;flex:1">
     </div>
@@ -375,6 +378,9 @@
            ondrop="handleImgDrop(event,'e')">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" stroke="#aaa" stroke-width="1.5"/><polyline points="17,8 12,3 7,8" stroke="#aaa" stroke-width="1.5"/><line x1="12" y1="3" x2="12" y2="15" stroke="#aaa" stroke-width="1.5"/></svg>
       </div>
+      <button type="button" onclick="openStudioForPost('e')"
+        style="font-size:11px;padding:4px 8px;border:0.5px solid #61CEBC;border-radius:4px;background:#fff;cursor:pointer;color:#008591;white-space:nowrap;flex-shrink:0"
+        title="Bild im Studio erstellen/bearbeiten">🎨 Studio</button>
       <input type="file" id="e-img-input" accept="image/*" style="display:none" onchange="previewImg('e',this)">
       <input type="text" id="e-title" placeholder="Title..." class="finput" style="margin-bottom:0;flex:1">
     </div>
@@ -708,6 +714,63 @@ async function savePost() {
     }
     closeModal('post-modal');
     location.reload();
+  }
+}
+
+/* ── Open Studio for post ── */
+function openStudioForPost(prefix) {
+  if (prefix === 'e') {
+    // Edit modal — post already exists
+    const id = document.getElementById('e-id').value;
+    if (id) {
+      window.open('/library/studio/?post_id=' + id, '_blank');
+    }
+  } else {
+    // New post modal — save first, then open studio
+    if (!confirm('Post wird zuerst gespeichert, dann öffnet sich das Studio.')) return;
+    // Trigger save, then open studio with the new post_id
+    const origSave = savePost;
+    savePost = async function() {
+      await origSave();
+      // After save + reload, the studio won't auto-open. Better approach: save inline and get ID
+    };
+    (async () => {
+      const topic = document.getElementById('m-topic').value;
+      const title = document.getElementById('m-title').value.trim();
+      const content = getEditorText('m').trim();
+      const status = document.getElementById('m-status').value;
+      const date = document.getElementById('m-date').value;
+      const time = document.getElementById('m-time').value;
+      const comment = document.getElementById('m-comment').value.trim();
+      const link = document.getElementById('m-link').value.trim();
+      try {
+        const res = await fetch('/planner/api/post/', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json', 'X-CSRFToken': CSRF},
+          body: JSON.stringify({
+            action: 'create',
+            topic_id: topic,
+            title: title,
+            content: content,
+            status: status,
+            planned_date: date || null,
+            planned_time: time || null,
+            comment: comment || null,
+            link: link || null
+          })
+        });
+        const d = await res.json();
+        if (d.ok && d.id) {
+          window.open('/library/studio/?post_id=' + d.id, '_blank');
+          closeModal('post-modal');
+          location.reload();
+        } else {
+          alert('Fehler beim Speichern: ' + (d.error || 'Unbekannt'));
+        }
+      } catch(err) {
+        alert('Fehler: ' + err);
+      }
+    })();
   }
 }
 

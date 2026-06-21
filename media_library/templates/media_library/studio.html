@@ -2,23 +2,30 @@
 {% block title %}🎨 Image Studio{% endblock %}
 {% block content %}
 <style>
-  .studio-wrap { display: flex; gap: 1rem; align-items: flex-start; }
-  .studio-sidebar { width: 380px; flex-shrink: 0; display:flex; flex-direction:column; gap:0; }
-  .studio-main { flex: 1; min-width: 0; }
+  .shape-btn { background:#f8f9fa; border:1px solid #ddd; border-radius:4px; cursor:pointer; line-height:1; min-width:32px; }
+  .shape-btn:hover { background:#e8f0fe; border-color:#008591; }
+  .studio-wrap { display: flex; gap: .5rem; align-items: flex-start; width: 100%; }
+  /* LEFT: single-column sidebar */
+  .studio-sidebar { flex: 0 0 280px; width: 280px; display:flex; flex-direction:column; gap:0; max-height:calc(100vh - 80px); overflow-y:auto; }
+  /* CENTER: canvas takes all remaining space */
+  .studio-main { flex: 1 1 auto; min-width: 0; overflow: hidden; }
+  /* RIGHT: library sidebar */
+  .studio-right-sidebar { flex: 0 0 260px !important; width: 260px !important; max-height:calc(100vh - 80px); overflow-y:auto; }
   .sidebar-section { background: #fff; border-radius: 6px; box-shadow: 0 1px 4px rgba(0,0,0,.1); padding: .75rem; margin-bottom: .5rem; }
   .sidebar-section h3 { font-size: .85rem; color: var(--octo-petrol); margin-bottom: .5rem; cursor:pointer; user-select:none; display:flex; justify-content:space-between; align-items:center; }
   .sidebar-section h3::after { content:'▾'; font-size:.7rem; color:#aaa; transition:transform .2s; }
   .sidebar-section.collapsed h3::after { transform:rotate(-90deg); }
   .sidebar-section.collapsed .section-body { display:none; }
-  .tpl-grid { display:grid; grid-template-columns:1fr 1fr 1fr; gap:.3rem; max-height:120px; overflow-y:auto; }
+  .tpl-grid { display:grid; grid-template-columns:1fr 1fr 1fr 1fr; gap:.3rem; max-height:100px; overflow-y:auto; }
   .tpl-thumb { width: 100%; aspect-ratio:16/9; object-fit:cover; border-radius: 4px; cursor: pointer; border: 2px solid transparent; transition: border-color .2s; }
   .tpl-thumb:hover, .tpl-thumb.selected { border-color: var(--octo-orange); }
   .tpl-label { font-size: .75rem; color: #555; margin-bottom: .4rem; display: block; }
-  .lib-grid { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: .3rem; max-height: 220px; overflow-y: auto; }
+  .lib-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: .3rem; max-height: 220px; overflow-y: auto; }
   .lib-thumb { width: 100%; aspect-ratio:1; object-fit:cover; border-radius: 4px; cursor: grab; border: 2px solid transparent; transition: border-color .2s; }
   .lib-thumb:hover { border-color: var(--octo-orange); }
   .lib-thumb.dragging { opacity: .5; cursor: grabbing; }
-  #canvas-wrap { position: relative; border-radius: 6px; display: inline-block; line-height: 0; }
+  #canvas-wrap { position: relative; border-radius: 6px; display: block; line-height: 0; }
+  #main-canvas { display: block; cursor: crosshair; }
   #canvas-wrap.drag-over { outline: 3px dashed var(--octo-orange); }
   #main-canvas { display: block; cursor: crosshair; }
   .toolbar { display: flex; gap: .5rem; flex-wrap: wrap; margin-bottom: .5rem; align-items: center; }
@@ -33,6 +40,7 @@
   .lib-search { width: 100%; margin-bottom: .4rem; padding: .25rem .4rem; border: 2px solid var(--octo-light-gray); border-radius: 4px; font-size: .8rem; }
   .no-templates { font-size: .85rem; color: #888; }
   a.manage-link { font-size: .75rem; color: var(--octo-petrol); }
+  .sidebar-divider { border: none; border-top: 2px solid #e8e8e8; margin: .25rem 0; }
   /* Post-Info kompakt */
   .post-banner { background:#f0faf9; border:1px solid #61CEBC; border-radius:6px; padding:8px 12px; margin-bottom:.5rem; display:flex; gap:10px; align-items:center; font-size:.8rem; }
   .post-banner img { width:40px; height:40px; border-radius:4px; object-fit:cover; border:2px solid #61CEBC; flex-shrink:0; }
@@ -47,6 +55,16 @@
   .canvas-toolbar button:hover { background:#f0f0f0; }
   .canvas-toolbar button.danger { color:#dc3545; border-color:#dc3545; }
   .canvas-toolbar button.danger:hover { background:#fff5f5; }
+  /* Thin timeline slider tracks */
+  .tl-slider { -webkit-appearance:none; appearance:none; height:14px; background:transparent; cursor:pointer; }
+  .tl-slider::-webkit-slider-runnable-track { height:3px; border-radius:2px; background:#ddd; }
+  .tl-slider::-webkit-slider-thumb { -webkit-appearance:none; width:14px; height:14px; border-radius:50%; margin-top:-5.5px; border:2px solid #fff; box-shadow:0 1px 3px rgba(0,0,0,.3); }
+  .tl-slider.tl-start::-webkit-slider-thumb { background:#61CEBC; }
+  .tl-slider.tl-dur::-webkit-slider-thumb { background:#F56E28; }
+  .tl-slider::-moz-range-track { height:3px; border-radius:2px; background:#ddd; border:none; }
+  .tl-slider::-moz-range-thumb { width:14px; height:14px; border-radius:50%; border:2px solid #fff; box-shadow:0 1px 3px rgba(0,0,0,.3); }
+  .tl-slider.tl-start::-moz-range-thumb { background:#61CEBC; }
+  .tl-slider.tl-dur::-moz-range-thumb { background:#F56E28; }
 </style>
 
 <h1 style="margin-bottom:.5rem">🎨 Image Studio</h1>
@@ -80,10 +98,10 @@
 
 <div class="studio-wrap">
 
-  <!-- LEFT SIDEBAR: Tools -->
+  <!-- LEFT SIDEBAR -->
   <div class="studio-sidebar">
 
-    <div class="sidebar-section">
+    <div class="sidebar-section collapsed">
       <h3 onclick="this.parentElement.classList.toggle('collapsed')">📐 Templates</h3>
       <div class="section-body">
         <div id="tpl-list" class="tpl-grid"><span class="no-templates">Lädt…</span></div>
@@ -115,6 +133,59 @@
           <div onclick="document.getElementById('text-color').value='#005F68'" title="Dunkel"    style="width:18px;height:18px;border-radius:3px;background:#005F68;cursor:pointer"></div>
           <div onclick="document.getElementById('text-color').value='#161616'" title="Schwarz"   style="width:18px;height:18px;border-radius:3px;background:#161616;cursor:pointer"></div>
           <span style="font-size:.65rem;color:#aaa;margin-left:4px">Doppelklick = bearbeiten</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="sidebar-section">
+      <h3 onclick="this.parentElement.classList.toggle('collapsed')">🔗 Formen & Verbindungen</h3>
+      <div class="section-body">
+        <div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:6px">
+          <button class="btn btn-sm shape-btn" onclick="addShape('arrow')"    title="Pfeil rechts"    style="font-size:16px;padding:2px 6px">➜</button>
+          <button class="btn btn-sm shape-btn" onclick="addShape('arrowDown')" title="Pfeil runter"   style="font-size:16px;padding:2px 6px">⬇</button>
+          <button class="btn btn-sm shape-btn" onclick="addShape('line')"     title="Linie"           style="font-size:16px;padding:2px 6px">╱</button>
+          <button class="btn btn-sm shape-btn" onclick="addShape('dottedLine')" title="Gestrichelte Linie" style="font-size:16px;padding:2px 6px">┈</button>
+          <button class="btn btn-sm shape-btn" onclick="addShape('circle')"   title="Kreis"           style="font-size:16px;padding:2px 6px">◯</button>
+          <button class="btn btn-sm shape-btn" onclick="addShape('filledCircle')" title="Gefüllter Kreis" style="font-size:16px;padding:2px 6px">●</button>
+          <button class="btn btn-sm shape-btn" onclick="addShape('rect')"     title="Rechteck"        style="font-size:16px;padding:2px 6px">▭</button>
+          <button class="btn btn-sm shape-btn" onclick="addShape('filledRect')" title="Gefülltes Rechteck" style="font-size:16px;padding:2px 6px">■</button>
+          <button class="btn btn-sm shape-btn" onclick="addShape('curvedArrow')" title="Gebogener Pfeil" style="font-size:16px;padding:2px 6px">↩</button>
+          <button class="btn btn-sm shape-btn" onclick="addShape('doubleArrow')" title="Doppelpfeil"  style="font-size:16px;padding:2px 6px">⟷</button>
+          <button class="btn btn-sm shape-btn" onclick="addShape('triangle')" title="Dreieck"         style="font-size:16px;padding:2px 6px">△</button>
+          <button class="btn btn-sm shape-btn" onclick="addShape('star')"     title="Stern"           style="font-size:16px;padding:2px 6px">★</button>
+          <button class="btn btn-sm shape-btn" onclick="addShape('cross')"    title="Kreuz/Plus"      style="font-size:16px;padding:2px 6px">✚</button>
+        </div>
+        <div style="display:flex;gap:4px;align-items:center;margin-bottom:4px">
+          <label style="font-size:.7rem;color:#555;white-space:nowrap">Farbe:</label>
+          <input type="color" id="shape-color" value="#F56E28" style="width:26px;height:24px;border:none;padding:0;cursor:pointer;border-radius:3px">
+          <label style="font-size:.7rem;color:#555;white-space:nowrap;margin-left:4px">Stärke:</label>
+          <select id="shape-stroke" style="width:50px;padding:1px;font-size:.75rem">
+            <option value="2">2</option>
+            <option value="3" selected>3</option>
+            <option value="4">4</option>
+            <option value="6">6</option>
+            <option value="8">8</option>
+          </select>
+        </div>
+        <div id="shape-rotate-panel" style="display:none;margin-bottom:4px">
+          <div style="display:flex;gap:4px;align-items:center">
+            <label style="font-size:.7rem;color:#555;white-space:nowrap">🔄 Drehen:</label>
+            <button class="btn btn-sm shape-btn" onclick="rotateShape(-90)" style="font-size:12px;padding:1px 5px">↶ 90°</button>
+            <button class="btn btn-sm shape-btn" onclick="rotateShape(-45)" style="font-size:12px;padding:1px 5px">↶ 45°</button>
+            <button class="btn btn-sm shape-btn" onclick="rotateShape(45)"  style="font-size:12px;padding:1px 5px">↷ 45°</button>
+            <button class="btn btn-sm shape-btn" onclick="rotateShape(90)"  style="font-size:12px;padding:1px 5px">↷ 90°</button>
+            <input type="number" id="shape-rotation-val" value="0" min="-360" max="360" step="15" style="width:48px;font-size:.7rem;padding:1px 3px;border:1px solid #ccc;border-radius:3px" onchange="setShapeRotation(+this.value)">
+            <span style="font-size:.65rem;color:#999">°</span>
+          </div>
+        </div>
+        <div style="display:flex;gap:2px;align-items:center">
+          <div onclick="document.getElementById('shape-color').value='#F56E28'" title="Orange"  style="width:18px;height:18px;border-radius:3px;background:#F56E28;cursor:pointer"></div>
+          <div onclick="document.getElementById('shape-color').value='#ffffff'" title="Weiß"    style="width:18px;height:18px;border-radius:3px;background:#ffffff;border:1px solid #ccc;cursor:pointer"></div>
+          <div onclick="document.getElementById('shape-color').value='#008591'" title="Petrol"  style="width:18px;height:18px;border-radius:3px;background:#008591;cursor:pointer"></div>
+          <div onclick="document.getElementById('shape-color').value='#61CEBC'" title="Türkis"  style="width:18px;height:18px;border-radius:3px;background:#61CEBC;cursor:pointer"></div>
+          <div onclick="document.getElementById('shape-color').value='#161616'" title="Schwarz" style="width:18px;height:18px;border-radius:3px;background:#161616;cursor:pointer"></div>
+          <div onclick="document.getElementById('shape-color').value='#e74c3c'" title="Rot"     style="width:18px;height:18px;border-radius:3px;background:#e74c3c;cursor:pointer"></div>
+          <div onclick="document.getElementById('shape-color').value='#3498db'" title="Blau"    style="width:18px;height:18px;border-radius:3px;background:#3498db;cursor:pointer"></div>
         </div>
       </div>
     </div>
@@ -169,17 +240,26 @@
 
         <fieldset style="border:1px solid #ddd;border-radius:4px;padding:6px;margin-bottom:6px">
           <legend style="font-size:.7rem;font-weight:600;color:var(--octo-dark-petrol);padding:0 4px">⚡ Schnell-Animationen</legend>
-          <div style="font-size:.65rem;color:#888;margin-bottom:4px">Nur Elemente, die auf „Keine" stehen, werden animiert. Statisch gesetzte bleiben unverändert.</div>
+          <div style="font-size:.65rem;color:#888;margin-bottom:6px">Nur Elemente ohne Animation werden gesetzt. Bereits gesetzte bleiben unverändert.</div>
+          <div style="display:flex;gap:4px;align-items:center;margin-bottom:6px;flex-wrap:wrap">
+            <label style="font-size:.65rem;color:#555;white-space:nowrap">Abstand:</label>
+            <input type="number" id="seq-delay-ms" value="400" min="100" max="2000" step="100"
+              style="width:55px;padding:2px 4px;font-size:.75rem;border:1px solid #ccc;border-radius:3px">
+            <label style="font-size:.65rem;color:#555;white-space:nowrap">ms &nbsp; Dauer:</label>
+            <input type="number" id="seq-dur-ms" value="700" min="200" max="3000" step="100"
+              style="width:55px;padding:2px 4px;font-size:.75rem;border:1px solid #ccc;border-radius:3px">
+            <label style="font-size:.65rem;color:#555;white-space:nowrap">ms</label>
+          </div>
           <div style="display:flex;gap:4px;flex-wrap:wrap">
             <button class="btn btn-secondary btn-sm" onclick="flyAllSequential('edges')" style="font-size:10px" title="Von allen Seiten nacheinander einfliegen">🎯 Einfliegen</button>
             <button class="btn btn-secondary btn-sm" onclick="flyAllSequential('top')" style="font-size:10px">⬇ Von oben</button>
             <button class="btn btn-secondary btn-sm" onclick="flyAllSequential('left')" style="font-size:10px">➡ Von links</button>
+            <button class="btn btn-secondary btn-sm" onclick="flyAllSequential('right')" style="font-size:10px">⬅ Von rechts</button>
             <button class="btn btn-secondary btn-sm" onclick="flyAllSequential('fade')" style="font-size:10px">✨ Einblenden</button>
+            <button class="btn btn-secondary btn-sm" onclick="flyAllSequential('zoom')" style="font-size:10px">🔍 Reinzoomen</button>
             <button class="btn btn-secondary btn-sm" onclick="resetAllAnimations()" style="font-size:10px;color:#dc3545" title="Alle Animationen zurücksetzen">↩ Reset</button>
           </div>
         </fieldset>
-
-        <div id="anim-timeline" style="margin-bottom:6px"></div>
 
         <div style="margin-bottom:6px">
           <label style="font-size:.75rem;color:#555">Video-Dauer (Sek):</label>
@@ -265,10 +345,16 @@
       <button class="btn btn-sm" onclick="deleteCurrentImage()" style="font-size:.85rem;color:#dc3545;border:1px solid #dc3545;background:#fff" title="Bild aus Bibliothek löschen">🗑 Löschen</button>
       <span id="status-msg"></span>
     </div>
+
+    <!-- TIMELINE: full width below canvas, only shown when animations exist -->
+    <div id="timeline-section" style="display:none;margin-top:.5rem;background:#fff;border-radius:6px;box-shadow:0 1px 4px rgba(0,0,0,.1);padding:.6rem .75rem">
+      <div style="font-size:.72rem;font-weight:600;color:var(--octo-dark-petrol);margin-bottom:6px">⏱ Timeline</div>
+      <div id="anim-timeline" style="max-height:320px;overflow-y:auto"></div>
+    </div>
   </div>
 
   <!-- RIGHT SIDEBAR: Bibliothek + Bilder/Videos/Video-Bilder -->
-  <div class="studio-right-sidebar" style="width:280px;flex-shrink:0;display:flex;flex-direction:column;gap:0;max-height:calc(100vh - 60px);overflow-y:auto">
+  <div class="studio-right-sidebar" style="display:flex;flex-direction:column;gap:0">
 
     <!-- Bibliothek -->
     <div class="sidebar-section">
@@ -283,6 +369,8 @@
         <div class="lib-grid" id="lib-grid"><span style="font-size:.8rem;color:#888">Lädt…</span></div>
       </div>
     </div>
+
+    <hr class="sidebar-divider">
 
     <!-- Gespeicherte Bilder -->
     <div class="sidebar-section">
@@ -356,12 +444,14 @@ const HANDLE = 12; // resize handle size px (canvas coords)
 
 // ── Scale canvas to fit screen ──
 function scaleCanvas() {
-  // Use full window width minus sidebar and padding
-  const totalW = window.innerWidth || document.documentElement.clientWidth;
-  const sidebarW = 340 + 280 + 40; // left + right sidebar + gaps
-  const available = Math.max(300, totalW - sidebarW - 40);
-  const maxPx = Math.min(700, available);
-  const scale = maxPx / Math.max(canvas.width, canvas.height);
+  // Measure the actual container width — most reliable approach
+  const main = document.querySelector('.studio-main');
+  const availW = main ? Math.max(300, main.getBoundingClientRect().width - 4) : 600;
+  const availH = Math.max(300, (window.innerHeight || 800) - 180);
+  // Prioritise width: scale to fill width, only cap if too tall
+  const scaleByW = availW / canvas.width;
+  const scaleByH = availH / canvas.height;
+  const scale = Math.min(scaleByW, scaleByH);
   canvas.style.width  = Math.round(canvas.width  * scale) + 'px';
   canvas.style.height = Math.round(canvas.height * scale) + 'px';
 }
@@ -369,10 +459,13 @@ window.addEventListener('resize', scaleCanvas);
 
 // ── Render ──
 function render() {
+  if (isAnimating) return; // don't draw static objects during animation
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   drawCleanBg(ctx);
   objects.forEach((obj, i) => {
-    if (obj.type === 'img') {
+    if (obj.type === 'shape') {
+      drawShape(ctx, obj);
+    } else if (obj.type === 'img') {
       ctx.drawImage(obj.img, obj.x, obj.y, obj.w, obj.h);
     } else if (obj.type === 'text') {
       ctx.save();
@@ -578,6 +671,189 @@ function addText() {
   render();
 }
 
+// ── Shapes ──
+function addShape(shapeType) {
+  const color  = document.getElementById('shape-color').value;
+  const stroke = parseInt(document.getElementById('shape-stroke').value) || 3;
+  const cx = canvas.width / 2, cy = canvas.height / 2;
+  let w = 120, h = 60, rotation = 0;
+  if (['circle','filledCircle'].includes(shapeType)) { w = 80; h = 80; }
+  if (['star','triangle','cross'].includes(shapeType)) { w = 80; h = 80; }
+  if (['arrow','line','dottedLine','doubleArrow','curvedArrow'].includes(shapeType)) { w = 200; h = 40; }
+  if (shapeType === 'arrowDown') { w = 40; h = 200; rotation = 0; }
+
+  objects.push({
+    type: 'shape', shapeType: shapeType === 'arrowDown' ? 'arrow' : shapeType,
+    x: cx - w/2, y: cy - h/2, w, h,
+    color, strokeWidth: stroke, rotation,
+    name: shapeType.charAt(0).toUpperCase() + shapeType.slice(1)
+  });
+  // arrowDown = arrow rotated 90°
+  if (shapeType === 'arrowDown') objects[objects.length - 1].rotation = 90;
+  selIdx = objects.length - 1;
+  render();
+  updateShapeRotatePanel();
+}
+
+function rotateShape(deg) {
+  if (selIdx < 0 || objects[selIdx]?.type !== 'shape') return;
+  const o = objects[selIdx];
+  o.rotation = ((o.rotation || 0) + deg) % 360;
+  document.getElementById('shape-rotation-val').value = o.rotation;
+  render();
+}
+function setShapeRotation(deg) {
+  if (selIdx < 0 || objects[selIdx]?.type !== 'shape') return;
+  objects[selIdx].rotation = deg % 360;
+  render();
+}
+function updateShapeRotatePanel() {
+  const panel = document.getElementById('shape-rotate-panel');
+  if (selIdx >= 0 && objects[selIdx]?.type === 'shape') {
+    panel.style.display = '';
+    document.getElementById('shape-rotation-val').value = objects[selIdx].rotation || 0;
+  } else {
+    panel.style.display = 'none';
+  }
+}
+
+function drawShape(ctx, obj, ox, oy) {
+  const x = (ox !== undefined ? ox : obj.x), y = (oy !== undefined ? oy : obj.y);
+  const w = obj.w, h = obj.h;
+  const col = obj.color || '#F56E28';
+  const sw  = obj.strokeWidth || 3;
+  ctx.save();
+
+  // Apply rotation around center
+  const rot = obj.rotation || 0;
+  if (rot !== 0) {
+    const centerX = x + w / 2, centerY = y + h / 2;
+    ctx.translate(centerX, centerY);
+    ctx.rotate(rot * Math.PI / 180);
+    ctx.translate(-centerX, -centerY);
+  }
+
+  ctx.strokeStyle = col;
+  ctx.fillStyle   = col;
+  ctx.lineWidth   = sw;
+  ctx.lineCap     = 'round';
+  ctx.lineJoin    = 'round';
+
+  switch (obj.shapeType) {
+    case 'arrow': {
+      const tipX = x + w, tipY = y + h/2, tailX = x, tailY = y + h/2;
+      const headLen = Math.min(18, w * 0.15);
+      ctx.beginPath();
+      ctx.moveTo(tailX, tailY); ctx.lineTo(tipX - headLen, tipY); ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(tipX, tipY);
+      ctx.lineTo(tipX - headLen, tipY - headLen * 0.6);
+      ctx.lineTo(tipX - headLen, tipY + headLen * 0.6);
+      ctx.closePath(); ctx.fill();
+      break;
+    }
+    case 'doubleArrow': {
+      const headLen = Math.min(18, w * 0.12);
+      const midY = y + h/2;
+      ctx.beginPath();
+      ctx.moveTo(x + headLen, midY); ctx.lineTo(x + w - headLen, midY); ctx.stroke();
+      // Left head
+      ctx.beginPath();
+      ctx.moveTo(x, midY);
+      ctx.lineTo(x + headLen, midY - headLen * 0.6);
+      ctx.lineTo(x + headLen, midY + headLen * 0.6);
+      ctx.closePath(); ctx.fill();
+      // Right head
+      ctx.beginPath();
+      ctx.moveTo(x + w, midY);
+      ctx.lineTo(x + w - headLen, midY - headLen * 0.6);
+      ctx.lineTo(x + w - headLen, midY + headLen * 0.6);
+      ctx.closePath(); ctx.fill();
+      break;
+    }
+    case 'curvedArrow': {
+      const headLen = Math.min(16, w * 0.12);
+      const midY = y + h/2;
+      ctx.beginPath();
+      ctx.moveTo(x, midY + h * 0.3);
+      ctx.quadraticCurveTo(x + w * 0.5, y - h * 0.4, x + w - headLen, midY);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(x + w, midY);
+      ctx.lineTo(x + w - headLen, midY - headLen * 0.6);
+      ctx.lineTo(x + w - headLen, midY + headLen * 0.6);
+      ctx.closePath(); ctx.fill();
+      break;
+    }
+    case 'line': {
+      ctx.beginPath();
+      ctx.moveTo(x, y + h); ctx.lineTo(x + w, y);
+      ctx.stroke();
+      break;
+    }
+    case 'dottedLine': {
+      ctx.setLineDash([8, 5]);
+      ctx.beginPath();
+      ctx.moveTo(x, y + h); ctx.lineTo(x + w, y);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      break;
+    }
+    case 'circle': {
+      ctx.beginPath();
+      ctx.ellipse(x + w/2, y + h/2, w/2, h/2, 0, 0, Math.PI * 2);
+      ctx.stroke();
+      break;
+    }
+    case 'filledCircle': {
+      ctx.globalAlpha = 0.85;
+      ctx.beginPath();
+      ctx.ellipse(x + w/2, y + h/2, w/2, h/2, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.globalAlpha = 1;
+      break;
+    }
+    case 'rect': {
+      ctx.strokeRect(x, y, w, h);
+      break;
+    }
+    case 'filledRect': {
+      ctx.globalAlpha = 0.85;
+      ctx.fillRect(x, y, w, h);
+      ctx.globalAlpha = 1;
+      break;
+    }
+    case 'triangle': {
+      ctx.beginPath();
+      ctx.moveTo(x + w/2, y);
+      ctx.lineTo(x + w, y + h);
+      ctx.lineTo(x, y + h);
+      ctx.closePath(); ctx.stroke();
+      break;
+    }
+    case 'star': {
+      const cx2 = x + w/2, cy2 = y + h/2;
+      const outerR = Math.min(w, h) / 2, innerR = outerR * 0.4;
+      ctx.beginPath();
+      for (let i = 0; i < 10; i++) {
+        const r = i % 2 === 0 ? outerR : innerR;
+        const angle = (i * Math.PI / 5) - Math.PI / 2;
+        const px = cx2 + r * Math.cos(angle), py = cy2 + r * Math.sin(angle);
+        i === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py);
+      }
+      ctx.closePath(); ctx.fill();
+      break;
+    }
+    case 'cross': {
+      const armW = w * 0.3, armH = h * 0.3;
+      ctx.fillRect(x + w/2 - armW/2, y, armW, h);
+      ctx.fillRect(x, y + h/2 - armH/2, w, armH);
+      break;
+    }
+  }
+  ctx.restore();
+}
+
 // ── Delete ──
 function deleteSelected() {
   if (selIdx < 0) return;
@@ -603,7 +879,9 @@ function updateSelInfo() {
   const info = document.getElementById('sel-info');
   if (selIdx < 0) { info.textContent = 'Nichts ausgewählt'; return; }
   const o = objects[selIdx];
-  info.textContent = o.type === 'img' ? `Bild ${Math.round(o.w)}×${Math.round(o.h)}` : `Text: "${(o.text||'').substring(0,20)}"`;
+  if (o.type === 'shape') info.textContent = `Form: ${o.shapeType} ${Math.round(o.w)}×${Math.round(o.h)}`;
+  else if (o.type === 'img') info.textContent = `Bild ${Math.round(o.w)}×${Math.round(o.h)}`;
+  else info.textContent = `Text: "${(o.text||'').substring(0,20)}"`;
   updateBgButton();
 }
 
@@ -938,7 +1216,7 @@ function loadVideoFrameWithObjects(url, info) {
         let pending = 0;
         const tryRender = () => { if (pending === 0) { scaleCanvas(); render(); } };
         (state.objects || []).forEach(o => {
-          if (o.type === 'text') {
+          if (o.type === 'text' || o.type === 'shape') {
             objects.push(o);
           } else if (o.type === 'img' && o.imgSrc) {
             pending++;
@@ -982,7 +1260,7 @@ function loadSnapshotAndObjects(state) {
     let pending = 0;
     const tryRender = () => { if (pending === 0) { scaleCanvas(); render(); } };
     (state.objects || []).forEach(o => {
-      if (o.type === 'text') {
+      if (o.type === 'text' || o.type === 'shape') {
         objects.push(o);
       } else if (o.type === 'img' && o.imgSrc) {
         pending++;
@@ -1045,7 +1323,7 @@ function restoreCanvas(jsonStr, bgUrl) {
 
     loadBg.then(() => {
       (state.objects || []).forEach(o => {
-        if (o.type === 'text') {
+        if (o.type === 'text' || o.type === 'shape') {
           objects.push(o);
         } else if (o.type === 'img' && o.imgSrc) {
           pending++;
@@ -1160,7 +1438,7 @@ function _hasAnimations() {
 }
 
 function _buildCanvasJson() {
-  // Snapshot des aktuellen Canvas
+  // Snapshot: NUR Hintergrund (ohne Elemente), damit beim Laden keine doppelten Objekte entstehen
   let snapshotDataUrl = null;
   try {
     const sc = document.createElement('canvas');
@@ -1168,7 +1446,7 @@ function _buildCanvasJson() {
     const sctx = sc.getContext('2d');
     if (bgImage) sctx.drawImage(bgImage, 0, 0, sc.width, sc.height);
     else { sctx.fillStyle = '#1a1a2e'; sctx.fillRect(0, 0, sc.width, sc.height); }
-    objects.forEach(o => { if (o.type === 'img' && o.img) sctx.drawImage(o.img, o.x, o.y, o.w, o.h); });
+    // Keine Objekte zeichnen — die werden separat als objects[] gespeichert
     snapshotDataUrl = sc.toDataURL('image/png');
   } catch(e) { console.warn('Snapshot error:', e); }
 
@@ -1539,7 +1817,10 @@ async function saveVideoTemplate(silent = false) {
     const sctx = sc.getContext('2d');
     if (bgImage) sctx.drawImage(bgImage, 0, 0, sc.width, sc.height);
     else { sctx.fillStyle = '#1a1a2e'; sctx.fillRect(0, 0, sc.width, sc.height); }
-    objects.forEach(o => { if (o.type === 'img' && o.img) sctx.drawImage(o.img, o.x, o.y, o.w, o.h); });
+    objects.forEach(o => {
+      if (o.type === 'img' && o.img) sctx.drawImage(o.img, o.x, o.y, o.w, o.h);
+      else if (o.type === 'shape') drawShape(sctx, o);
+    });
     snapshotDataUrl = sc.toDataURL('image/png');
   } catch(e) { console.warn('Snapshot error:', e); }
 
@@ -1604,7 +1885,7 @@ async function loadVideoTemplate(tplId) {
       let pending = 0;
       const tryRender = () => { if (pending === 0) { scaleCanvas(); render(); } };
       (state.objects || []).forEach(o => {
-        if (o.type === 'text') { objects.push(o); }
+        if (o.type === 'text' || o.type === 'shape') { objects.push(o); }
         else if (o.type === 'img' && o.imgSrc) {
           pending++;
           const img = new Image();
@@ -2073,8 +2354,21 @@ function updateCanvasElemList() {
     div.onclick = () => { selIdx = i; render(); showElemAnimPanel(); };
     if (i === selIdx) div.style.background = '#e8f0fe';
 
+    // Sequence number
+    const seqNum = document.createElement('span');
+    seqNum.textContent = (i + 1);
+    seqNum.title = 'Reihenfolge beim Einfliegen';
+    seqNum.style.cssText = 'font-size:9px;color:#fff;background:var(--octo-petrol);border-radius:50%;width:14px;height:14px;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-weight:600';
+    div.appendChild(seqNum);
+
     // Thumbnail
-    if (o.type === 'img' && o.img) {
+    if (o.type === 'shape') {
+      const SHAPE_ICONS = {arrow:'➜',arrowDown:'⬇',line:'╱',dottedLine:'┈',circle:'◯',filledCircle:'●',rect:'▭',filledRect:'■',curvedArrow:'↩',doubleArrow:'⟷',triangle:'△',star:'★',cross:'✚'};
+      const icon = document.createElement('span');
+      icon.textContent = SHAPE_ICONS[o.shapeType] || '◆';
+      icon.style.cssText = `width:22px;height:22px;display:flex;align-items:center;justify-content:center;font-size:14px;color:${o.color||'#F56E28'};background:#f8f9fa;border-radius:2px;flex-shrink:0`;
+      div.appendChild(icon);
+    } else if (o.type === 'img' && o.img) {
       const thumb = document.createElement('img');
       thumb.src = o.img.src;
       thumb.style.cssText = 'width:22px;height:22px;object-fit:contain;border-radius:2px;flex-shrink:0';
@@ -2092,31 +2386,14 @@ function updateCanvasElemList() {
     label.style.cssText = 'flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:.7rem';
     div.appendChild(label);
 
-    // Inline animation selector
-    const animSel = document.createElement('select');
-    animSel.style.cssText = 'font-size:9px;padding:1px 2px;border:1px solid #ddd;border-radius:3px;width:65px;flex-shrink:0';
-    const animOpts = [
-      ['none','Keine'],['fadeIn','Einblend.'],['flyTo','Fliegen'],
-      ['slideLeft','← Links'],['slideRight','→ Rechts'],['slideUp','↑ Unten'],['slideDown','↓ Oben'],
-      ['zoomIn','Zoom+'],['pulse','Puls'],['bounce','Bounce']
-    ];
-    animOpts.forEach(([v,t]) => {
-      const opt = document.createElement('option');
-      opt.value = v; opt.textContent = t;
-      if ((o.animType || 'none') === v) opt.selected = true;
-      animSel.appendChild(opt);
-    });
-    animSel.onclick = e => e.stopPropagation();
-    animSel.onchange = e => {
-      e.stopPropagation();
-      o.animType = animSel.value;
-      if (animSel.value === 'none') { delete o.animStartX; delete o.animStartY; o.animDelay = 0; }
-      selIdx = i;
-      render();
-      updateTimeline();
-      showElemAnimPanel();
-    };
-    div.appendChild(animSel);
+    // Animation type badge (read-only, click to open anim panel)
+    if (o.animType && o.animType !== 'none') {
+      const badge = document.createElement('span');
+      const ANIM_COLORS = {fadeIn:'#61CEBC',flyTo:'#F56E28',slideLeft:'#008591',slideRight:'#008591',slideUp:'#008591',slideDown:'#008591',zoomIn:'#9b59b6',zoomOut:'#9b59b6',pulse:'#e74c3c',blink:'#e74c3c',bounce:'#e67e22',dashedGlow:'#3498db',typewriter:'#27ae60'};
+      badge.textContent = o.animType;
+      badge.style.cssText = `font-size:8px;background:${ANIM_COLORS[o.animType]||'#888'};color:#fff;border-radius:3px;padding:1px 4px;flex-shrink:0;white-space:nowrap`;
+      div.appendChild(badge);
+    }
 
     // Delete button
     const del = document.createElement('span');
@@ -2258,6 +2535,7 @@ canvas.addEventListener('mouseup', function cropUp(e) {
   if (bgImage) ctx.drawImage(bgImage, 0, 0, canvas.width, canvas.height);
   objects.forEach(o => {
     if (o.type === 'img' && o.img) ctx.drawImage(o.img, o.x, o.y, o.w, o.h);
+    else if (o.type === 'shape') drawShape(ctx, o);
   });
 
   // Sample fill color for masking
@@ -2473,18 +2751,465 @@ function flyAllSequential(mode) {
     () => ({x: canvas.width / 2, y: canvas.height + 80}),
   ];
 
+  const seqDelay = parseInt(document.getElementById('seq-delay-ms')?.value) || 400;
+  const seqDur   = parseInt(document.getElementById('seq-dur-ms')?.value)   || 700;
+
   candidates.forEach((obj, i) => {
     const globalIdx = i + alreadyAnimated;
-    obj.animDelay = globalIdx * 500;
-    obj.animDur = 800;
+    obj.animDelay = globalIdx * seqDelay;
+    obj.animDur   = seqDur;
 
     if (mode === 'fade') {
       obj.animType = 'fadeIn';
+    } else if (mode === 'zoom') {
+      obj.animType = 'zoomIn';
     } else {
       obj.animType = 'flyTo';
       let start;
-      if (mode === 'top') start = {x: obj.x + obj.w/2, y: -80};
-      else if (mode === 'left') start = {x: -80, y: obj.y + obj.h/2};
+      if (mode === 'top')   start = {x: obj.x + obj.w/2, y: -80};
+      else if (mode === 'left')  start = {x: -80, y: obj.y + obj.h/2};
+      else if (mode === 'right') start = {x: canvas.width + 80, y: obj.y + obj.h/2};
       else start = edgeStarts[i % edgeStarts.length](); // 'edges' default
       obj.animStartX = start.x;
-      obj.an
+      obj.animStartY = start.y;
+    }
+  });
+
+  // Auto-adjust video duration
+  const maxEnd = Math.max(...objects.map(o => (o.animDelay||0) + (o.animDur||800)));
+  const durInput = document.getElementById('vid-duration');
+  if (parseFloat(durInput.value) * 1000 < maxEnd + 500) {
+    durInput.value = Math.ceil((maxEnd + 500) / 1000);
+  }
+
+  render();
+  updateTimeline();
+  if (selIdx >= 0) showElemAnimPanel();
+  updateCanvasElemList();
+}
+
+function resetAllAnimations() {
+  objects.forEach(o => {
+    o.animType = 'none';
+    o.animDelay = 0;
+    o.animDur = 800;
+    delete o.animStartX;
+    delete o.animStartY;
+  });
+  render();
+  updateTimeline();
+  if (selIdx >= 0) showElemAnimPanel();
+  updateCanvasElemList();
+}
+
+// ── Interactive Timeline with sliders ──
+const ANIM_COLORS = {none:'#ccc',fadeIn:'#61CEBC',flyTo:'#F56E28',slideLeft:'#008591',slideRight:'#008591',slideUp:'#008591',slideDown:'#008591',zoomIn:'#005F68',zoomOut:'#dc3545',typewriter:'#6f42c1',pulse:'#e67e22',blink:'#f1c40f',bounce:'#3498db',dashedGlow:'#F56E28'};
+
+function updateTimelineBar(i) {
+  const vidMs = (parseFloat(document.getElementById('vid-duration').value) || 5) * 1000;
+  const obj = objects[i];
+  const delay = obj.animDelay || 0;
+  const dur   = obj.animDur   || 1000;
+  const fill  = document.getElementById('tl-bar-fill-'+i);
+  if (!fill) return;
+  fill.style.left  = Math.min(99, delay/vidMs*100).toFixed(1) + '%';
+  fill.style.width = Math.min(100 - delay/vidMs*100, dur/vidMs*100).toFixed(1) + '%';
+}
+
+function updateTimeline() {
+  const container = document.getElementById('anim-timeline');
+  const vidMs = (parseFloat(document.getElementById('vid-duration').value) || 5) * 1000;
+  const animated = objects.filter(o => o.animType && o.animType !== 'none');
+  const section = document.getElementById('timeline-section');
+  if (animated.length === 0) { container.innerHTML = ''; if (section) section.style.display = 'none'; return; }
+  if (section) section.style.display = '';
+
+  // VERTICAL rows, full width — thumbnail+name left, both sliders right
+  let html = `<div style="display:flex;flex-direction:column;gap:4px">`;
+
+  animated.forEach((obj) => {
+    const i     = objects.indexOf(obj);
+    const ai    = animated.indexOf(obj);
+    const delay = obj.animDelay || 0;
+    const dur   = obj.animDur   || 1000;
+    const anim  = obj.animType  || 'none';
+    const col   = ANIM_COLORS[anim] || '#888';
+    const name  = obj.name || obj.text?.substring(0,12) || (obj.type==='img' ? 'Bild '+(i+1) : obj.type==='shape' ? obj.shapeType : 'Text '+(i+1));
+    const isSel = i === selIdx;
+    const SHAPE_ICONS = {arrow:'➜',arrowDown:'⬇',line:'╱',dottedLine:'┈',circle:'◯',filledCircle:'●',rect:'▭',filledRect:'■',curvedArrow:'↩',doubleArrow:'⟷',triangle:'△',star:'★',cross:'✚'};
+    const thumb = (obj.type==='img' && obj.img)
+      ? `<img src="${obj.img.src}" style="width:54px;height:54px;object-fit:contain;border-radius:4px;flex-shrink:0">`
+      : obj.type==='shape'
+      ? `<div style="width:54px;height:54px;background:#f8f9fa;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:24px;color:${obj.color||'#F56E28'};flex-shrink:0">${SHAPE_ICONS[obj.shapeType]||'◆'}</div>`
+      : `<div style="width:54px;height:54px;background:#e8f0fe;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:700;color:var(--octo-petrol);flex-shrink:0">T</div>`;
+
+    const TL_TEAL = '#61CEBC'; // türkis for start
+    const TL_ORAN = '#F56E28'; // orange for duration
+    const animOpts = ['none','fadeIn','flyTo','slideLeft','slideRight','slideUp','slideDown','zoomIn','zoomOut','pulse','blink','bounce','dashedGlow','typewriter'];
+    const animLabels = {'none':'Keine','fadeIn':'Einblend.','flyTo':'Fliegen','slideLeft':'← Links','slideRight':'→ Rechts','slideUp':'↑ Unten','slideDown':'↓ Oben','zoomIn':'Zoom+','zoomOut':'Zoom−','pulse':'Puls','blink':'Blinken','bounce':'Bounce','dashedGlow':'Glow','typewriter':'Schreibm.'};
+    const animSelHtml = animOpts.map(v => `<option value="${v}"${v===anim?' selected':''}>${animLabels[v]||v}</option>`).join('');
+    const canUp = i > 0;
+    const canDn = i < objects.length - 1;
+
+    html += `
+    <div style="display:flex;align-items:center;gap:6px;border-radius:5px;border:2px solid ${isSel ? col : '#e8e8e8'};background:${isSel ? col+'12' : '#fafafa'};padding:4px 6px"
+      onclick="selIdx=${i};render();showElemAnimPanel();updateTimeline()">
+
+      <!-- ↑↓ sort -->
+      <div style="display:flex;flex-direction:column;gap:1px;flex-shrink:0" onclick="event.stopPropagation()">
+        <span onclick="${canUp ? `const o=objects.splice(${i},1)[0];objects.splice(${i-1},0,o);if(selIdx===${i})selIdx=${i-1};else if(selIdx===${i-1})selIdx=${i};render();updateCanvasElemList();updateTimeline();` : ''}"
+          style="font-size:13px;line-height:1;cursor:${canUp?'pointer':'default'};color:${canUp?'#008591':'#ccc'}">↑</span>
+        <span onclick="${canDn ? `const o=objects.splice(${i},1)[0];objects.splice(${i+1},0,o);if(selIdx===${i})selIdx=${i+1};else if(selIdx===${i+1})selIdx=${i};render();updateCanvasElemList();updateTimeline();` : ''}"
+          style="font-size:13px;line-height:1;cursor:${canDn?'pointer':'default'};color:${canDn?'#008591':'#ccc'}">↓</span>
+      </div>
+
+      <!-- nr + thumb -->
+      <span style="font-size:9px;color:#fff;background:${col};border-radius:50%;width:16px;height:16px;display:flex;align-items:center;justify-content:center;font-weight:700;flex-shrink:0">${ai+1}</span>
+      ${thumb}
+
+      <!-- name + anim + delete -->
+      <div style="display:flex;flex-direction:column;gap:2px;flex:0 0 auto;min-width:70px">
+        <div style="font-size:.68rem;font-weight:600;color:#333;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:80px">${name}</div>
+        <div style="display:flex;gap:3px;align-items:center">
+          <select onclick="event.stopPropagation()" onchange="event.stopPropagation();objects[${i}].animType=this.value;selIdx=${i};render();updateTimeline();updateCanvasElemList();showElemAnimPanel();"
+            style="width:75px;font-size:.6rem;padding:1px 2px;border:1px solid #ddd;border-radius:3px;cursor:pointer;background:#fff">
+            ${animSelHtml}
+          </select>
+          <span onclick="event.stopPropagation();if(confirm('Element löschen?')){objects.splice(${i},1);if(selIdx===${i})selIdx=-1;else if(selIdx>${i})selIdx--;render();updateCanvasElemList();updateTimeline();}"
+            style="font-size:11px;color:#dc3545;cursor:pointer;flex-shrink:0" title="Löschen">✕</span>
+        </div>
+      </div>
+
+      <!-- sliders: Start + Dur each as single row -->
+      <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:1px">
+        <div style="display:flex;align-items:center;gap:3px">
+          <span style="font-size:.55rem;color:${TL_TEAL};font-weight:700;flex-shrink:0">Start</span>
+          <input type="range" min="0" max="${vidMs-100}" step="100" value="${delay}"
+            class="tl-slider tl-start" style="flex:1" onclick="event.stopPropagation()"
+            oninput="objects[${i}].animDelay=+this.value;document.getElementById('tl-dv-${i}').textContent=(+this.value/1000).toFixed(1)+'s';document.getElementById('elem-anim-delay').value=this.value;updateTimelineBar(${i});"
+            onchange="updateTimeline();updateCanvasElemList();">
+          <span id="tl-dv-${i}" style="font-size:.6rem;font-weight:700;color:${TL_TEAL};width:24px;text-align:right;flex-shrink:0">${(delay/1000).toFixed(1)}s</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:3px">
+          <span style="font-size:.55rem;color:${TL_ORAN};font-weight:700;flex-shrink:0;width:24px">Dauer</span>
+          <input type="range" min="200" max="${vidMs}" step="100" value="${dur}"
+            class="tl-slider tl-dur" style="flex:1" onclick="event.stopPropagation()"
+            oninput="objects[${i}].animDur=+this.value;document.getElementById('tl-rv-${i}').textContent=(+this.value/1000).toFixed(1)+'s';document.getElementById('elem-anim-dur').value=this.value;updateTimelineBar(${i});"
+            onchange="updateTimeline();updateCanvasElemList();">
+          <span id="tl-rv-${i}" style="font-size:.6rem;font-weight:700;color:${TL_ORAN};width:24px;text-align:right;flex-shrink:0">${(dur/1000).toFixed(1)}s</span>
+        </div>
+        <div style="height:2px;background:#e0e0e0;border-radius:1px;position:relative;overflow:hidden;margin-top:1px">
+          <div id="tl-bar-fill-${i}" style="position:absolute;height:100%;border-radius:1px;
+            background:linear-gradient(90deg,${TL_TEAL},${TL_ORAN});
+            left:${Math.min(99,delay/vidMs*100).toFixed(1)}%;
+            width:${Math.min(100-delay/vidMs*100,dur/vidMs*100).toFixed(1)}%"></div>
+        </div>
+      </div>
+    </div>`;
+  });
+
+  html += '</div>';
+  container.innerHTML = html;
+}
+
+// ── Animated render (per-element) ──
+function renderAnimated(elapsed) {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  drawCleanBg(ctx);
+
+  objects.forEach((obj) => {
+    const anim = obj.animType || 'none';
+    const delay = obj.animDelay || 0;
+    const dur = obj.animDur || 1500;
+    const localT = elapsed - delay;
+    // For looping anims (pulse, blink, bounce, dashedGlow), use continuous time
+    const isLooping = ['pulse','blink','bounce','dashedGlow'].includes(anim);
+    let p = anim === 'none' ? 1 : (localT <= 0 ? 0 : Math.min(1, localT / dur));
+    const ep = easeOutCubic(p);
+
+    ctx.save();
+
+    // Visibility: don't draw if animation hasn't started (non-looping, non-static)
+    if (!isLooping && anim !== 'none' && anim !== 'zoomOut' && p <= 0) { ctx.restore(); return; }
+
+    // Alpha
+    if (anim === 'fadeIn' || anim === 'zoomIn') ctx.globalAlpha = ep;
+    if (anim === 'zoomOut') ctx.globalAlpha = 1 - easeInCubic(p);
+
+    // Looping animation calculations
+    let dx = 0, dy = 0, scale = 1;
+    if (isLooping && localT > 0) {
+      const cycle = (localT % dur) / dur; // 0→1 repeating
+      const wave = Math.sin(cycle * Math.PI * 2); // -1→1
+      const slowWave = Math.sin(cycle * Math.PI); // half speed: one pulse per cycle
+      if (anim === 'pulse') scale = 1 + 0.06 * slowWave;
+      if (anim === 'blink') ctx.globalAlpha = 0.4 + 0.6 * (0.5 + 0.5 * slowWave);
+      if (anim === 'bounce') dx = slowWave * 15;
+    }
+
+    // One-shot animation offsets
+    if (anim === 'flyTo' && obj.animStartX !== undefined) {
+      const sx = obj.animStartX - obj.x - obj.w/2;
+      const sy = obj.animStartY - obj.y - obj.h/2;
+      dx = sx * (1 - ep);
+      dy = sy * (1 - ep);
+    }
+    if (anim === 'slideLeft')  dx = (1 - ep) * -canvas.width * 0.6;
+    if (anim === 'slideRight') dx = (1 - ep) * canvas.width * 0.6;
+    if (anim === 'slideUp')    dy = (1 - ep) * canvas.height * 0.6;
+    if (anim === 'slideDown')  dy = (1 - ep) * -canvas.height * 0.6;
+    if (anim === 'zoomIn')     scale = 0.2 + 0.8 * ep;
+    if (anim === 'zoomOut')    scale = 1 + 0.5 * easeInCubic(p);
+
+    if (obj.type === 'shape') {
+      const cx = obj.x + obj.w/2, cy = obj.y + obj.h/2;
+      ctx.translate(cx + dx, cy + dy);
+      ctx.scale(scale, scale);
+      ctx.translate(-cx, -cy);
+      if (opacity < 1) ctx.globalAlpha = opacity;
+      drawShape(ctx, obj);
+      ctx.globalAlpha = 1;
+    } else if (obj.type === 'img' && obj.img) {
+      const cx = obj.x + obj.w/2, cy = obj.y + obj.h/2;
+      ctx.translate(cx + dx, cy + dy);
+      ctx.scale(scale, scale);
+      ctx.drawImage(obj.img, -obj.w/2, -obj.h/2, obj.w, obj.h);
+      // Dashed glow border
+      if (anim === 'dashedGlow' && localT > 0) {
+        const cycle = (localT % dur) / dur;
+        const dashOffset = cycle * 30;
+        ctx.strokeStyle = `rgba(245,110,40,${0.5 + 0.5 * Math.sin(cycle * Math.PI * 2)})`;
+        ctx.lineWidth = 3;
+        ctx.setLineDash([8, 5]);
+        ctx.lineDashOffset = dashOffset;
+        ctx.strokeRect(-obj.w/2 - 4, -obj.h/2 - 4, obj.w + 8, obj.h + 8);
+      }
+    } else if (obj.type === 'text') {
+      ctx.font = `${obj.fontWeight||'bold'} ${obj.fontSize||32}px Roboto, Arial, sans-serif`;
+      ctx.fillStyle = obj.color || '#ffffff';
+      ctx.shadowColor = 'rgba(0,0,0,0.6)';
+      ctx.shadowBlur = 4;
+      if (anim === 'typewriter') {
+        const chars = Math.round(ep * obj.text.length);
+        wrapText(ctx, obj.text.substring(0, chars), obj.x + dx, obj.y + (obj.fontSize||32) + dy, obj.w, (obj.fontSize||32) * 1.3);
+      } else {
+        const cx = obj.x + obj.w/2, cy = obj.y + obj.h/2;
+        ctx.translate(cx + dx, cy + dy);
+        ctx.scale(scale, scale);
+        ctx.translate(-cx, -cy);
+        wrapText(ctx, obj.text, obj.x, obj.y + (obj.fontSize||32), obj.w, (obj.fontSize||32) * 1.3);
+      }
+      // Dashed glow for text
+      if (anim === 'dashedGlow' && localT > 0) {
+        const cycle = (localT % dur) / dur;
+        ctx.strokeStyle = `rgba(245,110,40,${0.5 + 0.5 * Math.sin(cycle * Math.PI * 2)})`;
+        ctx.lineWidth = 2;
+        ctx.setLineDash([6, 4]);
+        ctx.lineDashOffset = cycle * 30;
+        ctx.strokeRect(obj.x - 4, obj.y - 2, obj.w + 8, (obj.fontSize||32) * 1.5 + 4);
+      }
+    }
+    ctx.restore();
+  });
+}
+
+function runAnimation(onDone) {
+  const dur = (parseFloat(document.getElementById('vid-duration').value) || 5) * 1000;
+  const t0 = performance.now();
+  isAnimating = true;
+  function tick(now) {
+    if (!isAnimating) { onDone(); return; }
+    renderAnimated(now - t0);
+    if ((now - t0) < dur) requestAnimationFrame(tick);
+    else { isAnimating = false; onDone(); }
+  }
+  requestAnimationFrame(tick);
+}
+
+function startVideoPreview() {
+  if (objects.length === 0 && !bgVideo) { alert('Füge zuerst Elemente ein.'); return; }
+  const status = document.getElementById('vid-status');
+  status.textContent = '▶ Vorschau…';
+  status.style.color = '#008591';
+  selIdx = -1;
+  if (bgVideo) { bgVideo.currentTime = 0; bgVideo.play(); startBgVideoLoop(); }
+  runAnimation(() => {
+    status.textContent = '✅ Fertig';
+    status.style.color = 'green';
+    if (bgVideo) bgVideo.pause();
+    render();
+  });
+}
+
+let lastVideoBlob = null;
+
+async function recordVideo() {
+  if (objects.length === 0) { alert('Füge zuerst Elemente ein.'); return; }
+
+  // Titel prüfen bevor Aufnahme
+  const titleVal = document.getElementById('title-input').value.trim();
+  if (!titleVal) {
+    const titleEl = document.getElementById('title-input');
+    titleEl.style.border = '2px solid #dc3545';
+    titleEl.focus();
+    titleEl.placeholder = '⚠️ Bitte Titel eingeben!';
+    setTimeout(() => { titleEl.style.border = ''; titleEl.placeholder = 'Bildtitel…'; }, 3000);
+    return;
+  }
+
+  const status = document.getElementById('vid-status');
+  const btn = document.getElementById('vid-record-btn');
+  btn.disabled = true;
+  selIdx = -1;
+
+  // Automatisch als Video-Bild speichern (nutzt saveImage() Logik)
+  status.textContent = '💾 Video-Bild wird gespeichert…';
+  status.style.color = '#008591';
+  const fd = new FormData();
+  fd.append('title', titleVal + ' – ' + new Date().toLocaleDateString('de-DE'));
+  fd.append('canvas_json', _buildCanvasJson());
+  await fetch('/library/studio/video-template/save/', {
+    method: 'POST', headers: {'X-CSRFToken': getCookie('csrftoken')}, body: fd
+  }).then(() => loadVideoTemplates()).catch(e => console.warn('Auto-save error:', e));
+
+  status.textContent = '⏺ Nimmt auf…';
+  status.style.color = '#dc3545';
+
+  const stream = canvas.captureStream(30);
+  const mimeType = MediaRecorder.isTypeSupported('video/webm;codecs=vp9') ? 'video/webm;codecs=vp9' : 'video/webm';
+  const recorder = new MediaRecorder(stream, { mimeType, videoBitsPerSecond: 4000000 });
+  const chunks = [];
+  recorder.ondataavailable = e => { if (e.data.size > 0) chunks.push(e.data); };
+  recorder.onstop = () => {
+    lastVideoBlob = new Blob(chunks, { type: 'video/webm' });
+    btn.disabled = false;
+    render();
+    showVideoResult(lastVideoBlob);
+  };
+  // Falls Video-Hintergrund vorhanden: von Anfang abspielen
+  if (bgVideo) { bgVideo.currentTime = 0; bgVideo.play(); startBgVideoLoop(); }
+  recorder.start();
+  runAnimation(() => setTimeout(() => { recorder.stop(); if (bgVideo) bgVideo.pause(); }, 1000));
+}
+
+function showVideoResult(blob) {
+  const url = URL.createObjectURL(blob);
+  const sizeMB = (blob.size / 1024 / 1024).toFixed(1);
+  document.getElementById('vid-preview').src = url;
+  document.getElementById('vid-size').textContent = 'Größe: ' + sizeMB + ' MB';
+  document.getElementById('vid-result').style.display = 'block';
+  document.getElementById('vid-status').textContent = '✅ Video aufgenommen!';
+  document.getElementById('vid-status').style.color = 'green';
+  document.getElementById('vid-nc-btn').disabled = false;
+  document.getElementById('vid-nc-btn').textContent = '☁ Nextcloud';
+}
+
+function downloadVideo() {
+  if (!lastVideoBlob) return;
+  const url = URL.createObjectURL(lastVideoBlob);
+  const a = document.createElement('a');
+  a.href = url;
+  const title = document.getElementById('title-input').value.trim() || 'studio_video';
+  a.download = title.replace(/[^a-zA-Z0-9_-]/g, '_') + '.webm';
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+async function saveVideoToNC() {
+  if (!lastVideoBlob) return;
+  const status = document.getElementById('vid-status');
+  const ncBtn = document.getElementById('vid-nc-btn');
+  const title = document.getElementById('title-input').value.trim() || 'Studio_Video';
+  ncBtn.disabled = true;
+  ncBtn.textContent = '☁ Speichert…';
+  status.textContent = '☁ Wird auf Nextcloud hochgeladen…';
+  status.style.color = '#008591';
+  try {
+    const fd = new FormData();
+    fd.append('video', lastVideoBlob, title + '.webm');
+    fd.append('title', title);
+    const folderId = document.getElementById('save-folder').value;
+    if (folderId) fd.append('folder_id', folderId);
+    // Save canvas state + snapshot so video can be reopened for editing
+    try {
+      // Snapshot des aktuellen Canvas als Hintergrundbild speichern
+      let snapshotDataUrl = null;
+      try {
+        const sc = document.createElement('canvas');
+        sc.width = canvas.width; sc.height = canvas.height;
+        const sctx = sc.getContext('2d');
+        // Hintergrund
+        if (bgImage) sctx.drawImage(bgImage, 0, 0, sc.width, sc.height);
+        else { sctx.fillStyle = '#1a1a2e'; sctx.fillRect(0, 0, sc.width, sc.height); }
+        // Objekte (ohne Auswahl-Handles)
+        objects.forEach(o => {
+          if (o.type === 'img' && o.img) sctx.drawImage(o.img, o.x, o.y, o.w, o.h);
+          else if (o.type === 'shape') drawShape(sctx, o);
+        });
+        snapshotDataUrl = sc.toDataURL('image/png');
+      } catch(e) { console.warn('Snapshot error:', e); }
+
+      const cj = JSON.stringify({
+        w: canvas.width, h: canvas.height,
+        snapshotDataUrl,   // Hintergrundbild eingebettet
+        objects: objects.map(o => {
+          const s = {...o};
+          if (s.img) {
+            try {
+              const tc = document.createElement('canvas');
+              tc.width = s.img.naturalWidth || s.img.width;
+              tc.height = s.img.naturalHeight || s.img.height;
+              tc.getContext('2d').drawImage(s.img, 0, 0);
+              s.imgSrc = tc.toDataURL('image/png');
+            } catch(e) { s.imgSrc = s.url || ''; }
+            delete s.img;
+          }
+          return s;
+        })
+      });
+      fd.append('canvas_json', cj);
+    } catch(e) { console.warn('Could not serialize canvas for video:', e); }
+    const res = await fetch('/library/studio/save-video/', {
+      method: 'POST',
+      headers: {'X-CSRFToken': getCookie('csrftoken')},
+      body: fd
+    });
+    const d = await res.json();
+    if (d.ok) {
+      ncBtn.textContent = '✅ Gespeichert!';
+      status.textContent = '✅ Video auf Nextcloud gespeichert!';
+      status.style.color = 'green';
+    } else {
+      ncBtn.disabled = false;
+      ncBtn.textContent = '☁ Nextcloud';
+      status.textContent = '❌ ' + (d.error || 'Fehler');
+      status.style.color = 'red';
+    }
+  } catch(e) {
+    ncBtn.disabled = false;
+    ncBtn.textContent = '☁ Nextcloud';
+    status.textContent = '❌ ' + e;
+    status.style.color = 'red';
+  }
+}
+
+// Hook updateSelInfo to also update anim panel
+const _origUpdateSelInfo = updateSelInfo;
+updateSelInfo = function() {
+  _origUpdateSelInfo();
+  showElemAnimPanel();
+  updateShapeRotatePanel();
+};
+
+// ── Init ──
+loadTemplateSidebar();
+loadLibrarySidebar();
+loadSavedItems();
+loadVideoTemplates();
+render();
+scaleCanvas();
+// Auto-restore canvas if opened from library or post with canvas_json
+if (POST_CANVAS_JSON) { restorePostCanvas(); }
+else { restoreLibImage(); }
+</script>
+{% endblock %}

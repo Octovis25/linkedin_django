@@ -1,0 +1,76 @@
+{% extends "core/base.html" %}
+{% block title %}📐 Studio Templates{% endblock %}
+{% block content %}
+<style>
+  .tpl-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px,1fr)); gap: 1rem; margin-top: 1rem; }
+  .tpl-card { background:#fff; border-radius:6px; box-shadow:0 1px 4px rgba(0,0,0,.1); overflow:hidden; }
+  .tpl-card img { width:100%; display:block; }
+  .tpl-card-body { padding:.75rem; }
+  .tpl-card-body h3 { font-size:.95rem; margin-bottom:.2rem; }
+  .tpl-card-body small { color:#888; font-size:.8rem; }
+  .tpl-card-actions { display:flex; gap:.5rem; margin-top:.5rem; }
+  .upload-box { background:#fff; border-radius:6px; box-shadow:0 1px 4px rgba(0,0,0,.1); padding:1.25rem; margin-bottom:1.5rem; max-width:540px; }
+  .upload-box h2 { font-size:1rem; margin-bottom:.75rem; }
+  .form-row { display:flex; gap:.75rem; }
+  .form-row .form-group { flex:1; }
+</style>
+
+<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem">
+  <h1>📐 Studio Templates</h1>
+  <a href="/library/studio/" class="btn btn-primary">→ Zum Editor</a>
+</div>
+
+<div class="upload-box">
+  <h2>Neues Template hochladen</h2>
+  <form method="post" action="/library/studio/template/upload/" enctype="multipart/form-data">
+    {% csrf_token %}
+    <div class="form-group">
+      <label>Bild (PNG/JPG aus Canva)</label>
+      <input type="file" name="image" accept="image/*" required>
+    </div>
+    <div class="form-group">
+      <label>Titel</label>
+      <input type="text" name="title" placeholder="z.B. LinkedIn Banner Werbung">
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Breite (px)</label>
+        <input type="number" name="width" value="1200">
+      </div>
+      <div class="form-group">
+        <label>Höhe (px)</label>
+        <input type="number" name="height" value="628">
+      </div>
+    </div>
+    <button type="submit" class="btn btn-secondary" style="margin-top:.5rem">Hochladen</button>
+  </form>
+</div>
+
+{% if messages %}
+  {% for m in messages %}<div class="alert alert-{{ m.tags }}">{{ m }}</div>{% endfor %}
+{% endif %}
+
+{% if templates %}
+<div class="tpl-grid">
+  {% for t in templates %}
+  <div class="tpl-card">
+    <img src="/library/studio/template/image/{{ t.id }}/" alt="{{ t.title }}">
+    <div class="tpl-card-body">
+      <h3>{{ t.title }}</h3>
+      <small>{{ t.width }} × {{ t.height }} px</small>
+      <div class="tpl-card-actions">
+        <a href="/library/studio/?template={{ t.id }}" class="btn btn-primary btn-sm">Im Editor öffnen</a>
+        <form method="post" action="/library/studio/template/delete/{{ t.id }}/" style="display:inline">
+          {% csrf_token %}
+          <button class="btn btn-danger btn-sm" onclick="return confirm('Template löschen?')">🗑</button>
+        </form>
+      </div>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% else %}
+  <p style="color:#888">Noch keine Templates. Lade ein Canva-Export (PNG) hoch.</p>
+{% endif %}
+
+{% endblock %}

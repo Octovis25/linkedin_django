@@ -200,6 +200,9 @@
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" stroke="#aaa" stroke-width="1.5"/><polyline points="17,8 12,3 7,8" stroke="#aaa" stroke-width="1.5"/><line x1="12" y1="3" x2="12" y2="15" stroke="#aaa" stroke-width="1.5"/></svg>
       </div>
       <input type="file" id="e-img-input" accept="image/*" style="display:none" onchange="previewImg('e',this)">
+      <button type="button" onclick="window.open('/library/studio/?post_id='+document.getElementById('e-id').value,'_blank')"
+        style="font-size:11px;padding:4px 8px;border:0.5px solid #61CEBC;border-radius:4px;background:#fff;cursor:pointer;color:#008591;white-space:nowrap;flex-shrink:0"
+        title="Bild im Studio bearbeiten">🎨 Studio</button>
       <input type="text" id="e-title" placeholder="Titel..." class="finput" style="margin-bottom:0;flex:1">
     </div>
     <div class="editor-wrap">

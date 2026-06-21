@@ -23,6 +23,19 @@ def _ensure_table():
     with connection.cursor() as c:
         try:
             c.execute("""
+                CREATE TABLE IF NOT EXISTS media_library_folders (
+                    id         INT AUTO_INCREMENT PRIMARY KEY,
+                    name       VARCHAR(255) NOT NULL,
+                    color      VARCHAR(20) DEFAULT '#008591',
+                    sort_order INT DEFAULT 0,
+                    parent_id  INT DEFAULT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+        except Exception:
+            pass
+        try:
+            c.execute("""
                 CREATE TABLE IF NOT EXISTS media_library_items (
                     id         INT AUTO_INCREMENT PRIMARY KEY,
                     nc_path    VARCHAR(512) NOT NULL,
@@ -31,17 +44,46 @@ def _ensure_table():
                     series     VARCHAR(100) DEFAULT '',
                     tags       VARCHAR(255) DEFAULT '',
                     note       TEXT,
+                    folder_id  INT DEFAULT NULL,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
             """)
         except Exception:
             pass
+        # Add folder_id if missing (existing tables)
+        try:
+            c.execute("ALTER TABLE media_library_items ADD COLUMN folder_id INT DEFAULT NULL")
+        except Exception:
+            pass
+        # Add parent_id to folders if missing
+        try:
+            c.execute("ALTER TABLE media_library_folders ADD COLUMN parent_id INT DEFAULT NULL")
+        except Exception:
+            pass
+
+
+def _all_folders():
+    with connection.cursor() as c:
+        rows = _safe(c, "SELECT id, name, color, sort_order, parent_id FROM media_library_folders ORDER BY sort_order, name")
+    return [{'id': r[0], 'name': r[1], 'color': r[2] or '#008591', 'sort_order': r[3] or 0, 'parent_id': r[4]} for r in (rows or [])]
 
 
 def _all_items(filters=None):
     filters = filters or {}
-    sql = "SELECT id, nc_path, title, person, series, tags, note, created_at FROM media_library_items WHERE 1=1"
+    sql = "SELECT id, nc_path, title, person, series, tags, note, created_at, folder_id FROM media_library_items WHERE 1=1"
     params = []
+    if filters.get('folder_id') and filters['folder_id'] not in ('none', 'all', ''):
+        # Include items in this folder AND all subfolders
+        fid = filters['folder_id']
+        with connection.cursor() as fc:
+            sub_rows = _safe(fc, "SELECT id FROM media_library_folders WHERE parent_id=%s", [fid])
+        sub_ids = [r[0] for r in (sub_rows or [])]
+        all_ids = [int(fid)] + sub_ids
+        placeholders = ','.join(['%s'] * len(all_ids))
+        sql += f" AND folder_id IN ({placeholders})"
+        params += all_ids
+    elif filters.get('folder') == 'none':
+        sql += " AND (folder_id IS NULL OR folder_id=0)"
     if filters.get('person'):
         sql += " AND person=%s"
         params.append(filters['person'])
@@ -61,8 +103,9 @@ def _all_items(filters=None):
     return [
         {'id': r[0], 'nc_path': r[1], 'title': r[2] or '',
          'person': r[3] or '', 'series': r[4] or '',
-         'tags': r[5] or '', 'note': r[6] or '',
-         'created_at': r[7]}
+         'tags': r[5] or '', 'tags_list': [t.strip() for t in (r[5] or '').split(',') if t.strip()],
+         'note': r[6] or '', 'created_at': r[7], 'folder_id': r[8],
+         'is_video': (r[1] or '').lower().endswith(('.webm', '.mp4'))}
         for r in (rows or [])
     ]
 
@@ -89,13 +132,28 @@ def library_view(request):
         'series':  request.GET.get('series', ''),
         'tag':     request.GET.get('tag', ''),
         'q':       request.GET.get('q', ''),
+        'folder_id': request.GET.get('folder', ''),
+        'folder': request.GET.get('folder', ''),
     }
     items   = _all_items(f)
     persons, series, tags = _meta_options()
+    folders = _all_folders()
+    # Count templates
+    _ensure_studio_tables()
+    try:
+        with connection.cursor() as c:
+            rows = _safe(c, "SELECT COUNT(*) FROM studio_templates", [])
+            templates_count = rows[0][0] if rows else 0
+    except Exception:
+        templates_count = 0
+    import json as _json
+    folders_json = _json.dumps([{'id': fo['id'], 'name': fo['name'], 'color': fo['color'], 'parent_id': fo['parent_id']} for fo in folders])
     return render(request, 'media_library/library.html', {
         'items': items, 'persons': persons, 'series_list': series, 'tags': tags,
+        'folders': folders, 'folders_json': folders_json, 'filter_folder': f['folder_id'],
         'filter_person': f['person'], 'filter_series': f['series'],
         'filter_tag': f['tag'], 'filter_q': f['q'],
+        'templates_count': templates_count,
         'tab': 'library',
     })
 
@@ -115,27 +173,31 @@ def library_upload(request):
     tags   = request.POST.get('tags', '').strip()
     note   = request.POST.get('note', '').strip()
 
-    from posts_posted.nc_storage import upload_image_to_nextcloud
     suffix   = os.path.splitext(image.name)[1] or '.jpg'
     import time
     filename = f"lib_{int(time.time())}{suffix}"
-    with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
+
+    # Save file locally first
+    from django.conf import settings as _settings
+    local_lib_dir = os.path.join(_settings.MEDIA_ROOT, 'library_uploads')
+    os.makedirs(local_lib_dir, exist_ok=True)
+    local_path = os.path.join(local_lib_dir, filename)
+    with open(local_path, 'wb') as f_out:
         for chunk in image.chunks():
-            tmp.write(chunk)
-        tmp_path = tmp.name
+            f_out.write(chunk)
+
+    # Try Nextcloud upload, fall back to local
+    nc_path = None
     try:
-        with open(tmp_path, 'rb') as f_obj:
-            class _Wrap:
-                def __init__(self, fobj, ct): self._f = fobj; self.content_type = ct
-                def read(self): return self._f.read()
-            nc_path_base = NC_LIBRARY_FOLDER + "/" + filename
-            from urllib.parse import quote
-            from requests.auth import HTTPBasicAuth
-            import requests as _req
-            from posts_posted.nc_storage import _get_nc_credentials
-            nc_url, username, password = _get_nc_credentials()
-            content = f_obj.read()
+        from posts_posted.nc_storage import _get_nc_credentials
+        from urllib.parse import quote
+        from requests.auth import HTTPBasicAuth
+        import requests as _req
+        nc_url, username, password = _get_nc_credentials()
         if nc_url and username and password:
+            nc_path_base = NC_LIBRARY_FOLDER + "/" + filename
+            with open(local_path, 'rb') as f_obj:
+                content = f_obj.read()
             upload_url = f"{nc_url}/remote.php/dav/files/{username}/{quote(nc_path_base, safe='/')}"
             r = _req.put(upload_url, data=content,
                 auth=HTTPBasicAuth(username, password),
@@ -143,19 +205,20 @@ def library_upload(request):
                 timeout=30)
             if r.status_code in [200, 201, 204]:
                 nc_path = nc_path_base
-            else:
-                messages.error(request, f'Nextcloud-Upload fehlgeschlagen: HTTP {r.status_code}')
-                return redirect('media_library:library')
-        else:
-            messages.error(request, 'Nextcloud nicht verbunden.')
-            return redirect('media_library:library')
-    finally:
-        os.unlink(tmp_path)
+    except Exception as e:
+        print(f"NC upload failed, using local: {e}")
 
+    if not nc_path:
+        nc_path = '__local__/' + filename
+
+    folder_id = request.POST.get('folder_id') or None
     with connection.cursor() as c:
-        c.execute("""INSERT INTO media_library_items (nc_path, title, person, series, tags, note)
-                     VALUES (%s,%s,%s,%s,%s,%s)""",
-                  [nc_path, title, person, series, tags, note or None])
+        c.execute("""INSERT INTO media_library_items (nc_path, title, person, series, tags, note, folder_id)
+                     VALUES (%s,%s,%s,%s,%s,%s,%s)""",
+                  [nc_path, title, person, series, tags, note or None, folder_id])
+    # AJAX: return JSON instead of redirect
+    if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+        return JsonResponse({'ok': True, 'title': title})
     messages.success(request, 'Bild gespeichert!')
     return redirect('media_library:library')
 
@@ -167,6 +230,25 @@ def library_image(request, item_id):
     if not rows:
         raise Http404
     nc_path = rows[0][0]
+    # Local fallback for studio-saved images
+    if nc_path.startswith('__local__/'):
+        from django.conf import settings as _settings
+        rel = nc_path[len('__local__/'):]
+        # Check both possible locations
+        local_path = os.path.join(_settings.MEDIA_ROOT, 'library_uploads', rel)
+        if not os.path.exists(local_path):
+            local_path = os.path.join(_settings.BASE_DIR, 'media', rel)
+        if not os.path.exists(local_path):
+            raise Http404
+        with open(local_path, 'rb') as f:
+            content = f.read()
+        ext = os.path.splitext(local_path)[1].lower()
+        ct_map = {'.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg',
+                  '.webm': 'video/webm', '.mp4': 'video/mp4', '.gif': 'image/gif'}
+        ct = ct_map.get(ext, 'image/jpeg')
+        resp = HttpResponse(content, content_type=ct)
+        resp['Cache-Control'] = 'public, max-age=86400'
+        return resp
     from posts_posted.nc_storage import download_image_from_nextcloud
     content, ct = download_image_from_nextcloud(nc_path)
     if not content:
@@ -201,10 +283,19 @@ def library_delete(request, item_id):
     with connection.cursor() as c:
         rows = _safe(c, "SELECT nc_path FROM media_library_items WHERE id=%s", [item_id])
     if rows:
+        nc_path = rows[0][0]
         from posts_posted.nc_storage import delete_image_from_nextcloud
-        delete_image_from_nextcloud(rows[0][0])
+        delete_image_from_nextcloud(nc_path)
         with connection.cursor() as c:
             c.execute("DELETE FROM media_library_items WHERE id=%s", [item_id])
+            # Clean up linked studio data
+            try: c.execute("DELETE FROM studio_images WHERE nc_path=%s", [nc_path])
+            except Exception: pass
+            try: c.execute("DELETE FROM studio_video_templates WHERE preview_nc_path=%s", [nc_path])
+            except Exception: pass
+    # AJAX request → JSON response
+    if request.headers.get('X-Requested-With') == 'XMLHttpRequest' or 'fetch' in request.headers.get('Sec-Fetch-Mode', ''):
+        return JsonResponse({'ok': True})
     messages.success(request, 'Bild gelöscht.')
     return redirect('media_library:library')
 
@@ -220,15 +311,655 @@ def library_api(request):
         'q':       request.GET.get('q', ''),
     }
     items = _all_items(f)
-    persons, series, tags = _meta_options()
-    data = []
-    for item in items:
-        data.append({
-            'id':     item['id'],
-            'title':  item['title'],
-            'person': item['person'],
-            'series': item['series'],
-            'tags':   item['tags'],
-            'url':    f"/library/image/{item['id']}/",
-        })
-    return JsonResponse({'items': data, 'persons': persons, 'series': series, 'tags': tags})
+    return JsonResponse({'items': [
+        {'id': i['id'], 'title': i['title'], 'person': i['person'],
+         'series': i['series'], 'url': f"/library/image/{i['id']}/"}
+        for i in items
+    ]})
+
+
+# ─────────────────────────────────────────────
+#  FOLDER MANAGEMENT
+# ─────────────────────────────────────────────
+
+@login_required
+def folder_create(request):
+    """Create a new folder."""
+    if request.method != 'POST':
+        return JsonResponse({'error': 'POST required'}, status=405)
+    _ensure_table()
+    data = json.loads(request.body)
+    name = data.get('name', '').strip()
+    color = data.get('color', '#008591').strip()
+    parent_id = data.get('parent_id') or None
+    if not name:
+        return JsonResponse({'error': 'Name required'}, status=400)
+    with connection.cursor() as c:
+        c.execute("INSERT INTO media_library_folders (name, color, parent_id) VALUES (%s, %s, %s)", [name, color, parent_id])
+        folder_id = c.lastrowid
+    # Create matching Nextcloud subfolder
+    try:
+        from posts_posted.nc_storage import _get_nc_credentials
+        from requests.auth import HTTPBasicAuth
+        from urllib.parse import quote
+        import requests as _req
+        nc_url, username, password = _get_nc_credentials()
+        if nc_url and username:
+            mkcol_url = f"{nc_url}/remote.php/dav/files/{username}/{quote(NC_LIBRARY_FOLDER + '/' + name, safe='/')}"
+            _req.request('MKCOL', mkcol_url, auth=HTTPBasicAuth(username, password), timeout=15)
+    except Exception as e:
+        print("NC folder create:", e)
+    return JsonResponse({'ok': True, 'id': folder_id, 'name': name, 'color': color})
+
+
+@login_required
+def folder_rename(request, folder_id):
+    """Rename a folder."""
+    if request.method != 'POST':
+        return JsonResponse({'error': 'POST required'}, status=405)
+    data = json.loads(request.body)
+    name = data.get('name', '').strip()
+    if not name:
+        return JsonResponse({'error': 'Name required'}, status=400)
+    with connection.cursor() as c:
+        c.execute("UPDATE media_library_folders SET name=%s WHERE id=%s", [name, folder_id])
+    return JsonResponse({'ok': True})
+
+
+@login_required
+def folder_delete(request, folder_id):
+    """Delete a folder (items become unassigned)."""
+    if request.method != 'POST':
+        return JsonResponse({'error': 'POST required'}, status=405)
+    with connection.cursor() as c:
+        # Also handle child folders
+        child_rows = _safe(c, "SELECT id FROM media_library_folders WHERE parent_id=%s", [folder_id])
+        child_ids = [r[0] for r in (child_rows or [])]
+        for cid in child_ids:
+            c.execute("UPDATE media_library_items SET folder_id=NULL WHERE folder_id=%s", [cid])
+            c.execute("DELETE FROM media_library_folders WHERE id=%s", [cid])
+        c.execute("UPDATE media_library_items SET folder_id=NULL WHERE folder_id=%s", [folder_id])
+        c.execute("DELETE FROM media_library_folders WHERE id=%s", [folder_id])
+    return JsonResponse({'ok': True})
+
+
+@login_required
+def item_move(request):
+    """Move one or more items to a folder (or to no folder)."""
+    if request.method != 'POST':
+        return JsonResponse({'error': 'POST required'}, status=405)
+    data = json.loads(request.body)
+    item_ids = data.get('item_ids', [])
+    folder_id = data.get('folder_id')  # None = remove from folder
+    if not item_ids:
+        return JsonResponse({'error': 'No items'}, status=400)
+    placeholders = ','.join(['%s'] * len(item_ids))
+    with connection.cursor() as c:
+        c.execute(f"UPDATE media_library_items SET folder_id=%s WHERE id IN ({placeholders})",
+                  [folder_id] + list(item_ids))
+    return JsonResponse({'ok': True})
+
+
+@login_required
+def item_studio_info(request, item_id):
+    """Check if a library item has a saved canvas_json in studio_images."""
+    _ensure_studio_tables()
+    with connection.cursor() as c:
+        rows = _safe(c, "SELECT nc_path FROM media_library_items WHERE id=%s", [item_id])
+        if not rows:
+            return JsonResponse({'has_canvas': False})
+        nc_path = rows[0][0] or ''
+        is_video = nc_path.lower().endswith(('.mp4', '.webm', '.mov', '.avi', '.mkv'))
+        studio_rows = _safe(c, """SELECT id, canvas_json, template_id, post_id
+                                  FROM studio_images WHERE nc_path=%s
+                                  ORDER BY created_at DESC LIMIT 1""", [nc_path])
+        if studio_rows and studio_rows[0][1]:
+            r = studio_rows[0]
+            return JsonResponse({'has_canvas': True, 'studio_id': r[0], 'post_id': r[3],
+                                 'template_id': r[2], 'canvas_json': r[1], 'is_video': is_video})
+    return JsonResponse({'has_canvas': False, 'is_video': is_video})
+
+
+# ─────────────────────────────────────────────
+#  NEXTCLOUD FOLDERS FOR STUDIO
+# ─────────────────────────────────────────────
+NC_STUDIO_TEMPLATES_FOLDER = "Marketing & Design/LinkedIn/Studio/Templates"
+NC_STUDIO_LIBRARY_FOLDER   = "Marketing & Design/LinkedIn/Studio/Bibliothek"
+NC_STUDIO_VIDEOS_FOLDER    = "Marketing & Design/LinkedIn/Studio/Videos"
+
+
+def _nc_upload(content_bytes, nc_path, content_type='image/png'):
+    """Upload raw bytes to Nextcloud. Returns nc_path on success, None on failure."""
+    from posts_posted.nc_storage import _get_nc_credentials
+    from urllib.parse import quote
+    import requests as _req
+    from requests.auth import HTTPBasicAuth
+    nc_url, username, password = _get_nc_credentials()
+    if not all([nc_url, username, password]):
+        return None
+    try:
+        upload_url = f"{nc_url.rstrip('/')}/remote.php/dav/files/{username}/{quote(nc_path, safe='/')}"
+        r = _req.put(upload_url, data=content_bytes,
+                     auth=HTTPBasicAuth(username, password),
+                     headers={'Content-Type': content_type}, timeout=60)
+        if r.status_code in [200, 201, 204]:
+            return nc_path
+        print(f"NC upload failed {r.status_code}: {nc_path}")
+        return None
+    except Exception as e:
+        print("NC upload error:", e)
+        return None
+
+
+def _nc_download(nc_path):
+    """Download from Nextcloud. Returns (bytes, content_type) or (None, None)."""
+    from posts_posted.nc_storage import download_image_from_nextcloud
+    return download_image_from_nextcloud(nc_path)
+
+
+def _nc_delete(nc_path):
+    from posts_posted.nc_storage import delete_image_from_nextcloud
+    delete_image_from_nextcloud(nc_path)
+
+
+def _ensure_studio_tables():
+    with connection.cursor() as c:
+        try:
+            c.execute("""CREATE TABLE IF NOT EXISTS studio_templates (
+                id         INT AUTO_INCREMENT PRIMARY KEY,
+                nc_path    VARCHAR(512) NOT NULL,
+                title      VARCHAR(255) DEFAULT '',
+                width      INT DEFAULT 1080,
+                height     INT DEFAULT 1080,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )""")
+        except Exception: pass
+        try:
+            c.execute("""CREATE TABLE IF NOT EXISTS studio_images (
+                id          INT AUTO_INCREMENT PRIMARY KEY,
+                nc_path     VARCHAR(512) NOT NULL,
+                title       VARCHAR(255) DEFAULT '',
+                canvas_json LONGTEXT,
+                template_id INT DEFAULT NULL,
+                post_id     INT DEFAULT NULL,
+                created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )""")
+        except Exception: pass
+        # Add post_id column if missing (existing tables)
+        try:
+            c.execute("ALTER TABLE studio_images ADD COLUMN post_id INT DEFAULT NULL")
+        except Exception: pass
+        # Upgrade canvas_json to LONGTEXT for large data-URL payloads
+        try:
+            c.execute("ALTER TABLE studio_images MODIFY COLUMN canvas_json LONGTEXT")
+        except Exception: pass
+
+
+# ─────────────────────────────────────────────
+#  STUDIO VIEWS
+# ─────────────────────────────────────────────
+
+@login_required
+@login_required
+def studio_flowcharts_view(request):
+    return render(request, 'media_library/flowcharts.html')
+
+
+def studio_view(request):
+    _ensure_studio_tables()
+    post_id = request.GET.get('post_id', '')
+    post_data = None
+    if post_id:
+        try:
+            with connection.cursor() as c:
+                rows = _safe(c, "SELECT id, title, image, content FROM planner_posts WHERE id=%s", [post_id])
+                if rows:
+                    r = rows[0]
+                    post_data = {'id': r[0], 'title': r[1] or '', 'image': r[2] or '', 'content': (r[3] or '')[:120]}
+                # Look up saved canvas_json for this post
+                canvas_rows = _safe(c, "SELECT canvas_json, template_id FROM studio_images WHERE post_id=%s ORDER BY created_at DESC LIMIT 1", [post_id])
+                if canvas_rows and canvas_rows[0][0] and post_data:
+                    post_data['canvas_json'] = canvas_rows[0][0]
+                    post_data['template_id'] = canvas_rows[0][1]
+        except Exception as e:
+            print("Studio post lookup error:", e)
+    # Also support loading from a library item (studio_image_id)
+    lib_item_id = request.GET.get('lib_item', '')
+    lib_data = None
+    if lib_item_id and not post_id:
+        try:
+            with connection.cursor() as c:
+                rows = _safe(c, "SELECT nc_path FROM media_library_items WHERE id=%s", [lib_item_id])
+                if rows:
+                    nc_path = rows[0][0]
+                    studio_rows = _safe(c, """SELECT canvas_json, template_id FROM studio_images
+                                             WHERE nc_path=%s ORDER BY created_at DESC LIMIT 1""", [nc_path])
+                    lib_data = {'item_id': lib_item_id, 'image_url': f"/library/image/{lib_item_id}/"}
+                    if studio_rows and studio_rows[0][0]:
+                        lib_data['canvas_json'] = studio_rows[0][0]
+                        lib_data['template_id'] = studio_rows[0][1]
+        except Exception as e:
+            print("Studio lib lookup:", e)
+    folders = _all_folders()
+    return render(request, 'media_library/studio.html', {
+        'post_id': post_id, 'post_data': post_data, 'lib_data': lib_data, 'folders': folders})
+
+
+@login_required
+def studio_templates_view(request):
+    _ensure_studio_tables()
+    with connection.cursor() as c:
+        rows = _safe(c, "SELECT id, title, width, height, created_at FROM studio_templates ORDER BY created_at DESC")
+    templates = [{'id': r[0], 'title': r[1], 'width': r[2], 'height': r[3],
+                  'url': f"/library/studio/template/image/{r[0]}/"}
+                 for r in (rows or [])]
+    return render(request, 'media_library/studio_templates.html', {'templates': templates})
+
+
+@login_required
+def studio_template_upload(request):
+    _ensure_studio_tables()
+    if request.method != 'POST':
+        return redirect('media_library:studio_templates')
+    f = request.FILES.get('template')
+    if not f:
+        messages.error(request, 'Kein Template ausgewählt.')
+        return redirect('media_library:studio_templates')
+    title  = request.POST.get('title', '').strip() or f.name
+    width  = int(request.POST.get('width', 1080) or 1080)
+    height = int(request.POST.get('height', 1080) or 1080)
+    import time
+    filename = f"tpl_{int(time.time())}.png"
+    content  = f.read()
+    nc_path  = _nc_upload(content, f"{NC_STUDIO_TEMPLATES_FOLDER}/{filename}", 'image/png')
+    if not nc_path:
+        # local fallback
+        from django.conf import settings as _s
+        local_dir = os.path.join(_s.BASE_DIR, 'media', 'studio', 'templates')
+        os.makedirs(local_dir, exist_ok=True)
+        with open(os.path.join(local_dir, filename), 'wb') as fh:
+            fh.write(content)
+        nc_path = f"__local__/studio/templates/{filename}"
+    with connection.cursor() as c:
+        c.execute("INSERT INTO studio_templates (nc_path, title, width, height) VALUES (%s,%s,%s,%s)",
+                  [nc_path, title, width, height])
+    messages.success(request, 'Template gespeichert!')
+    return redirect('media_library:studio_templates')
+
+
+@login_required
+def studio_template_delete(request, tpl_id):
+    if request.method != 'POST':
+        return redirect('media_library:studio_templates')
+    with connection.cursor() as c:
+        rows = _safe(c, "SELECT nc_path FROM studio_templates WHERE id=%s", [tpl_id])
+    if rows:
+        _nc_delete(rows[0][0])
+        with connection.cursor() as c:
+            c.execute("DELETE FROM studio_templates WHERE id=%s", [tpl_id])
+    messages.success(request, 'Template gelöscht.')
+    return redirect('media_library:studio_templates')
+
+
+@login_required
+def studio_template_image(request, tpl_id):
+    with connection.cursor() as c:
+        rows = _safe(c, "SELECT nc_path FROM studio_templates WHERE id=%s", [tpl_id])
+    if not rows:
+        raise Http404
+    nc_path = rows[0][0]
+    if nc_path.startswith('__local__/'):
+        from django.conf import settings as _s
+        local_path = os.path.join(_s.BASE_DIR, 'media', nc_path[len('__local__/'):])
+        if not os.path.exists(local_path):
+            raise Http404
+        with open(local_path, 'rb') as fh:
+            content = fh.read()
+        ct = 'image/png'
+    else:
+        content, ct = _nc_download(nc_path)
+        if not content:
+            raise Http404
+    resp = HttpResponse(content, content_type=ct or 'image/png')
+    resp['Cache-Control'] = 'public, max-age=3600'
+    return resp
+
+
+@login_required
+def studio_save(request):
+    """Save finished studio canvas as PNG → Nextcloud Studio/Bibliothek."""
+    if request.method != 'POST':
+        return JsonResponse({'error': 'POST required'}, status=405)
+    _ensure_studio_tables()
+    try:
+        data = json.loads(request.body)
+    except Exception:
+        return JsonResponse({'error': 'Invalid JSON'}, status=400)
+
+    import base64, time
+    data_url    = data.get('dataUrl', '')
+    title       = data.get('title', f'Studio_{int(time.time())}')
+    post_id     = data.get('post_id', '')
+    canvas_json = data.get('canvasJson', '')
+    template_id = data.get('templateId') or None
+    folder_id   = data.get('folderId') or None
+
+    if ',' in data_url:
+        _, b64 = data_url.split(',', 1)
+    else:
+        b64 = data_url
+    try:
+        content = base64.b64decode(b64)
+    except Exception:
+        return JsonResponse({'error': 'Invalid image data'}, status=400)
+
+    filename = f"studio_{int(time.time())}.png"
+    nc_path  = _nc_upload(content, f"{NC_STUDIO_LIBRARY_FOLDER}/{filename}", 'image/png')
+    if not nc_path:
+        # local fallback
+        from django.conf import settings as _s
+        local_dir = os.path.join(_s.BASE_DIR, 'media', 'studio', 'bibliothek')
+        os.makedirs(local_dir, exist_ok=True)
+        with open(os.path.join(local_dir, filename), 'wb') as fh:
+            fh.write(content)
+        nc_path = f"__local__/studio/bibliothek/{filename}"
+
+    # Save to media_library_items so it appears in Bibliothek tab
+    with connection.cursor() as c:
+        c.execute("""INSERT INTO media_library_items (nc_path, title, series, tags, folder_id)
+                     VALUES (%s, %s, 'Studio', 'studio', %s)""", [nc_path, title, folder_id])
+        lib_id = c.lastrowid
+
+    # Save studio metadata (upsert per post_id if given)
+    studio_image_id = None
+    with connection.cursor() as c:
+        if post_id:
+            # Update existing studio_image for this post, or insert new
+            rows = _safe(c, "SELECT id FROM studio_images WHERE post_id=%s ORDER BY created_at DESC LIMIT 1", [post_id])
+            if rows:
+                studio_image_id = rows[0][0]
+                c.execute("""UPDATE studio_images SET nc_path=%s, title=%s, canvas_json=%s, template_id=%s
+                             WHERE id=%s""", [nc_path, title, canvas_json or None, template_id, studio_image_id])
+            else:
+                c.execute("""INSERT INTO studio_images (nc_path, title, canvas_json, template_id, post_id)
+                             VALUES (%s,%s,%s,%s,%s)""", [nc_path, title, canvas_json or None, template_id, post_id])
+                studio_image_id = c.lastrowid
+        else:
+            c.execute("""INSERT INTO studio_images (nc_path, title, canvas_json, template_id)
+                         VALUES (%s,%s,%s,%s)""", [nc_path, title, canvas_json or None, template_id])
+            studio_image_id = c.lastrowid
+
+    # Attach to planner post if post_id given
+    if post_id:
+        try:
+            with connection.cursor() as c:
+                c.execute("UPDATE planner_posts SET image=%s WHERE id=%s", [nc_path, post_id])
+        except Exception as e:
+            print("Post attach error:", e)
+
+    image_url = f"/library/image/{lib_id}/"
+    return JsonResponse({'ok': True, 'lib_id': lib_id, 'image_url': image_url, 'nc_path': nc_path})
+
+
+@login_required
+def studio_save_video(request):
+    """Save recorded studio video (WebM) → Nextcloud Videos folder."""
+    if request.method != 'POST':
+        return JsonResponse({'error': 'POST required'}, status=405)
+    import time
+    _ensure_studio_tables()
+    video_file = request.FILES.get('video')
+    title = request.POST.get('title', f'Studio_Video_{int(time.time())}')
+    folder_id = request.POST.get('folder_id') or None
+    if folder_id:
+        try: folder_id = int(folder_id)
+        except: folder_id = None
+    if not video_file:
+        return JsonResponse({'error': 'No video file'}, status=400)
+    content = video_file.read()
+    filename = title.replace(' ', '_') + f"_{int(time.time())}.webm"
+    import re
+    filename = re.sub(r'[^a-zA-Z0-9_.-]', '', filename)
+    nc_path = _nc_upload(content, f"{NC_STUDIO_VIDEOS_FOLDER}/{filename}", 'video/webm')
+    if not nc_path:
+        from django.conf import settings as _s
+        local_dir = os.path.join(_s.BASE_DIR, 'media', 'studio', 'videos')
+        os.makedirs(local_dir, exist_ok=True)
+        with open(os.path.join(local_dir, filename), 'wb') as fh:
+            fh.write(content)
+        nc_path = f"__local__/studio/videos/{filename}"
+    # Save to media_library_items so it appears in Bibliothek
+    with connection.cursor() as c:
+        c.execute("""INSERT INTO media_library_items (nc_path, title, series, tags, folder_id)
+                     VALUES (%s, %s, 'Studio', 'video', %s)""", [nc_path, title, folder_id])
+        lib_id = c.lastrowid
+    # Save canvas state so video can be reopened for editing
+    canvas_json = request.POST.get('canvas_json', '')
+    if canvas_json:
+        with connection.cursor() as c:
+            c.execute("""INSERT INTO studio_images (nc_path, title, canvas_json)
+                         VALUES (%s, %s, %s)""", [nc_path, title, canvas_json])
+    return JsonResponse({'ok': True, 'nc_path': nc_path, 'filename': filename, 'lib_id': lib_id})
+
+
+@login_required
+def studio_api_templates(request):
+    _ensure_studio_tables()
+    with connection.cursor() as c:
+        rows = _safe(c, "SELECT id, title, width, height FROM studio_templates ORDER BY created_at DESC")
+    data = [{'id': r[0], 'title': r[1] or '', 'width': r[2], 'height': r[3],
+             'url': f"/library/studio/template/image/{r[0]}/"}
+            for r in (rows or [])]
+    return JsonResponse({'templates': data})
+
+
+@login_required
+def studio_api_templates(request):
+    _ensure_studio_tables()
+    with connection.cursor() as c:
+        rows = _safe(c, "SELECT id, title, width, height FROM studio_templates ORDER BY created_at DESC")
+    data = [{'id': r[0], 'title': r[1] or '', 'width': r[2], 'height': r[3],
+             'url': f"/library/studio/template/image/{r[0]}/"}
+            for r in (rows or [])]
+    return JsonResponse({'templates': data})
+
+
+NC_STUDIO_VIDEO_TEMPLATES_FOLDER = "Marketing & Design/LinkedIn/Studio/VideoVorlagen"
+
+
+def _ensure_video_template_table():
+    with connection.cursor() as c:
+        try:
+            c.execute("""CREATE TABLE IF NOT EXISTS studio_video_templates (
+                id              INT AUTO_INCREMENT PRIMARY KEY,
+                title           VARCHAR(255) DEFAULT '',
+                canvas_json     LONGTEXT NOT NULL,
+                preview_nc_path VARCHAR(512) DEFAULT NULL,
+                created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )""")
+        except Exception: pass
+
+
+@login_required
+def studio_video_template_save(request):
+    """Save current canvas state as a video template."""
+    if request.method != 'POST':
+        return JsonResponse({'error': 'POST required'}, status=405)
+    _ensure_video_template_table()
+    import time, base64, re as _re
+    title = request.POST.get('title', f'Video-Vorlage {int(time.time())}')
+    canvas_json = request.POST.get('canvas_json', '')
+    if not canvas_json:
+        return JsonResponse({'error': 'Kein canvas_json'}, status=400)
+
+    # Save preview PNG to Nextcloud (base64 from canvas_json snapshotDataUrl)
+    preview_nc_path = None
+    try:
+        import json as _json
+        state = _json.loads(canvas_json)
+        snapshot = state.get('snapshotDataUrl', '')
+        if snapshot and snapshot.startswith('data:image/png;base64,'):
+            b64 = snapshot.split(',', 1)[1]
+            img_bytes = base64.b64decode(b64)
+            safe_title = _re.sub(r'[^a-zA-Z0-9_-]', '_', title)
+            fname = f"{safe_title}_{int(time.time())}.png"
+            preview_nc_path = _nc_upload(img_bytes,
+                f"{NC_STUDIO_VIDEO_TEMPLATES_FOLDER}/{fname}", 'image/png')
+            if not preview_nc_path:
+                from django.conf import settings as _s
+                local_dir = os.path.join(_s.BASE_DIR, 'media', 'studio', 'video_templates')
+                os.makedirs(local_dir, exist_ok=True)
+                with open(os.path.join(local_dir, fname), 'wb') as fh:
+                    fh.write(img_bytes)
+                preview_nc_path = f"__local__/studio/video_templates/{fname}"
+    except Exception as e:
+        print("Video template preview error:", e)
+
+    with connection.cursor() as c:
+        c.execute("""INSERT INTO studio_video_templates (title, canvas_json, preview_nc_path)
+                     VALUES (%s, %s, %s)""", [title, canvas_json, preview_nc_path])
+        tpl_id = c.lastrowid
+    return JsonResponse({'ok': True, 'id': tpl_id, 'preview_nc_path': preview_nc_path})
+
+
+@login_required
+def studio_video_template_list(request):
+    _ensure_video_template_table()
+    with connection.cursor() as c:
+        rows = _safe(c, "SELECT id, title, preview_nc_path, created_at FROM studio_video_templates ORDER BY created_at DESC")
+    data = [{'id': r[0], 'title': r[1] or '', 'preview_url': f"/library/studio/video-template/preview/{r[0]}/"}
+            for r in (rows or [])]
+    return JsonResponse({'templates': data})
+
+
+@login_required
+def studio_video_template_load(request, tpl_id):
+    _ensure_video_template_table()
+    with connection.cursor() as c:
+        rows = _safe(c, "SELECT title, canvas_json FROM studio_video_templates WHERE id=%s", [tpl_id])
+    if not rows:
+        raise Http404
+    return JsonResponse({'ok': True, 'title': rows[0][0], 'canvas_json': rows[0][1]})
+
+
+@login_required
+def studio_video_template_delete(request, tpl_id):
+    if request.method != 'POST':
+        return JsonResponse({'error': 'POST required'}, status=405)
+    _ensure_video_template_table()
+    with connection.cursor() as c:
+        c.execute("DELETE FROM studio_video_templates WHERE id=%s", [tpl_id])
+    return JsonResponse({'ok': True})
+
+
+@login_required
+def studio_video_template_preview(request, tpl_id):
+    _ensure_video_template_table()
+    with connection.cursor() as c:
+        rows = _safe(c, "SELECT preview_nc_path FROM studio_video_templates WHERE id=%s", [tpl_id])
+    if not rows or not rows[0][0]:
+        raise Http404
+    nc_path = rows[0][0]
+    if nc_path.startswith('__local__/'):
+        from django.conf import settings as _s
+        rel = nc_path[len('__local__/'):]
+        local_path = os.path.join(_s.BASE_DIR, 'media', rel)
+        if not os.path.exists(local_path):
+            raise Http404
+        with open(local_path, 'rb') as f:
+            content = f.read()
+        return HttpResponse(content, content_type='image/png')
+    from posts_posted.nc_storage import download_image_from_nextcloud
+    content, ct = download_image_from_nextcloud(nc_path)
+    if not content:
+        raise Http404
+    return HttpResponse(content, content_type='image/png')
+
+
+@login_required
+def studio_api_saved(request):
+    """Return only items saved via Studio (images with tags='studio', videos with tags='video').
+    Images with animations in their canvas_json are excluded (they live in studio_video_templates).
+    """
+    import json as _json
+    _ensure_table()
+    _ensure_studio_tables()
+    with connection.cursor() as c:
+        # Load studio images together with their canvas_json to check for animations
+        img_rows = _safe(c, """SELECT m.id, m.title, m.nc_path,
+                                      si.canvas_json
+                               FROM media_library_items m
+                               LEFT JOIN studio_images si
+                                 ON si.nc_path = m.nc_path
+                                 AND si.id = (SELECT MAX(s2.id) FROM studio_images s2 WHERE s2.nc_path = m.nc_path)
+                               WHERE m.tags='studio' ORDER BY m.id DESC""")
+        vid_rows = _safe(c, """SELECT m.id, m.title, m.nc_path,
+                                      (SELECT COUNT(*) FROM studio_images s WHERE s.nc_path=m.nc_path AND s.canvas_json IS NOT NULL) as has_canvas
+                               FROM media_library_items m
+                               WHERE m.tags='video' ORDER BY m.id DESC""")
+
+    def _has_anim(canvas_json_str):
+        """Return True if any object in canvas_json has an animation set."""
+        if not canvas_json_str:
+            return False
+        try:
+            state = _json.loads(canvas_json_str)
+            return any(o.get('animType') and o.get('animType') != 'none'
+                       for o in (state.get('objects') or []))
+        except Exception:
+            return False
+
+    # Nicht-animierte Studio-Bilder → Bilder-Sektion
+    images = [{'id': r[0], 'title': r[1] or '', 'url': f"/library/image/{r[0]}/"}
+              for r in (img_rows or []) if not _has_anim(r[3])]
+    # Animierte Studio-Bilder → Video-Bilder-Sektion (legacy, vor neuem System)
+    anim_images = [{'id': r[0], 'title': r[1] or '', 'url': f"/library/image/{r[0]}/",
+                    'lib_item_id': r[0]}
+                   for r in (img_rows or []) if _has_anim(r[3])]
+    videos = [{'id': r[0], 'title': r[1] or '', 'url': f"/library/image/{r[0]}/", 'has_canvas': bool(r[3])}
+              for r in (vid_rows or [])]
+    return JsonResponse({'images': images, 'videos': videos, 'anim_images': anim_images})
+
+
+@login_required
+def studio_api_library(request):
+    """Return library images + folders for studio sidebar."""
+    _ensure_table()
+    filters = {'q': request.GET.get('q', '')}
+    folder_param = request.GET.get('folder', '')
+    if folder_param and folder_param != 'all':
+        if folder_param == 'none':
+            filters['folder'] = 'none'
+        else:
+            filters['folder_id'] = folder_param
+    items = _all_items(filters)
+    folders = _all_folders()
+    # Studio-generierte Bilder/Videos aus Bibliotheks-Seitenleiste ausblenden
+    STUDIO_TAGS = {'studio', 'video', 'video-bild'}
+    def _is_studio(item):
+        tags = {t.strip().lower() for t in (item.get('tags') or '').split(',') if t.strip()}
+        return bool(tags & STUDIO_TAGS)
+    items = [i for i in items if not _is_studio(i)]
+    data = [{'id': i['id'], 'title': i['title'], 'url': f"/library/image/{i['id']}/"} for i in items]
+    return JsonResponse({'items': data, 'folders': [{'id': f['id'], 'name': f['name']} for f in folders]})
+
+
+@login_required
+def studio_api_post_image(request, post_id):
+    """Return post image as proxy (same as planner_image but within studio URL namespace)."""
+    from django.http import Http404
+    from posts_posted.nc_storage import download_image_from_nextcloud
+    with connection.cursor() as c:
+        rows = _safe(c, "SELECT image FROM planner_posts WHERE id=%s", [post_id])
+    if not rows or not rows[0][0]:
+        raise Http404
+    nc_path = rows[0][0]
+    if not nc_path.startswith('Marketing') and not nc_path.startswith('__local__'):
+        filename = nc_path.split('/')[-1]
+        nc_path = f"Marketing & Design/LinkedIn/Planner/Images/{filename}"
+    content, ct = download_image_from_nextcloud(nc_path)
+    if not content:
+        raise Http404
+    resp = HttpResponse(content, content_type=ct or 'image/jpeg')
+    resp['Cache-Control'] = 'no-cache'
+    return resp

@@ -1,0 +1,143 @@
+{% extends "core/base.html" %}
+{% block title %}🔀 Flowcharts – draw.io{% endblock %}
+{% block content %}
+<style>
+  .drawio-wrap {
+    width: 100%;
+    height: calc(100vh - 120px);
+    min-height: 500px;
+    border: 1px solid #ddd;
+    border-radius: 6px;
+    overflow: hidden;
+    position: relative;
+  }
+  .drawio-wrap iframe {
+    width: 100%;
+    height: 100%;
+    border: none;
+  }
+  .drawio-toolbar {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    margin-bottom: 8px;
+    flex-wrap: wrap;
+  }
+  .drawio-toolbar .info {
+    font-size: .75rem;
+    color: #888;
+    margin-left: auto;
+  }
+</style>
+
+<div class="drawio-toolbar">
+  <h2 style="margin:0;font-size:1.1rem;color:var(--octo-dark-petrol)">🔀 Flowchart Editor</h2>
+  <button class="btn btn-primary btn-sm" onclick="exportDiagram('png')" style="font-size:12px">📥 Als PNG exportieren</button>
+  <button class="btn btn-secondary btn-sm" onclick="exportDiagram('svg')" style="font-size:12px">📥 Als SVG</button>
+  <button class="btn btn-secondary btn-sm" onclick="saveDiagramXml()" style="font-size:12px">💾 XML speichern</button>
+  <button class="btn btn-secondary btn-sm" onclick="document.getElementById('load-xml').click()" style="font-size:12px">📂 XML laden</button>
+  <input type="file" id="load-xml" accept=".xml,.drawio" style="display:none" onchange="loadDiagramXml(this)">
+  <span class="info">Powered by diagrams.net (draw.io)</span>
+</div>
+
+<div class="drawio-wrap">
+  <iframe id="drawio-frame"
+    src="https://embed.diagrams.net/?embed=1&ui=atlas&spin=1&proto=json&configure=1&noSaveBtn=1&noExitBtn=1">
+  </iframe>
+</div>
+
+<script>
+const frame = document.getElementById('drawio-frame');
+let pendingAction = null;
+
+window.addEventListener('message', function(evt) {
+  if (!evt.data) return;
+  let msg;
+  try { msg = JSON.parse(evt.data); } catch(e) { return; }
+
+  // draw.io sends configure event on load
+  if (msg.event === 'configure') {
+    // Send configuration with octovis colors
+    frame.contentWindow.postMessage(JSON.stringify({
+      action: 'configure',
+      config: {
+        defaultFonts: ['Roboto', 'Arial', 'Helvetica'],
+        customColorSchemes: [[
+          { fill: '#008591', font: '#ffffff', stroke: '#005F68' },  // Petrol
+          { fill: '#61CEBC', font: '#ffffff', stroke: '#008591' },  // Türkis
+          { fill: '#F56E28', font: '#ffffff', stroke: '#c4571f' },  // Orange
+          { fill: '#005F68', font: '#ffffff', stroke: '#003d42' },  // Dunkel
+          { fill: '#ffffff', font: '#333333', stroke: '#cccccc' },  // Weiß
+          { fill: '#1a1a2e', font: '#ffffff', stroke: '#0f0f1a' },  // Schwarz
+        ]]
+      }
+    }), '*');
+  }
+
+  if (msg.event === 'init') {
+    // Editor ready — load empty or stored diagram
+    const saved = localStorage.getItem('drawio_diagram');
+    frame.contentWindow.postMessage(JSON.stringify({
+      action: 'load',
+      xml: saved || '',
+      autosave: 1
+    }), '*');
+  }
+
+  if (msg.event === 'autosave') {
+    // Auto-save XML to localStorage
+    localStorage.setItem('drawio_diagram', msg.xml);
+  }
+
+  if (msg.event === 'save') {
+    localStorage.setItem('drawio_diagram', msg.xml);
+  }
+
+  if (msg.event === 'export') {
+    if (pendingAction === 'png' || pendingAction === 'svg') {
+      // Download the exported image
+      const a = document.createElement('a');
+      a.download = 'flowchart.' + pendingAction;
+      a.href = msg.data;
+      a.click();
+      pendingAction = null;
+    }
+  }
+});
+
+function exportDiagram(format) {
+  pendingAction = format;
+  frame.contentWindow.postMessage(JSON.stringify({
+    action: 'export',
+    format: format,
+    spinKey: 'export'
+  }), '*');
+}
+
+function saveDiagramXml() {
+  const xml = localStorage.getItem('drawio_diagram');
+  if (!xml) { alert('Kein Diagramm vorhanden.'); return; }
+  const blob = new Blob([xml], {type: 'application/xml'});
+  const a = document.createElement('a');
+  a.download = 'flowchart.drawio';
+  a.href = URL.createObjectURL(blob);
+  a.click();
+}
+
+function loadDiagramXml(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    const xml = e.target.result;
+    localStorage.setItem('drawio_diagram', xml);
+    frame.contentWindow.postMessage(JSON.stringify({
+      action: 'load',
+      xml: xml
+    }), '*');
+  };
+  reader.readAsText(file);
+  input.value = '';
+}
+</script>
+{% endblock %}
