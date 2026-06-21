@@ -858,11 +858,20 @@ def studio_video_template_list(request):
                            ) t
                          )""")
         except Exception: pass
-        rows = _safe(c, "SELECT id, title, preview_nc_path, created_at, preview_data FROM studio_video_templates ORDER BY created_at DESC")
+        # Try with preview_data column; fall back to 4-col query if column missing
+        try:
+            c.execute("SELECT id, title, preview_nc_path, created_at, preview_data FROM studio_video_templates ORDER BY created_at DESC")
+            rows = c.fetchall()
+        except Exception:
+            try:
+                c.execute("SELECT id, title, preview_nc_path, created_at FROM studio_video_templates ORDER BY created_at DESC")
+                rows = [list(r) + [None] for r in c.fetchall()]
+            except Exception:
+                rows = []
     data = []
     for r in (rows or []):
-        # Use preview_data (inline base64) if available, else fall back to server route
-        preview_url = r[4] if r[4] else f"/library/studio/video-template/preview/{r[0]}/"
+        preview_data = r[4] if len(r) > 4 else None
+        preview_url = preview_data if preview_data else f"/library/studio/video-template/preview/{r[0]}/"
         data.append({'id': r[0], 'title': r[1] or '', 'preview_url': preview_url})
     return JsonResponse({'templates': data})
 

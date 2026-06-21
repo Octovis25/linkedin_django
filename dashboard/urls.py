@@ -25,6 +25,8 @@ urlpatterns = [
     path("api/post-comment/", core_views.api_post_comment, name='api_post_comment'),
     path("api/categories/", core_views.api_categories, name='api_categories'),
     path("library/", include("media_library.urls")),
+    # Claude API (nur Bilder + Texte, API-Key geschützt)
+    path("api/claude/", include("media_library.claude_urls")),
     path("db-admin/", include("db_admin.urls")),
     path("change-password/", auth_views.PasswordChangeView.as_view(
         template_name="core/change_password.html", success_url="/"), name="change_password"),
