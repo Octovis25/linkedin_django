@@ -143,7 +143,7 @@
           <button id="text-action-btn" class="btn btn-primary btn-sm" onclick="addText()" style="font-size:11px;padding:2px 8px;margin-left:auto">+ Text</button>
         </div>
         <div style="display:flex;gap:4px;align-items:flex-end;flex-wrap:wrap">
-          <div id="palette-row" style="display:flex;gap:4px;align-items:flex-end"></div>
+          <div id="palette-row" style="display:flex;gap:4px;align-items:flex-end;flex-wrap:wrap"></div>
         </div>
       </div>
     </div>
@@ -190,7 +190,7 @@
           </div>
         </div>
         <div style="display:flex;gap:4px;align-items:flex-end;flex-wrap:wrap">
-          <div id="shape-palette-row" style="display:flex;gap:4px;align-items:flex-end"></div>
+          <div id="shape-palette-row" style="display:flex;gap:4px;align-items:flex-end;flex-wrap:wrap"></div>
         </div>
       </div>
     </div>
@@ -317,6 +317,7 @@
       <input type="color" id="fill-color-picker" value="#2a9d8f" title="Füllfarbe wählen" style="width:28px;height:28px;border:none;padding:0;cursor:pointer;vertical-align:middle;">
       <button onclick="toggleFillMode()" id="fill-btn" title="Farbe wählen, dann Loch klicken">🪣 Füllen</button>
       <span id="fill-status" style="display:none; font-size:12px; padding:2px 8px; border-radius:4px; vertical-align:middle;"></span>
+      <button onclick="resetAllModes()" id="reset-btn" title="Alle Modi zurücksetzen (Füllen, Ausschneiden etc.)" style="font-size:.85rem;color:#666;border:1px solid #ccc;background:#f8f8f8">↺ Reset</button>
       <button onclick="openDrawio()" title="draw.io Diagramm erstellen und als PNG auf Canvas einfügen" style="color:var(--octo-petrol);font-weight:600">🔷 draw.io</button>
       <span style="margin-left:auto;display:flex;align-items:center;gap:2px;">
         <button onclick="zoomCanvas(-1)" title="Rauszoomen" style="font-size:.9rem;padding:2px 6px;">➖</button>
@@ -446,7 +447,7 @@ const POST_ID = document.getElementById('post-id')?.value || '';
 // und fällt auf Hardcode-Werte zurück wenn brand.css nicht geladen.
 // Für dauerhafte Änderungen → brand.css bearbeiten, nicht hier!
 // ══════════════════════════════════════════
-const PALETTE_STORAGE_KEY = 'studio_palette_v1';
+const PALETTE_STORAGE_KEY = 'studio_palette_v2';
 
 function _readBrandColors() {
   const style = getComputedStyle(document.documentElement);
@@ -462,36 +463,97 @@ function _readBrandColors() {
 }
 const PALETTE_DEFAULT = _readBrandColors();
 
+// Brand-Farben sind immer die Basis (c1-c6). Zusätzlich: Template-Farben + Custom-Farben.
+let PALETTE = Object.assign({}, PALETTE_DEFAULT);
+let extraColors = [];   // Template-extrahierte Farben (nicht in Brand)
+let customColors = [];  // Vom User manuell hinzugefügt
+
 function _loadPalette() {
   try {
-    const stored = sessionStorage.getItem(PALETTE_STORAGE_KEY);
-    if (stored) return Object.assign({}, PALETTE_DEFAULT, JSON.parse(stored));
+    const stored = JSON.parse(sessionStorage.getItem(PALETTE_STORAGE_KEY) || '{}');
+    if (stored.brand) Object.assign(PALETTE, stored.brand);
+    if (stored.extra) extraColors = stored.extra;
+    if (stored.custom) customColors = stored.custom;
   } catch(e) {}
-  return Object.assign({}, PALETTE_DEFAULT);
 }
-let PALETTE = _loadPalette();
+_loadPalette();
 
 function savePalette() {
-  try { sessionStorage.setItem(PALETTE_STORAGE_KEY, JSON.stringify(PALETTE)); } catch(e) {}
+  try { sessionStorage.setItem(PALETTE_STORAGE_KEY, JSON.stringify({brand: PALETTE, extra: extraColors, custom: customColors})); } catch(e) {}
+}
+
+// Alle sichtbaren Farben (Brand + Extra + Custom, ohne Duplikate)
+function getAllColors() {
+  const brand = Object.values(PALETTE);
+  const all = [...brand];
+  [...extraColors, ...customColors].forEach(c => {
+    if (!all.some(a => a.toLowerCase() === c.toLowerCase())) all.push(c);
+  });
+  return all;
 }
 
 // Alle UI-Elemente die Palettenfarben nutzen aktualisieren
 function applyPaletteToUI() {
-  // Text-Farb-Standardwert
   const tc = document.getElementById('text-color');
   if (tc) tc.value = PALETTE.c1;
-  // Shape-Farb-Standardwert
   const sc = document.getElementById('shape-color');
   if (sc) sc.value = PALETTE.c2;
-  // Palette-Swatches rendern (ohne PALETTE zu überschreiben)
-  const palette = Object.values(PALETTE);
+
+  const allColors = getAllColors();
+  const brandCount = Object.keys(PALETTE).length;
   ['palette-row', 'shape-palette-row'].forEach(rowId => {
     const row = document.getElementById(rowId);
     if (!row) return;
     row.innerHTML = '';
-    palette.forEach((col, i) => { row.appendChild(_makeSwatch(col, col, i + 1)); });
+    allColors.forEach((col, i) => {
+      const label = i < brandCount ? String(i+1) : (i < brandCount + extraColors.length ? 'T' : '+');
+      row.appendChild(_makeSwatch(col, col, label));
+    });
+    // "+" Button: Color-Picker
+    const addBtn = document.createElement('div');
+    addBtn.style.cssText = 'display:flex;flex-direction:column;align-items:center;gap:1px;cursor:pointer';
+    addBtn.innerHTML = '<div style="width:24px;height:24px;border:2px dashed #ccc;border-radius:3px;display:flex;align-items:center;justify-content:center;font-size:14px;color:#999" title="Farbe aus Picker wählen">+</div>';
+    addBtn.addEventListener('click', () => {
+      const picker = document.createElement('input');
+      picker.type = 'color'; picker.value = '#F56E28';
+      picker.style.cssText = 'position:absolute;opacity:0;width:0;height:0';
+      document.body.appendChild(picker);
+      picker.addEventListener('input', () => {
+        const c = picker.value;
+        if (!getAllColors().some(a => a.toLowerCase() === c.toLowerCase())) {
+          customColors.push(c);
+          savePalette();
+          applyPaletteToUI();
+        }
+      });
+      picker.addEventListener('change', () => { document.body.removeChild(picker); });
+      picker.click();
+    });
+    row.appendChild(addBtn);
+    // Pipette (EyeDropper API)
+    if (window.EyeDropper) {
+      const pipBtn = document.createElement('div');
+      pipBtn.style.cssText = 'display:flex;flex-direction:column;align-items:center;gap:1px;cursor:pointer';
+      pipBtn.innerHTML = '<div style="width:24px;height:24px;border:2px dashed #ccc;border-radius:3px;display:flex;align-items:center;justify-content:center;font-size:14px;color:#999" title="Farbe mit Pipette vom Bildschirm aufnehmen">💉</div>';
+      pipBtn.addEventListener('click', async () => {
+        try {
+          const ed = new EyeDropper();
+          const result = await ed.open();
+          const c = result.sRGBHex;
+          if (!getAllColors().some(a => a.toLowerCase() === c.toLowerCase())) {
+            customColors.push(c);
+            savePalette();
+          }
+          // Farbe auch direkt in die Picker setzen
+          document.getElementById('text-color').value = c;
+          document.getElementById('shape-color').value = c;
+          applyPaletteToUI();
+        } catch(e) { /* user cancelled */ }
+      });
+      row.appendChild(pipBtn);
+    }
   });
-  // CSS-Variablen für dynamische UI-Elemente
+  // CSS-Variablen
   document.documentElement.style.setProperty('--studio-c1', PALETTE.c1);
   document.documentElement.style.setProperty('--studio-c2', PALETTE.c2);
   document.documentElement.style.setProperty('--studio-c3', PALETTE.c3);
@@ -531,6 +593,8 @@ function buildPaletteEditor() {
 
 function resetPalette() {
   Object.assign(PALETTE, PALETTE_DEFAULT);
+  extraColors = [];
+  customColors = [];
   savePalette();
   applyPaletteToUI();
   buildPaletteEditor();
@@ -1182,25 +1246,13 @@ function extractDominantColors(imgEl, count) {
 }
 
 function applyTemplatePalette(colors) {
-  // If colors given (from template extraction), update PALETTE
+  // Template-Farben als Extras hinzufügen (Brand-Farben bleiben!)
   if (colors && colors.length) {
-    const keys = ['c1','c2','c3','c4','c5','c6'];
-    colors.forEach((col, i) => { if (keys[i]) PALETTE[keys[i]] = col; });
+    const brandVals = Object.values(PALETTE).map(c => c.toLowerCase());
+    extraColors = colors.filter(c => !brandVals.includes(c.toLowerCase()));
     savePalette();
   }
-  const palette = Object.values(PALETTE);
-  ['palette-row', 'shape-palette-row'].forEach(rowId => {
-    const row = document.getElementById(rowId);
-    if (!row) return;
-    row.innerHTML = '';
-    palette.forEach((col, i) => {
-      row.appendChild(_makeSwatch(col, col, i + 1));
-    });
-  });
-  // Also update pickers to reflect current palette c2 as shape default
-  const sc = document.getElementById('shape-color');
-  if (sc) sc.value = PALETTE.c2;
-  // Palette-Editor synchronisieren
+  applyPaletteToUI();
   buildPaletteEditor();
 }
 
@@ -1751,6 +1803,7 @@ function _buildCanvasJson() {
 }
 
 async function saveImage() {
+  resetAllModes();
   const msg   = document.getElementById('status-msg');
   const titleEl = document.getElementById('title-input');
   const title = titleEl.value.trim();
@@ -2271,11 +2324,26 @@ function endCropMode() {
   autoDetectMode = false;
   cropStart = null;
   cropRect = null;
-  canvas.style.cursor = 'crosshair';
+  canvas.style.cursor = '';
   document.getElementById('crop-btn').style.background = '';
   document.getElementById('crop-btn').style.color = '';
   document.getElementById('autodetect-btn').style.background = '';
   document.getElementById('autodetect-btn').style.color = '';
+  render();
+}
+
+// ── Zentraler Reset aller Modi ──
+function resetAllModes() {
+  // Fill-Mode
+  if (fillMode) exitFillMode();
+  // Crop / AutoDetect
+  if (cropMode) endCropMode();
+  // Paint
+  paintMode = false;
+  isPainting = false;
+  // Cursor + Selection
+  canvas.style.cursor = '';
+  document.getElementById('sel-info').textContent = '';
   render();
 }
 
@@ -3388,6 +3456,7 @@ function startVideoPreview() {
 let lastVideoBlob = null;
 
 async function recordVideo() {
+  resetAllModes();
   if (objects.length === 0) { alert('Füge zuerst Elemente ein.'); return; }
 
   // Titel prüfen bevor Aufnahme
@@ -3631,7 +3700,7 @@ function exitFillMode() {
   updateFillStatus();
 }
 
-document.addEventListener('keydown', e => { if (e.key === 'Escape') exitFillMode(); });
+document.addEventListener('keydown', e => { if (e.key === 'Escape') resetAllModes(); });
 
 // Schritt 1: Farbe aufnehmen, Schritt 2: Loch füllen
 function floodFillAtClick(e) {
