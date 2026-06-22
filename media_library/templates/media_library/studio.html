@@ -374,8 +374,8 @@
             ➕<input type="file" id="shared-upload-input" accept="image/*" style="display:none" multiple>
           </label>
         </div>
-        <div id="shared-grid" style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:.3rem;max-height:180px;overflow-y:auto">
-          <span style="font-size:.75rem;color:#888">Lädt…</span>
+        <div id="shared-tree" style="max-height:250px;overflow-y:auto;font-size:.75rem">
+          <span style="color:#888">Lädt…</span>
         </div>
       </div>
     </div>
@@ -3850,50 +3850,88 @@ applyPaletteToUI();
 buildPaletteEditor();
 
 // ── Shared Assets (Geteilte Bilder aus NC) ──
+function _sharedImgThumb(item) {
+  const wrap = document.createElement('div');
+  wrap.style.cssText = 'position:relative;cursor:pointer';
+  wrap.title = (item.path || item.name) + ' – klicken zum Einfügen';
+  const img = document.createElement('img');
+  img.src = item.url;
+  img.loading = 'lazy';
+  img.className = 'lib-thumb';
+  img.setAttribute('draggable', 'false');
+  img.onerror = () => { img.style.display='none'; wrap.style.background='#eee'; };
+  wrap.appendChild(img);
+  wrap.setAttribute('draggable', 'true');
+  wrap.addEventListener('dragstart', e => {
+    e.dataTransfer.setData('text/plain', item.url);
+    e.dataTransfer.effectAllowed = 'copy';
+    e.dataTransfer.setDragImage(img, img.width/2, img.height/2);
+  });
+  wrap.addEventListener('click', () => {
+    const ni = new Image();
+    ni.crossOrigin = 'anonymous';
+    ni.onload = () => {
+      const s = Math.min(300/ni.width, 300/ni.height, 1);
+      objects.push({type:'img', img:ni, x:50, y:50, w:ni.width*s, h:ni.height*s, url:item.url, originalUrl:item.url});
+      selIdx = objects.length - 1;
+      render();
+    };
+    ni.src = item.url;
+  });
+  return wrap;
+}
+
 async function loadSharedAssets(q='') {
-  const grid = document.getElementById('shared-grid');
+  const tree = document.getElementById('shared-tree');
   try {
     const res = await fetch('/library/studio/api/shared-assets/?q=' + encodeURIComponent(q));
     const data = await res.json();
     if (!data.items || !data.items.length) {
-      grid.innerHTML = '<span style="font-size:.75rem;color:#888">Keine Bilder</span>';
+      tree.innerHTML = '<span style="color:#888">Keine Bilder</span>';
       return;
     }
-    grid.innerHTML = '';
+    // Group by folder
+    const folders = {};
+    const rootFiles = [];
     data.items.forEach(item => {
-      const wrap = document.createElement('div');
-      wrap.style.cssText = 'position:relative;cursor:pointer';
-      wrap.title = (item.path || item.name) + ' – klicken zum Einfügen';
-      const img = document.createElement('img');
-      img.src = item.url;
-      img.loading = 'lazy';
-      img.className = 'lib-thumb';
-      img.setAttribute('draggable', 'false');
-      img.onerror = () => { img.style.display='none'; wrap.style.background='#eee'; };
-      wrap.appendChild(img);
-      // Drag & Drop
-      wrap.setAttribute('draggable', 'true');
-      wrap.addEventListener('dragstart', e => {
-        e.dataTransfer.setData('text/plain', item.url);
-        e.dataTransfer.effectAllowed = 'copy';
-        e.dataTransfer.setDragImage(img, img.width/2, img.height/2);
+      const parts = (item.path || item.name).split('/');
+      if (parts.length > 1) {
+        const folder = parts.slice(0, -1).join('/');
+        if (!folders[folder]) folders[folder] = [];
+        folders[folder].push(item);
+      } else {
+        rootFiles.push(item);
+      }
+    });
+    tree.innerHTML = '';
+    // Render root files first
+    if (rootFiles.length) {
+      const grid = document.createElement('div');
+      grid.style.cssText = 'display:grid;grid-template-columns:1fr 1fr 1fr;gap:.3rem;margin-bottom:6px';
+      rootFiles.forEach(item => grid.appendChild(_sharedImgThumb(item)));
+      tree.appendChild(grid);
+    }
+    // Render folders
+    const sortedFolders = Object.keys(folders).sort();
+    sortedFolders.forEach(fname => {
+      const section = document.createElement('div');
+      section.style.cssText = 'margin-bottom:4px';
+      const header = document.createElement('div');
+      header.style.cssText = 'cursor:pointer;padding:2px 4px;background:#f0f0f0;border-radius:3px;font-size:.7rem;font-weight:600;color:#555;margin-bottom:3px;user-select:none';
+      header.textContent = '📁 ' + fname + ' (' + folders[fname].length + ')';
+      const grid = document.createElement('div');
+      grid.style.cssText = 'display:grid;grid-template-columns:1fr 1fr 1fr;gap:.3rem;margin-bottom:4px';
+      folders[fname].forEach(item => grid.appendChild(_sharedImgThumb(item)));
+      header.addEventListener('click', () => {
+        grid.style.display = grid.style.display === 'none' ? 'grid' : 'none';
+        header.textContent = (grid.style.display === 'none' ? '📁 ' : '📂 ') + fname + ' (' + folders[fname].length + ')';
       });
-      // Click = add to canvas
-      wrap.addEventListener('click', () => {
-        const ni = new Image();
-        ni.crossOrigin = 'anonymous';
-        ni.onload = () => {
-          const s = Math.min(300/ni.width, 300/ni.height, 1);
-          objects.push({type:'img', img:ni, x:50, y:50, w:ni.width*s, h:ni.height*s, url:item.url, originalUrl:item.url});
-          selIdx = objects.length - 1;
-          render();
-        };
-        ni.src = item.url;
-      });
-      grid.appendChild(wrap);
+      section.appendChild(header);
+      section.appendChild(grid);
+      tree.appendChild(section);
     });
   } catch(e) {
-    grid.innerHTML = '<span style="color:red;font-size:.7rem">Fehler: '+e+'</span>';
+    tree.innerHTML = '<span style="color:red;font-size:.7rem">Fehler: '+e+'</span>';
   }
 }
 document.getElementById('shared-search').addEventListener('input', function() {
