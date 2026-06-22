@@ -1274,7 +1274,7 @@ NC_SHARED_ASSETS_FOLDER = "Marketing & Design/Bilder_Bibliothek"
 
 @login_required
 def studio_shared_assets_list(request):
-    """List images from the shared NC folder via WebDAV PROPFIND."""
+    """List images from the shared NC folder via WebDAV PROPFIND (recursive)."""
     from posts_posted.nc_storage import _get_nc_credentials
     from urllib.parse import quote, unquote
     import xml.etree.ElementTree as ET
@@ -1291,13 +1291,20 @@ def studio_shared_assets_list(request):
     propfind_url = "{}/remote.php/dav/files/{}/{}".format(
         nc_url.rstrip('/'), username, quote(NC_SHARED_ASSETS_FOLDER, safe='/')
     )
+    # Depth: infinity to include subfolders
     try:
         import requests as _req
         from requests.auth import HTTPBasicAuth
         r = _req.request('PROPFIND', propfind_url,
                          auth=HTTPBasicAuth(username, password),
-                         headers={'Depth': '1', 'Content-Type': 'application/xml'},
+                         headers={'Depth': 'infinity', 'Content-Type': 'application/xml'},
                          timeout=30)
+        if r.status_code == 507:
+            # Some NC servers reject infinity, fall back to Depth:1
+            r = _req.request('PROPFIND', propfind_url,
+                             auth=HTTPBasicAuth(username, password),
+                             headers={'Depth': '1', 'Content-Type': 'application/xml'},
+                             timeout=30)
         if r.status_code not in [200, 207]:
             return JsonResponse({'items': [], 'error': f'NC {r.status_code}'})
     except Exception as e:
@@ -1305,25 +1312,34 @@ def studio_shared_assets_list(request):
 
     items = []
     IMAGE_EXTS = {'.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg'}
+    # Build the base path prefix to strip from hrefs
+    base_prefix = f"/remote.php/dav/files/{username}/"
     try:
         root = ET.fromstring(r.text)
         ns = {'d': 'DAV:'}
         for resp_el in root.findall('.//d:response', ns):
             href = resp_el.findtext('d:href', '', ns)
-            # Skip the folder itself
             decoded = unquote(href)
-            if decoded.rstrip('/').endswith(NC_SHARED_ASSETS_FOLDER.rstrip('/')):
+            # Skip folders (end with /)
+            if decoded.endswith('/'):
                 continue
-            filename = decoded.rstrip('/').split('/')[-1]
+            filename = decoded.split('/')[-1]
             ext = os.path.splitext(filename)[1].lower()
             if ext not in IMAGE_EXTS:
                 continue
             # Search filter
             if q and q not in filename.lower():
                 continue
-            nc_path = f"{NC_SHARED_ASSETS_FOLDER}/{filename}"
+            # Extract full NC path from href
+            bp = decoded.find(base_prefix)
+            if bp >= 0:
+                nc_path = decoded[bp + len(base_prefix):]
+            else:
+                nc_path = f"{NC_SHARED_ASSETS_FOLDER}/{filename}"
             proxy_url = f"/library/studio/nc-image/?p={quote(nc_path, safe='/')}"
-            items.append({'name': filename, 'url': proxy_url, 'nc_path': nc_path})
+            # Subfolder label
+            rel = nc_path[len(NC_SHARED_ASSETS_FOLDER):].lstrip('/')
+            items.append({'name': filename, 'url': proxy_url, 'nc_path': nc_path, 'path': rel})
     except Exception as e:
         return JsonResponse({'items': [], 'error': f'XML parse: {e}'})
 
