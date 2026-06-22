@@ -364,6 +364,24 @@
 
     <hr class="sidebar-divider">
 
+    <!-- Geteilte Bilder (Shared Assets aus NC) -->
+    <div class="sidebar-section">
+      <h3 onclick="this.parentElement.classList.toggle('collapsed')">🌐 Geteilte Bilder</h3>
+      <div class="section-body">
+        <div style="display:flex;gap:4px;margin-bottom:4px">
+          <input id="shared-search" type="text" placeholder="Suchen…" style="flex:1;padding:.2rem .3rem;border:1px solid #ccc;border-radius:4px;font-size:.75rem">
+          <label style="cursor:pointer;font-size:1.1rem;line-height:1;padding:2px 4px;border:1px solid #ccc;border-radius:4px;background:#fff" title="Bild hochladen">
+            ➕<input type="file" id="shared-upload-input" accept="image/*" style="display:none" multiple>
+          </label>
+        </div>
+        <div id="shared-grid" style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:.3rem;max-height:180px;overflow-y:auto">
+          <span style="font-size:.75rem;color:#888">Lädt…</span>
+        </div>
+      </div>
+    </div>
+
+    <hr class="sidebar-divider">
+
     <!-- Gespeicherte Bilder -->
     <div class="sidebar-section">
       <h3 onclick="this.parentElement.classList.toggle('collapsed')">🖼 Bilder</h3>
@@ -3831,9 +3849,74 @@ async function handleDrawioExport(dataUrl) {
 applyPaletteToUI();
 buildPaletteEditor();
 
+// ── Shared Assets (Geteilte Bilder aus NC) ──
+async function loadSharedAssets(q='') {
+  const grid = document.getElementById('shared-grid');
+  try {
+    const res = await fetch('/library/studio/api/shared-assets/?q=' + encodeURIComponent(q));
+    const data = await res.json();
+    if (!data.items || !data.items.length) {
+      grid.innerHTML = '<span style="font-size:.75rem;color:#888">Keine Bilder</span>';
+      return;
+    }
+    grid.innerHTML = '';
+    data.items.forEach(item => {
+      const wrap = document.createElement('div');
+      wrap.style.cssText = 'position:relative;cursor:pointer';
+      wrap.title = item.name + ' – klicken zum Einfügen';
+      const img = document.createElement('img');
+      img.src = item.url;
+      img.loading = 'lazy';
+      img.className = 'lib-thumb';
+      img.setAttribute('draggable', 'false');
+      img.onerror = () => { img.style.display='none'; wrap.style.background='#eee'; };
+      wrap.appendChild(img);
+      // Drag & Drop
+      wrap.setAttribute('draggable', 'true');
+      wrap.addEventListener('dragstart', e => {
+        e.dataTransfer.setData('text/plain', item.url);
+        e.dataTransfer.effectAllowed = 'copy';
+        e.dataTransfer.setDragImage(img, img.width/2, img.height/2);
+      });
+      // Click = add to canvas
+      wrap.addEventListener('click', () => {
+        const ni = new Image();
+        ni.crossOrigin = 'anonymous';
+        ni.onload = () => {
+          const s = Math.min(300/ni.width, 300/ni.height, 1);
+          objects.push({type:'img', img:ni, x:50, y:50, w:ni.width*s, h:ni.height*s, url:item.url, originalUrl:item.url});
+          selIdx = objects.length - 1;
+          render();
+        };
+        ni.src = item.url;
+      });
+      grid.appendChild(wrap);
+    });
+  } catch(e) {
+    grid.innerHTML = '<span style="color:red;font-size:.7rem">Fehler: '+e+'</span>';
+  }
+}
+document.getElementById('shared-search').addEventListener('input', function() {
+  clearTimeout(this._t); this._t = setTimeout(() => loadSharedAssets(this.value), 400);
+});
+document.getElementById('shared-upload-input').addEventListener('change', async function() {
+  for (const file of this.files) {
+    const fd = new FormData();
+    fd.append('file', file);
+    try {
+      const r = await fetch('/library/studio/api/shared-assets/upload/', {method:'POST', body:fd, headers:{'X-CSRFToken': getCookie('csrftoken')}});
+      const d = await r.json();
+      if (!d.ok) alert('Upload fehlgeschlagen: ' + (d.error||''));
+    } catch(e) { alert('Upload Fehler: '+e); }
+  }
+  this.value = '';
+  loadSharedAssets();
+});
+
 // ── Init ──
 loadTemplateSidebar();
 loadLibrarySidebar();
+loadSharedAssets();
 loadSavedItems();
 loadVideoTemplates();
 render();

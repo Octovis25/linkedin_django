@@ -1265,3 +1265,119 @@ def studio_drawio_save(request):
 
     return JsonResponse({'ok': True, 'nc_path': nc_path, 'lib_id': lib_id,
                          'url': f"/library/image/{lib_id}/"})
+
+
+# ── Shared Assets (geteilter NC-Ordner für Bilderpool) ──
+
+NC_SHARED_ASSETS_FOLDER = "Marketing & Design/Bilder_Bibliothek"
+
+
+@login_required
+def studio_shared_assets_list(request):
+    """List images from the shared NC folder via WebDAV PROPFIND."""
+    from posts_posted.nc_storage import _get_nc_credentials
+    from urllib.parse import quote, unquote
+    import xml.etree.ElementTree as ET
+
+    nc_url, username, password = _get_nc_credentials()
+    if not all([nc_url, username, password]):
+        return JsonResponse({'error': 'Nextcloud nicht konfiguriert'}, status=500)
+
+    # Ensure folder exists
+    _nc_ensure_folder(nc_url, username, password, NC_SHARED_ASSETS_FOLDER)
+
+    q = (request.GET.get('q') or '').strip().lower()
+
+    propfind_url = "{}/remote.php/dav/files/{}/{}".format(
+        nc_url.rstrip('/'), username, quote(NC_SHARED_ASSETS_FOLDER, safe='/')
+    )
+    try:
+        import requests as _req
+        from requests.auth import HTTPBasicAuth
+        r = _req.request('PROPFIND', propfind_url,
+                         auth=HTTPBasicAuth(username, password),
+                         headers={'Depth': '1', 'Content-Type': 'application/xml'},
+                         timeout=30)
+        if r.status_code not in [200, 207]:
+            return JsonResponse({'items': [], 'error': f'NC {r.status_code}'})
+    except Exception as e:
+        return JsonResponse({'items': [], 'error': str(e)})
+
+    items = []
+    IMAGE_EXTS = {'.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg'}
+    try:
+        root = ET.fromstring(r.text)
+        ns = {'d': 'DAV:'}
+        for resp_el in root.findall('.//d:response', ns):
+            href = resp_el.findtext('d:href', '', ns)
+            # Skip the folder itself
+            decoded = unquote(href)
+            if decoded.rstrip('/').endswith(NC_SHARED_ASSETS_FOLDER.rstrip('/')):
+                continue
+            filename = decoded.rstrip('/').split('/')[-1]
+            ext = os.path.splitext(filename)[1].lower()
+            if ext not in IMAGE_EXTS:
+                continue
+            # Search filter
+            if q and q not in filename.lower():
+                continue
+            nc_path = f"{NC_SHARED_ASSETS_FOLDER}/{filename}"
+            proxy_url = f"/library/studio/nc-image/?p={quote(nc_path, safe='/')}"
+            items.append({'name': filename, 'url': proxy_url, 'nc_path': nc_path})
+    except Exception as e:
+        return JsonResponse({'items': [], 'error': f'XML parse: {e}'})
+
+    return JsonResponse({'items': items})
+
+
+@login_required
+def studio_shared_assets_upload(request):
+    """Upload an image to the shared NC assets folder."""
+    if request.method != 'POST':
+        return JsonResponse({'error': 'POST required'}, status=405)
+    from posts_posted.nc_storage import _get_nc_credentials
+    from urllib.parse import quote
+    import requests as _req
+    from requests.auth import HTTPBasicAuth
+
+    nc_url, username, password = _get_nc_credentials()
+    if not all([nc_url, username, password]):
+        return JsonResponse({'error': 'Nextcloud nicht konfiguriert'}, status=500)
+
+    f = request.FILES.get('file')
+    if not f:
+        return JsonResponse({'error': 'Keine Datei'}, status=400)
+
+    filename = f.name.replace(' ', '_')
+    _nc_ensure_folder(nc_url, username, password, NC_SHARED_ASSETS_FOLDER)
+
+    nc_path = f"{NC_SHARED_ASSETS_FOLDER}/{filename}"
+    upload_url = "{}/remote.php/dav/files/{}/{}".format(
+        nc_url.rstrip('/'), username, quote(nc_path, safe='/')
+    )
+    try:
+        content = f.read()
+        r = _req.put(upload_url, data=content,
+                     auth=HTTPBasicAuth(username, password),
+                     headers={'Content-Type': f.content_type or 'image/png'},
+                     timeout=60)
+        if r.status_code not in [200, 201, 204]:
+            return JsonResponse({'error': f'Upload fehlgeschlagen: {r.status_code}'}, status=500)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+    proxy_url = f"/library/studio/nc-image/?p={quote(nc_path, safe='/')}"
+    return JsonResponse({'ok': True, 'name': filename, 'url': proxy_url, 'nc_path': nc_path})
+
+
+@login_required
+def studio_shared_assets_delete(request):
+    """Delete an image from the shared NC assets folder."""
+    if request.method != 'POST':
+        return JsonResponse({'error': 'POST required'}, status=405)
+    nc_path = request.POST.get('nc_path', '')
+    if not nc_path or not nc_path.startswith(NC_SHARED_ASSETS_FOLDER):
+        return JsonResponse({'error': 'Ungültiger Pfad'}, status=400)
+    from posts_posted.nc_storage import delete_image_from_nextcloud
+    ok = delete_image_from_nextcloud(nc_path)
+    return JsonResponse({'ok': ok})
