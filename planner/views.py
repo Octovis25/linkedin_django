@@ -1523,6 +1523,56 @@ def _buffer_channel_for_target(token, target):
     return token.get('buffer_profile_id'), token.get('buffer_profile_name')
 
 
+def _buffer_first_org_id(buf_token):
+    """Get the first Buffer organization id (needed for the posts metrics query)."""
+    query = """
+    query GetOrganizations {
+      account { organizations { id name } }
+    }
+    """
+    result = _buffer_graphql(buf_token, query)
+    orgs = (result.get('data', {}) or {}).get('account', {}).get('organizations', []) or []
+    return orgs[0].get('id') if orgs else None
+
+
+def _buffer_fetch_post_metrics(buf_token, org_id, first=50):
+    """
+    Fetch recent posts with their metrics from Buffer.
+    Returns a list of dicts: {buffer_post_id, channel_id, sent_at, metrics:[{type,name,value,unit}]}.
+    """
+    query = """
+    query PostsMetrics($input: PostsInput!, $first: Int) {
+      posts(input: $input, first: $first) {
+        edges {
+          node {
+            id
+            channelId
+            dueAt
+            status
+            metricsUpdatedAt
+            metrics { type name value unit }
+          }
+        }
+      }
+    }
+    """
+    variables = {"input": {"organizationId": org_id}, "first": first}
+    result = _buffer_graphql(buf_token, query, variables)
+    edges = (result.get('data', {}) or {}).get('posts', {}).get('edges', []) or []
+    out = []
+    for e in edges:
+        node = e.get('node') or {}
+        out.append({
+            'buffer_post_id': node.get('id'),
+            'channel_id': node.get('channelId'),
+            'sent_at': node.get('dueAt'),
+            'status': node.get('status'),
+            'metrics_updated_at': node.get('metricsUpdatedAt'),
+            'metrics': node.get('metrics') or [],
+        })
+    return out
+
+
 def _buffer_delete_post(buf_token, buffer_post_id):
     """Delete a post in Buffer by its Buffer post id (buffer_update_id)."""
     if not buf_token or not buffer_post_id:

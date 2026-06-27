@@ -31,3 +31,26 @@ services:
         sync: false
       - key: MYSQL_PASSWORD
         sync: false
+
+  # Nächtlicher Cron-Job: holt einmal täglich die Buffer-Statistik in die DB.
+  - type: cron
+    name: buffer-stats-nightly
+    runtime: python
+    schedule: "0 3 * * *"   # täglich 03:00 UTC
+    buildCommand: pip install -r requirements.txt
+    startCommand: python manage.py fetch_buffer_stats
+    envVars:
+      - key: MYSQL_HOST
+        sync: false
+      - key: MYSQL_DATABASE
+        sync: false
+      - key: MYSQL_USER
+        sync: false
+      - key: MYSQL_PASSWORD
+        sync: false
+      - key: CLOUDINARY_CLOUD_NAME
+        sync: false
+      - key: CLOUDINARY_API_KEY
+        sync: false
+      - key: CLOUDINARY_API_SECRET
+        sync: false
