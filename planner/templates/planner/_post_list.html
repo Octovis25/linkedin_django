@@ -315,7 +315,10 @@ async function setStatus(id, status) {
 }
 async function peDeletePost(id) {
   if (!confirm('Delete this post permanently? This cannot be undone.')) return;
-  await peApi({action:'delete', id});
+  const r = await peApi({action:'delete', id});
+  if (r && r.had_buffer_id && !r.buffer_deleted) {
+    alert('Hinweis: In Buffer konnte der Post nicht geloescht werden.\nGrund: ' + (r.buffer_error || 'unbekannt'));
+  }
   location.reload();
 }
 

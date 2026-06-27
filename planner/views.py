@@ -554,6 +554,8 @@ def api_post(request):
             pid = data.get('id')
             # Falls der Post über Buffer geplant wurde: zuerst in Buffer löschen.
             buffer_deleted = None
+            buffer_error = None
+            buf_post_id = None
             try:
                 c.execute("SELECT buffer_update_id FROM planner_posts WHERE id=%s", [pid])
                 brow = c.fetchone()
@@ -563,11 +565,15 @@ def api_post(request):
                     if tok and tok.get('buffer_token'):
                         _buffer_delete_post(tok['buffer_token'], buf_post_id)
                         buffer_deleted = True
+                    else:
+                        buffer_error = 'kein Buffer-Token konfiguriert'
             except Exception as _be:
                 print("Buffer delete on post-delete error:", _be)
                 buffer_deleted = False
+                buffer_error = str(_be)
             c.execute("DELETE FROM planner_posts WHERE id=%s", [pid])
-            return JsonResponse({'ok': True, 'buffer_deleted': buffer_deleted})
+            return JsonResponse({'ok': True, 'buffer_deleted': buffer_deleted,
+                                 'buffer_error': buffer_error, 'had_buffer_id': bool(buf_post_id)})
         elif action == 'to_pipeline':
             c.execute("UPDATE planner_posts SET in_pipeline=1 WHERE id=%s", [data.get('id')])
             return JsonResponse({'ok': True})
