@@ -1342,11 +1342,13 @@ def _buffer_graphql(buf_token, query, variables=None):
     req.add_header("Content-Type", "application/json")
 
     try:
-        with urllib.request.urlopen(req) as resp:
+        with urllib.request.urlopen(req, timeout=30) as resp:
             result = json.loads(resp.read().decode("utf-8"))
     except urllib.error.HTTPError as e:
         body = e.read().decode("utf-8", errors="replace")
         raise Exception(f"Buffer GraphQL HTTP {e.code}: {body}")
+    except Exception as e:
+        raise Exception(f"Buffer GraphQL Verbindungsfehler: {type(e).__name__}: {e}")
 
     if result.get("errors"):
         raise Exception("Buffer GraphQL errors: " + json.dumps(result["errors"], ensure_ascii=False))
@@ -1901,6 +1903,15 @@ def _handle_video_from_json_request(token, post_id, text, target, scheduled_ms):
 
 @login_required
 def linkedin_do_post(request, post_id):
+    try:
+        return _linkedin_do_post_impl(request, post_id)
+    except Exception as _e:
+        import traceback as _tb
+        print("linkedin_do_post CRASH:", _tb.format_exc())
+        return JsonResponse({'ok': False, 'error': f'{type(_e).__name__}: {_e}'}, status=500)
+
+
+def _linkedin_do_post_impl(request, post_id):
     import time as _time
     from datetime import datetime as _dt, timezone as _timezone
 
@@ -1961,14 +1972,6 @@ def linkedin_do_post(request, post_id):
                     _prepare_temp_video(post_id)
                     video_url = _temp_video_url(post_id)
                     print("BUFFER TEMP VIDEO URL:", video_url)
-                    # Warmup: Render selbst die URL anstoßen, damit der Dienst wach
-                    # und die Datei sofort auslieferbar ist, bevor Buffer validiert.
-                    # Verhindert das 10s-Timeout bei Render-Kaltstart.
-                    try:
-                        import requests as _wreq
-                        _wreq.get(video_url, headers={'Range': 'bytes=0-1024'}, timeout=20)
-                    except Exception as _we:
-                        print("temp video warmup error:", _we)
 
             if include_img and not video_url:
                 with connection.cursor() as c:
