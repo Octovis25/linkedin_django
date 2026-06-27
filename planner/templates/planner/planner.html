@@ -855,9 +855,17 @@ function _setVidPreview(previewId, file) {
   if (file) {
     v.src = URL.createObjectURL(file);
     v.style.display = 'block';
+    v.onloadedmetadata = function() {
+      try {
+        const dur = isFinite(v.duration) ? v.duration : 0;
+        const target = dur > 0 ? Math.min(2, dur / 4) : 0;
+        if (target > 0) v.currentTime = target;
+      } catch (e) {}
+    };
     try { v.load(); } catch (e) {}
   } else {
     try { v.pause(); } catch (e) {}
+    v.onloadedmetadata = null;
     v.removeAttribute('src');
     v.style.display = 'none';
   }
