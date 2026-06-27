@@ -614,8 +614,27 @@ def api_post(request):
             c.execute("UPDATE planner_posts SET in_pipeline=0 WHERE id=%s", [data.get('id')])
             return JsonResponse({'ok': True})
         elif action == 'cancel_linkedin':
-            c.execute("UPDATE planner_posts SET post_scheduled_at=NULL WHERE id=%s", [data.get('id')])
-            return JsonResponse({'ok': True})
+            pid = data.get('id')
+            # Geplanten Post auch in Buffer löschen, sonst wird er trotzdem gepostet.
+            buffer_deleted = None
+            try:
+                c.execute("SELECT buffer_update_id FROM planner_posts WHERE id=%s", [pid])
+                brow = c.fetchone()
+                buf_post_id = brow[0] if brow else None
+                if buf_post_id:
+                    tok = _li_get_superuser_token()
+                    if tok and tok.get('buffer_token'):
+                        _buffer_delete_post(tok['buffer_token'], buf_post_id)
+                        buffer_deleted = True
+            except Exception as _be:
+                print("Buffer delete on cancel error:", _be)
+                buffer_deleted = False
+            # Planung zurücksetzen + Buffer-ID entfernen (Post bleibt in Django).
+            try:
+                c.execute("UPDATE planner_posts SET post_scheduled_at=NULL, buffer_update_id=NULL WHERE id=%s", [pid])
+            except Exception:
+                c.execute("UPDATE planner_posts SET post_scheduled_at=NULL WHERE id=%s", [pid])
+            return JsonResponse({'ok': True, 'buffer_deleted': buffer_deleted})
     return JsonResponse({'ok': False}, status=400)
 
 
