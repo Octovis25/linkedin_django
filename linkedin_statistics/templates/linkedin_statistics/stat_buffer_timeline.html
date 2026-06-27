@@ -1,0 +1,106 @@
+{% extends "base.html" %}
+{% block title %}Statistics – Buffer-Verlauf{% endblock %}
+{% block content %}
+<style>
+.bt-page { max-width: 1200px; margin: 0 auto; }
+.bt-card { background:#fff; border-radius:.5rem; padding:1.25rem 1.5rem; box-shadow:0 1px 3px rgba(0,0,0,.08); margin-bottom:1.5rem; border-left:4px solid var(--octo-petrol,#008591); }
+.bt-table { width:100%; border-collapse:collapse; font-size:13px; }
+.bt-table th, .bt-table td { padding:8px 10px; border-bottom:1px solid #eee; text-align:left; }
+.bt-table th { color:#6c757d; font-weight:600; font-size:12px; }
+.bt-table tr:hover { background:#f8fbfb; cursor:pointer; }
+.bt-table tr.active { background:#e1f5ee; }
+.bt-num { text-align:right; font-variant-numeric:tabular-nums; }
+.bt-title { max-width:380px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.bt-empty { color:#adb5bd; padding:2rem; text-align:center; }
+</style>
+
+<div class="bt-page">
+  <h1 style="font-size:1.4rem;margin-bottom:.25rem">📊 Buffer-Verlauf</h1>
+  <p style="color:#6c757d;font-size:13px;margin-bottom:1.5rem">
+    Verlauf der letzten 10 Posts anhand der täglich aus Buffer abgeholten Statistik.
+    Klicke auf einen Post, um seinen Verlauf im Diagramm zu sehen.
+  </p>
+
+  {% if posts %}
+  <div class="bt-card">
+    <table class="bt-table">
+      <thead>
+        <tr>
+          <th>Post</th>
+          <th>Gesendet</th>
+          <th class="bt-num">Impressionen</th>
+          <th class="bt-num">Reaktionen</th>
+          <th class="bt-num">Kommentare</th>
+          <th class="bt-num">Eng.-Rate</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for p in posts %}
+        <tr data-bpid="{{ p.buffer_post_id }}" onclick="btSelect('{{ p.buffer_post_id }}', this)">
+          <td class="bt-title" title="{{ p.title }}">{{ p.title }}</td>
+          <td>{{ p.sent_at|slice:":10" }}</td>
+          <td class="bt-num">{{ p.impressions|floatformat:0 }}</td>
+          <td class="bt-num">{{ p.reactions|floatformat:0 }}</td>
+          <td class="bt-num">{{ p.comments|floatformat:0 }}</td>
+          <td class="bt-num">{{ p.engagement_rate|floatformat:1 }}%</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="bt-card">
+    <h3 style="font-size:15px;margin:0 0 1rem" id="bt-chart-title">Verlauf</h3>
+    <canvas id="btChart" height="110"></canvas>
+  </div>
+  {% else %}
+  <div class="bt-card bt-empty">
+    Noch keine Buffer-Statistik vorhanden.<br>
+    Die Daten werden täglich nachts automatisch abgeholt (oder manuell mit
+    <code>python manage.py fetch_buffer_stats</code>).
+  </div>
+  {% endif %}
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+const BT_CHARTS = {{ charts_json|safe }};
+let btChartObj = null;
+
+function btSelect(bpid, rowEl) {
+  document.querySelectorAll('.bt-table tr').forEach(tr => tr.classList.remove('active'));
+  if (rowEl) rowEl.classList.add('active');
+  const data = BT_CHARTS[bpid];
+  if (!data) return;
+  const title = rowEl ? rowEl.querySelector('.bt-title').textContent : 'Verlauf';
+  document.getElementById('bt-chart-title').textContent = 'Verlauf: ' + title;
+
+  const datasets = [
+    {label:'Impressionen', data:data.impressions, borderColor:'#008591', backgroundColor:'rgba(0,133,145,.1)', yAxisID:'y'},
+    {label:'Reaktionen',   data:data.reactions,   borderColor:'#2c4bff', backgroundColor:'rgba(44,75,255,.1)', yAxisID:'y'},
+    {label:'Kommentare',   data:data.comments,    borderColor:'#e8a33d', backgroundColor:'rgba(232,163,61,.1)', yAxisID:'y'},
+    {label:'Eng.-Rate %',  data:data.engagementRate, borderColor:'#c0392b', backgroundColor:'rgba(192,57,43,.1)', yAxisID:'y2'},
+  ];
+
+  if (btChartObj) btChartObj.destroy();
+  btChartObj = new Chart(document.getElementById('btChart').getContext('2d'), {
+    type:'line',
+    data:{ labels:data.dates, datasets:datasets },
+    options:{
+      responsive:true,
+      interaction:{ mode:'index', intersect:false },
+      scales:{
+        y:{ position:'left', title:{display:true, text:'Anzahl'} },
+        y2:{ position:'right', title:{display:true, text:'Eng.-Rate %'}, grid:{drawOnChartArea:false} }
+      }
+    }
+  });
+}
+
+// Ersten Post automatisch auswählen
+document.addEventListener('DOMContentLoaded', () => {
+  const firstRow = document.querySelector('.bt-table tbody tr');
+  if (firstRow) btSelect(firstRow.dataset.bpid, firstRow);
+});
+</script>
+{% endblock %}

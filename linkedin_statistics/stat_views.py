@@ -771,3 +771,87 @@ def video_comparison(request):
         'scatter_video_json':     json.dumps(scatter_video),
         'scatter_novideo_json':   json.dumps(scatter_novideo),
     })
+
+
+@login_required
+def buffer_timeline(request):
+    """
+    Verlauf der letzten 10 Posts anhand der täglich aus Buffer abgeholten Metriken
+    (Tabelle buffer_post_metrics). Zeigt Impressionen/Reichweite, Reaktionen,
+    Kommentare und Engagement-Rate über die Zeit (fetched_date).
+    """
+    posts = []
+    charts = {}
+
+    with connection.cursor() as c:
+        # Die 10 zuletzt gesendeten Posts (eindeutige buffer_post_id), nach sent_at.
+        recent = _safe(c, """
+            SELECT bpm.buffer_post_id, MAX(bpm.sent_at) AS sent_at,
+                   MAX(bpm.planner_post_id) AS planner_post_id
+            FROM buffer_post_metrics bpm
+            GROUP BY bpm.buffer_post_id
+            ORDER BY MAX(COALESCE(bpm.sent_at,'')) DESC
+            LIMIT 10
+        """) or []
+
+        for r in recent:
+            bpid = r[0]
+            sent_at = r[1]
+            planner_id = r[2]
+
+            # Titel aus planner_posts holen (falls verknüpft)
+            title = bpid
+            if planner_id:
+                trow = _safe(c, "SELECT COALESCE(title, content) FROM planner_posts WHERE id=%s", [planner_id])
+                if trow and trow[0] and trow[0][0]:
+                    title = str(trow[0][0])[:80]
+
+            # Verlauf: pro Tag die wichtigsten Metriken
+            series = _safe(c, """
+                SELECT fetched_date, metric_type, metric_value
+                FROM buffer_post_metrics
+                WHERE buffer_post_id=%s
+                  AND metric_type IN ('impressions','reach','reactions','likes','comments','engagementRate')
+                ORDER BY fetched_date ASC
+            """, [bpid]) or []
+
+            # In {datum: {metric: value}} umformen
+            by_date = {}
+            for s in series:
+                d = str(s[0]); mt = s[1]; val = s[2]
+                by_date.setdefault(d, {})[mt] = val
+
+            dates = sorted(by_date.keys())
+            def col(metric, alt=None):
+                out = []
+                for d in dates:
+                    v = by_date[d].get(metric)
+                    if v is None and alt:
+                        v = by_date[d].get(alt)
+                    out.append(v if v is not None else 0)
+                return out
+
+            # Letzter bekannter Stand für die Übersichtszahlen
+            last = by_date[dates[-1]] if dates else {}
+            posts.append({
+                'buffer_post_id': bpid,
+                'title': title,
+                'sent_at': sent_at or '',
+                'impressions': last.get('impressions', last.get('reach', 0)),
+                'reactions': last.get('reactions', last.get('likes', 0)),
+                'comments': last.get('comments', 0),
+                'engagement_rate': last.get('engagementRate', 0),
+            })
+
+            charts[bpid] = {
+                'dates': dates,
+                'impressions': col('impressions', 'reach'),
+                'reactions': col('reactions', 'likes'),
+                'comments': col('comments'),
+                'engagementRate': col('engagementRate'),
+            }
+
+    return render(request, 'linkedin_statistics/stat_buffer_timeline.html', {
+        'posts': posts,
+        'charts_json': json.dumps(charts),
+    })
