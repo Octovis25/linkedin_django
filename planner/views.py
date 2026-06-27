@@ -1530,15 +1530,12 @@ def _buffer_delete_post(buf_token, buffer_post_id):
     query = """
     mutation DeletePost($input: DeletePostInput!) {
       deletePost(input: $input) {
-        ... on PostActionSuccess { post { id } }
-        ... on MutationError { message }
+        __typename
       }
     }
     """
     result = _buffer_graphql(buf_token, query, {"input": {"id": buffer_post_id}})
-    dp = (result.get("data", {}) or {}).get("deletePost") or {}
-    if dp.get("message"):
-        raise Exception("Buffer deletePost: " + dp.get("message"))
+    # _buffer_graphql wirft bereits bei GraphQL-Fehlern (errors-Feld) eine Exception.
     return True
 
 
