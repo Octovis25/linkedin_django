@@ -208,7 +208,7 @@ def draft_view(request):
         topics = _topics(c)
         sql = """SELECT p.id, p.title, p.content, p.status, p.planned_date,
                         p.image, t.name, t.color, p.topic_id, COALESCE(p.comment,'') as comment,
-                        COALESCE(p.link,'') as link, p.planned_time, p.updated_at
+                        COALESCE(p.link,'') as link, p.planned_time, p.updated_at, p.created_at
                  FROM planner_posts p
                  LEFT JOIN planner_topics t ON p.topic_id = t.id
                  WHERE p.status = 'Draft' AND COALESCE(p.is_oj,0) = 0"""
@@ -228,6 +228,7 @@ def draft_view(request):
             'topic_name': r[6] or '', 'topic_color': r[7] or 'gray',
             'topic_id': r[8], 'comment': r[9] or '', 'bg': bg, 'fg': fg,
             'link': r[10] or '', 'planned_time': r[11], 'updated_at': r[12],
+            'created_at': r[13],
         })
 
     li_token = _li_get_superuser_token()
@@ -369,7 +370,7 @@ def archive_view(request):
         topics = _topics(c)
         sql = """SELECT p.id, p.title, p.content, p.status, p.planned_date,
                         p.image, t.name, t.color, p.topic_id, p.comment,
-                        p.updated_at
+                        p.updated_at, p.created_at
                  FROM planner_posts p
                  LEFT JOIN planner_topics t ON p.topic_id = t.id
                  WHERE p.status IN ('Posted', 'Archive')"""
@@ -388,7 +389,7 @@ def archive_view(request):
             'status': r[3], 'planned_date': r[4], 'image': r[5] or '',
             'topic_name': r[6] or '', 'topic_color': r[7] or 'gray',
             'topic_id': r[8], 'comment': r[9] or '', 'bg': bg, 'fg': fg,
-            'updated_at': r[10],
+            'updated_at': r[10], 'created_at': r[11],
         })
 
     _attach_video_paths(posts_list)
