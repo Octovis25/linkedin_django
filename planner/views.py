@@ -921,6 +921,61 @@ def _upload_video_to_cloudinary(post_id):
     return secure_url
 
 
+def _upload_image_to_cloudinary(post_id):
+    """
+    Download the post's image from Nextcloud and upload it to Cloudinary,
+    returning the permanent public URL. Same reasoning as the video variant:
+    Buffer can fetch this reliably, unlike the Render public-image URL.
+    """
+    import requests as _req
+    import time as _time, hashlib as _hashlib
+    from posts_posted.nc_storage import download_image_from_nextcloud
+
+    cloud_name = os.environ.get("CLOUDINARY_CLOUD_NAME", "").strip()
+    api_key = os.environ.get("CLOUDINARY_API_KEY", "").strip()
+    api_secret = os.environ.get("CLOUDINARY_API_SECRET", "").strip()
+    if not all([cloud_name, api_key, api_secret]):
+        raise Exception("Cloudinary ist nicht konfiguriert (CLOUDINARY_* fehlen).")
+
+    # Bildpfad holen + von Nextcloud laden.
+    with connection.cursor() as c:
+        c.execute("SELECT image FROM planner_posts WHERE id=%s", [post_id])
+        row = c.fetchone()
+    if not row or not row[0]:
+        raise Exception("Kein Bild für diesen Post gespeichert.")
+    nc_path = row[0]
+    if not nc_path.startswith("Marketing"):
+        filename = nc_path.split("/")[-1]
+        nc_path = f"Marketing & Design/LinkedIn/Planner/Images/{filename}"
+
+    img_content, img_content_type = download_image_from_nextcloud(nc_path)
+    if not img_content:
+        raise Exception("Bild konnte nicht von Nextcloud geladen werden.")
+
+    public_id = f"linkedin_post_img_{post_id}"
+    timestamp = str(int(_time.time()))
+    to_sign = f"public_id={public_id}&timestamp={timestamp}{api_secret}"
+    signature = _hashlib.sha1(to_sign.encode("utf-8")).hexdigest()
+
+    upload_url = f"https://api.cloudinary.com/v1_1/{cloud_name}/image/upload"
+    files = {"file": ("image", img_content, img_content_type or "image/jpeg")}
+    data = {
+        "api_key": api_key,
+        "timestamp": timestamp,
+        "public_id": public_id,
+        "signature": signature,
+    }
+    r = _req.post(upload_url, data=data, files=files, timeout=120)
+    if r.status_code not in (200, 201):
+        raise Exception(f"Cloudinary Image Upload HTTP {r.status_code}: {r.text[:300]}")
+
+    result = r.json()
+    secure_url = result.get("secure_url")
+    if not secure_url:
+        raise Exception("Cloudinary lieferte keine Bild-URL: " + json.dumps(result)[:300])
+    return secure_url
+
+
 def _upload_video_to_nextcloud(video_file, post_id):
     """Upload one video file into the Planner/Videos folder and return its Nextcloud path."""
     import requests as _req, time as _time
@@ -1481,7 +1536,7 @@ def _buffer_delete_post(buf_token, buffer_post_id):
     return True
 
 
-def _buffer_post(buf_token, profile_id, text, image_url=None, video_url=None, scheduled_at=None):
+def _buffer_post(buf_token, profile_id, text, image_url=None, video_url=None, scheduled_at=None, link_url=None):
     """
     Send a post to Buffer using the current GraphQL API.
 
@@ -1530,7 +1585,12 @@ def _buffer_post(buf_token, profile_id, text, image_url=None, video_url=None, sc
         input_data["mode"] = "customScheduled"
         input_data["dueAt"] = scheduled_at.isoformat(timespec="milliseconds").replace("+00:00", "Z")
 
-    if video_url:
+    # Reihenfolge (eure Regel): Link → Video → Bild.
+    # Ein Link-Post zeigt auf LinkedIn die Link-Vorschau (z.B. Canva-Video),
+    # ohne dass wir Medien hochladen müssen (kein Render-/Timeout-Problem).
+    if link_url:
+        input_data["assets"] = [{"link": {"url": link_url}}]
+    elif video_url:
         input_data["assets"] = [{"video": {"url": video_url}}]
     elif image_url:
         input_data["assets"] = [{"image": {"url": image_url}}]
@@ -2069,9 +2129,19 @@ def _linkedin_do_post_impl(request, post_id):
         try:
             image_url = None
             video_url = None
+            link_url = None
 
-            if include_video:
-                _ensure_media_columns()
+            # Regel (per Ortrud): Hat der Post einen Link -> Link posten
+            # (LinkedIn zeigt die Link-Vorschau, z.B. Canva-Video). Kein Medien-Upload.
+            _ensure_media_columns()
+            with connection.cursor() as c:
+                c.execute("SELECT COALESCE(link,'') FROM planner_posts WHERE id=%s", [post_id])
+                lrow = c.fetchone()
+            if lrow and lrow[0] and str(lrow[0]).strip().lower().startswith("http"):
+                link_url = str(lrow[0]).strip()
+                print("BUFFER LINK URL:", link_url)
+
+            if not link_url and include_video:
                 with connection.cursor() as c:
                     c.execute("SELECT video_nc_path FROM planner_posts WHERE id=%s", [post_id])
                     vrow = c.fetchone()
@@ -2081,14 +2151,14 @@ def _linkedin_do_post_impl(request, post_id):
                     video_url = _upload_video_to_cloudinary(post_id)
                     print("BUFFER CLOUDINARY VIDEO URL:", video_url)
 
-            if include_img and not video_url:
+            if not link_url and include_img and not video_url:
                 with connection.cursor() as c:
                     c.execute("SELECT image FROM planner_posts WHERE id=%s", [post_id])
                     row = c.fetchone()
-
                 if row and row[0]:
-                    image_url = _public_image_url(post_id)
-                    print("BUFFER IMAGE URL:", image_url)
+                    # Bild ebenfalls über Cloudinary (sonst Render-Timeout wie beim Video).
+                    image_url = _upload_image_to_cloudinary(post_id)
+                    print("BUFFER CLOUDINARY IMAGE URL:", image_url)
 
             scheduled_at = None
             if scheduled_ms:
@@ -2103,6 +2173,7 @@ def _linkedin_do_post_impl(request, post_id):
                 image_url=image_url,
                 video_url=video_url,
                 scheduled_at=scheduled_at,
+                link_url=link_url,
             )
 
             buffer_update_id = None
