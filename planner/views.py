@@ -833,6 +833,54 @@ def _prepare_temp_video(post_id):
             pass
 
 
+def _upload_video_to_cloudinary(post_id):
+    """
+    Copy the post's video from Nextcloud to a local temp file, then upload it to
+    Cloudinary and return the permanent public URL. Buffer can fetch this URL
+    reliably (also for scheduled posts), unlike the Render temp-video URL.
+
+    Requires env vars: CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, CLOUDINARY_API_SECRET.
+    """
+    import requests as _req
+    import time as _time, hashlib as _hashlib
+
+    cloud_name = os.environ.get("CLOUDINARY_CLOUD_NAME", "").strip()
+    api_key = os.environ.get("CLOUDINARY_API_KEY", "").strip()
+    api_secret = os.environ.get("CLOUDINARY_API_SECRET", "").strip()
+    if not all([cloud_name, api_key, api_secret]):
+        raise Exception("Cloudinary ist nicht konfiguriert (CLOUDINARY_CLOUD_NAME/API_KEY/API_SECRET fehlen).")
+
+    # 1) Video lokal aus Nextcloud holen (vorhandene Logik, WebDAV mit Login).
+    local_path = _prepare_temp_video(post_id)
+
+    # 2) Signierten Upload an Cloudinary vorbereiten.
+    public_id = f"linkedin_post_{post_id}"
+    timestamp = str(int(_time.time()))
+    # Signatur: alle Parameter (außer file/api_key) alphabetisch, mit api_secret gehasht.
+    to_sign = f"public_id={public_id}&timestamp={timestamp}{api_secret}"
+    signature = _hashlib.sha1(to_sign.encode("utf-8")).hexdigest()
+
+    upload_url = f"https://api.cloudinary.com/v1_1/{cloud_name}/video/upload"
+    with open(local_path, "rb") as f:
+        files = {"file": f}
+        data = {
+            "api_key": api_key,
+            "timestamp": timestamp,
+            "public_id": public_id,
+            "signature": signature,
+        }
+        r = _req.post(upload_url, data=data, files=files, timeout=300)
+
+    if r.status_code not in (200, 201):
+        raise Exception(f"Cloudinary Upload HTTP {r.status_code}: {r.text[:300]}")
+
+    result = r.json()
+    secure_url = result.get("secure_url")
+    if not secure_url:
+        raise Exception("Cloudinary lieferte keine URL: " + json.dumps(result)[:300])
+    return secure_url
+
+
 def _upload_video_to_nextcloud(video_file, post_id):
     """Upload one video file into the Planner/Videos folder and return its Nextcloud path."""
     import requests as _req, time as _time
@@ -1969,9 +2017,10 @@ def _linkedin_do_post_impl(request, post_id):
                     c.execute("SELECT video_nc_path FROM planner_posts WHERE id=%s", [post_id])
                     vrow = c.fetchone()
                 if vrow and vrow[0]:
-                    _prepare_temp_video(post_id)
-                    video_url = _temp_video_url(post_id)
-                    print("BUFFER TEMP VIDEO URL:", video_url)
+                    # Cloudinary: dauerhaft öffentliche URL, die Buffer zuverlässig
+                    # erreichen kann (auch bei geplanten Posts Stunden später).
+                    video_url = _upload_video_to_cloudinary(post_id)
+                    print("BUFFER CLOUDINARY VIDEO URL:", video_url)
 
             if include_img and not video_url:
                 with connection.cursor() as c:
@@ -2209,9 +2258,8 @@ def linkedin_post_video(request, post_id):
         if not nc_path:
             return JsonResponse({'ok': False, 'error': 'Kein Video für diesen Post gespeichert.'}, status=400)
 
-        _prepare_temp_video(post_id)
-        video_url = _temp_video_url(post_id)
-        print("BUFFER VIDEO URL:", video_url)
+        video_url = _upload_video_to_cloudinary(post_id)
+        print("BUFFER CLOUDINARY VIDEO URL:", video_url)
 
         scheduled_at = None
         scheduled_ms = request.POST.get('scheduled_ms')
