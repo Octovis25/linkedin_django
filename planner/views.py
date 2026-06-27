@@ -231,6 +231,7 @@ def draft_view(request):
             'created_at': r[13],
         })
 
+    _attach_video_paths(posts_list)
     li_token = _li_get_superuser_token()
     return render(request, 'planner/draft.html', {
         'posts': posts_list, 'topics': topics, 'topic_filter': topic_filter,
