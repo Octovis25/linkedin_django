@@ -610,6 +610,23 @@ function liOpenPost(id) {
   }
   document.getElementById('li-include-img').checked = !!p.image;
   document.getElementById('li-include-img-row').style.display = p.image ? 'flex' : 'none';
+  // Zugeordnetes Video anzeigen (Upload passiert in Edit, hier nur prüfen)
+  const liVidInfo = document.getElementById('li-video-info');
+  const liVidName = document.getElementById('li-video-name');
+  const liVidPrev = document.getElementById('li-video-preview');
+  if (p.video) {
+    const fn = p.video.split('/').pop();
+    liVidName.textContent = fn;
+    liVidInfo.style.display = 'flex';
+    if (liVidPrev) {
+      liVidPrev.src = '/planner/nc-video-preview/' + encodeURIComponent(fn) + '/';
+      try { liVidPrev.load(); } catch (e) {}
+    }
+  } else {
+    liVidInfo.style.display = 'none';
+    liVidName.textContent = '';
+    if (liVidPrev) { try { liVidPrev.pause(); } catch (e) {} liVidPrev.removeAttribute('src'); }
+  }
   // Scheduling: always show with datetime-local input
   const schedRow = document.getElementById('li-schedule-row');
   const schedCheck = document.getElementById('li-schedule-check');
@@ -672,45 +689,12 @@ async function liDoPost() {
   const res = document.getElementById('li-post-result');
   res.style.display = 'none';
 
-  const videoInput = document.getElementById('li-video-input');
-  const hasVideo   = videoInput && videoInput.files && videoInput.files[0];
+  // Video wird in Edit zugeordnet; hier kein Upload mehr.
+  // Ein zugeordnetes Video wird über den normalen /post/-Weg (include_video) gepostet.
+  const liVidInfoEl = document.getElementById('li-video-info');
+  const hasVideo = liVidInfoEl && liVidInfoEl.style.display !== 'none';
 
-  // ── Video route ──
-  if (hasVideo) {
-    const schedCheck2 = document.getElementById('li-schedule-check');
-    const isScheduled2 = schedCheck2 && schedCheck2.checked;
-    const dtVal2 = document.getElementById('li-schedule-dt') && document.getElementById('li-schedule-dt').value;
-    const scheduled_ms2 = (isScheduled2 && dtVal2) ? new Date(dtVal2).getTime() : null;
-    btn.textContent = isScheduled2 ? 'Video wird gespeichert…' : 'Video wird hochgeladen…';
-    try {
-      const form = new FormData();
-      form.append('video',  videoInput.files[0]);
-      form.append('text',   document.getElementById('li-post-text').value);
-      form.append('target', document.getElementById('li-target').value);
-      if (scheduled_ms2) form.append('scheduled_ms', scheduled_ms2);
-      const r    = await fetch(`/planner/linkedin/post-video/${liCurrentId}/`, {
-        method: 'POST', headers: {'X-CSRFToken': peCSRF}, body: form
-      });
-      const data = await r.json();
-      res.style.display = 'block';
-      if (data.ok) {
-        res.style.background = '#E1F5EE'; res.style.color = '#0F6E56';
-        res.textContent = data.scheduled ? '📅 Video eingeplant!' : '✓ Video veröffentlicht!';
-        setTimeout(() => { liClosePost(); location.reload(); }, 1800);
-      } else {
-        res.style.background = '#FCEBEB'; res.style.color = '#791F1F';
-        res.textContent = 'Fehler: ' + (data.error || 'Unbekannt');
-      }
-    } catch(e) {
-      res.style.display = 'block';
-      res.style.background = '#FCEBEB'; res.style.color = '#791F1F';
-      res.textContent = 'Netzwerkfehler: ' + e.message;
-    }
-    btn.disabled = false; btn.textContent = 'Jetzt posten';
-    return;
-  }
-
-  // ── Text / Image route ──
+  // ── Text / Image / Video route (alles über /post/) ──
   const schedCheck  = document.getElementById('li-schedule-check');
   const isScheduled = schedCheck && schedCheck.checked;
   btn.textContent = isScheduled ? 'Scheduling…' : 'Posting…';
@@ -727,6 +711,7 @@ async function liDoPost() {
         text: document.getElementById('li-post-text').value,
         target: document.getElementById('li-target').value,
         include_image: document.getElementById('li-include-img').checked,
+        include_video: hasVideo,
         scheduled_ms: scheduled_ms,
       })
     });
@@ -778,15 +763,14 @@ if (_liModalBg) _liModalBg.addEventListener('click', function(e) {
       <input type="checkbox" id="li-include-img" checked style="cursor:pointer">
       <label for="li-include-img" style="cursor:pointer;color:#444">Bild mitposten</label>
     </div>
-    <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;font-size:13px;flex-wrap:wrap">
-      <label style="color:#444;white-space:nowrap">🎬 Video hochladen</label>
-      <input type="file" id="li-video-input" accept="video/mp4,video/quicktime,video/avi,.mp4,.mov,.avi"
-        style="font-size:12px;flex:1" onchange="document.getElementById('li-video-name').textContent=this.files[0]?this.files[0].name:''">
-      <span id="li-video-name" style="font-size:11px;color:#008591"></span>
-      <button type="button" onclick="document.getElementById('li-video-input').value='';document.getElementById('li-video-name').textContent=''"
-        style="font-size:11px;padding:2px 6px;border:0.5px solid #ced4da;border-radius:4px;background:#fff;cursor:pointer;color:#888">✕</button>
+    <div id="li-video-info" style="display:none;flex-direction:column;gap:8px;margin-bottom:8px;font-size:13px;padding:6px 10px;background:#f0fbf8;border:0.5px solid #61CEBC;border-radius:6px">
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+        <span style="color:#0F6E56">🎬 Video zugeordnet:</span>
+        <span id="li-video-name" style="font-size:12px;color:#008591;font-weight:500"></span>
+      </div>
+      <video id="li-video-preview" controls preload="metadata"
+        style="width:100%;max-height:200px;border-radius:4px;background:#000"></video>
     </div>
-    <div style="font-size:11px;color:#adb5bd;margin:-4px 0 8px;">Max. 200 MB · MP4, MOV · Bild und Video schließen sich aus</div>
     <div id="li-schedule-row" style="display:flex;align-items:center;gap:8px;margin-bottom:12px;font-size:13px;flex-wrap:wrap">
       <input type="checkbox" id="li-schedule-check" style="cursor:pointer">
       <label for="li-schedule-check" style="cursor:pointer;color:#444">📅 Auf LinkedIn planen:</label>

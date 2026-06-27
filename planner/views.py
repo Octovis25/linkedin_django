@@ -1961,6 +1961,14 @@ def linkedin_do_post(request, post_id):
                     _prepare_temp_video(post_id)
                     video_url = _temp_video_url(post_id)
                     print("BUFFER TEMP VIDEO URL:", video_url)
+                    # Warmup: Render selbst die URL anstoßen, damit der Dienst wach
+                    # und die Datei sofort auslieferbar ist, bevor Buffer validiert.
+                    # Verhindert das 10s-Timeout bei Render-Kaltstart.
+                    try:
+                        import requests as _wreq
+                        _wreq.get(video_url, headers={'Range': 'bytes=0-1024'}, timeout=20)
+                    except Exception as _we:
+                        print("temp video warmup error:", _we)
 
             if include_img and not video_url:
                 with connection.cursor() as c:
