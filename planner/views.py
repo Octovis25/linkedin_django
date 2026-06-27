@@ -2159,14 +2159,10 @@ def _linkedin_do_post_impl(request, post_id):
                     c.execute("SELECT image FROM planner_posts WHERE id=%s", [post_id])
                     row = c.fetchone()
                 if row and row[0]:
-                    # Bild: bevorzugt Cloudinary (robust), sonst der bisherige
-                    # Render-Proxy-Weg. So funktioniert es auch ohne Cloudinary.
-                    if os.environ.get("CLOUDINARY_CLOUD_NAME", "").strip():
-                        image_url = _upload_image_to_cloudinary(post_id)
-                        print("BUFFER CLOUDINARY IMAGE URL:", image_url)
-                    else:
-                        image_url = _public_image_url(post_id)
-                        print("BUFFER IMAGE URL (Render):", image_url)
+                    # Bild über Cloudinary (wie Video): Buffer erreicht die
+                    # Render-Proxy-URL nicht zuverlässig (403/Timeout).
+                    image_url = _upload_image_to_cloudinary(post_id)
+                    print("BUFFER CLOUDINARY IMAGE URL:", image_url)
 
             scheduled_at = None
             if scheduled_ms:
