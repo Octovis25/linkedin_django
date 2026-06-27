@@ -551,8 +551,23 @@ def api_post(request):
                 return JsonResponse({'ok': False, 'error': str(e)})
             return JsonResponse({'ok': True})
         elif action == 'delete':
-            c.execute("DELETE FROM planner_posts WHERE id=%s", [data.get('id')])
-            return JsonResponse({'ok': True})
+            pid = data.get('id')
+            # Falls der Post über Buffer geplant wurde: zuerst in Buffer löschen.
+            buffer_deleted = None
+            try:
+                c.execute("SELECT buffer_update_id FROM planner_posts WHERE id=%s", [pid])
+                brow = c.fetchone()
+                buf_post_id = brow[0] if brow else None
+                if buf_post_id:
+                    tok = _li_get_superuser_token()
+                    if tok and tok.get('buffer_token'):
+                        _buffer_delete_post(tok['buffer_token'], buf_post_id)
+                        buffer_deleted = True
+            except Exception as _be:
+                print("Buffer delete on post-delete error:", _be)
+                buffer_deleted = False
+            c.execute("DELETE FROM planner_posts WHERE id=%s", [pid])
+            return JsonResponse({'ok': True, 'buffer_deleted': buffer_deleted})
         elif action == 'to_pipeline':
             c.execute("UPDATE planner_posts SET in_pipeline=1 WHERE id=%s", [data.get('id')])
             return JsonResponse({'ok': True})
@@ -1420,6 +1435,25 @@ def _buffer_channel_for_target(token, target):
         # No dedicated personal channel — fall back to org channel.
         return token.get('buffer_profile_id'), token.get('buffer_profile_name')
     return token.get('buffer_profile_id'), token.get('buffer_profile_name')
+
+
+def _buffer_delete_post(buf_token, buffer_post_id):
+    """Delete a post in Buffer by its Buffer post id (buffer_update_id)."""
+    if not buf_token or not buffer_post_id:
+        return False
+    query = """
+    mutation DeletePost($input: DeletePostInput!) {
+      deletePost(input: $input) {
+        ... on PostActionSuccess { post { id } }
+        ... on MutationError { message }
+      }
+    }
+    """
+    result = _buffer_graphql(buf_token, query, {"input": {"id": buffer_post_id}})
+    dp = (result.get("data", {}) or {}).get("deletePost") or {}
+    if dp.get("message"):
+        raise Exception("Buffer deletePost: " + dp.get("message"))
+    return True
 
 
 def _buffer_post(buf_token, profile_id, text, image_url=None, video_url=None, scheduled_at=None):
