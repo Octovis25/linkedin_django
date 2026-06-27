@@ -70,12 +70,16 @@ def _posts_to_json(posts_list):
             'comment': p.get('comment') or '',
             'image': p.get('image') or '',
             'video_nc_path': p.get('video_nc_path') or '',
+            'video': p.get('video_nc_path') or '',
             'topic_id': p.get('topic_id') or 0,
             'is_oj': bool(p.get('is_oj', False)),
             'link': p.get('link') or '',
             'linkedin_posted': bool(p.get('linkedin_posted', False)),
             'post_scheduled_at': p.get('post_scheduled_at_fmt') or '',
             'time': str(p.get('planned_time') or ''),
+            'updated_at': (p.get('updated_at').strftime('%d.%m.%Y %H:%M')
+                           if p.get('updated_at') and hasattr(p.get('updated_at'), 'strftime')
+                           else (str(p.get('updated_at')) if p.get('updated_at') else '')),
         })
     # Replace </ to prevent </script> injection
     return json.dumps(safe, ensure_ascii=False).replace('</', '<\\/')
@@ -204,7 +208,7 @@ def draft_view(request):
         topics = _topics(c)
         sql = """SELECT p.id, p.title, p.content, p.status, p.planned_date,
                         p.image, t.name, t.color, p.topic_id, COALESCE(p.comment,'') as comment,
-                        COALESCE(p.link,'') as link, p.planned_time
+                        COALESCE(p.link,'') as link, p.planned_time, p.updated_at
                  FROM planner_posts p
                  LEFT JOIN planner_topics t ON p.topic_id = t.id
                  WHERE p.status = 'Draft' AND COALESCE(p.is_oj,0) = 0"""
@@ -212,7 +216,7 @@ def draft_view(request):
         if topic_filter:
             sql += " AND p.topic_id=%s"
             params.append(topic_filter)
-        sql += " ORDER BY COALESCE(p.planned_date,'9999-12-31'), p.created_at"
+        sql += " ORDER BY p.updated_at DESC, p.created_at DESC"
         posts = _q(c, sql, params)
 
     posts_list = []
@@ -223,7 +227,7 @@ def draft_view(request):
             'status': r[3], 'planned_date': r[4], 'image': r[5] or '',
             'topic_name': r[6] or '', 'topic_color': r[7] or 'gray',
             'topic_id': r[8], 'comment': r[9] or '', 'bg': bg, 'fg': fg,
-            'link': r[10] or '', 'planned_time': r[11],
+            'link': r[10] or '', 'planned_time': r[11], 'updated_at': r[12],
         })
 
     li_token = _li_get_superuser_token()
@@ -278,7 +282,8 @@ def ready_view(request):
     with connection.cursor() as c:
         topics = _topics(c)
         sql = """SELECT p.id, p.title, p.content, p.status, p.planned_date,
-                        p.image, t.name, t.color, p.topic_id, p.comment
+                        p.image, t.name, t.color, p.topic_id, p.comment,
+                        p.created_at, p.updated_at
                  FROM planner_posts p
                  LEFT JOIN planner_topics t ON p.topic_id = t.id
                  WHERE p.status = 'Ready' AND p.in_pipeline = 1 AND COALESCE(p.is_oj,0) = 0"""
@@ -286,7 +291,7 @@ def ready_view(request):
         if topic_filter:
             sql += " AND p.topic_id=%s"
             params.append(topic_filter)
-        sql += " ORDER BY p.created_at ASC"
+        sql += " ORDER BY p.updated_at DESC, p.created_at DESC"
         posts = _q(c, sql, params)
 
     posts_list = []
@@ -297,6 +302,7 @@ def ready_view(request):
             'status': r[3], 'planned_date': r[4], 'image': r[5] or '',
             'topic_name': r[6] or '', 'topic_color': r[7] or 'gray',
             'topic_id': r[8], 'comment': r[9] or '', 'bg': bg, 'fg': fg,
+            'created_at': r[10], 'updated_at': r[11],
         })
 
     _attach_video_paths(posts_list)
@@ -316,7 +322,8 @@ def scheduled_view(request):
         sql = """SELECT p.id, p.title, p.content, p.status, p.planned_date,
                         p.image, t.name, t.color, p.topic_id, p.comment,
                         COALESCE(p.linkedin_posted,0), COALESCE(p.link,'') as link,
-                        p.post_scheduled_at, p.planned_time
+                        p.post_scheduled_at, p.planned_time,
+                        p.created_at, p.updated_at
                  FROM planner_posts p
                  LEFT JOIN planner_topics t ON p.topic_id = t.id
                  WHERE p.status = 'Scheduled' AND p.in_pipeline = 1 AND COALESCE(p.is_oj,0) = 0"""
@@ -348,6 +355,7 @@ def scheduled_view(request):
             'post_scheduled_at': sched_at,
             'post_scheduled_at_fmt': sched_at.strftime('%d.%m.%Y %H:%M') if sched_at else '',
             'planned_time': r[13],
+            'created_at': r[14], 'updated_at': r[15],
         })
     li_token = _li_get_superuser_token()
     _attach_video_paths(posts_list)
@@ -393,7 +401,8 @@ def all_view(request):
     with connection.cursor() as c:
         topics = _topics(c)
         sql = """SELECT p.id, p.title, p.content, p.status, p.planned_date,
-                        p.image, t.name, t.color, p.topic_id, p.comment
+                        p.image, t.name, t.color, p.topic_id, p.comment,
+                        p.created_at, p.updated_at
                  FROM planner_posts p
                  LEFT JOIN planner_topics t ON p.topic_id = t.id
                  WHERE COALESCE(p.is_oj,0) = 0"""
@@ -401,7 +410,7 @@ def all_view(request):
         if topic_filter:
             sql += " AND p.topic_id=%s"
             params.append(topic_filter)
-        sql += " ORDER BY COALESCE(p.planned_date,'9999-12-31'), p.created_at"
+        sql += " ORDER BY p.updated_at DESC, p.created_at DESC"
         posts = _q(c, sql, params)
 
     posts_list = []
@@ -412,6 +421,7 @@ def all_view(request):
             'status': r[3], 'planned_date': r[4], 'image': r[5] or '',
             'topic_name': r[6] or '', 'topic_color': r[7] or 'gray',
             'topic_id': r[8], 'comment': r[9] or '', 'bg': bg, 'fg': fg,
+            'created_at': r[10], 'updated_at': r[11],
         })
 
     _attach_video_paths(posts_list)
@@ -554,6 +564,17 @@ def api_post(request):
         elif action == 'delete_video':
             _ensure_media_columns()
             c.execute("UPDATE planner_posts SET video_nc_path=NULL WHERE id=%s", [data.get('id')])
+            return JsonResponse({'ok': True})
+        elif action == 'set_video':
+            # Link an existing Nextcloud video to this post (no upload).
+            _ensure_media_columns()
+            nc_path = (data.get('video_nc_path') or '').strip()
+            if not nc_path:
+                return JsonResponse({'ok': False, 'error': 'video_nc_path fehlt'}, status=400)
+            c.execute(
+                "UPDATE planner_posts SET video_nc_path=%s, image=NULL WHERE id=%s",
+                [nc_path, data.get('id')]
+            )
             return JsonResponse({'ok': True})
         elif action == 'to_archive':
             c.execute("UPDATE planner_posts SET status='Posted', in_pipeline=1 WHERE id=%s", [data.get('id')])
@@ -841,6 +862,135 @@ def _upload_video_to_nextcloud(video_file, post_id):
     return nc_path
 
 
+def _list_nextcloud_videos():
+    """
+    List video files in the Nextcloud Planner/Videos folder via WebDAV PROPFIND.
+    Returns a list of dicts: {'filename', 'nc_path'}. Newest first by name.
+    """
+    import requests as _req
+    from posts_posted.nc_storage import _get_nc_credentials
+    from urllib.parse import quote as _q2, unquote as _unq
+    from requests.auth import HTTPBasicAuth as _BA
+    import xml.etree.ElementTree as _ET
+
+    nc_folder = "Marketing & Design/LinkedIn/Planner/Videos"
+    nc_url, username, password = _get_nc_credentials()
+    if not all([nc_url, username, password]):
+        raise Exception('Nextcloud nicht verbunden')
+
+    dav_url = f"{nc_url}/remote.php/dav/files/{username}/{_q2(nc_folder, safe='/')}/"
+    body = (
+        '<?xml version="1.0"?>'
+        '<d:propfind xmlns:d="DAV:"><d:prop>'
+        '<d:displayname/><d:getcontenttype/><d:getlastmodified/>'
+        '</d:prop></d:propfind>'
+    )
+    r = _req.request(
+        'PROPFIND', dav_url,
+        data=body,
+        auth=_BA(username, password),
+        headers={'Depth': '1', 'Content-Type': 'application/xml'},
+        timeout=30,
+    )
+    if r.status_code not in (207, 200):
+        raise Exception(f'NC PROPFIND HTTP {r.status_code}: {r.text[:200]}')
+
+    video_exts = ('.mp4', '.mov', '.webm', '.m4v', '.avi')
+    results = []
+    root = _ET.fromstring(r.content)
+    ns = {'d': 'DAV:'}
+    for resp in root.findall('d:response', ns):
+        href_el = resp.find('d:href', ns)
+        if href_el is None or not href_el.text:
+            continue
+        href = _unq(href_el.text)
+        filename = href.rstrip('/').split('/')[-1]
+        if not filename or not filename.lower().endswith(video_exts):
+            continue
+        results.append({'filename': filename, 'nc_path': f"{nc_folder}/{filename}"})
+
+    results.sort(key=lambda x: x['filename'], reverse=True)
+    return results
+
+
+@login_required
+def api_nc_videos(request):
+    """JSON endpoint: list available videos in the Nextcloud Planner/Videos folder."""
+    try:
+        return JsonResponse({'ok': True, 'videos': _list_nextcloud_videos()})
+    except Exception as e:
+        return JsonResponse({'ok': False, 'error': str(e)}, status=500)
+
+
+@login_required
+def nc_video_preview(request, filename):
+    """
+    Stream a single video from the Nextcloud Planner/Videos folder for in-browser
+    preview. Range-aware so the HTML5 player can seek. Only serves files from the
+    fixed Planner/Videos folder (filename only — no path traversal).
+    """
+    from django.http import HttpResponse, StreamingHttpResponse
+    import requests as _req
+    from posts_posted.nc_storage import _get_nc_credentials
+    from urllib.parse import quote as _q2
+    from requests.auth import HTTPBasicAuth as _BA
+
+    # Security: strip any path components, allow only a bare filename.
+    safe_name = os.path.basename(filename)
+    if not safe_name or safe_name != filename or '..' in safe_name:
+        return HttpResponse(status=400)
+    if not safe_name.lower().endswith(('.mp4', '.mov', '.webm', '.m4v', '.avi')):
+        return HttpResponse(status=400)
+
+    nc_path = f"Marketing & Design/LinkedIn/Planner/Videos/{safe_name}"
+    nc_url, username, password = _get_nc_credentials()
+    if not all([nc_url, username, password]):
+        return HttpResponse(status=500)
+
+    download_url = f"{nc_url}/remote.php/dav/files/{username}/{_q2(nc_path, safe='/')}"
+
+    headers = {}
+    range_header = request.headers.get("Range")
+    if range_header:
+        headers["Range"] = range_header
+
+    try:
+        upstream = _req.get(download_url, auth=_BA(username, password),
+                            headers=headers, stream=True, timeout=(10, 120))
+    except Exception as e:
+        print(f"nc_video_preview upstream error: {e}")
+        return HttpResponse(status=504)
+
+    if upstream.status_code not in (200, 206):
+        upstream.close()
+        return HttpResponse(status=404)
+
+    content_type = _video_content_type(safe_name)
+
+    def stream_chunks():
+        try:
+            for chunk in upstream.iter_content(chunk_size=1024 * 1024):
+                if chunk:
+                    yield chunk
+        finally:
+            upstream.close()
+
+    response = StreamingHttpResponse(
+        stream_chunks(),
+        status=206 if upstream.status_code == 206 else 200,
+        content_type=content_type,
+    )
+    cl = upstream.headers.get("Content-Length")
+    cr = upstream.headers.get("Content-Range")
+    if cl:
+        response["Content-Length"] = cl
+    if cr:
+        response["Content-Range"] = cr
+    response["Accept-Ranges"] = "bytes"
+    response["Content-Disposition"] = f'inline; filename="{safe_name}"'
+    return response
+
+
 def public_image(request, post_id, token):
     """Serve a post image publicly using a signed token — used by Buffer."""
     from django.http import HttpResponse
@@ -1075,7 +1225,8 @@ def _li_get_superuser_token():
                                 t.linkedin_person_id, t.linkedin_name, t.linkedin_picture,
                                 t.org_id, t.org_name,
                                 t.buffer_token, t.buffer_profile_id, t.buffer_profile_name,
-                                t.make_webhook_url
+                                t.make_webhook_url,
+                                t.buffer_profile_id_person, t.buffer_profile_name_person
                          FROM planner_linkedin_tokens t
                          JOIN auth_user u ON t.user_id = u.id
                          WHERE u.is_superuser = 1 LIMIT 1""")
@@ -1088,7 +1239,8 @@ def _li_get_superuser_token():
             'person_id': row[3], 'name': row[4], 'picture': row[5],
             'org_id': row[6], 'org_name': row[7],
             'buffer_token': row[8], 'buffer_profile_id': row[9], 'buffer_profile_name': row[10],
-            'make_webhook_url': row[11]}
+            'make_webhook_url': row[11],
+            'buffer_profile_id_person': row[12], 'buffer_profile_name_person': row[13]}
 
 
 def _li_get_token(request):
@@ -1098,7 +1250,8 @@ def _li_get_token(request):
                                 linkedin_person_id, linkedin_name, linkedin_picture,
                                 org_id, org_name,
                                 buffer_token, buffer_profile_id, buffer_profile_name,
-                                make_webhook_url
+                                make_webhook_url,
+                                buffer_profile_id_person, buffer_profile_name_person
                          FROM planner_linkedin_tokens WHERE user_id=%s""",
                       [request.user.id])
             row = c.fetchone()
@@ -1110,7 +1263,8 @@ def _li_get_token(request):
             'person_id': row[3], 'name': row[4], 'picture': row[5],
             'org_id': row[6], 'org_name': row[7],
             'buffer_token': row[8], 'buffer_profile_id': row[9], 'buffer_profile_name': row[10],
-            'make_webhook_url': row[11]}
+            'make_webhook_url': row[11],
+            'buffer_profile_id_person': row[12], 'buffer_profile_name_person': row[13]}
 
 
 def _li_ensure_table():
@@ -1128,12 +1282,18 @@ def _li_ensure_table():
             org_name VARCHAR(200),
             buffer_token TEXT,
             buffer_profile_id VARCHAR(100),
-            buffer_profile_name VARCHAR(200)
+            buffer_profile_name VARCHAR(200),
+            buffer_profile_id_person VARCHAR(100),
+            buffer_profile_name_person VARCHAR(200)
         )""")
         # Migrate existing tables — silently skip if columns already exist
+        # Note: buffer_profile_id / buffer_profile_name = ORG channel (legacy name kept).
+        #       buffer_profile_id_person / _name = personal (OJ) channel.
         for col, defn in [('buffer_token', 'TEXT'),
                           ('buffer_profile_id', 'VARCHAR(100)'),
                           ('buffer_profile_name', 'VARCHAR(200)'),
+                          ('buffer_profile_id_person', 'VARCHAR(100)'),
+                          ('buffer_profile_name_person', 'VARCHAR(200)'),
                           ('make_webhook_url', 'TEXT')]:
             try:
                 c.execute(f"ALTER TABLE planner_linkedin_tokens ADD COLUMN {col} {defn}")
@@ -1190,6 +1350,24 @@ def _buffer_graphql(buf_token, query, variables=None):
         raise Exception("Buffer GraphQL errors: " + json.dumps(result["errors"], ensure_ascii=False))
 
     return result
+
+
+def _buffer_channel_for_target(token, target):
+    """
+    Pick the correct Buffer channel ID/name for a given post target.
+
+    Rule (per Ortrud): OJ / personal posts → personal Buffer channel,
+    everything else (org / company page) → org Buffer channel.
+    Falls back to the org channel if no personal channel is configured.
+    """
+    if target == 'person':
+        pid = token.get('buffer_profile_id_person')
+        pname = token.get('buffer_profile_name_person')
+        if pid:
+            return pid, pname
+        # No dedicated personal channel — fall back to org channel.
+        return token.get('buffer_profile_id'), token.get('buffer_profile_name')
+    return token.get('buffer_profile_id'), token.get('buffer_profile_name')
 
 
 def _buffer_post(buf_token, profile_id, text, image_url=None, video_url=None, scheduled_at=None):
@@ -1287,12 +1465,17 @@ def api_connect_view(request):
         buf_tok  = request.POST.get('buffer_token', '').strip()
         buf_pid  = request.POST.get('buffer_profile_id', '').strip()
         buf_pname = request.POST.get('buffer_profile_name', '').strip()
+        # Personal (OJ) channel — optional second channel.
+        buf_pid_person  = request.POST.get('buffer_profile_id_person', '').strip()
+        buf_pname_person = request.POST.get('buffer_profile_name_person', '').strip()
         with connection.cursor() as c:
             try:
                 c.execute("""UPDATE planner_linkedin_tokens
-                             SET buffer_token=%s, buffer_profile_id=%s, buffer_profile_name=%s
+                             SET buffer_token=%s, buffer_profile_id=%s, buffer_profile_name=%s,
+                                 buffer_profile_id_person=%s, buffer_profile_name_person=%s
                              WHERE user_id=%s""",
-                          [buf_tok or None, buf_pid or None, buf_pname or None, request.user.id])
+                          [buf_tok or None, buf_pid or None, buf_pname or None,
+                           buf_pid_person or None, buf_pname_person or None, request.user.id])
             except Exception as ex:
                 print('Buffer save error:', ex)
         return redirect('/planner/api-connect/?buf_saved=1')
@@ -1737,19 +1920,27 @@ def linkedin_do_post(request, post_id):
         return JsonResponse({'ok': False, 'error': 'empty_text'}, status=400)
 
     # ─────────────────────────────────────────────
-    # Video route: bypass Buffer completely
+    # Routing rule (per Ortrud):
+    #   scheduled (scheduled_ms set) → Buffer
+    #   immediate                    → direct LinkedIn
+    # Applies to text, image AND video alike.
     # ─────────────────────────────────────────────
-    if include_video:
+
+    # Immediate video → direct LinkedIn (bypass Buffer).
+    # Scheduled video falls through to the Buffer route below.
+    if include_video and not scheduled_ms:
         try:
             return _handle_video_from_json_request(token, post_id, text, target, scheduled_ms)
         except Exception as e:
             return JsonResponse({'ok': False, 'error': str(e)}, status=500)
 
     # ─────────────────────────────────────────────
-    # Buffer route for organization/company posts
+    # Buffer route: used for scheduled posts (and org posts).
+    # Channel is chosen by target via _buffer_channel_for_target.
     # ─────────────────────────────────────────────
-    if target == 'org':
-        if not token.get('buffer_token') or not token.get('buffer_profile_id'):
+    _buf_pid, _buf_pname = _buffer_channel_for_target(token, target)
+    if scheduled_ms or target == 'org':
+        if not token.get('buffer_token') or not _buf_pid:
             return JsonResponse({
                 'ok': False,
                 'error': 'Buffer ist nicht konfiguriert. Bitte Buffer Access Token speichern und Profil auswählen.'
@@ -1786,7 +1977,7 @@ def linkedin_do_post(request, post_id):
 
             result = _buffer_post(
                 buf_token=token['buffer_token'],
-                profile_id=token['buffer_profile_id'],
+                profile_id=_buf_pid,
                 text=text,
                 image_url=image_url,
                 video_url=video_url,

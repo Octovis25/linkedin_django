@@ -465,6 +465,7 @@ const PALETTE_DEFAULT = _readBrandColors();
 
 // Brand-Farben sind immer die Basis (c1-c6). Zusätzlich: Template-Farben + Custom-Farben.
 let PALETTE = Object.assign({}, PALETTE_DEFAULT);
+let brandExtraColors = {{ brand_extra_colors_json|safe }};  // Zusätzliche Brand-Farben aus DB
 let extraColors = [];   // Template-extrahierte Farben (nicht in Brand)
 let customColors = [];  // Vom User manuell hinzugefügt
 
@@ -486,7 +487,7 @@ function savePalette() {
 function getAllColors() {
   const brand = Object.values(PALETTE);
   const all = [...brand];
-  [...extraColors, ...customColors].forEach(c => {
+  [...brandExtraColors, ...extraColors, ...customColors].forEach(c => {
     if (!all.some(a => a.toLowerCase() === c.toLowerCase())) all.push(c);
   });
   return all;
@@ -506,7 +507,8 @@ function applyPaletteToUI() {
     if (!row) return;
     row.innerHTML = '';
     allColors.forEach((col, i) => {
-      const label = i < brandCount ? String(i+1) : (i < brandCount + extraColors.length ? 'T' : '+');
+      const bxEnd = brandCount + brandExtraColors.length;
+      const label = i < brandCount ? String(i+1) : (i < bxEnd ? 'B' : (i < bxEnd + extraColors.length ? 'T' : '+'));
       row.appendChild(_makeSwatch(col, col, label));
     });
     // "+" Button: Color-Picker

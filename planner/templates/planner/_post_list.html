@@ -26,9 +26,9 @@
   <h1 style="margin:0;font-size:1.4rem">{{ title }}</h1>
   <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
     {% if allow_create %}
-    <button type="button" onclick="openCreate()"
-       style="font-size:13px;padding:4px 10px;border:0.5px solid #008080;border-radius:4px;background:#008080;color:#fff;cursor:pointer;white-space:nowrap"
-       title="Neuen Post direkt in Progress anlegen">＋ Neuer Post</button>
+    <a href="/planner/?new=1"
+       style="font-size:13px;padding:4px 10px;border:0.5px solid #008080;border-radius:4px;background:#008080;color:#fff;cursor:pointer;white-space:nowrap;text-decoration:none;display:inline-block"
+       title="Neuen Post anlegen (im Planner)">＋ Neuer Post</a>
     {% endif %}
     <a href="https://publish.buffer.com/" target="_blank" rel="noopener"
        style="font-size:13px;padding:4px 10px;border:0.5px solid #2c4bff;border-radius:4px;background:#fff;color:#2c4bff;text-decoration:none;white-space:nowrap"
@@ -177,6 +177,35 @@
       <label style="font-size:12px;color:#6c757d;white-space:nowrap">🔗 Link</label>
       <input type="text" id="pe-link" placeholder="https://..." style="font-size:13px;flex:1;padding:6px 8px;border:0.5px solid #ced4da;border-radius:4px;box-sizing:border-box">
     </div>
+
+    <!-- ── Video-Auswahl: Nextcloud (Default) oder PC-Upload ── -->
+    <div style="border:0.5px solid #ced4da;border-radius:4px;padding:8px;margin-bottom:8px;background:#fafbfc">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+        <span style="font-size:12px;color:#008591;font-weight:500">🎬 Video</span>
+        <span id="pe-video-current" style="font-size:11px;color:#0F6E56;flex:1"></span>
+        <button type="button" onclick="peEditVideoInStudio()" id="pe-video-studio"
+          style="font-size:11px;padding:2px 8px;border:0.5px solid #61CEBC;border-radius:4px;background:#fff;cursor:pointer;color:#008591;display:none">🎨 Studio</button>
+        <button type="button" onclick="peClearVideo()" id="pe-video-clear"
+          style="font-size:11px;padding:2px 6px;border:0.5px solid #ced4da;border-radius:4px;background:#fff;cursor:pointer;color:#888;display:none">✕</button>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <select id="pe-video-nc" onchange="peVideoNcSelect()"
+          style="font-size:12px;padding:4px 8px;border:0.5px solid #ced4da;border-radius:4px;flex:1;min-width:180px">
+          <option value="">— aus Nextcloud wählen —</option>
+        </select>
+        <button type="button" onclick="peReloadNcVideos()"
+          style="font-size:11px;padding:4px 8px;border:0.5px solid #ced4da;border-radius:4px;background:#fff;cursor:pointer;color:#008591" title="Liste neu laden">↻</button>
+        <span style="font-size:11px;color:#adb5bd">oder</span>
+        <button type="button" onclick="document.getElementById('pe-video-input').click()"
+          style="font-size:11px;padding:4px 8px;border:0.5px solid #61CEBC;border-radius:4px;background:#fff;cursor:pointer;color:#008591">⬆ vom PC</button>
+        <input type="file" id="pe-video-input" accept="video/mp4,video/quicktime,video/webm,.mp4,.mov,.webm,.m4v"
+          style="display:none" onchange="peVideoPcSelect(this)">
+      </div>
+      <input type="hidden" id="pe-video-nc-path" value="">
+      <video id="pe-video-preview" controls preload="metadata"
+        style="display:none;width:100%;max-height:220px;margin-top:8px;border-radius:4px;background:#000"></video>
+    </div>
+
     <textarea id="pe-comment" placeholder="Internal comment..." style="width:100%;min-height:50px;font-size:13px;padding:8px;border:0.5px solid #ced4da;border-radius:4px;resize:vertical;box-sizing:border-box;background:#fffef0"></textarea>
     <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:12px">
       <button type="button" onclick="closeEdit()" style="font-size:13px;padding:5px 14px;border:0.5px solid #ced4da;border-radius:4px;background:#fff;cursor:pointer">Cancel</button>
@@ -298,7 +327,103 @@ function openCreate() {
   const topicSelect = document.getElementById('pe-topic');
   if (topicSelect && topicSelect.options.length > 0) topicSelect.selectedIndex = 0;
   peClearPreview();
+  peResetVideoUi();
+  peReloadNcVideos();
   document.getElementById('post-edit-modal').style.display = 'flex';
+}
+
+/* ── Video-Auswahl: Helfer ── */
+function peShowVideoPreview(src) {
+  const v = document.getElementById('pe-video-preview');
+  if (!v) return;
+  if (src) {
+    v.src = src;
+    v.style.display = 'block';
+    try { v.load(); } catch (e) {}
+  } else {
+    try { v.pause(); } catch (e) {}
+    v.removeAttribute('src');
+    v.style.display = 'none';
+  }
+}
+
+function peResetVideoUi() {
+  document.getElementById('pe-video-input').value = '';
+  document.getElementById('pe-video-nc-path').value = '';
+  document.getElementById('pe-video-current').textContent = '';
+  document.getElementById('pe-video-clear').style.display = 'none';
+  document.getElementById('pe-video-studio').style.display = 'none';
+  const sel = document.getElementById('pe-video-nc');
+  if (sel) sel.value = '';
+  peShowVideoPreview('');
+}
+function peClearVideo() { peResetVideoUi(); }
+
+/* Studio-Button nur zeigen, wenn ein Nextcloud-Video gewählt ist */
+function peUpdateStudioBtn() {
+  const ncPath = document.getElementById('pe-video-nc-path').value;
+  document.getElementById('pe-video-studio').style.display = ncPath ? 'inline-block' : 'none';
+}
+
+async function peEditVideoInStudio() {
+  const ncPath = document.getElementById('pe-video-nc-path').value;
+  if (!ncPath) {
+    alert('Bitte zuerst ein Nextcloud-Video wählen (PC-Videos erst speichern).');
+    return;
+  }
+  try {
+    const r = await fetch('/library/studio/link-video/', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json','X-CSRFToken':peCSRF},
+      body: JSON.stringify({video_nc_path: ncPath}),
+    }).then(r => r.json());
+    if (r.ok && r.studio_url) {
+      window.open(r.studio_url, '_blank');
+    } else {
+      alert('Studio konnte nicht geöffnet werden: ' + (r.error || 'Unbekannt'));
+    }
+  } catch (e) {
+    alert('Netzwerkfehler: ' + e.message);
+  }
+}
+
+async function peReloadNcVideos() {
+  const sel = document.getElementById('pe-video-nc');
+  if (!sel) return;
+  const keep = document.getElementById('pe-video-nc-path').value;
+  try {
+    const r = await fetch('/planner/api/nc-videos/').then(r => r.json());
+    sel.innerHTML = '<option value="">— aus Nextcloud wählen —</option>';
+    if (r.ok && r.videos) {
+      r.videos.forEach(v => {
+        const opt = document.createElement('option');
+        opt.value = v.nc_path;
+        opt.textContent = v.filename;
+        if (v.nc_path === keep) opt.selected = true;
+        sel.appendChild(opt);
+      });
+    }
+  } catch (e) { /* Liste optional — PC-Upload bleibt möglich */ }
+}
+
+function peVideoNcSelect() {
+  const sel = document.getElementById('pe-video-nc');
+  const path = sel.value;
+  document.getElementById('pe-video-input').value = '';
+  document.getElementById('pe-video-nc-path').value = path;
+  document.getElementById('pe-video-current').textContent = path ? ('✓ ' + path.split('/').pop() + ' (Nextcloud)') : '';
+  document.getElementById('pe-video-clear').style.display = path ? 'inline-block' : 'none';
+  peShowVideoPreview(path ? ('/planner/nc-video-preview/' + encodeURIComponent(path.split('/').pop()) + '/') : '');
+  peUpdateStudioBtn();
+}
+
+function peVideoPcSelect(input) {
+  const f = input.files && input.files[0];
+  document.getElementById('pe-video-nc').value = '';
+  document.getElementById('pe-video-nc-path').value = '';
+  document.getElementById('pe-video-current').textContent = f ? ('⬆ ' + f.name + ' (PC, wird hochgeladen)') : '';
+  document.getElementById('pe-video-clear').style.display = f ? 'inline-block' : 'none';
+  peShowVideoPreview(f ? URL.createObjectURL(f) : '');
 }
 
 function peOpenStudio() {
@@ -328,6 +453,17 @@ function openEdit(id) {
   } else {
     peClearPreview();
   }
+
+  peResetVideoUi();
+  if (p.video) {
+    document.getElementById('pe-video-nc-path').value = p.video;
+    document.getElementById('pe-video-current').textContent = '✓ ' + p.video.split('/').pop();
+    document.getElementById('pe-video-clear').style.display = 'inline-block';
+    peShowVideoPreview('/planner/nc-video-preview/' + encodeURIComponent(p.video.split('/').pop()) + '/');
+    peUpdateStudioBtn();
+  }
+  peReloadNcVideos();
+
   document.getElementById('post-edit-modal').style.display = 'flex';
 }
 
@@ -391,6 +527,18 @@ async function saveEdit() {
       form.append('image', imgInput.files[0]);
       await fetch('/planner/api/image/'+id+'/', {method:'POST', headers:{'X-CSRFToken':peCSRF}, body:form});
     }
+
+    // Video: PC-Upload hat Vorrang, sonst Nextcloud-Auswahl
+    const vidInput = document.getElementById('pe-video-input');
+    const ncPath = document.getElementById('pe-video-nc-path').value;
+    if (vidInput.files && vidInput.files[0]) {
+      const vform = new FormData();
+      vform.append('video', vidInput.files[0]);
+      await fetch('/planner/api/video/'+id+'/', {method:'POST', headers:{'X-CSRFToken':peCSRF}, body:vform});
+    } else if (ncPath) {
+      await peApi({action:'set_video', id:parseInt(id), video_nc_path:ncPath});
+    }
+
     location.reload();
   } catch(e) {
     alert('Netzwerk- oder Serverfehler: ' + e.message);

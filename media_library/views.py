@@ -578,8 +578,15 @@ def _ensure_brand_colors_table():
                 c3   VARCHAR(20) DEFAULT '#008591',
                 c4   VARCHAR(20) DEFAULT '#61CEBC',
                 c5   VARCHAR(20) DEFAULT '#005F68',
-                c6   VARCHAR(20) DEFAULT '#161616'
+                c6   VARCHAR(20) DEFAULT '#161616',
+                extra_colors TEXT DEFAULT NULL
             )""")
+        except Exception: pass
+        # extra_colors Spalte nachrüsten falls Tabelle schon existiert
+        try:
+            c.execute("SHOW COLUMNS FROM brand_colors LIKE 'extra_colors'")
+            if not c.fetchone():
+                c.execute("ALTER TABLE brand_colors ADD COLUMN extra_colors TEXT DEFAULT NULL")
         except Exception: pass
         # Sicherstellen dass immer genau eine Zeile existiert
         try:
@@ -590,15 +597,18 @@ def _ensure_brand_colors_table():
 
 
 def get_brand_colors():
-    """Gibt die aktuellen Brand-Farben als Dict zurück."""
+    """Gibt die aktuellen Brand-Farben als Dict zurück (inkl. extra_colors Liste)."""
     _ensure_brand_colors_table()
-    defaults = {'c1':'#ffffff','c2':'#F56E28','c3':'#008591','c4':'#61CEBC','c5':'#005F68','c6':'#161616'}
+    defaults = {'c1':'#ffffff','c2':'#F56E28','c3':'#008591','c4':'#61CEBC','c5':'#005F68','c6':'#161616','extra_colors':[]}
     try:
         with connection.cursor() as c:
-            c.execute("SELECT c1,c2,c3,c4,c5,c6 FROM brand_colors LIMIT 1")
+            c.execute("SELECT c1,c2,c3,c4,c5,c6,extra_colors FROM brand_colors LIMIT 1")
             row = c.fetchone()
             if row:
-                return dict(zip(['c1','c2','c3','c4','c5','c6'], row))
+                d = dict(zip(['c1','c2','c3','c4','c5','c6','extra_colors'], row))
+                try: d['extra_colors'] = json.loads(d['extra_colors']) if d['extra_colors'] else []
+                except: d['extra_colors'] = []
+                return d
     except Exception: pass
     return defaults
 
@@ -693,9 +703,55 @@ def studio_view(request):
         nc_url_val, _, _ = _get_nc_credentials()
     except Exception:
         nc_url_val = ''
+    brand = get_brand_colors()
     return render(request, 'media_library/studio.html', {
         'post_id': post_id, 'post_data': post_data, 'lib_data': lib_data,
-        'folders': folders, 'nc_url': (nc_url_val or '').rstrip('/')})
+        'folders': folders, 'nc_url': (nc_url_val or '').rstrip('/'),
+        'brand_extra_colors_json': json.dumps(brand.get('extra_colors', []))})
+
+
+@login_required
+def studio_link_video(request):
+    """
+    Bridge: given a Nextcloud video path (Planner/Videos), find or create a
+    media_library item for it and return its id, so the Planner post editor can
+    open Studio for that video via /library/studio/?lib_item=<id>.
+    """
+    if request.method != 'POST':
+        return JsonResponse({'ok': False}, status=405)
+
+    try:
+        data = json.loads(request.body or '{}')
+    except Exception:
+        data = {}
+    nc_path = (data.get('video_nc_path') or '').strip()
+    if not nc_path:
+        return JsonResponse({'ok': False, 'error': 'video_nc_path fehlt'}, status=400)
+
+    # Normalize bare filenames to the Planner/Videos folder.
+    if not nc_path.startswith("Marketing"):
+        filename = nc_path.split("/")[-1]
+        nc_path = f"Marketing & Design/LinkedIn/Planner/Videos/{filename}"
+
+    title = nc_path.split("/")[-1]
+    with connection.cursor() as c:
+        rows = _safe(c, "SELECT id FROM media_library_items WHERE nc_path=%s LIMIT 1", [nc_path])
+        if rows:
+            item_id = rows[0][0]
+        else:
+            c.execute(
+                """INSERT INTO media_library_items (nc_path, title, person, series, tags, note, folder_id)
+                   VALUES (%s,%s,%s,%s,%s,%s,%s)""",
+                [nc_path, title, '', '', '', None, None]
+            )
+            rows2 = _safe(c, "SELECT id FROM media_library_items WHERE nc_path=%s ORDER BY id DESC LIMIT 1", [nc_path])
+            item_id = rows2[0][0] if rows2 else None
+
+    if not item_id:
+        return JsonResponse({'ok': False, 'error': 'Item konnte nicht angelegt werden'}, status=500)
+
+    return JsonResponse({'ok': True, 'item_id': item_id,
+                         'studio_url': f"/library/studio/?lib_item={item_id}"})
 
 
 @login_required
@@ -727,13 +783,16 @@ def studio_brand_colors_save(request):
     c4 = request.POST.get('c4', '#61CEBC')
     c5 = request.POST.get('c5', '#005F68')
     c6 = request.POST.get('c6', '#161616')
+    # Extra-Farben aus dem Formular sammeln
+    extra = [v for k, v in request.POST.items() if k.startswith('extra_') and v.startswith('#')]
+    extra_json = json.dumps(extra) if extra else None
     try:
         with connection.cursor() as cur:
             cur.execute("SELECT COUNT(*) FROM brand_colors")
             if cur.fetchone()[0] > 0:
-                cur.execute("UPDATE brand_colors SET c1=%s,c2=%s,c3=%s,c4=%s,c5=%s,c6=%s", [c1,c2,c3,c4,c5,c6])
+                cur.execute("UPDATE brand_colors SET c1=%s,c2=%s,c3=%s,c4=%s,c5=%s,c6=%s,extra_colors=%s", [c1,c2,c3,c4,c5,c6,extra_json])
             else:
-                cur.execute("INSERT INTO brand_colors (c1,c2,c3,c4,c5,c6) VALUES (%s,%s,%s,%s,%s,%s)", [c1,c2,c3,c4,c5,c6])
+                cur.execute("INSERT INTO brand_colors (c1,c2,c3,c4,c5,c6,extra_colors) VALUES (%s,%s,%s,%s,%s,%s,%s)", [c1,c2,c3,c4,c5,c6,extra_json])
         messages.success(request, 'Brand-Farben gespeichert.')
     except Exception as e:
         messages.error(request, f'Fehler: {e}')

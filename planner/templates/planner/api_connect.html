@@ -193,6 +193,8 @@
     <input type="hidden" name="buffer_token" id="buf-token-hidden" value="{{ token.buffer_token|default:'' }}">
     <input type="hidden" name="buffer_profile_id" id="buf-pid-hidden" value="{{ token.buffer_profile_id|default:'' }}">
     <input type="hidden" name="buffer_profile_name" id="buf-pname-hidden" value="{{ token.buffer_profile_name|default:'' }}">
+    <input type="hidden" name="buffer_profile_id_person" id="buf-pid-person-hidden" value="{{ token.buffer_profile_id_person|default:'' }}">
+    <input type="hidden" name="buffer_profile_name_person" id="buf-pname-person-hidden" value="{{ token.buffer_profile_name_person|default:'' }}">
 
     <div style="display:flex;flex-direction:column;gap:10px">
       <div>
@@ -209,7 +211,7 @@
       </div>
 
       <div id="buf-profiles-wrap" style="{% if token.buffer_profile_id %}display:block{% else %}display:none{% endif %}">
-        <label style="font-size:11px;color:#888;display:block;margin-bottom:3px">LinkedIn-Seite in Buffer</label>
+        <label style="font-size:11px;color:#888;display:block;margin-bottom:3px">LinkedIn-Seite in Buffer (Firmen-Seite / Org)</label>
         <select id="buf-profile-select"
                 style="font-size:13px;padding:5px 9px;border:0.5px solid #ced4da;border-radius:4px;min-width:260px"
                 onchange="onProfileSelect()">
@@ -219,6 +221,19 @@
           </option>
           {% else %}
           <option value="">— Profile zuerst laden —</option>
+          {% endif %}
+        </select>
+
+        <label style="font-size:11px;color:#888;display:block;margin:10px 0 3px">Persönlicher LinkedIn-Kanal in Buffer (für OJ-Posts) — optional</label>
+        <select id="buf-profile-select-person"
+                style="font-size:13px;padding:5px 9px;border:0.5px solid #ced4da;border-radius:4px;min-width:260px"
+                onchange="onProfileSelectPerson()">
+          {% if token.buffer_profile_id_person %}
+          <option value="{{ token.buffer_profile_id_person }}" data-name="{{ token.buffer_profile_name_person|default:'' }}" selected>
+            {{ token.buffer_profile_name_person|default:token.buffer_profile_id_person }}
+          </option>
+          {% else %}
+          <option value="">— kein persönlicher Kanal —</option>
           {% endif %}
         </select>
       </div>
@@ -427,7 +442,11 @@ async function loadBufferProfiles() {
     }
 
     const sel = document.getElementById('buf-profile-select');
+    const selP = document.getElementById('buf-profile-select-person');
+    const prevOrg = document.getElementById('buf-pid-hidden').value;
+    const prevPerson = document.getElementById('buf-pid-person-hidden').value;
     sel.innerHTML = '';
+    selP.innerHTML = '<option value="">— kein persönlicher Kanal —</option>';
 
     if (!res.profiles || res.profiles.length === 0) {
       errEl.textContent = 'Keine LinkedIn-Profile in Buffer gefunden. Stelle sicher, dass die LinkedIn-Seite im neuen Buffer-Account verbunden ist.';
@@ -440,11 +459,20 @@ async function loadBufferProfiles() {
       opt.value = p.id;
       opt.dataset.name = p.name;
       opt.textContent = p.name + (p.type ? ' (' + p.type + ')' : '');
+      if (p.id === prevOrg) opt.selected = true;
       sel.appendChild(opt);
+
+      const optP = document.createElement('option');
+      optP.value = p.id;
+      optP.dataset.name = p.name;
+      optP.textContent = p.name + (p.type ? ' (' + p.type + ')' : '');
+      if (p.id === prevPerson) optP.selected = true;
+      selP.appendChild(optP);
     });
 
     document.getElementById('buf-profiles-wrap').style.display = 'block';
     onProfileSelect();
+    onProfileSelectPerson();
 
   } catch(e) {
     errEl.textContent = 'Netzwerkfehler: ' + e.message;
@@ -460,11 +488,20 @@ function onProfileSelect() {
   document.getElementById('buf-pname-hidden').value = opt ? (opt.dataset.name || opt.textContent) : '';
 }
 
+function onProfileSelectPerson() {
+  const sel = document.getElementById('buf-profile-select-person');
+  const opt = sel.options[sel.selectedIndex];
+
+  document.getElementById('buf-pid-person-hidden').value = opt ? opt.value : '';
+  document.getElementById('buf-pname-person-hidden').value = opt ? (opt.dataset.name || opt.textContent) : '';
+}
+
 function prepareBufferSubmit() {
   document.getElementById('buf-token-hidden').value =
     document.getElementById('buf-token-input').value.trim();
 
   onProfileSelect();
+  onProfileSelectPerson();
 }
 </script>
 {% endblock %}

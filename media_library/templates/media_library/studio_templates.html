@@ -71,8 +71,34 @@
         <span style="font-size:.7rem;color:#888">Schwarz/Text</span>
       </div>
     </div>
+    <!-- Extra-Farben -->
+    <p style="font-size:.8rem;color:#aaa;margin-bottom:.5rem">Zusätzliche Farben (optional)</p>
+    <div id="extra-colors-row" style="display:flex;gap:.75rem;align-items:flex-end;flex-wrap:wrap;margin-bottom:1rem">
+      {% for ec in brand.extra_colors %}
+      <div class="color-swatch-wrap" data-extra>
+        <div class="color-swatch-input"><input type="color" name="extra_{{ forloop.counter }}" value="{{ ec }}"></div>
+        <span style="font-size:.8rem;font-weight:700;color:var(--octo-dark-petrol)">E{{ forloop.counter }}</span>
+        <button type="button" onclick="this.closest('[data-extra]').remove()" style="background:none;border:none;color:#c00;cursor:pointer;font-size:.7rem">✕</button>
+      </div>
+      {% endfor %}
+      <button type="button" onclick="addExtraColor()" style="width:52px;height:52px;border-radius:8px;border:2px dashed #ccc;background:#f9f9f9;font-size:1.5rem;cursor:pointer;color:#888" title="Neue Farbe hinzufügen">+</button>
+    </div>
     <button type="submit" class="btn btn-secondary">💾 Farben speichern</button>
   </form>
+  <script>
+  function addExtraColor() {
+    const row = document.getElementById('extra-colors-row');
+    const btn = row.querySelector('button[onclick="addExtraColor()"]');
+    const n = row.querySelectorAll('[data-extra]').length + 1;
+    const wrap = document.createElement('div');
+    wrap.className = 'color-swatch-wrap';
+    wrap.setAttribute('data-extra','');
+    wrap.innerHTML = '<div class="color-swatch-input"><input type="color" name="extra_'+n+'" value="#888888"></div>'
+      + '<span style="font-size:.8rem;font-weight:700;color:var(--octo-dark-petrol)">E'+n+'</span>'
+      + '<button type="button" onclick="this.closest(\'[data-extra]\').remove()" style="background:none;border:none;color:#c00;cursor:pointer;font-size:.7rem">✕</button>';
+    row.insertBefore(wrap, btn);
+  }
+  </script>
 </div>
 
 <div class="upload-box">

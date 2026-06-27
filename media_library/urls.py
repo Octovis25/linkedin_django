@@ -17,6 +17,7 @@ urlpatterns = [
     path('item/studio-info/<int:item_id>/', views.item_studio_info, name='item_studio_info'),
     # Image Studio
     path('studio/',                       views.studio_view,            name='studio'),
+    path('studio/link-video/',            views.studio_link_video,      name='studio_link_video'),
     path('studio/templates/',             views.studio_templates_view,  name='studio_templates'),
     path('studio/template/upload/',       views.studio_template_upload, name='studio_template_upload'),
     path('studio/template/delete/<int:tpl_id>/', views.studio_template_delete, name='studio_template_delete'),

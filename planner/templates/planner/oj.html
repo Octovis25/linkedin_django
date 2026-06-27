@@ -205,6 +205,31 @@
         title="Bild im Studio bearbeiten">🎨 Studio</button>
       <input type="text" id="e-title" placeholder="Titel..." class="finput" style="margin-bottom:0;flex:1">
     </div>
+
+    <!-- ── Video-Auswahl: Nextcloud (Default) oder PC-Upload ── -->
+    <div style="border:0.5px solid #ced4da;border-radius:4px;padding:8px;margin-bottom:8px;background:#fafbfc">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+        <span style="font-size:12px;color:#008591;font-weight:500">🎬 Video</span>
+        <span id="e-video-current" style="font-size:11px;color:#0F6E56;flex:1"></span>
+        <button type="button" onclick="clearOjVideo()" id="e-video-clear"
+          style="font-size:11px;padding:2px 6px;border:0.5px solid #ced4da;border-radius:4px;background:#fff;cursor:pointer;color:#888;display:none">✕</button>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <select id="e-video-nc" onchange="onOjVideoNcSelect()"
+          style="font-size:12px;padding:4px 8px;border:0.5px solid #ced4da;border-radius:4px;flex:1;min-width:180px">
+          <option value="">— aus Nextcloud wählen —</option>
+        </select>
+        <button type="button" onclick="reloadOjNcVideos()"
+          style="font-size:11px;padding:4px 8px;border:0.5px solid #ced4da;border-radius:4px;background:#fff;cursor:pointer;color:#008591" title="Liste neu laden">↻</button>
+        <span style="font-size:11px;color:#adb5bd">oder</span>
+        <button type="button" onclick="document.getElementById('e-video-input').click()"
+          style="font-size:11px;padding:4px 8px;border:0.5px solid #61CEBC;border-radius:4px;background:#fff;cursor:pointer;color:#008591">⬆ vom PC</button>
+        <input type="file" id="e-video-input" accept="video/mp4,video/quicktime,video/webm,.mp4,.mov,.webm,.m4v"
+          style="display:none" onchange="onOjVideoPcSelect(this)">
+      </div>
+      <input type="hidden" id="e-video-nc-path" value="">
+    </div>
+
     <div class="editor-wrap">
       <div class="editor-toolbar">
         <button type="button" onmousedown="event.preventDefault();fmt('e','bold')"><b>B</b></button>
@@ -243,7 +268,7 @@
 
 <!-- Post data for JS -->
 <script id="oj-data-raw" type="application/json">
-[{% for p in posts %}{"id":{{ p.id }},"title":"{{ p.title|default:""|escapejs }}","content":"{{ p.content|default:""|escapejs }}","status":"{{ p.status }}","date":"{{ p.planned_date|date:"Y-m-d"|default:"" }}","topicId":{{ p.topic_id|default:"null" }},"comment":"{{ p.comment|escapejs }}","image":"{{ p.image|default:""|escapejs }}"}{% if not forloop.last %},{% endif %}{% endfor %}]
+[{% for p in posts %}{"id":{{ p.id }},"title":"{{ p.title|default:""|escapejs }}","content":"{{ p.content|default:""|escapejs }}","status":"{{ p.status }}","date":"{{ p.planned_date|date:"Y-m-d"|default:"" }}","topicId":{{ p.topic_id|default:"null" }},"comment":"{{ p.comment|escapejs }}","image":"{{ p.image|default:""|escapejs }}","video":"{{ p.video_nc_path|default:""|escapejs }}"}{% if not forloop.last %},{% endif %}{% endfor %}]
 </script>
 
 <script>
@@ -395,7 +420,67 @@ function openOjEditById(id) {
   document.getElementById('e-comment').value = p.comment || '';
   clearImgPreview('e');
   if (p.image) showImgPreview('e', `/planner/image/${id}/`);
+
+  // Video-Auswahl zurücksetzen + Nextcloud-Liste laden
+  resetOjVideoUi();
+  if (p.video) {
+    document.getElementById('e-video-nc-path').value = p.video;
+    document.getElementById('e-video-current').textContent = '✓ ' + p.video.split('/').pop();
+    document.getElementById('e-video-clear').style.display = 'inline-block';
+  }
+  reloadOjNcVideos();
+
   document.getElementById('oj-edit-modal').classList.add('open');
+}
+
+/* ── Video-Auswahl: Helfer ── */
+function resetOjVideoUi() {
+  document.getElementById('e-video-input').value = '';
+  document.getElementById('e-video-nc-path').value = '';
+  document.getElementById('e-video-current').textContent = '';
+  document.getElementById('e-video-clear').style.display = 'none';
+  const sel = document.getElementById('e-video-nc');
+  if (sel) sel.value = '';
+}
+
+function clearOjVideo() {
+  resetOjVideoUi();
+}
+
+async function reloadOjNcVideos() {
+  const sel = document.getElementById('e-video-nc');
+  if (!sel) return;
+  const keep = document.getElementById('e-video-nc-path').value;
+  try {
+    const r = await fetch('/planner/api/nc-videos/').then(r => r.json());
+    sel.innerHTML = '<option value="">— aus Nextcloud wählen —</option>';
+    if (r.ok && r.videos) {
+      r.videos.forEach(v => {
+        const opt = document.createElement('option');
+        opt.value = v.nc_path;
+        opt.textContent = v.filename;
+        if (v.nc_path === keep) opt.selected = true;
+        sel.appendChild(opt);
+      });
+    }
+  } catch (e) { /* Liste optional — PC-Upload bleibt möglich */ }
+}
+
+function onOjVideoNcSelect() {
+  const sel = document.getElementById('e-video-nc');
+  const path = sel.value;
+  document.getElementById('e-video-input').value = '';  // PC-Auswahl verwerfen
+  document.getElementById('e-video-nc-path').value = path;
+  document.getElementById('e-video-current').textContent = path ? ('✓ ' + path.split('/').pop() + ' (Nextcloud)') : '';
+  document.getElementById('e-video-clear').style.display = path ? 'inline-block' : 'none';
+}
+
+function onOjVideoPcSelect(input) {
+  const f = input.files && input.files[0];
+  document.getElementById('e-video-nc').value = '';        // NC-Auswahl verwerfen
+  document.getElementById('e-video-nc-path').value = '';
+  document.getElementById('e-video-current').textContent = f ? ('⬆ ' + f.name + ' (PC, wird hochgeladen)') : '';
+  document.getElementById('e-video-clear').style.display = f ? 'inline-block' : 'none';
 }
 
 /* ── Save edit ── */
@@ -420,6 +505,18 @@ async function updateOjPost() {
       fd.append('image', imgInput.files[0]);
       await fetch(`/planner/api/image/${id}/`, {method:'POST', headers:{'X-CSRFToken':CSRF}, body:fd});
     }
+
+    // Video speichern: PC-Upload hat Vorrang, sonst Nextcloud-Auswahl
+    const vidInput = document.getElementById('e-video-input');
+    const ncPath = document.getElementById('e-video-nc-path').value;
+    if (vidInput.files && vidInput.files[0]) {
+      const fd = new FormData();
+      fd.append('video', vidInput.files[0]);
+      await fetch(`/planner/api/video/${id}/`, {method:'POST', headers:{'X-CSRFToken':CSRF}, body:fd});
+    } else if (ncPath) {
+      await api('/planner/api/post/', {action:'set_video', id:parseInt(id), video_nc_path:ncPath});
+    }
+
     closeModal('oj-edit-modal');
     location.reload();
   } else {
