@@ -70,15 +70,17 @@ class Command(BaseCommand):
     def add_arguments(self, parser):
         parser.add_argument('--first', type=int, default=50,
                             help='Anzahl der zuletzt gesendeten Posts, die abgefragt werden (Standard 50).')
+        parser.add_argument('--token', type=str, default=None,
+                            help='Buffer-Token direkt angeben (sonst aus DB).')
 
     def handle(self, *args, **options):
         # Import hier, um Django-Setup-Reihenfolge sicherzustellen.
         from planner.views import (_buffer_first_org_id, _buffer_fetch_post_metrics)
         from datetime import date
 
-        buf_token = _get_buffer_token()
+        buf_token = options.get('token') or _get_buffer_token()
         if not buf_token:
-            self.stderr.write("Kein Buffer-Token gefunden (planner_linkedin_tokens). Abbruch.")
+            self.stderr.write("Kein Buffer-Token (--token angeben oder in DB speichern). Abbruch.")
             return
 
         try:
