@@ -1,0 +1,102 @@
+{% extends "core/base.html" %}
+{% block title %}Buffer Posts Posted{% endblock %}
+{% block content %}
+<style>
+.post-title-cell {
+    max-width: 420px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.copy-link-btn {
+    cursor: pointer;
+    margin-left: 0.3rem;
+    color: var(--octo-petrol);
+    text-decoration: none;
+    font-size: 1rem;
+}
+.copy-link-btn:hover { color: var(--octo-orange); }
+
+.thumb-wrap { position: relative; display: inline-block; }
+.thumb-wrap img.thumb {
+    max-height: 40px; max-width: 60px;
+    border-radius: 4px; cursor: pointer; transition: transform 0.2s;
+}
+.thumb-wrap .thumb-large {
+    display: none; position: absolute; bottom: 100%; left: 50%;
+    transform: translateX(-50%); z-index: 1000;
+    border: 3px solid var(--octo-petrol); border-radius: 8px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.3); background: #fff;
+    max-width: 220px; max-height: 160px;
+}
+.thumb-wrap:hover .thumb-large { display: block; }
+.bp-id { font-family: monospace; font-size: 0.75rem; color: var(--octo-petrol); text-decoration: none; }
+.bp-id:hover { text-decoration: underline; color: var(--octo-orange); }
+.bp-status { font-size: 0.7rem; padding: 2px 6px; border-radius: 4px; background: #eef; color: #335; }
+</style>
+
+<div class="card">
+<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem">
+<h2 style="margin:0">Buffer Posts Posted ({{ posts|length }})</h2>
+{% if last_fetch %}<span style="color:#6c757d;font-size:12px">Letzter Abruf: {{ last_fetch|date:"d.m.Y H:i" }}</span>{% endif %}
+</div>
+
+{% if error %}
+<div class="alert alert-error" style="margin-bottom:1rem">{{ error }}</div>
+{% endif %}
+
+<table>
+<thead><tr>
+    <th>Bild</th>
+    <th>Text</th>
+    <th>Gesendet</th>
+    <th>LinkedIn-Link</th>
+    <th>Buffer-ID</th>
+    <th>Status</th>
+</tr></thead>
+<tbody>
+{% for p in posts %}
+<tr>
+    <td>
+        {% if p.thumbnail_url %}
+        <div class="thumb-wrap">
+            <img src="{{ p.thumbnail_url }}" class="thumb" alt="Bild" referrerpolicy="no-referrer">
+            <img src="{{ p.thumbnail_url }}" class="thumb-large" alt="Bild gross" referrerpolicy="no-referrer">
+        </div>
+        {% elif p.planner_id and p.has_image %}
+        <div class="thumb-wrap">
+            <img src="{% url 'planner_image' p.planner_id %}" class="thumb" alt="Bild">
+            <img src="{% url 'planner_image' p.planner_id %}" class="thumb-large" alt="Bild gross">
+        </div>
+        {% else %}<span style="color:#aaa">—</span>{% endif %}
+    </td>
+    <td class="post-title-cell" title="{{ p.text }}">{{ p.text|default:"-"|truncatechars:90 }}</td>
+    <td>{{ p.sent_at|default:"—" }}</td>
+    <td>
+        {% if p.link %}
+        <a href="{{ p.link }}" target="_blank" title="{{ p.link }}">&#x1F517; LinkedIn</a>
+        <a href="#" class="copy-link-btn" title="Link kopieren" onclick="copyLink('{{ p.link }}', event)">&#x1F4CB;</a>
+        {% else %}<span style="color:#aaa">—</span>{% endif %}
+    </td>
+    <td><span class="bp-id">{{ p.buffer_post_id }}</span></td>
+    <td>{% if p.status %}<span class="bp-status">{{ p.status }}</span>{% else %}—{% endif %}</td>
+</tr>
+{% empty %}
+<tr><td colspan="6" style="text-align:center;color:#aaa;padding:2rem">Keine Buffer-Posts gefunden.</td></tr>
+{% endfor %}
+</tbody></table>
+</div>
+
+<script>
+function copyLink(link, event) {
+    event.preventDefault();
+    navigator.clipboard.writeText(link).then(function() {
+        var btn = event.target;
+        var orig = btn.textContent;
+        btn.textContent = '✓';
+        btn.style.color = 'green';
+        setTimeout(function() { btn.textContent = orig; btn.style.color = ''; }, 1500);
+    });
+}
+</script>
+{% endblock %}

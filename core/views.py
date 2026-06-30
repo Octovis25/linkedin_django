@@ -208,7 +208,19 @@ def upload_import_view(request):
                         else:
                             results.append({'file': filename, 'type': 'Unknown', 'status': 'unrecognized', 'stats': []})
                             error_count += 1
-            
+
+            # AUTOMATISCH nach dem Import: fehlende Post-Bilder aus Buffer befuellen.
+            if success_count > 0:
+                try:
+                    from posts_posted.views import fill_missing_post_images
+                    filled, checked, img_err, dates_filled = fill_missing_post_images()
+                    if filled:
+                        messages.success(request, f'{filled} fehlende(s) Post-Bild(er) automatisch aus Buffer befüllt.')
+                    if dates_filled:
+                        messages.success(request, f'{dates_filled} fehlende(s) Post-Datum/Daten automatisch aus Buffer befüllt.')
+                except Exception as _e:
+                    print('Auto-Bild/Datum-Befuellen fehlgeschlagen:', _e)
+
             # Dateiliste nach Import aktualisieren
             files = []
             if os.path.exists(UPLOAD_DIR):

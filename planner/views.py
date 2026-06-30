@@ -1377,7 +1377,8 @@ def _li_get_superuser_token():
                                 t.org_id, t.org_name,
                                 t.buffer_token, t.buffer_profile_id, t.buffer_profile_name,
                                 t.make_webhook_url,
-                                t.buffer_profile_id_person, t.buffer_profile_name_person
+                                t.buffer_profile_id_person, t.buffer_profile_name_person,
+                                t.buffer_insights_token
                          FROM planner_linkedin_tokens t
                          JOIN auth_user u ON t.user_id = u.id
                          WHERE u.is_superuser = 1 LIMIT 1""")
@@ -1391,7 +1392,8 @@ def _li_get_superuser_token():
             'org_id': row[6], 'org_name': row[7],
             'buffer_token': row[8], 'buffer_profile_id': row[9], 'buffer_profile_name': row[10],
             'make_webhook_url': row[11],
-            'buffer_profile_id_person': row[12], 'buffer_profile_name_person': row[13]}
+            'buffer_profile_id_person': row[12], 'buffer_profile_name_person': row[13],
+            'buffer_insights_token': row[14] if len(row) > 14 else None}
 
 
 def _li_get_token(request):
@@ -1402,7 +1404,8 @@ def _li_get_token(request):
                                 org_id, org_name,
                                 buffer_token, buffer_profile_id, buffer_profile_name,
                                 make_webhook_url,
-                                buffer_profile_id_person, buffer_profile_name_person
+                                buffer_profile_id_person, buffer_profile_name_person,
+                                buffer_insights_token
                          FROM planner_linkedin_tokens WHERE user_id=%s""",
                       [request.user.id])
             row = c.fetchone()
@@ -1415,7 +1418,8 @@ def _li_get_token(request):
             'org_id': row[6], 'org_name': row[7],
             'buffer_token': row[8], 'buffer_profile_id': row[9], 'buffer_profile_name': row[10],
             'make_webhook_url': row[11],
-            'buffer_profile_id_person': row[12], 'buffer_profile_name_person': row[13]}
+            'buffer_profile_id_person': row[12], 'buffer_profile_name_person': row[13],
+            'buffer_insights_token': row[14] if len(row) > 14 else None}
 
 
 def _li_ensure_table():
@@ -1441,6 +1445,7 @@ def _li_ensure_table():
         # Note: buffer_profile_id / buffer_profile_name = ORG channel (legacy name kept).
         #       buffer_profile_id_person / _name = personal (OJ) channel.
         for col, defn in [('buffer_token', 'TEXT'),
+                          ('buffer_insights_token', 'TEXT'),
                           ('buffer_profile_id', 'VARCHAR(100)'),
                           ('buffer_profile_name', 'VARCHAR(200)'),
                           ('buffer_profile_id_person', 'VARCHAR(100)'),
@@ -1535,20 +1540,24 @@ def _buffer_first_org_id(buf_token):
     return orgs[0].get('id') if orgs else None
 
 
-def _buffer_fetch_post_metrics(buf_token, org_id, first=50):
+def _buffer_fetch_post_metrics(buf_token, org_id, first=50, all_pages=False, max_posts=1000):
     """
-    Fetch recent posts with their metrics from Buffer.
-    Returns a list of dicts: {buffer_post_id, channel_id, sent_at, metrics:[{type,name,value,unit}]}.
+    Fetch posts with their metrics from Buffer.
+
+    all_pages=True paginiert ueber alle verfuegbaren Posts (bis max_posts).
+    Liefert pro Post auch Text und Thumbnail (zur Erkennung im Tab).
     """
     query = """
-    query PostsMetrics($input: PostsInput!, $first: Int) {
-      posts(input: $input, first: $first) {
+    query PostsMetrics($input: PostsInput!, $first: Int, $after: String) {
+      posts(input: $input, first: $first, after: $after) {
+        pageInfo { hasNextPage endCursor }
         edges {
           node {
             id
             channelId
             dueAt
             status
+            text
             metricsUpdatedAt
             metrics { type name value unit }
           }
@@ -1556,20 +1565,107 @@ def _buffer_fetch_post_metrics(buf_token, org_id, first=50):
       }
     }
     """
-    variables = {"input": {"organizationId": org_id}, "first": first}
-    result = _buffer_graphql(buf_token, query, variables)
-    edges = (result.get('data', {}) or {}).get('posts', {}).get('edges', []) or []
+
+    def _thumb(node):
+        for a in (node.get('assets') or []):
+            t = a.get('thumbnailUrl') or a.get('url')
+            if t:
+                return t
+        return None
+
     out = []
-    for e in edges:
-        node = e.get('node') or {}
-        out.append({
-            'buffer_post_id': node.get('id'),
-            'channel_id': node.get('channelId'),
-            'sent_at': node.get('dueAt'),
-            'status': node.get('status'),
-            'metrics_updated_at': node.get('metricsUpdatedAt'),
-            'metrics': node.get('metrics') or [],
-        })
+    after = None
+    while True:
+        variables = {"input": {"organizationId": org_id}, "first": first}
+        if after:
+            variables["after"] = after
+        result = _buffer_graphql(buf_token, query, variables)
+        posts_node = (result.get('data', {}) or {}).get('posts', {}) or {}
+        edges = posts_node.get('edges', []) or []
+        for e in edges:
+            node = e.get('node') or {}
+            out.append({
+                'buffer_post_id': node.get('id'),
+                'channel_id': node.get('channelId'),
+                'sent_at': node.get('dueAt'),
+                'status': node.get('status'),
+                'text': node.get('text') or '',
+                'thumbnail_url': _thumb(node),
+                'metrics_updated_at': node.get('metricsUpdatedAt'),
+                'metrics': node.get('metrics') or [],
+            })
+        page = posts_node.get('pageInfo') or {}
+        if not all_pages or not page.get('hasNextPage') or len(out) >= max_posts:
+            break
+        after = page.get('endCursor')
+        if not after:
+            break
+    return out
+
+
+def _buffer_fetch_posts_basic(buf_token, org_id, first=50, all_pages=True, max_posts=1000):
+    """
+    Holt Buffer-Posts OHNE Metriken (kommt mit posts:read aus, kein insights:read noetig).
+    Liefert pro Post: Buffer-ID, Channel, Text, Status, Sende-Datum.
+    Bild + LinkedIn-Link werden spaeter ueber planner_posts (buffer_update_id) ergaenzt.
+    """
+    query = """
+    query PostsBasic($input: PostsInput!, $first: Int, $after: String) {
+      posts(input: $input, first: $first, after: $after) {
+        pageInfo { hasNextPage endCursor }
+        edges {
+          node {
+            id
+            channelId
+            dueAt
+            sentAt
+            status
+            text
+            externalLink
+            assets {
+              __typename
+              ... on ImageAsset { source thumbnail }
+              ... on VideoAsset { source thumbnail }
+            }
+          }
+        }
+      }
+    }
+    """
+
+    def _asset_thumb(node):
+        for a in (node.get('assets') or []):
+            t = a.get('thumbnail') or a.get('source')
+            if t:
+                return t
+        return ''
+
+    out = []
+    after = None
+    while True:
+        variables = {"input": {"organizationId": org_id}, "first": first}
+        if after:
+            variables["after"] = after
+        result = _buffer_graphql(buf_token, query, variables)
+        posts_node = (result.get('data', {}) or {}).get('posts', {}) or {}
+        edges = posts_node.get('edges', []) or []
+        for e in edges:
+            node = e.get('node') or {}
+            out.append({
+                'buffer_post_id': node.get('id'),
+                'channel_id': node.get('channelId'),
+                'sent_at': node.get('sentAt') or node.get('dueAt'),
+                'status': node.get('status'),
+                'text': node.get('text') or '',
+                'external_link': node.get('externalLink') or '',
+                'thumbnail_url': _asset_thumb(node),
+            })
+        page = posts_node.get('pageInfo') or {}
+        if not all_pages or not page.get('hasNextPage') or len(out) >= max_posts:
+            break
+        after = page.get('endCursor')
+        if not after:
+            break
     return out
 
 
@@ -1694,11 +1790,17 @@ def api_connect_view(request):
         buf_pname_person = request.POST.get('buffer_profile_name_person', '').strip()
         with connection.cursor() as c:
             try:
+                # Leere Felder NICHT ueberschreiben (COALESCE auf neuen Wert, sonst alt).
+                # So loescht das Eintragen des Insights-Tokens nicht den Posting-Token.
                 c.execute("""UPDATE planner_linkedin_tokens
-                             SET buffer_token=%s, buffer_profile_id=%s, buffer_profile_name=%s,
-                                 buffer_profile_id_person=%s, buffer_profile_name_person=%s
+                             SET buffer_token=COALESCE(%s, buffer_token),
+                                 buffer_profile_id=COALESCE(%s, buffer_profile_id),
+                                 buffer_profile_name=COALESCE(%s, buffer_profile_name),
+                                 buffer_profile_id_person=COALESCE(%s, buffer_profile_id_person),
+                                 buffer_profile_name_person=COALESCE(%s, buffer_profile_name_person)
                              WHERE user_id=%s""",
-                          [buf_tok or None, buf_pid or None, buf_pname or None,
+                          [buf_tok or None,
+                           buf_pid or None, buf_pname or None,
                            buf_pid_person or None, buf_pname_person or None, request.user.id])
             except Exception as ex:
                 print('Buffer save error:', ex)

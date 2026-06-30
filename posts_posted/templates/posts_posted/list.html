@@ -51,12 +51,18 @@
 </style>
 
 <div class="card">
-<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem">
+<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;gap:1rem;flex-wrap:wrap">
 <h2 style="margin:0">Alle Posts ({{ posts|length }})</h2>
+<div style="display:flex;gap:.5rem;align-items:center">
+<button type="button" id="fill-img-btn" class="btn btn-sm" style="background:var(--octo-petrol,#008591);color:#fff;border:none"
+        onclick="fillImagesFromBuffer(this)">🖼️ Bilder automatisch befüllen</button>
 <form style="display:flex;gap:.5rem;width:300px">
 <input type="text" name="q" value="{{ query }}" class="form-input" placeholder="Suche...">
 <button type="submit" class="btn btn-secondary btn-sm">Suchen</button>
-</form></div>
+</form>
+</div>
+</div>
+<div id="fill-img-msg" style="display:none;font-size:13px;margin-bottom:1rem;padding:8px 12px;border-radius:6px"></div>
 
 <table>
 <thead><tr>
@@ -118,6 +124,40 @@ function copyLink(link, event) {
         btn.textContent = '\u2713';
         btn.style.color = 'green';
         setTimeout(function() { btn.textContent = orig; btn.style.color = ''; }, 1500);
+    });
+}
+
+function csrfToken() {
+    var m = document.cookie.match(/csrftoken=([^;]+)/);
+    return m ? m[1] : '';
+}
+
+function fillImagesFromBuffer(btn) {
+    var msg = document.getElementById('fill-img-msg');
+    btn.disabled = true;
+    var orig = btn.textContent;
+    btn.textContent = '\u23f3 Bef\u00fclle Bilder\u2026';
+    fetch('/data/posts/fill-images/', {
+        method: 'POST',
+        headers: { 'X-CSRFToken': csrfToken() }
+    })
+    .then(function(r){ return r.json(); })
+    .then(function(d){
+        btn.disabled = false; btn.textContent = orig;
+        msg.style.display = 'block';
+        if (d.ok) {
+            msg.style.background = '#e1f5ee'; msg.style.color = '#0F6E56';
+            msg.textContent = '\u2705 ' + d.filled + ' Bild(er) und ' + (d.dates_filled || 0) + ' Datum/Daten aus Buffer bef\u00fcllt' + (d.errors ? ' (Fehler: ' + d.errors + ')' : '') + '. Seite neu laden zum Anzeigen.';
+        } else {
+            msg.style.background = '#fdecea'; msg.style.color = '#b71c1c';
+            msg.textContent = '\u274c Fehler: ' + (d.error || 'unbekannt');
+        }
+    })
+    .catch(function(){
+        btn.disabled = false; btn.textContent = orig;
+        msg.style.display = 'block';
+        msg.style.background = '#fdecea'; msg.style.color = '#b71c1c';
+        msg.textContent = '\u274c Verbindungsfehler.';
     });
 }
 </script>
