@@ -425,8 +425,8 @@ def item_studio_info(request, item_id):
 #  NEXTCLOUD FOLDERS FOR STUDIO
 # ─────────────────────────────────────────────
 NC_STUDIO_TEMPLATES_FOLDER = "Marketing & Design/LinkedIn/Studio/Templates"
-NC_STUDIO_LIBRARY_FOLDER   = "Marketing & Design/LinkedIn/Studio/Bibliothek"
-NC_STUDIO_VIDEOS_FOLDER    = "Marketing & Design/LinkedIn/Studio/Videos"
+NC_STUDIO_LIBRARY_FOLDER   = "Marketing & Design/Octotrial_Assets/Studio_Output/Images"
+NC_STUDIO_VIDEOS_FOLDER    = "Marketing & Design/Octotrial_Assets/Studio_Output/Videos"
 
 
 def _optimize_canvas_json(canvas_json_str, nc_folder, title_prefix):

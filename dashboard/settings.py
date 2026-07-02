@@ -25,6 +25,7 @@ INSTALLED_APPS = [
     "planner",
     "db_admin",
     "media_library",
+    "assets",
 ]
 
 MIDDLEWARE = [

@@ -1,0 +1,995 @@
+{% extends "core/base.html" %}
+{% block title %}Octotrial Asset Library{% endblock %}
+
+{% block content %}
+<style>
+/* ── Asset Library Layout ─────────────────────────────────────── */
+.asset-page { display:flex; gap:0; min-height:calc(100vh - 180px); margin:-1rem -1.5rem; }
+
+/* Sidebar */
+.asset-sidebar {
+  width:240px; min-width:240px; background:var(--octo-light-gray);
+  border-right:2px solid #e0ddd4; padding:0.75rem 0; overflow-y:auto;
+  font-size:0.85rem; flex-shrink:0;
+}
+.sidebar-title { padding:0.5rem 1rem; font-weight:700; color:var(--octo-dark-petrol); font-size:0.9rem; }
+.folder-item {
+  display:flex; align-items:center; gap:6px; padding:5px 1rem; cursor:pointer;
+  transition:background 0.15s; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+}
+.folder-item:hover { background:#e8e5dc; }
+.folder-item.active { background:var(--octo-petrol); color:#fff; border-radius:0; }
+.folder-item.active .folder-icon { filter:brightness(10); }
+.folder-children { display:none; padding-left:1rem; }
+.folder-children.open { display:block; }
+.folder-toggle { cursor:pointer; user-select:none; font-size:0.7rem; width:14px; text-align:center; flex-shrink:0; }
+
+/* Main area */
+.asset-main { flex:1; display:flex; flex-direction:column; overflow:hidden; }
+
+/* Top bar */
+.asset-topbar {
+  display:flex; align-items:center; gap:0.75rem; padding:0.75rem 1rem;
+  border-bottom:1px solid #e0ddd4; flex-wrap:wrap; background:#fff;
+}
+.asset-topbar h1 { font-size:1.15rem; margin:0; white-space:nowrap; }
+.asset-search {
+  flex:1; min-width:180px; padding:6px 10px; border:2px solid #e0ddd4;
+  border-radius:6px; font-size:0.85rem; outline:none;
+}
+.asset-search:focus { border-color:var(--octo-orange); }
+.filter-select { padding:5px 8px; border:2px solid #e0ddd4; border-radius:6px; font-size:0.82rem; background:#fff; }
+.fav-toggle {
+  padding:5px 10px; border:2px solid #e0ddd4; border-radius:6px; cursor:pointer;
+  background:#fff; font-size:0.85rem; transition:all 0.15s;
+}
+.fav-toggle.active { background:var(--octo-orange); color:#fff; border-color:var(--octo-orange); }
+.btn-upload-area { display:flex; gap:6px; align-items:center; }
+
+/* Breadcrumb */
+.breadcrumb-bar { padding:6px 1rem; font-size:0.82rem; color:#666; border-bottom:1px solid #f0ede6; background:#faf9f6; }
+.breadcrumb-bar a { color:var(--octo-petrol); text-decoration:none; }
+.breadcrumb-bar a:hover { color:var(--octo-orange); }
+.breadcrumb-sep { margin:0 4px; color:#bbb; }
+
+/* Grid */
+.asset-grid-wrap { flex:1; overflow-y:auto; padding:1rem; position:relative; }
+.asset-grid {
+  display:grid; grid-template-columns:repeat(auto-fill, minmax(170px, 1fr));
+  gap:12px;
+}
+.asset-card {
+  background:#fff; border-radius:8px; box-shadow:0 1px 4px rgba(0,0,0,0.08);
+  overflow:hidden; cursor:pointer; transition:box-shadow 0.2s, transform 0.15s;
+  position:relative; border:2px solid transparent;
+}
+.asset-card:hover { box-shadow:0 4px 12px rgba(0,0,0,0.14); transform:translateY(-1px); }
+.asset-card.selected { border-color:var(--octo-petrol); }
+.card-thumb {
+  width:100%; height:130px; background:#f0ede6; display:flex; align-items:center;
+  justify-content:center; overflow:hidden; position:relative;
+}
+.card-thumb img { max-width:100%; max-height:100%; object-fit:contain; }
+.card-thumb .type-badge {
+  position:absolute; top:6px; left:6px; background:var(--octo-dark-petrol);
+  color:#fff; font-size:0.65rem; padding:2px 6px; border-radius:4px; text-transform:uppercase;
+}
+.card-fav {
+  position:absolute; top:6px; right:6px; font-size:1.1rem; cursor:pointer;
+  opacity:0.4; transition:opacity 0.15s;
+}
+.card-fav:hover, .card-fav.active { opacity:1; }
+.card-check {
+  position:absolute; top:6px; left:6px; width:18px; height:18px; accent-color:var(--octo-petrol);
+  display:none; z-index:2;
+}
+.multiselect-mode .card-check { display:block; }
+.multiselect-mode .type-badge { left:28px; }
+.card-info { padding:8px 10px; }
+.card-name {
+  font-size:0.8rem; font-weight:500; white-space:nowrap; overflow:hidden;
+  text-overflow:ellipsis; color:var(--octo-text);
+}
+.card-meta { font-size:0.7rem; color:#999; margin-top:2px; }
+.card-ctx-btn {
+  position:absolute; bottom:8px; right:8px; background:none; border:none;
+  font-size:1rem; cursor:pointer; opacity:0; transition:opacity 0.15s; color:#888;
+}
+.asset-card:hover .card-ctx-btn { opacity:1; }
+
+/* Folder cards */
+.folder-card {
+  background:#faf9f6; border-radius:8px; box-shadow:0 1px 3px rgba(0,0,0,0.06);
+  padding:12px; cursor:pointer; display:flex; align-items:center; gap:8px;
+  transition:background 0.15s; border:2px solid transparent;
+}
+.folder-card:hover { background:#f0ede6; }
+.folder-card .folder-icon { font-size:1.5rem; }
+.folder-card .folder-name { font-size:0.85rem; font-weight:500; }
+
+/* Context menu */
+.ctx-menu {
+  position:fixed; background:#fff; border-radius:8px; box-shadow:0 4px 16px rgba(0,0,0,0.18);
+  z-index:1000; min-width:160px; padding:4px 0; display:none; font-size:0.85rem;
+}
+.ctx-menu-item {
+  padding:7px 14px; cursor:pointer; display:flex; align-items:center; gap:8px;
+  transition:background 0.1s;
+}
+.ctx-menu-item:hover { background:var(--octo-light-gray); }
+.ctx-menu-item.danger { color:#dc3545; }
+
+/* Drop zone */
+.drop-overlay {
+  position:absolute; inset:0; background:rgba(0,133,145,0.12); border:3px dashed var(--octo-petrol);
+  border-radius:12px; display:none; align-items:center; justify-content:center;
+  z-index:50; font-size:1.1rem; color:var(--octo-dark-petrol); font-weight:600;
+}
+.drop-overlay.visible { display:flex; }
+
+/* Preview modal */
+.preview-overlay {
+  position:fixed; inset:0; background:rgba(0,0,0,0.6); z-index:2000; display:none;
+  align-items:center; justify-content:center;
+}
+.preview-overlay.open { display:flex; }
+.preview-box {
+  background:#fff; border-radius:12px; max-width:900px; width:95%; max-height:90vh;
+  display:flex; overflow:hidden; box-shadow:0 8px 32px rgba(0,0,0,0.3);
+}
+.preview-img-area {
+  flex:1; background:#1a1a1a; display:flex; align-items:center; justify-content:center;
+  min-height:300px; overflow:hidden;
+}
+.preview-img-area img { max-width:100%; max-height:80vh; object-fit:contain; }
+.preview-sidebar {
+  width:280px; padding:1.25rem; overflow-y:auto; border-left:1px solid #e0ddd4;
+  display:flex; flex-direction:column; gap:0.75rem;
+}
+.preview-close {
+  position:absolute; top:12px; right:16px; font-size:1.5rem; color:#fff;
+  cursor:pointer; z-index:2001; background:rgba(0,0,0,0.4); border-radius:50%;
+  width:32px; height:32px; display:flex; align-items:center; justify-content:center;
+  border:none;
+}
+.preview-field label { font-size:0.75rem; color:#888; margin-bottom:2px; display:block; }
+.preview-field input, .preview-field textarea {
+  width:100%; padding:5px 8px; border:1px solid #ddd; border-radius:5px; font-size:0.82rem;
+}
+.preview-field textarea { resize:vertical; min-height:60px; }
+.tag-chips { display:flex; flex-wrap:wrap; gap:4px; }
+.tag-chip {
+  background:var(--octo-light-gray); padding:2px 8px; border-radius:12px;
+  font-size:0.75rem; display:flex; align-items:center; gap:4px;
+}
+.tag-chip .remove-tag { cursor:pointer; color:#999; font-size:0.8rem; }
+.tag-chip .remove-tag:hover { color:#dc3545; }
+.tag-input { border:none; outline:none; font-size:0.75rem; width:80px; padding:2px 4px; }
+
+/* Move modal */
+.modal-overlay {
+  position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:3000;
+  display:none; align-items:center; justify-content:center;
+}
+.modal-overlay.open { display:flex; }
+.modal-box {
+  background:#fff; border-radius:10px; padding:1.5rem; max-width:400px; width:90%;
+  box-shadow:0 8px 24px rgba(0,0,0,0.2);
+}
+.modal-box h3 { margin-bottom:1rem; font-size:1rem; }
+.modal-folder-list { max-height:300px; overflow-y:auto; border:1px solid #e0ddd4; border-radius:6px; }
+.modal-folder-item {
+  padding:8px 12px; cursor:pointer; font-size:0.85rem; border-bottom:1px solid #f0ede6;
+}
+.modal-folder-item:hover { background:var(--octo-light-gray); }
+.modal-folder-item.selected { background:var(--octo-petrol); color:#fff; }
+.modal-actions { margin-top:1rem; display:flex; gap:8px; justify-content:flex-end; }
+
+/* Selection bar */
+.selection-bar {
+  display:none; padding:8px 1rem; background:var(--octo-dark-petrol); color:#fff;
+  font-size:0.85rem; align-items:center; gap:1rem;
+}
+.selection-bar.visible { display:flex; }
+.selection-bar .sel-actions { display:flex; gap:6px; margin-left:auto; }
+.selection-bar .sel-btn {
+  padding:4px 10px; border:1px solid rgba(255,255,255,0.4); border-radius:5px;
+  background:transparent; color:#fff; cursor:pointer; font-size:0.8rem;
+}
+.selection-bar .sel-btn:hover { background:rgba(255,255,255,0.15); }
+
+/* Toast */
+.toast-container { position:fixed; bottom:20px; right:20px; z-index:9000; display:flex; flex-direction:column; gap:8px; }
+.toast {
+  background:var(--octo-dark-petrol); color:#fff; padding:10px 18px; border-radius:8px;
+  font-size:0.85rem; box-shadow:0 4px 12px rgba(0,0,0,0.2); animation:slideIn 0.3s;
+}
+.toast.error { background:#dc3545; }
+@keyframes slideIn { from { transform:translateX(100px); opacity:0; } to { transform:translateX(0); opacity:1; } }
+
+/* Empty state */
+.empty-state { text-align:center; padding:3rem; color:#999; }
+.empty-state .empty-icon { font-size:3rem; margin-bottom:0.5rem; }
+
+/* Loading */
+.loading-spinner { text-align:center; padding:2rem; color:#999; }
+</style>
+
+<div class="asset-page">
+  <!-- Sidebar -->
+  <div class="asset-sidebar">
+    <div class="sidebar-title">Folders</div>
+    <div class="folder-item{% if not current_folder %} active{% endif %}" onclick="loadFolder('')" data-folder="">
+      <span class="folder-icon">🏠</span> All Assets
+    </div>
+    {% for cat in categories %}
+    <div class="folder-group" data-root="{{ cat }}">
+      <div class="folder-item" onclick="loadFolder('{{ cat }}')" data-folder="{{ cat }}">
+        <span class="folder-toggle" onclick="event.stopPropagation(); toggleChildren(this)">&#9654;</span>
+        <span class="folder-icon">📁</span>
+        <span>{{ cat }}</span>
+      </div>
+      <div class="folder-children" id="children-{{ cat }}"></div>
+    </div>
+    {% endfor %}
+
+    {% if user.is_superuser %}
+    <div style="padding:0.75rem 1rem; margin-top:1rem; border-top:1px solid #ddd;">
+      <button class="btn btn-sm btn-primary" onclick="setupFolders()" style="width:100%;">Setup NC Folders</button>
+    </div>
+    {% endif %}
+  </div>
+
+  <!-- Main -->
+  <div class="asset-main">
+    <!-- Top bar -->
+    <div class="asset-topbar">
+      <h1>🗂️ Octotrial Asset Library</h1>
+      <input type="text" class="asset-search" id="searchInput" placeholder="Search assets..." oninput="debounceSearch()">
+      <select class="filter-select" id="tagFilter" onchange="applyFilters()">
+        <option value="">All Tags</option>
+      </select>
+      <div class="fav-toggle" id="favToggle" onclick="toggleFavFilter()">⭐ Favorites</div>
+      <div class="btn-upload-area">
+        <button class="btn btn-sm btn-secondary" onclick="createNewFolder()" title="Neuen Unterordner anlegen">
+          📁 Neuer Ordner
+        </button>
+        <button class="btn btn-sm btn-secondary" onclick="document.getElementById('fileInput').click()">
+          📤 Upload
+        </button>
+        <input type="file" id="fileInput" multiple style="display:none" onchange="handleFileSelect(this.files)">
+      </div>
+    </div>
+
+    <!-- Breadcrumb -->
+    <div class="breadcrumb-bar" id="breadcrumb">
+      <a href="#" onclick="loadFolder(''); return false;">Root</a>
+    </div>
+
+    <!-- Grid area -->
+    <div class="asset-grid-wrap" id="gridWrap">
+      <div class="drop-overlay" id="dropOverlay">📁 Drop files here to upload</div>
+      <div class="asset-grid" id="assetGrid">
+        <div class="loading-spinner">Loading...</div>
+      </div>
+    </div>
+
+    <!-- Selection bar -->
+    <div class="selection-bar" id="selectionBar">
+      <span id="selCount">0 selected</span>
+      <div class="sel-actions">
+        <button class="sel-btn" onclick="bulkMove()">Move</button>
+        <button class="sel-btn" onclick="bulkDelete()">Delete</button>
+        <button class="sel-btn" onclick="clearSelection()">Cancel</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Context Menu -->
+<div class="ctx-menu" id="ctxMenu">
+  <div class="ctx-menu-item" onclick="ctxAction('preview')">🔍 Preview</div>
+  <div class="ctx-menu-item" onclick="ctxAction('rename')">✏️ Rename</div>
+  <div class="ctx-menu-item" onclick="ctxAction('move')">📂 Move to...</div>
+  <div class="ctx-menu-item" onclick="ctxAction('tags')">🏷️ Edit Tags</div>
+  <div class="ctx-menu-item" onclick="ctxAction('download')">⬇️ Download</div>
+  <div class="ctx-menu-item danger" onclick="ctxAction('delete')">🗑️ Delete</div>
+</div>
+
+<!-- Preview Modal -->
+<div class="preview-overlay" id="previewOverlay" onclick="if(event.target===this)closePreview()">
+  <button class="preview-close" onclick="closePreview()">✕</button>
+  <div class="preview-box">
+    <div class="preview-img-area">
+      <img id="previewImg" src="" alt="">
+    </div>
+    <div class="preview-sidebar">
+      <h3 id="previewName" style="font-size:0.95rem; word-break:break-word;"></h3>
+      <div class="preview-field">
+        <label>Favorite</label>
+        <span id="previewFav" style="cursor:pointer; font-size:1.3rem;" onclick="togglePreviewFav()">☆</span>
+      </div>
+      <div class="preview-field">
+        <label>Description</label>
+        <textarea id="previewDesc" onchange="savePreviewMeta()"></textarea>
+      </div>
+      <div class="preview-field">
+        <label>Tags</label>
+        <div class="tag-chips" id="previewTags"></div>
+        <input type="text" class="tag-input" id="tagAddInput" placeholder="Add tag..." onkeydown="if(event.key==='Enter'){addPreviewTag(); event.preventDefault();}">
+      </div>
+      <div class="preview-field">
+        <label>Category</label>
+        <input type="text" id="previewCategory" onchange="savePreviewMeta()" style="width:100%; padding:5px 8px; border:1px solid #ddd; border-radius:5px; font-size:0.82rem;">
+      </div>
+      <div class="preview-field">
+        <label>File Type</label>
+        <span id="previewType" style="font-size:0.82rem;"></span>
+      </div>
+      <div class="preview-field">
+        <label>Size</label>
+        <span id="previewSize" style="font-size:0.82rem;"></span>
+      </div>
+      <div class="preview-field">
+        <label>Path</label>
+        <span id="previewPath" style="font-size:0.75rem; color:#999; word-break:break-all;"></span>
+      </div>
+      <div style="margin-top:auto; display:flex; gap:6px;">
+        <a id="previewDownload" href="#" class="btn btn-sm btn-primary" download>Download</a>
+        <button class="btn btn-sm btn-danger" onclick="deleteFromPreview()">Delete</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Move Modal -->
+<div class="modal-overlay" id="moveModal" onclick="if(event.target===this)closeMoveModal()">
+  <div class="modal-box">
+    <h3>Move to folder</h3>
+    <div class="modal-folder-list" id="moveFolderList"></div>
+    <div class="modal-actions">
+      <button class="btn btn-sm" onclick="closeMoveModal()" style="background:#eee;">Cancel</button>
+      <button class="btn btn-sm btn-primary" onclick="confirmMove()">Move</button>
+    </div>
+  </div>
+</div>
+
+<!-- Toast container -->
+<div class="toast-container" id="toasts"></div>
+
+<script>
+const CSRF = getCookie('csrftoken');
+const FOLDER_TREE = {{ categories|safe }}.reduce((a,c) => { a.push(c); return a; }, []);
+const ALL_FOLDERS = [
+  {% for cat in categories %}"{{ cat }}",{% endfor %}
+];
+
+// Build full folder tree from server data
+const FULL_TREE = {
+  {% for cat in categories %}
+  "{{ cat }}": [],
+  {% endfor %}
+};
+
+// Populate sub-folders from the Python FOLDER_TREE
+const RAW_FOLDERS = [
+  "Backgrounds", "Backgrounds/Workflows", "Backgrounds/Timelines", "Backgrounds/LinkedIn",
+  "Backgrounds/Website", "Backgrounds/Offers", "Backgrounds/Presentations", "Backgrounds/Blank_Templates",
+  "Icons", "Icons/Clinical_Data_Management", "Icons/Biostatistics", "Icons/Statistical_Programming",
+  "Icons/Data_Management", "Icons/AI", "Icons/Database", "Icons/Validation", "Icons/Quality",
+  "Icons/Monitoring", "Icons/CDISC", "Icons/SDTM", "Icons/ADaM", "Icons/Tables", "Icons/Listings",
+  "Icons/Figures", "Icons/Risk", "Icons/Security", "Icons/General",
+  "Logos", "Logos/Octotrial", "Logos/White", "Logos/Dark", "Logos/Icon_Only",
+  "Buttons", "Badges", "Shapes", "Illustrations",
+  "Templates", "Templates/LinkedIn", "Templates/Website", "Templates/Offer",
+  "Templates/PowerPoint", "Templates/Reports",
+  "Flowcharts", "Screenshots", "Archive",
+  "Studio_Output", "Studio_Output/Images", "Studio_Output/Videos",
+  "Uploads"
+];
+
+// Build children map
+const childMap = {};
+RAW_FOLDERS.forEach(f => {
+  const parts = f.split('/');
+  if (parts.length === 1) {
+    if (!childMap[f]) childMap[f] = [];
+  } else {
+    const parent = parts[0];
+    const child = parts.slice(1).join('/');
+    if (!childMap[parent]) childMap[parent] = [];
+    if (parts.length === 2) childMap[parent].push({name: parts[1], path: f});
+  }
+});
+
+// Populate sidebar children
+Object.keys(childMap).forEach(parent => {
+  const container = document.getElementById('children-' + parent);
+  if (!container) return;
+  childMap[parent].forEach(ch => {
+    const div = document.createElement('div');
+    div.className = 'folder-item';
+    div.setAttribute('data-folder', ch.path);
+    div.onclick = () => loadFolder(ch.path);
+    div.innerHTML = '<span class="folder-icon" style="margin-left:4px;">📄</span> ' + ch.name;
+    container.appendChild(div);
+  });
+});
+
+let currentFolder = '';
+let currentItems = [];
+let selectedPaths = new Set();
+let ctxTarget = null;
+let previewItem = null;
+let favFilterActive = false;
+let searchTimeout = null;
+let moveTargetFolder = '';
+let movePaths = [];
+
+function getCookie(name) {
+  const v = document.cookie.match('(^|;)\\s*' + name + '\\s*=\\s*([^;]+)');
+  return v ? v.pop() : '';
+}
+
+function toast(msg, isError) {
+  const t = document.createElement('div');
+  t.className = 'toast' + (isError ? ' error' : '');
+  t.textContent = msg;
+  document.getElementById('toasts').appendChild(t);
+  setTimeout(() => t.remove(), 3500);
+}
+
+function formatSize(bytes) {
+  if (!bytes) return '-';
+  if (bytes < 1024) return bytes + ' B';
+  if (bytes < 1048576) return (bytes/1024).toFixed(1) + ' KB';
+  return (bytes/1048576).toFixed(1) + ' MB';
+}
+
+function toggleChildren(el) {
+  const group = el.closest('.folder-group');
+  const children = group.querySelector('.folder-children');
+  if (children.classList.contains('open')) {
+    children.classList.remove('open');
+    el.innerHTML = '&#9654;';
+  } else {
+    children.classList.add('open');
+    el.innerHTML = '&#9660;';
+  }
+}
+
+function highlightFolder(path) {
+  document.querySelectorAll('.folder-item').forEach(el => el.classList.remove('active'));
+  const target = document.querySelector('.folder-item[data-folder="' + path + '"]');
+  if (target) {
+    target.classList.add('active');
+    // Open parent if needed
+    const group = target.closest('.folder-group');
+    if (group) {
+      const ch = group.querySelector('.folder-children');
+      if (ch && !ch.classList.contains('open')) {
+        ch.classList.add('open');
+        const toggle = group.querySelector('.folder-toggle');
+        if (toggle) toggle.innerHTML = '&#9660;';
+      }
+    }
+  }
+}
+
+function updateBreadcrumb(path) {
+  const bar = document.getElementById('breadcrumb');
+  let html = '<a href="#" onclick="loadFolder(\'\'); return false;">Root</a>';
+  if (path) {
+    const parts = path.split('/');
+    let cumulative = '';
+    parts.forEach((p, i) => {
+      cumulative += (i > 0 ? '/' : '') + p;
+      const cp = cumulative;
+      html += '<span class="breadcrumb-sep">/</span>';
+      if (i < parts.length - 1) {
+        html += '<a href="#" onclick="loadFolder(\'' + cp + '\'); return false;">' + p + '</a>';
+      } else {
+        html += '<strong>' + p + '</strong>';
+      }
+    });
+  }
+  bar.innerHTML = html;
+}
+
+function isImageType(ft) {
+  return ['png','jpg','jpeg','gif','svg','webp','bmp','ico'].includes((ft||'').toLowerCase());
+}
+
+function renderGrid(data) {
+  const grid = document.getElementById('assetGrid');
+  currentItems = data.items || [];
+  const folders = data.folders || [];
+
+  if (!folders.length && !currentItems.length) {
+    grid.innerHTML = '<div class="empty-state"><div class="empty-icon">📂</div><div>No assets in this folder</div><div style="font-size:0.8rem; margin-top:4px;">Drag & drop files here or click Upload</div></div>';
+    return;
+  }
+
+  let html = '';
+
+  // Folders first
+  folders.forEach(f => {
+    const subPath = currentFolder ? currentFolder + '/' + f.name : f.name;
+    html += '<div class="folder-card" ondblclick="loadFolder(\'' + subPath + '\')">';
+    html += '<span class="folder-icon">📂</span>';
+    html += '<span class="folder-name">' + escHtml(f.name) + '</span>';
+    html += '</div>';
+  });
+
+  // Files
+  currentItems.forEach((item, idx) => {
+    const isFav = item.is_favorite;
+    const isImg = isImageType(item.file_type);
+    const thumbUrl = isImg ? '/assets/image/?path=' + encodeURIComponent(item.nc_path) : '';
+    const sel = selectedPaths.has(item.nc_path) ? ' selected' : '';
+
+    html += '<div class="asset-card' + sel + '" data-idx="' + idx + '" data-path="' + escAttr(item.nc_path) + '"';
+    html += ' onclick="cardClick(event, ' + idx + ')" oncontextmenu="cardContext(event, ' + idx + ')">';
+    html += '<input type="checkbox" class="card-check" ' + (selectedPaths.has(item.nc_path)?'checked':'') + ' onclick="event.stopPropagation(); toggleSelect(' + idx + ')">';
+    html += '<div class="card-thumb">';
+    if (isImg && thumbUrl) {
+      html += '<img src="' + thumbUrl + '" alt="" loading="lazy">';
+    } else {
+      html += '<span style="font-size:2.5rem; color:#ccc;">📄</span>';
+    }
+    html += '<span class="type-badge">' + (item.file_type || '?') + '</span>';
+    html += '</div>';
+    html += '<span class="card-fav' + (isFav?' active':'') + '" onclick="event.stopPropagation(); toggleFavorite(\'' + escAttr(item.nc_path) + '\')">' + (isFav?'⭐':'☆') + '</span>';
+    html += '<div class="card-info">';
+    html += '<div class="card-name" title="' + escAttr(item.name) + '">' + escHtml(item.name) + '</div>';
+    html += '<div class="card-meta">' + formatSize(item.file_size) + '</div>';
+    html += '</div>';
+    html += '<button class="card-ctx-btn" onclick="event.stopPropagation(); showCtxMenu(event, ' + idx + ')">⋮</button>';
+    html += '</div>';
+  });
+
+  grid.innerHTML = html;
+}
+
+function escHtml(s) { const d=document.createElement('div'); d.textContent=s; return d.innerHTML; }
+function escAttr(s) { return s.replace(/'/g, "\\'").replace(/"/g, '&quot;'); }
+
+async function loadFolder(path) {
+  currentFolder = path || '';
+  highlightFolder(currentFolder);
+  updateBreadcrumb(currentFolder);
+  clearSelection();
+
+  const grid = document.getElementById('assetGrid');
+  grid.innerHTML = '<div class="loading-spinner">Loading...</div>';
+
+  const params = new URLSearchParams();
+  params.set('folder', currentFolder);
+  const q = document.getElementById('searchInput').value.trim();
+  if (q) params.set('q', q);
+  const tag = document.getElementById('tagFilter').value;
+  if (tag) params.set('tag', tag);
+  if (favFilterActive) params.set('favorites_only', '1');
+
+  try {
+    const resp = await fetch('/assets/api/list/?' + params.toString());
+    const data = await resp.json();
+    renderGrid(data);
+  } catch(e) {
+    grid.innerHTML = '<div class="empty-state"><div class="empty-icon">⚠️</div><div>Error loading assets</div></div>';
+    toast('Failed to load assets', true);
+  }
+}
+
+function debounceSearch() {
+  clearTimeout(searchTimeout);
+  searchTimeout = setTimeout(() => loadFolder(currentFolder), 400);
+}
+
+function applyFilters() { loadFolder(currentFolder); }
+
+function toggleFavFilter() {
+  favFilterActive = !favFilterActive;
+  document.getElementById('favToggle').classList.toggle('active', favFilterActive);
+  loadFolder(currentFolder);
+}
+
+// ── Neuen Ordner anlegen ────────────────────────────────────────
+async function createNewFolder() {
+  const name = prompt('Ordnername (Leerzeichen werden zu _ ):');
+  if (!name || !name.trim()) return;
+  try {
+    const resp = await fetch('/assets/api/create-folder/', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json', 'X-CSRFToken': getCookie('csrftoken')},
+      body: JSON.stringify({parent: currentFolder, name: name.trim()})
+    });
+    const data = await resp.json();
+    if (data.ok) {
+      toast('Ordner "' + data.name + '" erstellt');
+      loadFolder(currentFolder);
+    } else {
+      toast('Fehler: ' + (data.error||'unbekannt'), true);
+    }
+  } catch(e) { toast('Fehler: ' + e, true); }
+}
+
+// ── Upload ──────────────────────────────────────────────────────
+async function uploadFiles(files, folder) {
+  if (!files.length) return;
+  const fd = new FormData();
+  fd.append('folder', folder || currentFolder);
+  for (let i = 0; i < files.length; i++) fd.append('files', files[i]);
+
+  toast('Uploading ' + files.length + ' file(s)...');
+
+  try {
+    const resp = await fetch('/assets/api/upload/', {
+      method: 'POST',
+      headers: {'X-CSRFToken': CSRF},
+      body: fd,
+    });
+    const data = await resp.json();
+    if (data.ok) {
+      toast('Uploaded ' + (data.uploaded||[]).length + ' file(s)');
+      loadFolder(currentFolder);
+    } else {
+      toast('Upload failed', true);
+    }
+  } catch(e) {
+    toast('Upload error', true);
+  }
+}
+
+function handleFileSelect(files) {
+  uploadFiles(files, currentFolder);
+  document.getElementById('fileInput').value = '';
+}
+
+// Drag & drop
+const gridWrap = document.getElementById('gridWrap');
+const dropOverlay = document.getElementById('dropOverlay');
+let dragCounter = 0;
+
+gridWrap.addEventListener('dragenter', e => {
+  e.preventDefault();
+  dragCounter++;
+  dropOverlay.classList.add('visible');
+});
+gridWrap.addEventListener('dragleave', e => {
+  dragCounter--;
+  if (dragCounter <= 0) { dropOverlay.classList.remove('visible'); dragCounter = 0; }
+});
+gridWrap.addEventListener('dragover', e => e.preventDefault());
+gridWrap.addEventListener('drop', e => {
+  e.preventDefault();
+  dragCounter = 0;
+  dropOverlay.classList.remove('visible');
+  if (e.dataTransfer.files.length) uploadFiles(e.dataTransfer.files, currentFolder);
+});
+
+// ── Selection ───────────────────────────────────────────────────
+function cardClick(event, idx) {
+  if (event.shiftKey || event.ctrlKey || event.metaKey) {
+    toggleSelect(idx);
+  } else {
+    openPreview(idx);
+  }
+}
+
+function toggleSelect(idx) {
+  const item = currentItems[idx];
+  if (!item) return;
+  if (selectedPaths.has(item.nc_path)) {
+    selectedPaths.delete(item.nc_path);
+  } else {
+    selectedPaths.add(item.nc_path);
+  }
+  updateSelectionUI();
+  // Update card visual
+  const card = document.querySelector('.asset-card[data-idx="' + idx + '"]');
+  if (card) {
+    card.classList.toggle('selected', selectedPaths.has(item.nc_path));
+    const cb = card.querySelector('.card-check');
+    if (cb) cb.checked = selectedPaths.has(item.nc_path);
+  }
+}
+
+function clearSelection() {
+  selectedPaths.clear();
+  updateSelectionUI();
+  document.querySelectorAll('.asset-card.selected').forEach(c => c.classList.remove('selected'));
+  document.querySelectorAll('.card-check').forEach(c => c.checked = false);
+}
+
+function updateSelectionUI() {
+  const bar = document.getElementById('selectionBar');
+  const count = selectedPaths.size;
+  if (count > 0) {
+    bar.classList.add('visible');
+    document.getElementById('selCount').textContent = count + ' selected';
+    document.querySelector('.asset-page').classList.add('multiselect-mode');
+  } else {
+    bar.classList.remove('visible');
+    document.querySelector('.asset-page').classList.remove('multiselect-mode');
+  }
+}
+
+// ── Context Menu ────────────────────────────────────────────────
+function cardContext(event, idx) {
+  event.preventDefault();
+  ctxTarget = currentItems[idx];
+  showCtxMenu(event, idx);
+}
+
+function showCtxMenu(event, idx) {
+  event.stopPropagation();
+  ctxTarget = currentItems[idx];
+  const menu = document.getElementById('ctxMenu');
+  menu.style.display = 'block';
+  menu.style.left = Math.min(event.clientX, window.innerWidth - 180) + 'px';
+  menu.style.top = Math.min(event.clientY, window.innerHeight - 200) + 'px';
+}
+
+document.addEventListener('click', () => {
+  document.getElementById('ctxMenu').style.display = 'none';
+});
+
+function ctxAction(action) {
+  document.getElementById('ctxMenu').style.display = 'none';
+  if (!ctxTarget) return;
+  switch(action) {
+    case 'preview': openPreview(currentItems.indexOf(ctxTarget)); break;
+    case 'rename': renameAsset(ctxTarget.nc_path); break;
+    case 'move': moveAsset([ctxTarget.nc_path]); break;
+    case 'tags': openPreview(currentItems.indexOf(ctxTarget)); setTimeout(() => document.getElementById('tagAddInput').focus(), 300); break;
+    case 'download': window.open('/assets/image/?path=' + encodeURIComponent(ctxTarget.nc_path) + '&dl=1'); break;
+    case 'delete': deleteAsset(ctxTarget.nc_path); break;
+  }
+}
+
+// ── CRUD operations ─────────────────────────────────────────────
+async function deleteAsset(ncPath) {
+  if (!confirm('Delete this asset permanently?')) return;
+  try {
+    const resp = await fetch('/assets/api/delete/', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json', 'X-CSRFToken': CSRF},
+      body: JSON.stringify({nc_path: ncPath}),
+    });
+    const data = await resp.json();
+    if (data.ok) { toast('Deleted'); closePreview(); loadFolder(currentFolder); }
+    else toast('Delete failed', true);
+  } catch(e) { toast('Error', true); }
+}
+
+async function renameAsset(ncPath) {
+  const oldName = ncPath.split('/').pop();
+  const newName = prompt('New name:', oldName);
+  if (!newName || newName === oldName) return;
+  try {
+    const resp = await fetch('/assets/api/rename/', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json', 'X-CSRFToken': CSRF},
+      body: JSON.stringify({nc_path: ncPath, new_name: newName}),
+    });
+    const data = await resp.json();
+    if (data.ok) { toast('Renamed'); loadFolder(currentFolder); }
+    else toast('Rename failed', true);
+  } catch(e) { toast('Error', true); }
+}
+
+function moveAsset(paths) {
+  movePaths = Array.isArray(paths) ? paths : [paths];
+  moveTargetFolder = '';
+  const list = document.getElementById('moveFolderList');
+  let html = '<div class="modal-folder-item" onclick="selectMoveFolder(this, \'\')" data-folder="">Root</div>';
+  RAW_FOLDERS.forEach(f => {
+    html += '<div class="modal-folder-item" onclick="selectMoveFolder(this, \'' + f + '\')" data-folder="' + f + '">';
+    html += (f.includes('/') ? '&nbsp;&nbsp;' : '') + '📁 ' + f;
+    html += '</div>';
+  });
+  list.innerHTML = html;
+  document.getElementById('moveModal').classList.add('open');
+}
+
+function selectMoveFolder(el, folder) {
+  document.querySelectorAll('.modal-folder-item').forEach(i => i.classList.remove('selected'));
+  el.classList.add('selected');
+  moveTargetFolder = folder;
+}
+
+function closeMoveModal() { document.getElementById('moveModal').classList.remove('open'); }
+
+async function confirmMove() {
+  closeMoveModal();
+  for (const p of movePaths) {
+    try {
+      await fetch('/assets/api/move/', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json', 'X-CSRFToken': CSRF},
+        body: JSON.stringify({nc_path: p, dest_folder: moveTargetFolder}),
+      });
+    } catch(e) {}
+  }
+  toast('Moved ' + movePaths.length + ' item(s)');
+  clearSelection();
+  loadFolder(currentFolder);
+}
+
+function bulkMove() { moveAsset(Array.from(selectedPaths)); }
+
+async function bulkDelete() {
+  if (!confirm('Delete ' + selectedPaths.size + ' items permanently?')) return;
+  for (const p of selectedPaths) {
+    try {
+      await fetch('/assets/api/delete/', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json', 'X-CSRFToken': CSRF},
+        body: JSON.stringify({nc_path: p}),
+      });
+    } catch(e) {}
+  }
+  toast('Deleted ' + selectedPaths.size + ' item(s)');
+  clearSelection();
+  loadFolder(currentFolder);
+}
+
+async function toggleFavorite(ncPath) {
+  try {
+    const resp = await fetch('/assets/api/favorite/', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json', 'X-CSRFToken': CSRF},
+      body: JSON.stringify({nc_path: ncPath}),
+    });
+    const data = await resp.json();
+    if (data.ok) {
+      // Update in-memory
+      const item = currentItems.find(i => i.nc_path === ncPath);
+      if (item) item.is_favorite = data.is_favorite;
+      // Re-render card
+      const card = document.querySelector('[data-path="' + ncPath.replace(/'/g, "\\'") + '"]');
+      if (card) {
+        const fav = card.querySelector('.card-fav');
+        fav.textContent = data.is_favorite ? '⭐' : '☆';
+        fav.classList.toggle('active', data.is_favorite);
+      }
+      // Update preview if open
+      if (previewItem && previewItem.nc_path === ncPath) {
+        previewItem.is_favorite = data.is_favorite;
+        document.getElementById('previewFav').textContent = data.is_favorite ? '⭐' : '☆';
+      }
+    }
+  } catch(e) {}
+}
+
+// ── Preview ─────────────────────────────────────────────────────
+function openPreview(idx) {
+  if (idx < 0 || idx >= currentItems.length) return;
+  previewItem = currentItems[idx];
+  const isImg = isImageType(previewItem.file_type);
+
+  document.getElementById('previewImg').src = isImg
+    ? '/assets/image/?path=' + encodeURIComponent(previewItem.nc_path)
+    : '';
+  if (!isImg) {
+    document.querySelector('.preview-img-area').innerHTML =
+      '<span style="font-size:4rem; color:#555;">📄</span><br><span style="color:#aaa;">' + escHtml(previewItem.file_type || 'Unknown') + '</span>';
+  } else {
+    document.querySelector('.preview-img-area').innerHTML =
+      '<img id="previewImg" src="/assets/image/?path=' + encodeURIComponent(previewItem.nc_path) + '" alt="">';
+  }
+
+  document.getElementById('previewName').textContent = previewItem.name;
+  document.getElementById('previewFav').textContent = previewItem.is_favorite ? '⭐' : '☆';
+  document.getElementById('previewDesc').value = previewItem.description || '';
+  document.getElementById('previewCategory').value = previewItem.category || '';
+  document.getElementById('previewType').textContent = previewItem.file_type || '-';
+  document.getElementById('previewSize').textContent = formatSize(previewItem.file_size);
+  document.getElementById('previewPath').textContent = previewItem.nc_path;
+  document.getElementById('previewDownload').href = '/assets/image/?path=' + encodeURIComponent(previewItem.nc_path) + '&dl=1';
+
+  renderPreviewTags(previewItem.tags || []);
+  document.getElementById('previewOverlay').classList.add('open');
+}
+
+function closePreview() {
+  document.getElementById('previewOverlay').classList.remove('open');
+  previewItem = null;
+}
+
+function renderPreviewTags(tags) {
+  const container = document.getElementById('previewTags');
+  container.innerHTML = '';
+  tags.forEach(t => {
+    const chip = document.createElement('span');
+    chip.className = 'tag-chip';
+    chip.innerHTML = escHtml(t) + ' <span class="remove-tag" onclick="removePreviewTag(\'' + escAttr(t) + '\')">&times;</span>';
+    container.appendChild(chip);
+  });
+}
+
+function addPreviewTag() {
+  const input = document.getElementById('tagAddInput');
+  const tag = input.value.trim();
+  if (!tag || !previewItem) return;
+  if (!previewItem.tags) previewItem.tags = [];
+  if (!previewItem.tags.includes(tag)) {
+    previewItem.tags.push(tag);
+    renderPreviewTags(previewItem.tags);
+    savePreviewMeta();
+  }
+  input.value = '';
+}
+
+function removePreviewTag(tag) {
+  if (!previewItem) return;
+  previewItem.tags = (previewItem.tags || []).filter(t => t !== tag);
+  renderPreviewTags(previewItem.tags);
+  savePreviewMeta();
+}
+
+async function savePreviewMeta() {
+  if (!previewItem) return;
+  const desc = document.getElementById('previewDesc').value;
+  const cat = document.getElementById('previewCategory').value;
+  const tags = (previewItem.tags || []).join(',');
+  try {
+    await fetch('/assets/api/meta/', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json', 'X-CSRFToken': CSRF},
+      body: JSON.stringify({nc_path: previewItem.nc_path, description: desc, category: cat, tags: tags}),
+    });
+  } catch(e) {}
+}
+
+function togglePreviewFav() {
+  if (previewItem) toggleFavorite(previewItem.nc_path);
+}
+
+function deleteFromPreview() {
+  if (previewItem) deleteAsset(previewItem.nc_path);
+}
+
+// ── Tags filter ─────────────────────────────────────────────────
+async function loadTagsFilter() {
+  try {
+    const resp = await fetch('/assets/api/tags/');
+    const data = await resp.json();
+    const sel = document.getElementById('tagFilter');
+    sel.innerHTML = '<option value="">All Tags</option>';
+    (data.tags || []).forEach(t => {
+      sel.innerHTML += '<option value="' + escHtml(t) + '">' + escHtml(t) + '</option>';
+    });
+  } catch(e) {}
+}
+
+// ── Setup (superuser) ───────────────────────────────────────────
+async function setupFolders() {
+  if (!confirm('Create all NC folders for the Asset Library?')) return;
+  toast('Creating folders...');
+  try {
+    const resp = await fetch('/assets/api/setup/', {
+      method: 'POST',
+      headers: {'X-CSRFToken': CSRF},
+    });
+    const data = await resp.json();
+    if (data.ok) toast('Folders created successfully');
+    else toast('Some errors: ' + JSON.stringify(data.result), true);
+  } catch(e) { toast('Setup error', true); }
+}
+
+// ── Keyboard shortcuts ──────────────────────────────────────────
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') {
+    closePreview();
+    closeMoveModal();
+    document.getElementById('ctxMenu').style.display = 'none';
+  }
+});
+
+// ── Init ────────────────────────────────────────────────────────
+loadFolder('');
+loadTagsFilter();
+</script>
+{% endblock %}
