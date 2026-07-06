@@ -236,6 +236,26 @@
               <option value="typewriter">Schreibmaschine (Text)</option>
             </select>
           </div>
+          <div style="margin-bottom:4px">
+            <label style="font-size:.7rem;color:#555;font-weight:600">Deko-Effekt:</label>
+            <select id="elem-effect-type" onchange="setElemAnim()" style="width:100%;padding:2px;font-size:.75rem;border:1px solid #ccc;border-radius:3px">
+              <option value="none">Kein Effekt</option>
+              <option value="sparkle">✨ Funkeln</option>
+              <option value="glow">💡 Leuchten</option>
+              <option value="shimmer">🌊 Schimmer</option>
+              <option value="confetti">🎊 Konfetti</option>
+              <option value="hearts">💕 Herzen</option>
+              <option value="bubbles">⭕ Kreise</option>
+              <option value="rays">☀️ Strahlen</option>
+              <option value="shake">🔔 Wackeln</option>
+              <option value="rotate">🌀 Rotation</option>
+              <option value="orbit">💫 Orbit</option>
+              <option value="arrowBounce">📍 Pfeil</option>
+              <option value="borderRun">🔲 Rahmen-Lauf</option>
+              <option value="rainbow">🌈 Farbwechsel</option>
+              <option value="smoke">💨 Nebel</option>
+            </select>
+          </div>
           <div id="flyto-hint" style="display:none;font-size:.65rem;color:#F56E28;margin-bottom:4px">
             Klick auf Canvas = Startposition setzen.
           </div>
@@ -272,6 +292,7 @@
         <div style="display:flex;gap:4px;margin-bottom:4px">
           <button class="btn btn-primary btn-sm" onclick="startVideoPreview()" style="font-size:11px;flex:1">▶ Vorschau</button>
           <button class="btn btn-secondary btn-sm" onclick="recordVideo()" style="font-size:11px;flex:1" id="vid-record-btn">⏺ Aufnehmen</button>
+          <button class="btn btn-secondary btn-sm" onclick="exportGif()" style="font-size:11px;flex:1;background:#ffd700;color:#333;border-color:#e6c200" id="gif-export-btn">🎞 GIF</button>
         </div>
         <div id="vid-result" style="display:none;background:#f0f8f0;border-radius:4px;padding:6px;margin-bottom:4px">
           <video id="vid-preview" controls style="width:100%;border-radius:4px;margin-bottom:4px;max-height:160px"></video>
@@ -280,6 +301,15 @@
             <button class="btn btn-primary btn-sm" onclick="saveVideoToNC()" style="font-size:10px;flex:1" id="vid-nc-btn">☁ Nextcloud</button>
             <button class="btn btn-secondary btn-sm" onclick="downloadVideo()" style="font-size:10px;flex:1">⬇ Download</button>
             <button class="btn btn-secondary btn-sm" onclick="recordVideo()" style="font-size:10px;flex:1">🔄 Nochmal</button>
+          </div>
+        </div>
+        <div id="gif-result" style="display:none;background:#fffbe6;border-radius:4px;padding:6px;margin-bottom:4px">
+          <img id="gif-preview" style="width:100%;border-radius:4px;margin-bottom:4px;max-height:160px;object-fit:contain" />
+          <div id="gif-size" style="font-size:.65rem;color:#555;margin-bottom:4px"></div>
+          <div style="display:flex;gap:4px;flex-wrap:wrap">
+            <button class="btn btn-primary btn-sm" onclick="saveGifToNC()" style="font-size:10px;flex:1" id="gif-nc-btn">☁ Nextcloud</button>
+            <button class="btn btn-secondary btn-sm" onclick="downloadGif()" style="font-size:10px;flex:1">⬇ Download</button>
+            <button class="btn btn-secondary btn-sm" onclick="exportGif()" style="font-size:10px;flex:1">🔄 Nochmal</button>
           </div>
         </div>
         <div id="vid-status" style="font-size:.7rem;color:#888;margin-top:4px"></div>
@@ -334,7 +364,7 @@
 
     <div class="save-row">
       <button class="btn btn-secondary" onclick="saveImage()" style="font-size:.85rem">💾 Speichern</button>
-      <button class="btn btn-primary btn-sm" onclick="downloadImage()" style="font-size:.85rem">⬇ Download</button>
+      <button class="btn btn-primary btn-sm" onclick="downloadImage()" style="font-size:.85rem" id="main-download-btn">⬇ Download</button>
       <button class="btn btn-sm" onclick="deleteCurrentImage()" style="font-size:.85rem;color:#dc3545;border:1px solid #dc3545;background:#fff" title="Bild aus Bibliothek löschen">🗑 Löschen</button>
       <span id="status-msg"></span>
     </div>
@@ -355,19 +385,21 @@
       <div class="section-body">
         <div style="display:flex;gap:4px;margin-bottom:4px">
           <select id="lib-folder-filter" style="flex:1;padding:.2rem .3rem;border:1px solid #ccc;border-radius:4px;font-size:.75rem">
-            <option value="all">Alle Ordner</option>
+            <option value="">📂 Ordner wählen…</option>
+            <option value="__all__">📂 Alle (NC)</option>
+            <option value="__db__">🎨 Studio-Elemente</option>
           </select>
           <input class="lib-search" id="lib-search" type="text" placeholder="Suchen…" style="flex:1;margin-bottom:0">
         </div>
-        <div class="lib-grid" id="lib-grid"><span style="font-size:.8rem;color:#888">Lädt…</span></div>
+        <div class="lib-grid" id="lib-grid"><span style="font-size:.8rem;color:#888">Ordner wählen oder suchen…</span></div>
       </div>
     </div>
 
     <hr class="sidebar-divider">
 
-    <!-- Geteilte Bilder (Shared Assets aus NC) -->
+    <!-- Upload (Shared Assets aus NC) -->
     <div class="sidebar-section">
-      <h3 onclick="this.parentElement.classList.toggle('collapsed')">🌐 Geteilte Bilder</h3>
+      <h3 onclick="this.parentElement.classList.toggle('collapsed')">📤 Upload</h3>
       <div class="section-body">
         <div style="display:flex;gap:4px;margin-bottom:4px">
           <input id="shared-search" type="text" placeholder="Suchen…" style="flex:1;padding:.2rem .3rem;border:1px solid #ccc;border-radius:4px;font-size:.75rem">
@@ -605,13 +637,18 @@ function resetPalette() {
 // ── State ──
 let objects = [];   // [{type:'img'|'text', x,y,w,h, img?, text?,fontSize?,color?,fontWeight?}]
 let selIdx   = -1;
-let mode     = 'idle'; // 'idle' | 'drag' | 'resize'
+let mode     = 'idle'; // 'idle' | 'drag' | 'resize' | 'rotate'
 let dragOffX = 0, dragOffY = 0;
 let resizeHandle = ''; // 'se' | 'sw' | 'ne' | 'nw'
 let resizeStartX = 0, resizeStartY = 0;
 let resizeStartObj = null;
+let rotateStartAngle = 0; // for rotation handle drag
 let bgImage  = null;
 let bgVideo  = null;  // HTMLVideoElement als laufender Hintergrund
+let bgGifFrames = null; // [{canvas, delay}] — parsed animated GIF frames
+let bgGifIdx = 0;       // current frame index
+let bgGifTimer = null;   // animation interval
+let bgGifDataUrl = null; // original GIF data URL for saving
 let currentTemplateId = null;
 const HANDLE = 12; // resize handle size px (canvas coords)
 
@@ -666,22 +703,36 @@ function render() {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   drawCleanBg(ctx);
   objects.forEach((obj, i) => {
+    const rot = obj.rotation || 0;
     if (obj.type === 'shape') {
       drawShape(ctx, obj);
     } else if (obj.type === 'img') {
+      ctx.save();
+      if (rot) {
+        const cx = obj.x + obj.w/2, cy = obj.y + obj.h/2;
+        ctx.translate(cx, cy); ctx.rotate(rot * Math.PI / 180); ctx.translate(-cx, -cy);
+      }
       ctx.drawImage(obj.img, obj.x, obj.y, obj.w, obj.h);
+      ctx.restore();
     } else if (obj.type === 'text') {
       ctx.save();
+      if (rot) {
+        const cx = obj.x + obj.w/2, cy = obj.y + obj.h/2;
+        ctx.translate(cx, cy); ctx.rotate(rot * Math.PI / 180); ctx.translate(-cx, -cy);
+      }
       ctx.font = `${obj.fontWeight||'bold'} ${obj.fontSize||32}px Roboto, Arial, sans-serif`;
       ctx.fillStyle = obj.color || '#ffffff';
       ctx.shadowColor = 'rgba(0,0,0,0.6)';
       ctx.shadowBlur  = 4;
-      // y is top of text box; offset by fontSize so baseline is inside box
       wrapText(ctx, obj.text, obj.x, obj.y + (obj.fontSize||32), obj.w, (obj.fontSize||32) * 1.3);
       ctx.restore();
     }
     if (i === selIdx) {
       ctx.save();
+      if (rot) {
+        const cx = obj.x + obj.w/2, cy = obj.y + obj.h/2;
+        ctx.translate(cx, cy); ctx.rotate(rot * Math.PI / 180); ctx.translate(-cx, -cy);
+      }
       ctx.strokeStyle = '#F56E28';
       ctx.lineWidth   = 2;
       ctx.setLineDash([6,3]);
@@ -694,11 +745,26 @@ function render() {
       for (const hxi of hx) for (const hyi of hy) {
         ctx.fillRect(hxi, hyi, HANDLE, HANDLE);
       }
+      // Rotation handle — circle above top-center
+      const rcx = obj.x + obj.w/2, rcy = obj.y - 25;
+      ctx.beginPath();
+      ctx.moveTo(obj.x + obj.w/2, obj.y - 2);
+      ctx.lineTo(rcx, rcy + 7);
+      ctx.strokeStyle = '#F56E28'; ctx.lineWidth = 2; ctx.setLineDash([]); ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(rcx, rcy, 7, 0, Math.PI * 2);
+      ctx.fillStyle = '#fff'; ctx.fill();
+      ctx.strokeStyle = '#F56E28'; ctx.lineWidth = 2; ctx.stroke();
+      // Rotation icon (↻)
+      ctx.fillStyle = '#F56E28'; ctx.font = '10px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText('↻', rcx, rcy);
+      ctx.textAlign = 'start'; ctx.textBaseline = 'alphabetic';
       ctx.restore();
     }
   });
   if (typeof updateSelInfo === 'function') updateSelInfo();
   if (typeof updateCanvasElemList === 'function') updateCanvasElemList();
+  if (typeof _updateDownloadBtn === 'function') _updateDownloadBtn();
 }
 
 function wrapText(ctx, text, x, y, maxW, lineH) {
@@ -747,11 +813,36 @@ function getResizeHandle(obj, x, y) {
   return '';
 }
 
+// Check if point hits the rotation handle (circle above selected element)
+function hitRotateHandle(obj, px, py) {
+  if (!obj) return false;
+  const rot = obj.rotation || 0;
+  const cx = obj.x + obj.w/2, cy = obj.y + obj.h/2;
+  // Rotation handle position (before rotation transform)
+  let hx = obj.x + obj.w/2, hy = obj.y - 25;
+  // If element is rotated, the handle position is also rotated
+  if (rot) {
+    const rad = rot * Math.PI / 180;
+    const dx = hx - cx, dy = hy - cy;
+    hx = cx + dx * Math.cos(rad) - dy * Math.sin(rad);
+    hy = cy + dx * Math.sin(rad) + dy * Math.cos(rad);
+  }
+  return Math.hypot(px - hx, py - hy) <= 12;
+}
+
 canvas.addEventListener('mousedown', e => {
   // Fill mode: skip drag/select, flood-fill at click point
   if (fillMode) { floodFillAtClick(e); return; }
   const {x, y} = canvasXY(e);
-  // Check resize handle first (only if something selected)
+  // Check rotation handle first
+  if (selIdx >= 0 && hitRotateHandle(objects[selIdx], x, y)) {
+    mode = 'rotate';
+    const obj = objects[selIdx];
+    const cx = obj.x + obj.w/2, cy = obj.y + obj.h/2;
+    rotateStartAngle = Math.atan2(y - cy, x - cx) - (obj.rotation || 0) * Math.PI / 180;
+    return;
+  }
+  // Check resize handle (only if something selected)
   if (selIdx >= 0) {
     const handle = getResizeHandle(objects[selIdx], x, y);
     if (handle) {
@@ -777,8 +868,22 @@ canvas.addEventListener('mousedown', e => {
 });
 
 canvas.addEventListener('mousemove', e => {
-  if (fillMode) return; // Im Fill-Modus kein Drag
+  if (fillMode) return;
   const {x, y} = canvasXY(e);
+  if (mode === 'rotate' && selIdx >= 0) {
+    const obj = objects[selIdx];
+    const cx = obj.x + obj.w/2, cy = obj.y + obj.h/2;
+    const angle = Math.atan2(y - cy, x - cx) - rotateStartAngle;
+    let deg = (angle * 180 / Math.PI) % 360;
+    if (deg < 0) deg += 360;
+    // Snap to 0/45/90/... when close
+    for (const snap of [0,45,90,135,180,225,270,315,360]) {
+      if (Math.abs(deg - snap) < 4) { deg = snap % 360; break; }
+    }
+    obj.rotation = Math.round(deg);
+    render();
+    return;
+  }
   if (mode === 'drag' && selIdx >= 0) {
     objects[selIdx].x = x - dragOffX;
     objects[selIdx].y = y - dragOffY;
@@ -809,6 +914,7 @@ canvas.addEventListener('mousemove', e => {
   } else {
     // Update cursor based on hover
     if (selIdx >= 0) {
+      if (hitRotateHandle(objects[selIdx], x, y)) { canvas.style.cursor = 'grab'; return; }
       const handle = getResizeHandle(objects[selIdx], x, y);
       if (handle === 'se' || handle === 'nw') canvas.style.cursor = 'nwse-resize';
       else if (handle === 'sw' || handle === 'ne') canvas.style.cursor = 'nesw-resize';
@@ -820,6 +926,17 @@ canvas.addEventListener('mousemove', e => {
 
 canvas.addEventListener('mouseup', () => { mode = 'idle'; resizeStartObj = null; isPainting = false; });
 canvas.addEventListener('mouseleave', () => { mode = 'idle'; resizeStartObj = null; isPainting = false; });
+
+// ── Keyboard: Delete/Backspace removes selected element ──
+document.addEventListener('keydown', e => {
+  // Don't delete if user is typing in an input/textarea/select
+  const tag = (e.target.tagName || '').toLowerCase();
+  if (tag === 'input' || tag === 'textarea' || tag === 'select' || e.target.isContentEditable) return;
+  if ((e.key === 'Delete' || e.key === 'Backspace') && selIdx >= 0) {
+    e.preventDefault();
+    deleteSelected();
+  }
+});
 
 
 // ── Doppelklick → Text-Objekt in Sidebar laden zum Bearbeiten ──
@@ -902,20 +1019,21 @@ function addShape(shapeType) {
 }
 
 function rotateShape(deg) {
-  if (selIdx < 0 || objects[selIdx]?.type !== 'shape') return;
+  if (selIdx < 0) return;
   const o = objects[selIdx];
   o.rotation = ((o.rotation || 0) + deg) % 360;
+  if (o.rotation < 0) o.rotation += 360;
   document.getElementById('shape-rotation-val').value = o.rotation;
   render();
 }
 function setShapeRotation(deg) {
-  if (selIdx < 0 || objects[selIdx]?.type !== 'shape') return;
+  if (selIdx < 0) return;
   objects[selIdx].rotation = deg % 360;
   render();
 }
 function updateShapeRotatePanel() {
   const panel = document.getElementById('shape-rotate-panel');
-  if (selIdx >= 0 && objects[selIdx]?.type === 'shape') {
+  if (selIdx >= 0) {
     panel.style.display = '';
     document.getElementById('shape-rotation-val').value = objects[selIdx].rotation || 0;
   } else {
@@ -923,16 +1041,16 @@ function updateShapeRotatePanel() {
   }
 }
 
-function drawShape(ctx, obj, ox, oy) {
+function drawShape(ctx, obj, ox, oy, skipRotation) {
   const x = (ox !== undefined ? ox : obj.x), y = (oy !== undefined ? oy : obj.y);
   const w = obj.w, h = obj.h;
   const col = obj.color || '#F56E28';
   const sw  = obj.strokeWidth || 3;
   ctx.save();
 
-  // Apply rotation around center
+  // Apply rotation around center (skip if caller already handles rotation)
   const rot = obj.rotation || 0;
-  if (rot !== 0) {
+  if (rot !== 0 && !skipRotation) {
     const centerX = x + w / 2, centerY = y + h / 2;
     ctx.translate(centerX, centerY);
     ctx.rotate(rot * Math.PI / 180);
@@ -1299,8 +1417,13 @@ function _makeSwatch(col, title, num) {
 
 // ── Add library image at position ──
 function addLibraryImage(url, dropX, dropY) {
+  // Check if URL is a GIF — offer animated loading
+  const isGif = url.toLowerCase().replace(/\?.*$/, '').endsWith('.gif');
+  if (isGif && confirm('GIF als animierten Hintergrund laden?\n(OK = Animiert, Abbrechen = Standbild-Element)')) {
+    _loadAnimatedGifFromUrl(url);
+    return;
+  }
   const img = new Image();
-  // Set crossOrigin only for external URLs (not same-origin)
   if (url.startsWith('http') && !url.startsWith(location.origin)) img.crossOrigin = 'anonymous';
   img.onload = () => {
     let w = img.naturalWidth, h = img.naturalHeight;
@@ -1311,11 +1434,32 @@ function addLibraryImage(url, dropX, dropY) {
     objects.push({ type:'img', x, y, w, h, img, url, originalUrl: url });
     selIdx = objects.length - 1;
     render();
-    // Auto-remove background
     autoRemoveBg(objects.length - 1);
   };
   img.onerror = () => console.error('Bild konnte nicht geladen werden:', url);
   img.src = url;
+}
+
+async function _loadAnimatedGifFromUrl(url) {
+  try {
+    const res = await fetch(url);
+    const ab = await res.arrayBuffer();
+    // Create data URL for saving
+    const blob = new Blob([ab], {type: 'image/gif'});
+    const dataUrl = URL.createObjectURL(blob);
+    const loaded = loadAnimatedGif(dataUrl, ab);
+    if (!loaded) {
+      // Static GIF — fall back to regular image
+      const img = new Image();
+      img.onload = () => { bgImage = img; render(); updateCanvasElemList(); };
+      img.src = url;
+    } else {
+      updateCanvasElemList();
+    }
+  } catch(e) {
+    console.error('GIF fetch error:', e);
+    alert('GIF konnte nicht geladen werden: ' + e);
+  }
 }
 
 // Auto-remove BG for a given object index (non-interactive version of removeImageBg)
@@ -1458,9 +1602,16 @@ async function restoreLibImage() {
     }
     loadVideoFrameWithObjects(LIB_IMAGE_URL, info);
   } else if (info && info.has_canvas && info.canvas_json) {
-    // Bild mit Canvas-JSON → wiederherstellen
+    // Bild mit Canvas-JSON → Einzelelemente wiederherstellen
+    const cj = typeof info.canvas_json === 'string' ? info.canvas_json : JSON.stringify(info.canvas_json);
     const bgUrl = info.template_id ? `/library/studio/template/image/${info.template_id}/` : null;
-    restoreCanvas(typeof info.canvas_json === 'string' ? info.canvas_json : JSON.stringify(info.canvas_json), bgUrl);
+    const state = JSON.parse(cj);
+    if (!bgUrl && state.snapshotDataUrl) {
+      // Kein Template → Snapshot als Hintergrund + Objekte einzeln laden
+      loadSnapshotAndObjects(state);
+    } else {
+      restoreCanvas(cj, bgUrl);
+    }
   } else {
     // Bild ohne Canvas-JSON → als Hintergrund laden
     loadBackground(LIB_IMAGE_URL);
@@ -1491,6 +1642,274 @@ function toggleBgVideo() {
     document.getElementById('bg-video-btn').textContent = '▶ Video abspielen';
     render(); // Standbild zeigen
   }
+}
+
+// ── Animated GIF background: parse, play, stop ──
+function _parseGifFrames(arrayBuffer) {
+  // Minimal GIF89a frame parser — returns [{imageData, delay}]
+  const buf = new Uint8Array(arrayBuffer);
+  let pos = 0;
+  const read = (n) => { const s = buf.subarray(pos, pos + n); pos += n; return s; };
+  const readU16 = () => { const v = buf[pos] | (buf[pos+1] << 8); pos += 2; return v; };
+  const readU8 = () => buf[pos++];
+
+  // Header
+  const sig = String.fromCharCode(...read(6));
+  if (!sig.startsWith('GIF')) throw new Error('Not a GIF');
+  const screenW = readU16(), screenH = readU16();
+  const packed = readU8();
+  const hasCT = !!(packed & 0x80);
+  const ctSize = 1 << ((packed & 7) + 1);
+  const bgIdx = readU8();
+  readU8(); // pixel aspect
+  let globalCT = null;
+  if (hasCT) { globalCT = []; for (let i = 0; i < ctSize; i++) globalCT.push([readU8(), readU8(), readU8()]); }
+
+  const frames = [];
+  let delay = 100; // default 100ms
+  let disposalMethod = 0;
+  let transparentIdx = -1;
+
+  // Compositing canvas
+  const compCanvas = document.createElement('canvas');
+  compCanvas.width = screenW; compCanvas.height = screenH;
+  const compCtx = compCanvas.getContext('2d');
+  // Fill with background color
+  if (globalCT && bgIdx < globalCT.length) {
+    compCtx.fillStyle = `rgb(${globalCT[bgIdx].join(',')})`;
+  } else {
+    compCtx.fillStyle = '#000';
+  }
+  compCtx.fillRect(0, 0, screenW, screenH);
+
+  while (pos < buf.length) {
+    const block = readU8();
+    if (block === 0x3B) break; // trailer
+
+    if (block === 0x21) { // extension
+      const label = readU8();
+      if (label === 0xF9) { // GCE
+        readU8(); // block size (always 4)
+        const gcPacked = readU8();
+        disposalMethod = (gcPacked >> 2) & 7;
+        const hasTransparent = !!(gcPacked & 1);
+        delay = readU16() * 10; // hundredths of second → ms
+        if (delay < 20) delay = 100; // browsers treat 0/1/2 as ~100ms
+        transparentIdx = hasTransparent ? readU8() : (readU8(), -1);
+        readU8(); // terminator
+      } else {
+        // Skip sub-blocks
+        while (true) { const sz = readU8(); if (sz === 0) break; pos += sz; }
+      }
+      continue;
+    }
+
+    if (block === 0x2C) { // image descriptor
+      const imgX = readU16(), imgY = readU16();
+      const imgW = readU16(), imgH = readU16();
+      const imgPacked = readU8();
+      const hasLocalCT = !!(imgPacked & 0x80);
+      const interlaced = !!(imgPacked & 0x40);
+      const localCTSize = hasLocalCT ? (1 << ((imgPacked & 7) + 1)) : 0;
+      let localCT = null;
+      if (hasLocalCT) { localCT = []; for (let i = 0; i < localCTSize; i++) localCT.push([readU8(), readU8(), readU8()]); }
+      const ct = localCT || globalCT || [];
+
+      // LZW decode
+      const minCodeSize = readU8();
+      let lzwData = [];
+      while (true) { const sz = readU8(); if (sz === 0) break; for (let i = 0; i < sz; i++) lzwData.push(buf[pos++]); }
+      const pixels = _lzwDecode(new Uint8Array(lzwData), minCodeSize, imgW * imgH);
+
+      // Handle disposal before drawing this frame
+      const prevState = (disposalMethod === 3) ? compCtx.getImageData(0, 0, screenW, screenH) : null;
+      if (disposalMethod === 2) {
+        // Restore to background
+        compCtx.clearRect(imgX, imgY, imgW, imgH);
+      }
+
+      // Draw pixels onto compositing canvas
+      const imgData = compCtx.getImageData(imgX, imgY, imgW, imgH);
+      const d = imgData.data;
+      for (let i = 0; i < pixels.length && i < imgW * imgH; i++) {
+        let pi = i;
+        if (interlaced) {
+          const row = i / imgW | 0, col = i % imgW;
+          const passes = [[0,8],[4,8],[2,4],[1,2]];
+          let targetRow = 0, counted = 0;
+          for (const [start, step] of passes) {
+            const rows = Math.ceil((imgH - start) / step);
+            if (row - counted < rows) { targetRow = start + (row - counted) * step; break; }
+            counted += rows;
+          }
+          pi = targetRow * imgW + col;
+        }
+        const idx = pixels[i];
+        if (idx === transparentIdx) continue;
+        if (idx < ct.length) {
+          d[pi*4]   = ct[idx][0];
+          d[pi*4+1] = ct[idx][1];
+          d[pi*4+2] = ct[idx][2];
+          d[pi*4+3] = 255;
+        }
+      }
+      compCtx.putImageData(imgData, imgX, imgY);
+
+      // Capture composed frame
+      const frameCanvas = document.createElement('canvas');
+      frameCanvas.width = screenW; frameCanvas.height = screenH;
+      frameCanvas.getContext('2d').drawImage(compCanvas, 0, 0);
+      frames.push({ canvas: frameCanvas, delay });
+
+      // Post-frame disposal
+      if (disposalMethod === 3 && prevState) {
+        compCtx.putImageData(prevState, 0, 0);
+      }
+
+      delay = 100; transparentIdx = -1; disposalMethod = 0;
+      continue;
+    }
+
+    // Unknown block — skip sub-blocks
+    if (block !== 0x00) {
+      while (pos < buf.length) { const sz = readU8(); if (sz === 0) break; pos += sz; }
+    }
+  }
+  return { width: screenW, height: screenH, frames };
+}
+
+function _lzwDecode(data, minCodeSize, pixelCount) {
+  const clear = 1 << minCodeSize;
+  const eoi   = clear + 1;
+  let codeSize = minCodeSize + 1;
+  let nextCode = eoi + 1;
+  let mask = (1 << codeSize) - 1;
+
+  // Init dictionary
+  let dict = [];
+  for (let i = 0; i <= eoi; i++) dict[i] = (i < clear) ? [i] : [];
+
+  const output = [];
+  let bitBuf = 0, bitCount = 0, bytePos = 0;
+
+  function readCode() {
+    while (bitCount < codeSize && bytePos < data.length) {
+      bitBuf |= data[bytePos++] << bitCount;
+      bitCount += 8;
+    }
+    const code = bitBuf & mask;
+    bitBuf >>= codeSize;
+    bitCount -= codeSize;
+    return code;
+  }
+
+  let prev = -1;
+  while (output.length < pixelCount) {
+    const code = readCode();
+    if (code === eoi) break;
+    if (code === clear) {
+      codeSize = minCodeSize + 1;
+      nextCode = eoi + 1;
+      mask = (1 << codeSize) - 1;
+      dict = [];
+      for (let i = 0; i <= eoi; i++) dict[i] = (i < clear) ? [i] : [];
+      prev = -1;
+      continue;
+    }
+    let entry;
+    if (dict[code]) {
+      entry = dict[code];
+    } else if (code === nextCode && prev >= 0) {
+      entry = [...dict[prev], dict[prev][0]];
+    } else {
+      break; // corrupt
+    }
+    for (const px of entry) output.push(px);
+    if (prev >= 0 && nextCode < 4096) {
+      dict[nextCode++] = [...dict[prev], entry[0]];
+      if (nextCode > mask && codeSize < 12) { codeSize++; mask = (1 << codeSize) - 1; }
+    }
+    prev = code;
+  }
+  return output;
+}
+
+function loadAnimatedGif(dataUrl, arrayBuffer) {
+  try {
+    const parsed = _parseGifFrames(arrayBuffer);
+    if (parsed.frames.length <= 1) {
+      // Static GIF — just use as regular image
+      return false;
+    }
+    stopBgGif();
+    bgGifFrames = parsed.frames;
+    bgGifIdx = 0;
+    bgGifDataUrl = dataUrl;
+    bgImage = null;
+    bgVideo = null;
+    canvas.width = parsed.width;
+    canvas.height = parsed.height;
+    startBgGifLoop();
+    scaleCanvas();
+    showBgGifControls();
+    return true;
+  } catch(e) {
+    console.warn('GIF parse error:', e);
+    return false;
+  }
+}
+
+function startBgGifLoop() {
+  stopBgGif();
+  if (!bgGifFrames || bgGifFrames.length === 0) return;
+  function nextFrame() {
+    bgGifIdx = (bgGifIdx + 1) % bgGifFrames.length;
+    render();
+    const d = bgGifFrames[bgGifIdx].delay || 100;
+    bgGifTimer = setTimeout(nextFrame, d);
+  }
+  render();
+  const d = bgGifFrames[bgGifIdx].delay || 100;
+  bgGifTimer = setTimeout(nextFrame, d);
+}
+
+function stopBgGif() {
+  if (bgGifTimer) { clearTimeout(bgGifTimer); bgGifTimer = null; }
+}
+
+function toggleBgGif() {
+  if (bgGifTimer) {
+    stopBgGif();
+    document.getElementById('bg-gif-btn').textContent = '▶ GIF abspielen';
+    render();
+  } else {
+    startBgGifLoop();
+    document.getElementById('bg-gif-btn').textContent = '⏸ Pause';
+  }
+}
+
+function showBgGifControls() {
+  let bar = document.getElementById('bg-gif-bar');
+  if (!bar) {
+    bar = document.createElement('div');
+    bar.id = 'bg-gif-bar';
+    bar.style.cssText = 'display:flex;gap:4px;margin-bottom:4px;align-items:center';
+    bar.innerHTML = `
+      <button class="btn btn-sm btn-secondary" id="bg-gif-btn" onclick="toggleBgGif()" style="font-size:10px;flex:1">⏸ Pause</button>
+      <button class="btn btn-sm btn-secondary" onclick="removeBgGif()" style="font-size:10px">✕</button>
+      <span style="font-size:.6rem;color:#888" id="bg-gif-info"></span>`;
+    document.getElementById('canvas-wrap').insertAdjacentElement('afterend', bar);
+  }
+  bar.style.display = 'flex';
+  document.getElementById('bg-gif-info').textContent = `${bgGifFrames.length} Frames`;
+}
+
+function removeBgGif() {
+  stopBgGif();
+  bgGifFrames = null; bgGifIdx = 0; bgGifDataUrl = null;
+  const bar = document.getElementById('bg-gif-bar');
+  if (bar) bar.style.display = 'none';
+  render();
 }
 
 // Ersten Frame eines Videos laden + gespeicherte Objekte (Text, Bilder) darüber legen
@@ -1530,7 +1949,7 @@ function loadVideoFrameWithObjects(url, info) {
             pending++;
             const img2 = new Image();
             img2.onload  = () => { objects.push({...o, img: img2}); pending--; tryRender(); };
-            img2.onerror = () => { pending--; tryRender(); };
+            img2.onerror = () => { objects.push({...o, img: img2}); pending--; tryRender(); };
             img2.src = o.imgSrc;
           }
         });
@@ -1574,7 +1993,7 @@ function loadSnapshotAndObjects(state) {
         pending++;
         const oi = new Image();
         oi.onload  = () => { objects.push({...o, img: oi, url: o.imgSrc, originalUrl: o.originalUrl || o.imgSrc}); pending--; tryRender(); };
-        oi.onerror = () => { console.warn('Failed to load object image:', o.imgSrc); pending--; tryRender(); };
+        oi.onerror = () => { console.warn('Failed to load object image:', o.imgSrc); objects.push({...o, img: oi, url: o.imgSrc}); pending--; tryRender(); };
         oi.src = o.imgSrc;
       }
     });
@@ -1615,13 +2034,14 @@ function restoreCanvas(jsonStr, bgUrl) {
     canvas.height = state.h || 628;
     objects = []; selIdx = -1;
 
-    // Hintergrund laden
+    // Hintergrund laden: bgUrl (Template) oder snapshotDataUrl aus JSON
+    const bgSrc = bgUrl ? (bgUrl + '?t=' + Date.now()) : (state.snapshotDataUrl || null);
     const loadBg = new Promise(resolve => {
-      if (bgUrl) {
+      if (bgSrc) {
         const img = new Image();
         img.onload = () => { bgImage = img; resolve(); };
         img.onerror = () => { bgImage = null; resolve(); };
-        img.src = bgUrl + '?t=' + Date.now();
+        img.src = bgSrc;
       } else { bgImage = null; resolve(); }
     });
 
@@ -1695,10 +2115,21 @@ canvasWrap.addEventListener('drop', e => {
   const dropX  = (e.clientX - rect.left) * scaleX;
   const dropY  = (e.clientY - rect.top)  * scaleY;
 
-  // 1) Datei vom Desktop gedroppt (z.B. PNG/JPG)
+  // 1) Datei vom Desktop gedroppt (z.B. PNG/JPG/GIF)
   if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
     const file = e.dataTransfer.files[0];
     if (!file.type.startsWith('image/')) return;
+    const isGif = file.name.toLowerCase().endsWith('.gif') || file.type === 'image/gif';
+    if (isGif && confirm('GIF als animierten Hintergrund laden?')) {
+      const abR = new FileReader();
+      abR.onload = abE => {
+        const duR = new FileReader();
+        duR.onload = duE => { loadAnimatedGif(duE.target.result, abE.target.result); updateCanvasElemList(); };
+        duR.readAsDataURL(file);
+      };
+      abR.readAsArrayBuffer(file);
+      return;
+    }
     const reader = new FileReader();
     reader.onload = ev => addLibraryImage(ev.target.result, dropX, dropY);
     reader.readAsDataURL(file);
@@ -1734,7 +2165,7 @@ async function deleteCurrentImage() {
   const libId = params.get('lib_item');
   if (!libId) { alert('Kein gespeichertes Bild zum Löschen vorhanden.'); return; }
   if (!confirm('Bild unwiderruflich aus der Bibliothek löschen?')) return;
-  const res = await fetch('/media-library/delete/' + libId + '/', {
+  const res = await fetch('/library/delete/' + libId + '/', {
     method: 'POST',
     headers: {'X-CSRFToken': getCookie('csrftoken')}
   });
@@ -1747,7 +2178,19 @@ async function deleteCurrentImage() {
 }
 
 function _hasAnimations() {
-  return objects.some(o => o.animType && o.animType !== 'none');
+  return (bgGifFrames && bgGifFrames.length > 1) || objects.some(o => (o.animType && o.animType !== 'none') || (o.effectType && o.effectType !== 'none'));
+}
+// wird aus render() aufgerufen — muss nach lastVideoBlob-Deklaration stehen? Nein,
+// weil es eine Funktion ist die erst aufgerufen wird wenn lastVideoBlob existiert.
+// Aber wegen TDZ (let) trotzdem hier als lazy-check:
+function _updateDownloadBtn() {
+  const dlBtn = document.getElementById('main-download-btn');
+  if (!dlBtn) return;
+  try {
+    if (lastVideoBlob) { dlBtn.textContent = '⬇ Video Download'; return; }
+  } catch(e) { /* lastVideoBlob not yet declared */ }
+  if (_hasAnimations()) dlBtn.textContent = '⬇ Als Video';
+  else dlBtn.textContent = '⬇ Download';
 }
 
 function _buildCanvasJson() {
@@ -1772,6 +2215,12 @@ function _buildCanvasJson() {
     else { pctx.fillStyle = '#1a1a2e'; pctx.fillRect(0, 0, pc.width, pc.height); }
     objects.forEach(o => {
       try {
+        const rot = o.rotation || 0;
+        if (rot) {
+          pctx.save();
+          const rcx = o.x + o.w/2, rcy = o.y + o.h/2;
+          pctx.translate(rcx, rcy); pctx.rotate(rot * Math.PI / 180); pctx.translate(-rcx, -rcy);
+        }
         if (o.type === 'img' && o.img) pctx.drawImage(o.img, o.x, o.y, o.w, o.h);
         else if (o.type === 'shape') drawShape(pctx, o);
         else if (o.type === 'text') {
@@ -1779,6 +2228,7 @@ function _buildCanvasJson() {
           pctx.fillStyle = o.color || '#ffffff';
           wrapText(pctx, o.text, o.x, o.y + (o.fontSize||32), o.w, (o.fontSize||32) * 1.3);
         }
+        if (rot) pctx.restore();
       } catch(ce) { /* cross-origin, skip */ }
     });
     try { previewDataUrl = pc.toDataURL('image/png'); } catch(te) { previewDataUrl = snapshotDataUrl; }
@@ -1802,6 +2252,254 @@ function _buildCanvasJson() {
       return s;
     })
   });
+}
+
+// ══════════════════════════════════════════
+// ── GIF EXPORT (Pure JS GIF89a Encoder) ──
+// ══════════════════════════════════════════
+let lastGifBlob = null;
+let lastGifDataUrl = null;
+
+function _buildColorPalette() {
+  // 6×6×6 uniform color cube (216 colors) + 40 grays = 256 entries
+  const palette = [];
+  for (let r = 0; r < 6; r++)
+    for (let g = 0; g < 6; g++)
+      for (let b = 0; b < 6; b++)
+        palette.push([Math.round(r * 51), Math.round(g * 51), Math.round(b * 51)]);
+  for (let i = 0; i < 40; i++) {
+    const v = Math.round(i * 255 / 39);
+    palette.push([v, v, v]);
+  }
+  return palette;
+}
+
+function _findClosestColor(palette, r, g, b) {
+  let best = 0, bestD = Infinity;
+  for (let i = 0; i < palette.length; i++) {
+    const dr = r - palette[i][0], dg = g - palette[i][1], db = b - palette[i][2];
+    const d = dr*dr + dg*dg + db*db;
+    if (d < bestD) { bestD = d; best = i; }
+  }
+  return best;
+}
+
+function _lzwEncode(indexStream, minCodeSize) {
+  const clearCode = 1 << minCodeSize;
+  const eoiCode = clearCode + 1;
+  let codeSize = minCodeSize + 1;
+  let nextCode = eoiCode + 1;
+  const table = {};
+  for (let i = 0; i < clearCode; i++) table[String(i)] = i;
+  const output = [];
+  let bits = 0, buf = 0, bitCount = 0;
+  function emit(code) {
+    buf |= code << bitCount;
+    bitCount += codeSize;
+    while (bitCount >= 8) { output.push(buf & 0xff); buf >>= 8; bitCount -= 8; }
+  }
+  emit(clearCode);
+  let cur = String(indexStream[0]);
+  for (let i = 1; i < indexStream.length; i++) {
+    const next = String(indexStream[i]);
+    const key = cur + ',' + next;
+    if (table[key] !== undefined) {
+      cur = key;
+    } else {
+      emit(table[cur]);
+      if (nextCode < 4096) {
+        table[key] = nextCode++;
+        if (nextCode > (1 << codeSize) && codeSize < 12) codeSize++;
+      } else {
+        emit(clearCode);
+        codeSize = minCodeSize + 1;
+        nextCode = eoiCode + 1;
+        for (const k in table) if (k.includes(',')) delete table[k];
+      }
+      cur = next;
+    }
+  }
+  emit(table[cur]);
+  emit(eoiCode);
+  if (bitCount > 0) output.push(buf & 0xff);
+  return output;
+}
+
+function _buildGifFrame(imageData, palette, w, h, delay) {
+  const pixels = imageData.data;
+  const indices = new Uint8Array(w * h);
+  for (let i = 0; i < w * h; i++) {
+    indices[i] = _findClosestColor(palette, pixels[i*4], pixels[i*4+1], pixels[i*4+2]);
+  }
+  const lzw = _lzwEncode(indices, 8);
+  // GCE
+  const gce = [0x21, 0xF9, 4, 0, delay & 0xff, (delay >> 8) & 0xff, 0, 0];
+  // Image descriptor
+  const id = [0x2C, 0, 0, 0, 0, w & 0xff, (w >> 8) & 0xff, h & 0xff, (h >> 8) & 0xff, 0];
+  // LZW data sub-blocks
+  const lzwBlocks = [8]; // min code size
+  for (let i = 0; i < lzw.length; i += 255) {
+    const chunk = lzw.slice(i, i + 255);
+    lzwBlocks.push(chunk.length);
+    lzwBlocks.push(...chunk);
+  }
+  lzwBlocks.push(0); // block terminator
+  return [...gce, ...id, ...lzwBlocks];
+}
+
+async function exportGif() {
+  const status = document.getElementById('vid-status');
+  const btn = document.getElementById('gif-export-btn');
+  if (btn) btn.disabled = true;
+  status.textContent = '🎞 GIF wird erstellt…';
+  status.style.color = '#008591';
+
+  await new Promise(r => setTimeout(r, 50));
+
+  try {
+    const palette = _buildColorPalette();
+    const W = canvas.width, H = canvas.height;
+    const vidMs = (parseFloat(document.getElementById('vid-duration').value) || 5) * 1000;
+    const fps = 10;
+    const frameCount = Math.round(vidMs / 1000 * fps);
+    const frameDelay = Math.round(100 / fps); // in 1/100s
+
+    // GIF header
+    const header = [0x47, 0x49, 0x46, 0x38, 0x39, 0x61]; // GIF89a
+    // Logical screen descriptor
+    const lsd = [W & 0xff, (W >> 8) & 0xff, H & 0xff, (H >> 8) & 0xff,
+                 0xF7, 0, 0]; // GCT flag, 256 colors, bg=0, aspect=0
+    // Global color table
+    const gct = [];
+    for (const c of palette) gct.push(c[0], c[1], c[2]);
+    // Netscape looping extension
+    const loop = [0x21, 0xFF, 11, 0x4E, 0x45, 0x54, 0x53, 0x43, 0x41, 0x50, 0x45, 0x32, 0x2E, 0x30, 3, 1, 0, 0, 0];
+
+    const allBytes = [...header, ...lsd, ...gct, ...loop];
+
+    // Pause bg GIF if playing
+    const wasBgGifPlaying = bgGifTimer !== null;
+    if (wasBgGifPlaying) stopBgGif();
+
+    selIdx = -1;
+
+    if (bgGifFrames && bgGifFrames.length > 1 && !_hasAnimationsExceptBgGif()) {
+      // Pure animated GIF background with static overlays
+      for (let fi = 0; fi < bgGifFrames.length; fi++) {
+        bgGifIdx = fi;
+        const fc = document.createElement('canvas');
+        fc.width = W; fc.height = H;
+        const fctx = fc.getContext('2d');
+        drawCleanBg(fctx);
+        objects.forEach(obj => {
+          fctx.save();
+          const rot = obj.rotation || 0;
+          if (obj.type === 'shape') { drawShape(fctx, obj); }
+          else if (obj.type === 'img' && obj.img) {
+            if (rot) { const cx = obj.x+obj.w/2, cy = obj.y+obj.h/2; fctx.translate(cx,cy); fctx.rotate(rot*Math.PI/180); fctx.translate(-cx,-cy); }
+            fctx.drawImage(obj.img, obj.x, obj.y, obj.w, obj.h);
+          } else if (obj.type === 'text') {
+            if (rot) { const cx = obj.x+obj.w/2, cy = obj.y+obj.h/2; fctx.translate(cx,cy); fctx.rotate(rot*Math.PI/180); fctx.translate(-cx,-cy); }
+            fctx.font = `${obj.fontWeight||'bold'} ${obj.fontSize||32}px Roboto, Arial, sans-serif`;
+            fctx.fillStyle = obj.color || '#fff';
+            wrapText(fctx, obj.text, obj.x, obj.y + (obj.fontSize||32), obj.w, (obj.fontSize||32)*1.3);
+          }
+          fctx.restore();
+        });
+        const imgData = fctx.getImageData(0, 0, W, H);
+        const d = bgGifFrames[fi].delay || 100;
+        allBytes.push(..._buildGifFrame(imgData, palette, W, H, Math.round(d / 10)));
+        status.textContent = `🎞 Frame ${fi+1}/${bgGifFrames.length}…`;
+      }
+    } else {
+      // Animated elements (with or without bg GIF)
+      for (let fi = 0; fi < frameCount; fi++) {
+        const elapsed = fi * (1000 / fps);
+        if (bgGifFrames && bgGifFrames.length > 1) {
+          // Advance bg GIF frame based on elapsed time
+          let totalGifDur = bgGifFrames.reduce((s, f) => s + (f.delay || 100), 0);
+          let t = elapsed % totalGifDur, acc = 0;
+          for (let gi = 0; gi < bgGifFrames.length; gi++) {
+            acc += bgGifFrames[gi].delay || 100;
+            if (t < acc) { bgGifIdx = gi; break; }
+          }
+        }
+        renderAnimated(elapsed);
+        const imgData = ctx.getImageData(0, 0, W, H);
+        allBytes.push(..._buildGifFrame(imgData, palette, W, H, frameDelay));
+        status.textContent = `🎞 Frame ${fi+1}/${frameCount}…`;
+        if (fi % 5 === 0) await new Promise(r => setTimeout(r, 0));
+      }
+    }
+
+    // GIF trailer
+    allBytes.push(0x3B);
+
+    lastGifBlob = new Blob([new Uint8Array(allBytes)], { type: 'image/gif' });
+    lastGifDataUrl = URL.createObjectURL(lastGifBlob);
+
+    document.getElementById('gif-preview').src = lastGifDataUrl;
+    document.getElementById('gif-size').textContent = 'Größe: ' + (lastGifBlob.size / 1024 / 1024).toFixed(1) + ' MB';
+    document.getElementById('gif-result').style.display = 'block';
+    status.textContent = '✅ GIF erstellt!';
+    status.style.color = 'green';
+
+    if (wasBgGifPlaying) startBgGifLoop();
+    render();
+  } catch(e) {
+    console.error('GIF export error:', e);
+    status.textContent = '❌ GIF Fehler: ' + e.message;
+    status.style.color = 'red';
+  }
+  if (btn) btn.disabled = false;
+}
+
+function _hasAnimationsExceptBgGif() {
+  return objects.some(o => (o.animType && o.animType !== 'none') || (o.effectType && o.effectType !== 'none'));
+}
+
+function downloadGif() {
+  if (!lastGifBlob) return;
+  const a = document.createElement('a');
+  a.href = lastGifDataUrl;
+  const title = document.getElementById('title-input').value.trim() || 'studio_anim';
+  a.download = title.replace(/[^a-zA-Z0-9_-]/g, '_') + '.gif';
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+}
+
+async function saveGifToNC() {
+  if (!lastGifBlob) return;
+  const status = document.getElementById('vid-status');
+  const ncBtn = document.getElementById('gif-nc-btn');
+  const title = document.getElementById('title-input').value.trim() || 'Studio_GIF';
+  ncBtn.disabled = true;
+  ncBtn.textContent = '☁ Speichert…';
+  status.textContent = '☁ GIF wird auf Nextcloud hochgeladen…';
+  status.style.color = '#008591';
+  try {
+    const fd = new FormData();
+    fd.append('video', lastGifBlob, title + '.gif');
+    fd.append('title', title);
+    const folderId = document.getElementById('save-folder').value;
+    if (folderId) fd.append('folder_id', folderId);
+    const res = await fetch('/library/studio/save-video/', {
+      method: 'POST',
+      headers: {'X-CSRFToken': getCookie('csrftoken')},
+      body: fd
+    });
+    const d = await res.json();
+    if (d.ok) {
+      ncBtn.textContent = '✅ Gespeichert!';
+      status.textContent = '✅ GIF auf Nextcloud gespeichert!';
+      status.style.color = 'green';
+    } else {
+      ncBtn.disabled = false; ncBtn.textContent = '☁ Nextcloud';
+      status.textContent = '❌ ' + (d.error || 'Fehler'); status.style.color = 'red';
+    }
+  } catch(e) {
+    ncBtn.disabled = false; ncBtn.textContent = '☁ Nextcloud';
+    status.textContent = '❌ ' + e; status.style.color = 'red';
+  }
 }
 
 async function saveImage() {
@@ -1860,10 +2558,14 @@ async function saveImage() {
       });
       const d = await res.json();
       if (d.ok) {
-        msg.textContent = '✅ Als Video-Bild gespeichert! 🎬';
-        msg.style.color = 'green';
+        msg.textContent = '✅ Video-Bild gespeichert! Nehme Video auf…';
+        msg.style.color = '#008591';
         document.getElementById('vtpl-title').value = '';
         loadVideoTemplates();
+        // Auto-record and save .webm so it appears in Videos
+        await _autoRecordAndSave();
+        msg.textContent = '✅ Video-Bild + Video gespeichert!';
+        msg.style.color = 'green';
       } else {
         msg.textContent = '❌ ' + (d.error || 'Fehler');
         msg.style.color = 'red';
@@ -1897,11 +2599,54 @@ async function saveImage() {
   }
 }
 
+// ── Auto-Save: speichert automatisch wenn Titel eingegeben wird ──
+let _autoSaveTimer = null;
+document.getElementById('title-input').addEventListener('input', () => {
+  clearTimeout(_autoSaveTimer);
+  const title = document.getElementById('title-input').value.trim();
+  if (!title) return;
+  if (objects.length === 0 && !bgImage) return; // nichts auf dem Canvas
+  _autoSaveTimer = setTimeout(() => {
+    const msg = document.getElementById('status-msg');
+    msg.textContent = '💾 Auto-Save…';
+    msg.style.color = '#008591';
+    saveImage();
+  }, 1500); // 1.5s nach letztem Tastendruck
+});
+
 function downloadImage() {
+  // If a video was already recorded, download that instead
+  if (lastVideoBlob) { downloadVideo(); return; }
+  // If canvas has animations → record + download as video
+  if (_hasAnimations()) { recordAndDownload(); return; }
   const a = document.createElement('a');
   a.download = (document.getElementById('title-input').value.trim() || 'studio') + '.png';
   a.href = canvas.toDataURL('image/png');
   a.click();
+}
+
+async function recordAndDownload() {
+  if (objects.length === 0) return;
+  const status = document.getElementById('status-msg');
+  status.textContent = '⏺ Video wird aufgenommen…';
+  status.style.color = '#dc3545';
+  selIdx = -1;
+  const stream = canvas.captureStream(30);
+  const mimeType = MediaRecorder.isTypeSupported('video/webm;codecs=vp9') ? 'video/webm;codecs=vp9' : 'video/webm';
+  const recorder = new MediaRecorder(stream, { mimeType, videoBitsPerSecond: 4000000 });
+  const chunks = [];
+  recorder.ondataavailable = e => { if (e.data.size > 0) chunks.push(e.data); };
+  recorder.onstop = () => {
+    lastVideoBlob = new Blob(chunks, { type: 'video/webm' });
+    render();
+    showVideoResult(lastVideoBlob);
+    status.textContent = '✅ Video fertig!';
+    status.style.color = 'green';
+    downloadVideo();
+  };
+  if (bgVideo) { bgVideo.currentTime = 0; bgVideo.play(); startBgVideoLoop(); }
+  recorder.start();
+  runAnimation(() => setTimeout(() => { recorder.stop(); if (bgVideo) bgVideo.pause(); }, 1000));
 }
 
 function getCookie(name) {
@@ -1943,85 +2688,260 @@ async function loadTemplateSidebar() {
 
 // ── Load library sidebar ──
 let libFoldersLoaded = false;
-async function loadLibrarySidebar(q='') {
+// ── NC-Ordner laden ──
+let _ncFoldersLoaded = false;
+async function loadNcFolders() {
+  if (_ncFoldersLoaded) return;
   const folderSel = document.getElementById('lib-folder-filter');
-  const folder = folderSel.value || 'all';
-  let data;
   try {
-    const res = await fetch('/library/studio/api/library/?q=' + encodeURIComponent(q) + '&folder=' + folder);
-    data = await res.json();
-  } catch(e) {
-    document.getElementById('lib-grid').innerHTML = '<span style="color:red;font-size:.7rem">Fehler: ' + e + '</span>';
-    return;
-  }
-  // Populate folder dropdown once
-  if (!libFoldersLoaded && data.folders) {
-    libFoldersLoaded = true;
+    const res = await fetch('/library/studio/api/nc-folders/');
+    const data = await res.json();
     (data.folders || []).forEach(f => {
       const opt = document.createElement('option');
-      opt.value = f.id;
+      opt.value = f.name;
       opt.textContent = '📁 ' + f.name;
       folderSel.appendChild(opt);
     });
-    const noneOpt = document.createElement('option');
-    noneOpt.value = 'none';
-    noneOpt.textContent = '📂 Unsortiert';
-    folderSel.appendChild(noneOpt);
+    _ncFoldersLoaded = true;
+  } catch(e) {
+    console.error('NC folders error:', e);
   }
-  const el   = document.getElementById('lib-grid');
-  if (!data.items.length) {
-    el.innerHTML = '<span style="font-size:.8rem;color:#888">Keine Bilder</span>';
+}
+
+// ── Bibliothek: NC-Ordner browsen ODER DB-Suche ──
+let _currentNcPath = ''; // z.B. 'Graphics' oder 'Graphics/Badges'
+let _navToSubfolder = false; // true wenn Unterordner-Klick
+
+async function loadLibrarySidebar(q='') {
+  const folderSel = document.getElementById('lib-folder-filter');
+  const el = document.getElementById('lib-grid');
+
+  // Ordner bestimmen: Unterordner-Navigation hat Vorrang vor Dropdown
+  let folder;
+  if (_navToSubfolder) {
+    folder = _currentNcPath;
+    _navToSubfolder = false;
+  } else {
+    folder = folderSel.value || '';
+    if (folder && folder !== '__all__') _currentNcPath = folder;
+  }
+
+  // Wenn Suchbegriff → DB-Suche (über media_library_items + Tags)
+  if (q) {
+    try {
+      const res = await fetch('/library/studio/api/library/?q=' + encodeURIComponent(q));
+      const data = await res.json();
+      if (!data.items.length) {
+        el.innerHTML = '<span style="font-size:.8rem;color:#888">Nichts gefunden für "' + q + '"</span>';
+        return;
+      }
+      el.innerHTML = '';
+      data.items.forEach(item => _renderLibItem(el, item));
+    } catch(e) {
+      el.innerHTML = '<span style="color:red;font-size:.7rem">Fehler: ' + e + '</span>';
+    }
     return;
   }
-  el.innerHTML = '';
-  data.items.forEach(item => {
-    const wrap = document.createElement('div');
-    wrap.style.cssText = 'position:relative;cursor:pointer';
-    wrap.title = (item.title || 'Bild') + ' – klicken zum Einfügen';
 
-    const img = document.createElement('img');
-    img.src       = item.url;
-    img.loading   = 'lazy';
-    img.className = 'lib-thumb';
-    img.setAttribute('draggable', 'false'); // Eigenes Browser-Drag unterdrücken
-    img.onerror   = () => { img.style.display='none'; wrap.style.background='#eee'; wrap.title += ' (Bild nicht ladbar)'; };
+  // "Alle" → rekursiv alle Bilder
+  if (folder === '__all__') {
+    el.innerHTML = '<span style="font-size:.8rem;color:#888">Lädt alle Bilder…</span>';
+    try {
+      const res = await fetch('/library/studio/api/nc-browse/?folder=__all__');
+      const data = await res.json();
+      el.innerHTML = '';
+      if (data.items && data.items.length) {
+        data.items.forEach(item => _renderLibItem(el, {
+          title: item.title || item.name,
+          url: item.url
+        }));
+      } else {
+        el.innerHTML = '<span style="font-size:.8rem;color:#888">Keine Bilder</span>';
+      }
+    } catch(e) {
+      el.innerHTML = '<span style="color:red;font-size:.7rem">Fehler: ' + e + '</span>';
+    }
+    return;
+  }
 
-    wrap.appendChild(img);
+  // DB-basierte Studio-Elemente (nicht auf NC)
+  if (folder === '__db__') {
+    el.innerHTML = '<span style="font-size:.8rem;color:#888">Lädt…</span>';
+    try {
+      const res = await fetch('/library/studio/api/library/?q=');
+      const data = await res.json();
+      el.innerHTML = '';
+      if (data.items && data.items.length) {
+        // DB-Ordner als Gruppen anzeigen
+        if (data.folders && data.folders.length) {
+          data.folders.forEach(f => {
+            const folderBtn = document.createElement('div');
+            folderBtn.style.cssText = 'grid-column:1/-1;cursor:pointer;padding:4px 8px;background:#fff3e0;border-radius:4px;font-size:.75rem;margin-bottom:2px';
+            folderBtn.textContent = '🎨 ' + f.name;
+            folderBtn.addEventListener('click', () => {
+              _dbFolderFilter = f.id;
+              _loadDbFolder(f.id, f.name);
+            });
+            el.appendChild(folderBtn);
+          });
+        }
+        data.items.forEach(item => _renderLibItem(el, item));
+      } else {
+        el.innerHTML = '<span style="font-size:.8rem;color:#888">Keine Studio-Elemente</span>';
+      }
+    } catch(e) {
+      el.innerHTML = '<span style="color:red;font-size:.7rem">Fehler: ' + e + '</span>';
+    }
+    return;
+  }
 
-    // Drag & Drop → Bild an Drop-Position auf Canvas einfügen
-    let wasDragged = false;
-    wrap.setAttribute('draggable', 'true');
-    wrap.addEventListener('dragstart', e => {
-      wasDragged = true;
-      e.dataTransfer.setData('text/plain', item.url);
-      e.dataTransfer.effectAllowed = 'copy';
-      // Drag-Preview aus dem Thumbnail-Bild erzeugen
-      e.dataTransfer.setDragImage(img, img.width / 2, img.height / 2);
-      img.classList.add('dragging');
+  // Kein Ordner gewählt
+  if (!folder) {
+    el.innerHTML = '<span style="font-size:.8rem;color:#888">Ordner wählen oder suchen…</span>';
+    return;
+  }
+
+  _currentNcPath = folder;
+  el.innerHTML = '<span style="font-size:.8rem;color:#888">Lädt…</span>';
+  try {
+    const res = await fetch('/library/studio/api/nc-browse/?folder=' + encodeURIComponent(folder));
+    const data = await res.json();
+    el.innerHTML = '';
+
+    // Zurück-Button wenn wir in einem Unterordner sind
+    if (folder.includes('/')) {
+      const parentPath = folder.substring(0, folder.lastIndexOf('/'));
+      const backBtn = document.createElement('div');
+      backBtn.style.cssText = 'grid-column:1/-1;cursor:pointer;padding:4px 8px;background:#f0f0f0;border-radius:4px;font-size:.75rem;margin-bottom:4px';
+      backBtn.textContent = '⬅ Zurück zu ' + (parentPath.split('/').pop() || 'Root');
+      backBtn.addEventListener('click', () => {
+        _currentNcPath = parentPath;
+        _navToSubfolder = true;
+        loadLibrarySidebar();
+      });
+      el.appendChild(backBtn);
+    }
+
+    // Unterordner anzeigen
+    (data.subfolders || []).forEach(sub => {
+      const subBtn = document.createElement('div');
+      subBtn.style.cssText = 'grid-column:1/-1;cursor:pointer;padding:4px 8px;background:#e8f4f8;border-radius:4px;font-size:.75rem;margin-bottom:2px';
+      subBtn.textContent = '📁 ' + sub.name;
+      subBtn.addEventListener('click', () => {
+        _currentNcPath = folder + '/' + sub.name;
+        _navToSubfolder = true;
+        loadLibrarySidebar();
+      });
+      el.appendChild(subBtn);
     });
-    wrap.addEventListener('dragend', () => {
-      img.classList.remove('dragging');
-      setTimeout(() => { wasDragged = false; }, 0);
-    });
 
-    // Klick → Bild auf Canvas einfügen
-    wrap.addEventListener('click', () => {
-      if (wasDragged) return;
-      addLibraryImage(item.url);
-      wrap.style.outline = '2px solid #F56E28';
-      setTimeout(() => wrap.style.outline = '', 600);
-    });
+    // Bilder anzeigen
+    if (data.items && data.items.length) {
+      data.items.forEach(item => _renderLibItem(el, {
+        title: item.title || item.name,
+        url: item.url
+      }));
+    }
 
-    el.appendChild(wrap);
+    if (!(data.items && data.items.length) && !(data.subfolders && data.subfolders.length)) {
+      el.innerHTML += '<span style="font-size:.8rem;color:#888">Leer</span>';
+    }
+  } catch(e) {
+    el.innerHTML = '<span style="color:red;font-size:.7rem">Fehler: ' + e + '</span>';
+  }
+}
+
+let _dbFolderFilter = null;
+async function _loadDbFolder(folderId, folderName) {
+  const el = document.getElementById('lib-grid');
+  el.innerHTML = '<span style="font-size:.8rem;color:#888">Lädt…</span>';
+  try {
+    const res = await fetch('/library/studio/api/library/?folder=' + folderId);
+    const data = await res.json();
+    el.innerHTML = '';
+    // Zurück-Button
+    const backBtn = document.createElement('div');
+    backBtn.style.cssText = 'grid-column:1/-1;cursor:pointer;padding:4px 8px;background:#f0f0f0;border-radius:4px;font-size:.75rem;margin-bottom:4px';
+    backBtn.textContent = '⬅ Zurück zu Studio-Elemente';
+    backBtn.addEventListener('click', () => {
+      document.getElementById('lib-folder-filter').value = '__db__';
+      loadLibrarySidebar();
+    });
+    el.appendChild(backBtn);
+    if (data.items && data.items.length) {
+      data.items.forEach(item => _renderLibItem(el, item));
+    } else {
+      el.innerHTML += '<span style="font-size:.8rem;color:#888">Keine Elemente in ' + folderName + '</span>';
+    }
+  } catch(e) {
+    el.innerHTML = '<span style="color:red;font-size:.7rem">Fehler: ' + e + '</span>';
+  }
+}
+
+function _renderLibItem(container, item) {
+  const wrap = document.createElement('div');
+  wrap.style.cssText = 'position:relative;cursor:pointer';
+  wrap.title = (item.title || 'Bild') + ' – klicken zum Einfügen';
+
+  const img = document.createElement('img');
+  img.src       = item.url;
+  img.loading   = 'lazy';
+  img.className = 'lib-thumb';
+  img.setAttribute('draggable', 'false');
+  img.onerror   = () => { img.style.display='none'; wrap.style.background='#eee'; wrap.title += ' (Bild nicht ladbar)'; };
+
+  wrap.appendChild(img);
+
+  let wasDragged = false;
+  wrap.setAttribute('draggable', 'true');
+  wrap.addEventListener('dragstart', e => {
+    wasDragged = true;
+    e.dataTransfer.setData('text/plain', item.url);
+    e.dataTransfer.effectAllowed = 'copy';
+    e.dataTransfer.setDragImage(img, img.width / 2, img.height / 2);
+    img.classList.add('dragging');
+  });
+  wrap.addEventListener('dragend', () => {
+    img.classList.remove('dragging');
+    setTimeout(() => { wasDragged = false; }, 0);
   });
 
+  wrap.addEventListener('click', () => {
+    if (wasDragged) return;
+    addLibraryImage(item.url);
+    wrap.style.outline = '2px solid #F56E28';
+    setTimeout(() => wrap.style.outline = '', 600);
+  });
+
+  // "→ NC" button for DB items (have item.id)
+  if (item.id) {
+    const ncBtn = document.createElement('button');
+    ncBtn.textContent = '☁';
+    ncBtn.title = 'Auf Nextcloud speichern';
+    ncBtn.style.cssText = 'position:absolute;top:2px;right:2px;font-size:.65rem;padding:1px 4px;background:rgba(255,255,255,.9);border:1px solid #ccc;border-radius:3px;cursor:pointer;line-height:1;z-index:2';
+    ncBtn.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      ncBtn.textContent = '⏳';
+      try {
+        const fd = new FormData();
+        fd.append('item_id', item.id);
+        const r = await fetch('/library/studio/api/db-to-nc/', {method:'POST', body:fd, headers:{'X-CSRFToken': getCookie('csrftoken')}});
+        const d = await r.json();
+        if (d.ok) { ncBtn.textContent = '✅'; ncBtn.title = 'Gespeichert: ' + d.nc_path; }
+        else { ncBtn.textContent = '❌'; alert('Fehler: ' + (d.error||'')); }
+      } catch(err) { ncBtn.textContent = '❌'; alert('Fehler: ' + err); }
+    });
+    wrap.appendChild(ncBtn);
+  }
+
+  container.appendChild(wrap);
 }
 
 // ── Right sidebar: load studio-saved images & videos ──
-async function loadSavedItems() {
+async function loadSavedItems(q='') {
   let data;
   try {
-    const res = await fetch('/library/studio/api/saved/');
+    const res = await fetch('/library/studio/api/saved/?q=' + encodeURIComponent(q));
     data = await res.json();
   } catch(e) {
     console.error('loadSavedItems error:', e);
@@ -2034,16 +2954,33 @@ async function loadSavedItems() {
   if (data.images && data.images.length) {
     imgGrid.innerHTML = '';
     data.images.forEach(item => {
+      const wrap = document.createElement('div');
+      wrap.style.cssText = 'position:relative;border-radius:4px;overflow:hidden;border:2px solid transparent;transition:border-color .2s';
+      wrap.addEventListener('mouseenter', () => wrap.style.borderColor = '#F56E28');
+      wrap.addEventListener('mouseleave', () => wrap.style.borderColor = 'transparent');
+
       const img = document.createElement('img');
       img.src = item.url;
       img.title = (item.title || 'Bild') + ' – klicken zum Bearbeiten';
-      img.style.cssText = 'width:100%;aspect-ratio:1;object-fit:cover;border-radius:4px;cursor:pointer;border:2px solid transparent;transition:border-color .2s';
-      img.addEventListener('mouseenter', () => img.style.borderColor = '#F56E28');
-      img.addEventListener('mouseleave', () => img.style.borderColor = 'transparent');
+      img.style.cssText = 'width:100%;aspect-ratio:1;object-fit:cover;cursor:pointer;display:block';
       img.addEventListener('click', () => {
         location.href = '/library/studio/?lib_item=' + item.id;
       });
-      imgGrid.appendChild(img);
+      wrap.appendChild(img);
+
+      const delBtn = document.createElement('button');
+      delBtn.textContent = '✕';
+      delBtn.title = 'Löschen';
+      delBtn.style.cssText = 'position:absolute;top:2px;right:2px;background:rgba(220,50,50,.85);color:#fff;border:none;border-radius:50%;width:18px;height:18px;font-size:11px;cursor:pointer;line-height:1;padding:0;display:flex;align-items:center;justify-content:center';
+      delBtn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        if (!confirm('Bild "' + (item.title || 'Bild') + '" wirklich löschen?')) return;
+        const res = await fetch('/library/delete/' + item.id + '/', {method:'POST', headers:{'X-CSRFToken': getCookie('csrftoken'), 'X-Requested-With':'XMLHttpRequest'}});
+        if (res.ok) { wrap.remove(); } else { alert('Fehler beim Löschen'); }
+      });
+      wrap.appendChild(delBtn);
+
+      imgGrid.appendChild(wrap);
     });
   } else {
     imgGrid.innerHTML = '<span style="font-size:.75rem;color:#888">Keine Bilder</span>';
@@ -2275,7 +3212,7 @@ async function loadVideoTemplate(tplId) {
           pending++;
           const img = new Image();
           img.onload  = () => { objects.push({...o, img, url: o.imgSrc, originalUrl: o.originalUrl || o.imgSrc}); pending--; tryRender(); };
-          img.onerror = () => { console.warn('Failed to load object:', o.imgSrc); pending--; tryRender(); };
+          img.onerror = () => { console.warn('Failed to load object:', o.imgSrc); objects.push({...o, img, url: o.imgSrc}); pending--; tryRender(); };
           img.src = o.imgSrc;
         }
       });
@@ -2295,9 +3232,11 @@ async function deleteVideoTemplate(tplId, el) {
 
 document.getElementById('lib-search').addEventListener('input', function() {
   loadLibrarySidebar(this.value);
+  loadSavedItems(this.value);
 });
 document.getElementById('lib-folder-filter').addEventListener('change', function() {
-  loadLibrarySidebar(document.getElementById('lib-search').value);
+  document.getElementById('lib-search').value = ''; // Suche zurücksetzen bei Ordnerwechsel
+  loadLibrarySidebar();
 });
 
 // ══════════════════════════════════════════
@@ -2673,6 +3612,30 @@ let boardElements = [];  // {name, img, w, h}
 function handleElemUpload(input) {
   const files = Array.from(input.files);
   files.forEach((f, idx) => {
+    const isGif = f.name.toLowerCase().endsWith('.gif') || f.type === 'image/gif';
+
+    // For GIFs: try to load as animated background first
+    if (isGif && confirm('GIF als animierten Hintergrund laden?\n(OK = Animiert, Abbrechen = Standbild-Element)')) {
+      const abReader = new FileReader();
+      abReader.onload = abEvt => {
+        const dataUrlReader = new FileReader();
+        dataUrlReader.onload = duEvt => {
+          const loaded = loadAnimatedGif(duEvt.target.result, abEvt.target.result);
+          if (!loaded) {
+            // Fallback: static GIF as background
+            const img = new Image();
+            img.onload = () => { bgImage = img; objects = []; selIdx = -1; render(); updateCanvasElemList(); };
+            img.src = duEvt.target.result;
+          } else {
+            updateCanvasElemList();
+          }
+        };
+        dataUrlReader.readAsDataURL(f);
+      };
+      abReader.readAsArrayBuffer(f);
+      return;
+    }
+
     const reader = new FileReader();
     reader.onload = e => {
       const img = new Image();
@@ -2693,7 +3656,7 @@ function handleElemUpload(input) {
         const fd = new FormData();
         fd.append('image', f);
         fd.append('title', f.name.replace(/\.[^.]+$/, ''));
-        fetch('/media-library/upload/', {method: 'POST', body: fd, headers: {'X-CSRFToken': getCookie('csrftoken'), 'X-Requested-With': 'XMLHttpRequest'}})
+        fetch('/library/upload/', {method: 'POST', body: fd, headers: {'X-CSRFToken': getCookie('csrftoken'), 'X-Requested-With': 'XMLHttpRequest'}})
           .then(r => r.json()).then(() => loadLibrarySidebar(document.getElementById('lib-search').value)).catch(() => {});
       };
       img.src = e.target.result;
@@ -2804,6 +3767,14 @@ function updateCanvasElemList() {
       badge.style.cssText = `font-size:8px;background:${ANIM_COLORS[o.animType]||'#888'};color:#fff;border-radius:3px;padding:1px 4px;flex-shrink:0;white-space:nowrap`;
       div.appendChild(badge);
     }
+    // Effect type badge
+    if (o.effectType && o.effectType !== 'none') {
+      const eBadge = document.createElement('span');
+      const EFFECT_ICONS = {sparkle:'✨',glow:'💡',shimmer:'🌊',confetti:'🎊',hearts:'💕',bubbles:'⭕',rays:'☀️',shake:'🔔',rotate:'🌀',orbit:'💫',arrowBounce:'📍',borderRun:'🔲',rainbow:'🌈',smoke:'💨'};
+      eBadge.textContent = EFFECT_ICONS[o.effectType] || o.effectType;
+      eBadge.style.cssText = 'font-size:8px;background:#ffd700;color:#333;border-radius:3px;padding:1px 4px;flex-shrink:0;white-space:nowrap';
+      div.appendChild(eBadge);
+    }
 
     // Delete button
     const del = document.createElement('span');
@@ -2879,7 +3850,10 @@ function rebuildCleanBg() {
 
 // Draw the clean background (without cutout cards) instead of original bgImage
 function drawCleanBg(targetCtx) {
-  if (bgVideo && !bgVideo.paused && !bgVideo.ended) {
+  if (bgGifFrames && bgGifFrames.length > 0) {
+    const frame = bgGifFrames[bgGifIdx % bgGifFrames.length];
+    targetCtx.drawImage(frame.canvas, 0, 0, canvas.width, canvas.height);
+  } else if (bgVideo && !bgVideo.paused && !bgVideo.ended) {
     targetCtx.drawImage(bgVideo, 0, 0, canvas.width, canvas.height);
   } else if (cleanBgCanvas && cutouts.length > 0) {
     targetCtx.drawImage(cleanBgCanvas, 0, 0, canvas.width, canvas.height);
@@ -3075,6 +4049,7 @@ function showElemAnimPanel() {
   const label = obj.type === 'img' ? `Bild #${selIdx+1}` : `Text: "${(obj.text||'').substring(0,15)}"`;
   document.getElementById('elem-anim-label').textContent = label;
   document.getElementById('elem-anim-type').value = obj.animType || 'none';
+  document.getElementById('elem-effect-type').value = obj.effectType || 'none';
   document.getElementById('elem-anim-delay').value = obj.animDelay || 0;
   document.getElementById('elem-anim-dur').value = obj.animDur || 1500;
   updateFlyToUI();
@@ -3085,6 +4060,7 @@ function setElemAnim() {
   if (selIdx < 0) return;
   const obj = objects[selIdx];
   obj.animType = document.getElementById('elem-anim-type').value;
+  obj.effectType = document.getElementById('elem-effect-type').value;
   obj.animDelay = parseInt(document.getElementById('elem-anim-delay').value) || 0;
   obj.animDur = parseInt(document.getElementById('elem-anim-dur').value) || 800;
   updateFlyToUI();
@@ -3217,7 +4193,7 @@ function resetAllAnimations() {
 function getAnimColors() {
   return {none:'#ccc',fadeIn:PALETTE.c4,flyTo:PALETTE.c2,slideLeft:PALETTE.c3,slideRight:PALETTE.c3,
     slideUp:PALETTE.c3,slideDown:PALETTE.c3,zoomIn:PALETTE.c5,zoomOut:'#dc3545',
-    typewriter:'#6f42c1',pulse:'#e67e22',blink:'#f1c40f',bounce:'#3498db',dashedGlow:PALETTE.c2};
+    typewriter:'#6f42c1',pulse:'#e67e22',blink:'#f1c40f',bounce:'#3498db',dashedGlow:PALETTE.c2,sparkle:'#ffd700'};
 }
 const ANIM_COLORS = new Proxy({}, { get: (_, k) => getAnimColors()[k] });
 
@@ -3335,35 +4311,31 @@ function renderAnimated(elapsed) {
 
   objects.forEach((obj) => {
     const anim = obj.animType || 'none';
+    const effect = obj.effectType || 'none';
     const delay = obj.animDelay || 0;
     const dur = obj.animDur || 1500;
     const localT = elapsed - delay;
-    // For looping anims (pulse, blink, bounce, dashedGlow), use continuous time
     const isLooping = ['pulse','blink','bounce','dashedGlow'].includes(anim);
     let p = anim === 'none' ? 1 : (localT <= 0 ? 0 : Math.min(1, localT / dur));
     const ep = easeOutCubic(p);
 
     ctx.save();
 
-    // Visibility: don't draw if animation hasn't started (non-looping, non-static)
     if (!isLooping && anim !== 'none' && anim !== 'zoomOut' && p <= 0) { ctx.restore(); return; }
 
-    // Alpha
     if (anim === 'fadeIn' || anim === 'zoomIn') ctx.globalAlpha = ep;
     if (anim === 'zoomOut') ctx.globalAlpha = 1 - easeInCubic(p);
 
-    // Looping animation calculations
-    let dx = 0, dy = 0, scale = 1;
+    let dx = 0, dy = 0, scale = 1, rotation = 0;
     if (isLooping && localT > 0) {
-      const cycle = (localT % dur) / dur; // 0→1 repeating
-      const wave = Math.sin(cycle * Math.PI * 2); // -1→1
-      const slowWave = Math.sin(cycle * Math.PI); // half speed: one pulse per cycle
+      const cycle = (localT % dur) / dur;
+      const wave = Math.sin(cycle * Math.PI * 2);
+      const slowWave = Math.sin(cycle * Math.PI);
       if (anim === 'pulse') scale = 1 + 0.06 * slowWave;
       if (anim === 'blink') ctx.globalAlpha = 0.4 + 0.6 * (0.5 + 0.5 * slowWave);
       if (anim === 'bounce') dx = slowWave * 15;
     }
 
-    // One-shot animation offsets
     if (anim === 'flyTo' && obj.animStartX !== undefined) {
       const sx = obj.animStartX - obj.x - obj.w/2;
       const sy = obj.animStartY - obj.y - obj.h/2;
@@ -3377,18 +4349,22 @@ function renderAnimated(elapsed) {
     if (anim === 'zoomIn')     scale = 0.2 + 0.8 * ep;
     if (anim === 'zoomOut')    scale = 1 + 0.5 * easeInCubic(p);
 
+    // Add static/manual rotation from obj.rotation (degrees)
+    if (obj.rotation) rotation += obj.rotation * Math.PI / 180;
+
     if (obj.type === 'shape') {
       const cx = obj.x + obj.w/2, cy = obj.y + obj.h/2;
       ctx.translate(cx + dx, cy + dy);
       ctx.scale(scale, scale);
+      if (rotation) ctx.rotate(rotation);
       ctx.translate(-cx, -cy);
-      drawShape(ctx, obj);
+      drawShape(ctx, obj, undefined, undefined, true);
     } else if (obj.type === 'img' && obj.img) {
       const cx = obj.x + obj.w/2, cy = obj.y + obj.h/2;
       ctx.translate(cx + dx, cy + dy);
       ctx.scale(scale, scale);
+      if (rotation) ctx.rotate(rotation);
       ctx.drawImage(obj.img, -obj.w/2, -obj.h/2, obj.w, obj.h);
-      // Dashed glow border
       if (anim === 'dashedGlow' && localT > 0) {
         const cycle = (localT % dur) / dur;
         const dashOffset = cycle * 30;
@@ -3410,10 +4386,10 @@ function renderAnimated(elapsed) {
         const cx = obj.x + obj.w/2, cy = obj.y + obj.h/2;
         ctx.translate(cx + dx, cy + dy);
         ctx.scale(scale, scale);
+        if (rotation) ctx.rotate(rotation);
         ctx.translate(-cx, -cy);
         wrapText(ctx, obj.text, obj.x, obj.y + (obj.fontSize||32), obj.w, (obj.fontSize||32) * 1.3);
       }
-      // Dashed glow for text
       if (anim === 'dashedGlow' && localT > 0) {
         const cycle = (localT % dur) / dur;
         ctx.strokeStyle = `rgba(245,110,40,${0.5 + 0.5 * Math.sin(cycle * Math.PI * 2)})`;
@@ -3423,6 +4399,12 @@ function renderAnimated(elapsed) {
         ctx.strokeRect(obj.x - 4, obj.y - 2, obj.w + 8, (obj.fontSize||32) * 1.5 + 4);
       }
     }
+
+    // Decorative effects overlay
+    if (effect !== 'none' && typeof _drawEffect === 'function') {
+      _drawEffect(ctx, obj, effect, elapsed);
+    }
+
     ctx.restore();
   });
 }
@@ -3461,7 +4443,6 @@ async function recordVideo() {
   resetAllModes();
   if (objects.length === 0) { alert('Füge zuerst Elemente ein.'); return; }
 
-  // Titel prüfen bevor Aufnahme
   const titleVal = document.getElementById('title-input').value.trim();
   if (!titleVal) {
     const titleEl = document.getElementById('title-input');
@@ -3477,11 +4458,10 @@ async function recordVideo() {
   btn.disabled = true;
   selIdx = -1;
 
-  // Automatisch als Video-Bild speichern (nutzt saveImage() Logik)
   status.textContent = '💾 Video-Bild wird gespeichert…';
   status.style.color = '#008591';
   const fd = new FormData();
-  fd.append('title', titleVal);  // Kein Datum → Duplikat-Check greift bei gleichem Titel
+  fd.append('title', titleVal);
   fd.append('canvas_json', _buildCanvasJson());
   await fetch('/library/studio/video-template/save/', {
     method: 'POST', headers: {'X-CSRFToken': getCookie('csrftoken')}, body: fd
@@ -3501,7 +4481,6 @@ async function recordVideo() {
     render();
     showVideoResult(lastVideoBlob);
   };
-  // Falls Video-Hintergrund vorhanden: von Anfang abspielen
   if (bgVideo) { bgVideo.currentTime = 0; bgVideo.play(); startBgVideoLoop(); }
   recorder.start();
   runAnimation(() => setTimeout(() => { recorder.stop(); if (bgVideo) bgVideo.pause(); }, 1000));
@@ -3545,9 +4524,7 @@ async function saveVideoToNC() {
     fd.append('title', title);
     const folderId = document.getElementById('save-folder').value;
     if (folderId) fd.append('folder_id', folderId);
-    // Save canvas state + snapshot so video can be reopened for editing
     try {
-      // Snapshot des aktuellen Canvas als Hintergrundbild speichern
       let snapshotDataUrl = null;
       try {
         const sc = document.createElement('canvas');
@@ -3559,7 +4536,7 @@ async function saveVideoToNC() {
           try {
             if (o.type === 'img' && o.img) sctx.drawImage(o.img, o.x, o.y, o.w, o.h);
             else if (o.type === 'shape') drawShape(sctx, o);
-          } catch(ce) { /* cross-origin, skip */ }
+          } catch(ce) {}
         });
         try { snapshotDataUrl = sc.toDataURL('image/png'); }
         catch(te) {
@@ -3617,10 +4594,10 @@ async function saveVideoToNC() {
 }
 
 // ══════════════════════════════════════════
-// ── FÜLLEN-TOOL: Klick auf transparente Stelle → Flood-Fill ──
+// ── FÜLLEN-TOOL ──
 // ══════════════════════════════════════════
 let fillMode = false;
-let fillStep = 'pick'; // 'pick' = Farbe aus Bild, 'fill' = Loch füllen
+let fillStep = 'pick';
 let fillColor = null;
 let paintMode = false;
 let isPainting = false;
@@ -3658,7 +4635,6 @@ function updateFillStatus() {
   }
 }
 
-// Color-Picker ändert Farbe direkt → springe zu Schritt 2
 document.addEventListener('DOMContentLoaded', () => {
   const cp = document.getElementById('fill-color-picker');
   if (cp) cp.addEventListener('input', () => {
@@ -3704,7 +4680,7 @@ function exitFillMode() {
 
 document.addEventListener('keydown', e => { if (e.key === 'Escape') resetAllModes(); });
 
-// Schritt 1: Farbe aufnehmen, Schritt 2: Loch füllen
+
 function floodFillAtClick(e) {
   if (selIdx < 0 || objects[selIdx]?.type !== 'img') return;
   const obj = objects[selIdx];
@@ -3729,11 +4705,9 @@ function floodFillAtClick(e) {
   const data = imageData.data;
   const startIdx = iy * iw + ix;
 
-  // ── Schritt 1: Farbe aus Bild aufnehmen (Pipette) ──
   if (fillStep === 'pick') {
     const pr = data[startIdx * 4], pg = data[startIdx * 4 + 1], pb = data[startIdx * 4 + 2];
     fillColor = { r: pr, g: pg, b: pb };
-    // Auch den Color-Picker synchronisieren
     const hex = '#' + [pr, pg, pb].map(v => v.toString(16).padStart(2,'0')).join('');
     document.getElementById('fill-color-picker').value = hex;
     fillStep = 'fill';
@@ -3742,14 +4716,11 @@ function floodFillAtClick(e) {
     return;
   }
 
-  // ── Schritt 2: Füllen ──
   const cr = data[startIdx * 4], cg = data[startIdx * 4 + 1], cb = data[startIdx * 4 + 2];
-  const clickAlpha = data[startIdx * 4 + 3];
 
-  // Ähnlichkeit zum angeklickten Pixel prüfen
   function isSimilar(idx) {
     const a = data[idx * 4 + 3];
-    if (a < 200) return true; // transparent
+    if (a < 200) return true;
     const r = data[idx * 4], g = data[idx * 4 + 1], b = data[idx * 4 + 2];
     const dist = Math.abs(r - cr) + Math.abs(g - cg) + Math.abs(b - cb);
     return dist < 80;
@@ -3757,7 +4728,6 @@ function floodFillAtClick(e) {
 
   saveImageState();
 
-  // BFS: alle zusammenhängenden ähnlichen Pixel ab Klickpunkt sammeln
   const visited = new Uint8Array(iw * ih);
   const queue = [startIdx];
   visited[startIdx] = 1;
@@ -3774,7 +4744,6 @@ function floodFillAtClick(e) {
     if (py < ih-1  && !visited[idx + iw] && isSimilar(idx + iw)) { visited[idx + iw] = 1; queue.push(idx + iw); }
   }
 
-  // Mit gewählter Farbe füllen
   for (const idx of region) {
     data[idx * 4] = fillColor.r;
     data[idx * 4 + 1] = fillColor.g;
@@ -3793,7 +4762,6 @@ function floodFillAtClick(e) {
   };
   newImg.src = dataUrl;
 
-  // Zurück zu Schritt 1 für nächste Füllung
   fillStep = 'pick';
   canvas.style.cursor = 'copy';
   updateFillStatus();
@@ -3807,17 +4775,13 @@ updateSelInfo = function() {
   updateShapeRotatePanel();
 };
 
-// ══════════════════════════════════════════
-// ── draw.io INTEGRATION ──
-// ══════════════════════════════════════════
+// draw.io INTEGRATION
 const DRAWIO_NC_URL = '{{ nc_url }}';
 
 function openDrawio() {
   const overlay = document.getElementById('drawio-overlay');
   const frame   = document.getElementById('drawio-frame');
   overlay.classList.add('active');
-
-  // draw.io embed URL — use Nextcloud draw.io if available, else drawio.com
   let drawioUrl;
   if (DRAWIO_NC_URL) {
     drawioUrl = DRAWIO_NC_URL + '/apps/drawio/?embed=1&chrome=0&dark=0&lang=de';
@@ -3825,18 +4789,13 @@ function openDrawio() {
     drawioUrl = 'https://embed.diagrams.net/?embed=1&spin=1&proto=json&libraries=1&lang=de';
   }
   frame.src = drawioUrl;
-
-  // Listen for messages from draw.io
   window._drawioListener = function(evt) {
     if (!evt.data || typeof evt.data !== 'string') return;
     let msg;
     try { msg = JSON.parse(evt.data); } catch(e) { return; }
-
     if (msg.event === 'init') {
-      // draw.io is ready — send empty diagram to start fresh
       frame.contentWindow.postMessage(JSON.stringify({action:'load', autosave:0, xml:'<mxGraphModel/>'}), '*');
     } else if (msg.event === 'export') {
-      // PNG data received
       handleDrawioExport(msg.data);
     } else if (msg.event === 'exit') {
       closeDrawio();
@@ -3856,28 +4815,21 @@ function closeDrawio() {
 
 function drawioExportPng() {
   const frame = document.getElementById('drawio-frame');
-  // Request PNG export from draw.io
   frame.contentWindow.postMessage(JSON.stringify({
-    action: 'export',
-    format: 'png',
-    spin: 'Exportiert…',
-    scale: 2,
-    border: 20
+    action: 'export', format: 'png', spin: 'Exportiert...', scale: 2, border: 20
   }), '*');
 }
 
 async function handleDrawioExport(dataUrl) {
   if (!dataUrl || !dataUrl.startsWith('data:image/png')) {
-    alert('Export fehlgeschlagen – kein PNG erhalten.');
+    alert('Export fehlgeschlagen.');
     return;
   }
   const title = document.getElementById('drawio-title').value.trim() || 'Diagramm';
   const btn   = document.getElementById('drawio-export-btn');
-  btn.textContent = '⏳ Speichert…';
+  btn.textContent = 'Speichert...';
   btn.disabled = true;
-
   try {
-    // 1. Save to Nextcloud via backend
     const fd = new FormData();
     fd.append('title', title);
     fd.append('data_url', dataUrl);
@@ -3885,9 +4837,7 @@ async function handleDrawioExport(dataUrl) {
       method: 'POST', headers: {'X-CSRFToken': getCookie('csrftoken')}, body: fd
     });
     const d = await res.json();
-
     if (d.ok) {
-      // 2. Add the PNG to the canvas directly (load from data URL)
       const img = new Image();
       img.onload = () => {
         const maxW = Math.round(canvas.width * 0.7);
@@ -3900,31 +4850,31 @@ async function handleDrawioExport(dataUrl) {
         objects.push({type:'img', img, x, y, w, h, name: title, animType:'none', animDelay:0, animDur:800});
         selIdx = objects.length - 1;
         render(); updateCanvasElemList(); updateTimeline();
-        btn.textContent = '✅ Eingefügt!';
-        setTimeout(() => { btn.textContent = '📥 Als PNG ins Studio'; btn.disabled = false; }, 2000);
+        btn.textContent = 'Eingefuegt!';
+        setTimeout(() => { btn.textContent = 'Als PNG ins Studio'; btn.disabled = false; }, 2000);
         closeDrawio();
       };
-      img.onerror = () => { btn.textContent = '❌ Fehler'; btn.disabled = false; };
+      img.onerror = () => { btn.textContent = 'Fehler'; btn.disabled = false; };
       img.src = d.url;
     } else {
-      btn.textContent = '❌ ' + (d.error || 'Fehler');
+      btn.textContent = (d.error || 'Fehler');
       btn.disabled = false;
     }
   } catch(e) {
-    btn.textContent = '❌ ' + e;
+    btn.textContent = '' + e;
     btn.disabled = false;
   }
 }
 
-// ── Init: Farbpalette laden und Editor aufbauen ──
+// Init: Farbpalette laden und Editor aufbauen
 applyPaletteToUI();
 buildPaletteEditor();
 
-// ── Shared Assets (Geteilte Bilder aus NC) ──
+// Shared Assets (Geteilte Bilder aus NC)
 function _sharedImgThumb(item) {
   const wrap = document.createElement('div');
   wrap.style.cssText = 'position:relative;cursor:pointer';
-  wrap.title = (item.path || item.name) + ' – klicken zum Einfügen';
+  wrap.title = (item.path || item.name) + ' - klicken zum Einfuegen';
   const img = document.createElement('img');
   img.src = item.url;
   img.loading = 'lazy';
@@ -3961,7 +4911,6 @@ async function loadSharedAssets(q='') {
       tree.innerHTML = '<span style="color:#888">Keine Bilder</span>';
       return;
     }
-    // Group by folder
     const folders = {};
     const rootFiles = [];
     data.items.forEach(item => {
@@ -3975,27 +4924,24 @@ async function loadSharedAssets(q='') {
       }
     });
     tree.innerHTML = '';
-    // Render root files first
     if (rootFiles.length) {
       const grid = document.createElement('div');
       grid.style.cssText = 'display:grid;grid-template-columns:1fr 1fr 1fr;gap:.3rem;margin-bottom:6px';
       rootFiles.forEach(item => grid.appendChild(_sharedImgThumb(item)));
       tree.appendChild(grid);
     }
-    // Render folders
     const sortedFolders = Object.keys(folders).sort();
     sortedFolders.forEach(fname => {
       const section = document.createElement('div');
       section.style.cssText = 'margin-bottom:4px';
       const header = document.createElement('div');
       header.style.cssText = 'cursor:pointer;padding:2px 4px;background:#f0f0f0;border-radius:3px;font-size:.7rem;font-weight:600;color:#555;margin-bottom:3px;user-select:none';
-      header.textContent = '📁 ' + fname + ' (' + folders[fname].length + ')';
+      header.textContent = fname + ' (' + folders[fname].length + ')';
       const grid = document.createElement('div');
       grid.style.cssText = 'display:grid;grid-template-columns:1fr 1fr 1fr;gap:.3rem;margin-bottom:4px';
       folders[fname].forEach(item => grid.appendChild(_sharedImgThumb(item)));
       header.addEventListener('click', () => {
         grid.style.display = grid.style.display === 'none' ? 'grid' : 'none';
-        header.textContent = (grid.style.display === 'none' ? '📁 ' : '📂 ') + fname + ' (' + folders[fname].length + ')';
       });
       section.appendChild(header);
       section.appendChild(grid);
@@ -4022,7 +4968,7 @@ document.getElementById('shared-upload-input').addEventListener('change', async 
   loadSharedAssets();
 });
 
-// ── Init ──
+// Init
 loadTemplateSidebar();
 loadLibrarySidebar();
 loadSharedAssets();
