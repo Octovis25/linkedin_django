@@ -130,7 +130,6 @@
     <a href="/library/studio/" {% if '/studio/' in request.path and '/flowcharts/' not in request.path and '/templates/' not in request.path %}class="active"{% endif %}>🎨 Studio</a>
     <a href="/library/studio/templates/" {% if '/studio/templates/' in request.path %}class="active"{% endif %}>📐 Templates</a>
     <a href="/library/studio/flowcharts/" {% if '/flowcharts/' in request.path %}class="active"{% endif %}>🔀 Flowcharts</a>
-    <a href="/library/" {% if request.path == '/library/' %}class="active"{% endif %}>📚 Bibliothek</a>
   </div>
   {% endif %}
   {% if '/statistics/' in request.path %}

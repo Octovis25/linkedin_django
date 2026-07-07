@@ -126,36 +126,10 @@ def _meta_options():
 
 @login_required
 def library_view(request):
-    _ensure_table()
-    f = {
-        'person': request.GET.get('person', ''),
-        'series':  request.GET.get('series', ''),
-        'tag':     request.GET.get('tag', ''),
-        'q':       request.GET.get('q', ''),
-        'folder_id': request.GET.get('folder', ''),
-        'folder': request.GET.get('folder', ''),
-    }
-    items   = _all_items(f)
-    persons, series, tags = _meta_options()
-    folders = _all_folders()
-    # Count templates
-    _ensure_studio_tables()
-    try:
-        with connection.cursor() as c:
-            rows = _safe(c, "SELECT COUNT(*) FROM studio_templates", [])
-            templates_count = rows[0][0] if rows else 0
-    except Exception:
-        templates_count = 0
-    import json as _json
-    folders_json = _json.dumps([{'id': fo['id'], 'name': fo['name'], 'color': fo['color'], 'parent_id': fo['parent_id']} for fo in folders])
-    return render(request, 'media_library/library.html', {
-        'items': items, 'persons': persons, 'series_list': series, 'tags': tags,
-        'folders': folders, 'folders_json': folders_json, 'filter_folder': f['folder_id'],
-        'filter_person': f['person'], 'filter_series': f['series'],
-        'filter_tag': f['tag'], 'filter_q': f['q'],
-        'templates_count': templates_count,
-        'tab': 'library',
-    })
+    """Die alte DB-Medienbibliothek wurde aufgeloest (Bilder liegen in Nextcloud
+    unter Studio_Work). Diese Route bleibt nur als Weiterleitung bestehen, damit
+    interne redirect('media_library:library')-Aufrufe weiter funktionieren."""
+    return redirect('media_library:studio')
 
 
 @login_required
@@ -426,8 +400,8 @@ def item_studio_info(request, item_id):
 #  NEXTCLOUD FOLDERS FOR STUDIO
 # ─────────────────────────────────────────────
 NC_STUDIO_TEMPLATES_FOLDER = "Marketing & Design/LinkedIn/Studio/Templates"
-NC_STUDIO_LIBRARY_FOLDER   = "Marketing & Design/Octotrial_Assets/Studio_Output/Images"
-NC_STUDIO_VIDEOS_FOLDER    = "Marketing & Design/Octotrial_Assets/Studio_Output/Videos"
+NC_STUDIO_LIBRARY_FOLDER   = "Marketing & Design/Octotrial_Assets/Studio_Work/Bilder"
+NC_STUDIO_VIDEOS_FOLDER    = "Marketing & Design/Octotrial_Assets/Studio_Work/Bewegte_Bilder"
 
 
 def _nc_delete_old_files(nc_folder, safe_prefix):
@@ -768,9 +742,39 @@ def studio_view(request):
     except Exception:
         nc_url_val = ''
     brand = get_brand_colors()
+
+    # Canvas-JSON fuer post/lib mit same-origin Proxy-URLs aufloesen (kein CORS-Tainting)
+    if post_data and post_data.get('canvas_json'):
+        post_data['canvas_json'] = _resolve_nc_refs_in_json(post_data['canvas_json'])
+    if lib_data and lib_data.get('canvas_json'):
+        lib_data['canvas_json'] = _resolve_nc_refs_in_json(lib_data['canvas_json'])
+
+    # Zentrale Konfiguration fuers Frontend (studio.js liest #studio-config)
+    studio_config = {
+        'postId': post_id or None,
+        'postData': post_data,
+        'libData': lib_data,
+        'ncUrl': (nc_url_val or '').rstrip('/'),
+        'brandExtraColors': brand.get('extra_colors', []),
+        'urls': {
+            'save':          '/library/studio/save/',
+            'saveVideo':     '/library/studio/video-template/save/',
+            'apiTemplates':  '/library/studio/api/templates/',
+            'apiLibrary':    '/library/studio/api/library/',
+            'apiSaved':      '/library/studio/api/saved/',
+            'ncFolders':     '/library/studio/api/nc-folders/',
+            'ncBrowse':      '/library/studio/api/nc-browse/',
+            'ncImage':       '/library/studio/nc-image/',
+            'sharedAssets':  '/library/studio/api/shared-assets/',
+            'dbToNc':        '/library/studio/api/db-to-nc/',
+            'brandColors':   '/library/studio/brand-colors/save/',
+        },
+    }
+
     return render(request, 'media_library/studio.html', {
         'post_id': post_id, 'post_data': post_data, 'lib_data': lib_data,
         'folders': folders, 'nc_url': (nc_url_val or '').rstrip('/'),
+        'studio_config': studio_config,
         'brand_extra_colors_json': json.dumps(brand.get('extra_colors', []))})
 
 
@@ -1154,7 +1158,7 @@ def studio_api_templates(request):
     return JsonResponse({'templates': data})
 
 
-NC_STUDIO_VIDEO_TEMPLATES_FOLDER = "Marketing & Design/Octotrial_Assets/Studio_Output/Video_Images"
+NC_STUDIO_VIDEO_TEMPLATES_FOLDER = "Marketing & Design/Octotrial_Assets/Studio_Work/Bewegte_Bilder"
 
 
 def _ensure_video_template_table():
@@ -1514,7 +1518,7 @@ def studio_nc_folders(request):
             if rel == NC_ASSETS_ROOT.strip('/') or not rel.startswith(NC_ASSETS_ROOT):
                 continue
             folder_name = rel.split('/')[-1]
-            if folder_name.startswith('.') or folder_name == '_data':
+            if folder_name.startswith('.') or folder_name in ('_data', 'Studio_Work', 'Studio_Output'):
                 continue
             folders.append({'name': folder_name, 'nc_path': rel})
     except Exception as e:
@@ -1583,7 +1587,7 @@ def studio_nc_browse(request):
             if decoded.rstrip('/') == unquote(root_href).rstrip('/'):
                 continue
             name = decoded.rstrip('/').split('/')[-1]
-            if name.startswith('.') or name == '_data':
+            if name.startswith('.') or name in ('_data', 'Studio_Work', 'Studio_Output'):
                 continue
             # Unterordner (bei __all__ überspringen, nur Bilder zeigen)
             if decoded.endswith('/'):
