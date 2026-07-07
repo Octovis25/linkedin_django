@@ -39,8 +39,13 @@ urlpatterns = [
     path('studio/video-template/load/<int:tpl_id>/',    views.studio_video_template_load,    name='studio_video_template_load'),
     path('studio/video-template/delete/<int:tpl_id>/',  views.studio_video_template_delete,  name='studio_video_template_delete'),
     path('studio/video-template/preview/<int:tpl_id>/', views.studio_video_template_preview, name='studio_video_template_preview'),
+    # NC-Bibliothek (Ordner aus Octotrial_Assets)
+    path('studio/api/nc-folders/',           views.studio_nc_folders,           name='studio_nc_folders'),
+    path('studio/api/nc-browse/',            views.studio_nc_browse,            name='studio_nc_browse'),
     # Shared Assets (geteilter Bilderpool)
     path('studio/api/shared-assets/',        views.studio_shared_assets_list,   name='studio_shared_assets_list'),
     path('studio/api/shared-assets/upload/', views.studio_shared_assets_upload, name='studio_shared_assets_upload'),
     path('studio/api/shared-assets/delete/', views.studio_shared_assets_delete, name='studio_shared_assets_delete'),
+    # DB-Element nach NC kopieren
+    path('studio/api/db-to-nc/',             views.studio_db_item_to_nc,        name='studio_db_item_to_nc'),
 ]

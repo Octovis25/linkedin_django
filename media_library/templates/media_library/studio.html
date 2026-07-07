@@ -108,7 +108,7 @@
 <div class="post-banner">
   <img src="{{ lib_data.image_url }}" alt="">
   <div class="post-info"><strong>📷 Bibliotheksbild bearbeiten</strong>
-    <p>{% if lib_data.canvas_json %}Canvas wird wiederhergestellt.{% else %}Bild wird als Hintergrund geladen.{% endif %}</p>
+    <p>{% if lib_data.canvas_json %}Canvas wird wiederhergestellt.{% else %}Bild wird als Element geladen. Wähle ein Template als Hintergrund.{% endif %}</p>
   </div>
 </div>
 {% endif %}
@@ -123,6 +123,36 @@
       <div class="section-body">
         <div id="tpl-list" class="tpl-grid"><span class="no-templates">Lädt…</span></div>
         <a class="manage-link" href="/library/studio/templates/">+ Verwalten</a>
+      </div>
+    </div>
+
+    <div class="sidebar-section" id="image-functions-section">
+      <h3 onclick="this.parentElement.classList.toggle('collapsed')">🖼 Canvas</h3>
+      <div class="section-body">
+        <div style="display:flex;flex-wrap:wrap;gap:3px;font-size:.72rem">
+          <button class="btn btn-sm" onclick="bgToObject()" title="Hintergrundbild als verschiebbares Objekt">📌 BG → Objekt</button>
+          <button class="btn btn-sm" onclick="setCanvasSize()" title="Canvas-Größe ändern">📐 Größe</button>
+        </div>
+        <div id="bg-info" style="font-size:.65rem;color:#888;margin-top:4px"></div>
+      </div>
+    </div>
+
+    <div class="sidebar-section" id="element-props-section" style="display:none">
+      <h3 onclick="this.parentElement.classList.toggle('collapsed')">🎯 Element</h3>
+      <div class="section-body">
+        <div id="elem-type-info" style="font-size:.72rem;color:#666;margin-bottom:4px"></div>
+        <div style="display:flex;flex-wrap:wrap;gap:3px;font-size:.72rem">
+          <button class="btn btn-sm" onclick="flipSelectedH()" title="Horizontal spiegeln">↔ Spiegeln</button>
+          <button class="btn btn-sm" onclick="flipSelectedV()" title="Vertikal spiegeln">↕ Spiegeln</button>
+          <button class="btn btn-sm" onclick="duplicateSelected()" title="Element duplizieren">📋 Kopie</button>
+          <button class="btn btn-sm" onclick="bringForward()" title="Ebene nach vorne">⬆ Vor</button>
+          <button class="btn btn-sm" onclick="sendBackward()" title="Ebene nach hinten">⬇ Zurück</button>
+          <button class="btn btn-sm" onclick="resetObjTransform()" title="Drehung/Spiegelung zurücksetzen">🔄 Reset</button>
+          <button class="btn btn-sm" id="btn-remove-bg" onclick="removeImageBg()" title="Hintergrund entfernen (einfach)" style="display:none">✂ BG weg</button>
+          <button class="btn btn-sm" id="btn-auto-split" onclick="autoSplitObject()" title="Bild in Einzelteile zerlegen" style="display:none">🧩 Aufteilen</button>
+          <button class="btn btn-sm" onclick="deleteSelected()" title="Element löschen" style="color:#c33">🗑 Löschen</button>
+        </div>
+        <div id="elem-size-info" style="font-size:.65rem;color:#888;margin-top:4px"></div>
       </div>
     </div>
 
@@ -359,13 +389,14 @@
     </div>
 
     <div id="canvas-wrap" style="overflow:auto;">
-      <canvas id="main-canvas" width="1200" height="628"></canvas>
+      <canvas id="main-canvas" width="1200" height="628" draggable="false"></canvas>
     </div>
 
     <div class="save-row">
       <button class="btn btn-secondary" onclick="saveImage()" style="font-size:.85rem">💾 Speichern</button>
       <button class="btn btn-primary btn-sm" onclick="downloadImage()" style="font-size:.85rem" id="main-download-btn">⬇ Download</button>
       <button class="btn btn-sm" onclick="deleteCurrentImage()" style="font-size:.85rem;color:#dc3545;border:1px solid #dc3545;background:#fff" title="Bild aus Bibliothek löschen">🗑 Löschen</button>
+      <button class="btn btn-sm" onclick="clearCanvas()" style="font-size:.85rem;color:#666;border:1px solid #ccc;background:#f8f8f8" title="Canvas leeren für neues Bild">🧹 Neu</button>
       <span id="status-msg"></span>
     </div>
 
@@ -401,6 +432,11 @@
     <div class="sidebar-section">
       <h3 onclick="this.parentElement.classList.toggle('collapsed')">📤 Upload</h3>
       <div class="section-body">
+        <div style="margin-bottom:4px">
+          <select id="shared-folder-select" style="width:100%;padding:.2rem .3rem;border:1px solid #ccc;border-radius:4px;font-size:.72rem;margin-bottom:3px">
+            <option value="">📁 Ordner wählen…</option>
+          </select>
+        </div>
         <div style="display:flex;gap:4px;margin-bottom:4px">
           <input id="shared-search" type="text" placeholder="Suchen…" style="flex:1;padding:.2rem .3rem;border:1px solid #ccc;border-radius:4px;font-size:.75rem">
           <label style="cursor:pointer;font-size:1.1rem;line-height:1;padding:2px 4px;border:1px solid #ccc;border-radius:4px;background:#fff" title="Bild hochladen">
@@ -408,7 +444,7 @@
           </label>
         </div>
         <div id="shared-tree" style="max-height:250px;overflow-y:auto;font-size:.75rem">
-          <span style="color:#888">Lädt…</span>
+          <span style="color:#888">Ordner wählen…</span>
         </div>
       </div>
     </div>
@@ -765,6 +801,17 @@ function render() {
   if (typeof updateSelInfo === 'function') updateSelInfo();
   if (typeof updateCanvasElemList === 'function') updateCanvasElemList();
   if (typeof _updateDownloadBtn === 'function') _updateDownloadBtn();
+  // Update BG info
+  const bgInfoEl = document.getElementById('bg-info');
+  if (bgInfoEl) {
+    const parts = [];
+    if (bgImage) parts.push('BG: Bild');
+    if (bgGifFrames && bgGifFrames.length) parts.push(`GIF: ${bgGifFrames.length} Frames`);
+    if (bgVideo) parts.push('Video');
+    parts.push(`Canvas: ${canvas.width}×${canvas.height}`);
+    parts.push(`${objects.length} Element${objects.length !== 1 ? 'e' : ''}`);
+    bgInfoEl.textContent = parts.join(' · ');
+  }
 }
 
 function wrapText(ctx, text, x, y, maxW, lineH) {
@@ -831,6 +878,7 @@ function hitRotateHandle(obj, px, py) {
 }
 
 canvas.addEventListener('mousedown', e => {
+  e.preventDefault(); // prevent browser native drag on canvas
   // Fill mode: skip drag/select, flood-fill at click point
   if (fillMode) { floodFillAtClick(e); return; }
   const {x, y} = canvasXY(e);
@@ -1198,14 +1246,32 @@ function sendBackward() {
   selIdx--; render();
 }
 
-// ── Update selection info ──
+// ── Update selection info + Element-Panel ──
 function updateSelInfo() {
   const info = document.getElementById('sel-info');
-  if (selIdx < 0) { info.textContent = 'Nichts ausgewählt'; return; }
+  const panel = document.getElementById('element-props-section');
+  const typeInfo = document.getElementById('elem-type-info');
+  const sizeInfo = document.getElementById('elem-size-info');
+  const bgBtn = document.getElementById('btn-remove-bg');
+  if (selIdx < 0) {
+    info.textContent = 'Nichts ausgewählt';
+    if (panel) panel.style.display = 'none';
+    return;
+  }
   const o = objects[selIdx];
-  if (o.type === 'shape') info.textContent = `Form: ${o.shapeType} ${Math.round(o.w)}×${Math.round(o.h)}`;
-  else if (o.type === 'img') info.textContent = `Bild ${Math.round(o.w)}×${Math.round(o.h)}`;
-  else info.textContent = `Text: "${(o.text||'').substring(0,20)}"`;
+  let label = '';
+  if (o.type === 'shape') label = `Form: ${o.shapeType}`;
+  else if (o.type === 'img') label = 'Bild';
+  else label = `Text: "${(o.text||'').substring(0,20)}"`;
+  info.textContent = label + ` ${Math.round(o.w)}×${Math.round(o.h)}`;
+  if (panel) {
+    panel.style.display = '';
+    typeInfo.textContent = `${label} — ${Math.round(o.w)}×${Math.round(o.h)} px — Pos: ${Math.round(o.x)},${Math.round(o.y)}`;
+    sizeInfo.textContent = `Ebene ${selIdx+1}/${objects.length}` + (o.rotation ? ` — ${Math.round(o.rotation)}°` : '');
+    bgBtn.style.display = (o.type === 'img') ? '' : 'none';
+    const splitBtn = document.getElementById('btn-auto-split');
+    if (splitBtn) splitBtn.style.display = (o.type === 'img') ? '' : 'none';
+  }
   updateBgButton();
 }
 
@@ -1224,66 +1290,31 @@ function removeImageBg() {
   tctx.drawImage(obj.img, 0, 0, W, H);
   const imgData = tctx.getImageData(0, 0, W, H);
   const d = imgData.data;
-  const tolerance = 45; // color distance threshold
-
-  // Sample background color from the four corners (average)
-  function getPixel(px, py) {
-    const i = (py * W + px) * 4;
-    return [d[i], d[i+1], d[i+2], d[i+3]];
-  }
-  const corners = [getPixel(0,0), getPixel(W-1,0), getPixel(0,H-1), getPixel(W-1,H-1)];
-  // Use top-left corner as reference (most likely background)
-  const bgR = corners[0][0], bgG = corners[0][1], bgB = corners[0][2];
-
+  // Sample background from all 4 corners (8x8 blocks)
+  let bgR=0, bgG=0, bgB=0, bgCnt=0;
+  const sampleC = (sx,sy) => {
+    for(let cy=sy;cy<sy+8&&cy<H;cy++) for(let cx=sx;cx<sx+8&&cx<W;cx++){
+      const ci=(cy*W+cx)*4; bgR+=d[ci]; bgG+=d[ci+1]; bgB+=d[ci+2]; bgCnt++;
+    }
+  };
+  sampleC(0,0); sampleC(W-8,0); sampleC(0,H-8); sampleC(W-8,H-8);
+  bgR=Math.round(bgR/bgCnt); bgG=Math.round(bgG/bgCnt); bgB=Math.round(bgB/bgCnt);
   function colorDist(i) {
     const dr = d[i] - bgR, dg = d[i+1] - bgG, db = d[i+2] - bgB;
     return Math.sqrt(dr*dr + dg*dg + db*db);
   }
-  // Also detect checkerboard: two alternating grays
-  function isCheckerboard(i) {
-    const r = d[i], g = d[i+1], b = d[i+2];
-    if (Math.abs(r-g) > 8 || Math.abs(g-b) > 8) return false; // not gray
-    return (r > 180 && r < 255); // gray range typical for checkerboard
-  }
 
-  // Flood-fill from all four edges
-  const visited = new Uint8Array(W * H);
-  const queue = [];
-  // Seed from all edge pixels
-  for (let x = 0; x < W; x++) { queue.push(x); queue.push(0); queue.push(x); queue.push(H-1); }
-  for (let y = 1; y < H-1; y++) { queue.push(0); queue.push(y); queue.push(W-1); queue.push(y); }
-
-  let qi = 0;
-  while (qi < queue.length) {
-    const x = queue[qi++], y = queue[qi++];
-    if (x < 0 || x >= W || y < 0 || y >= H) continue;
-    const idx = y * W + x;
-    if (visited[idx]) continue;
-    visited[idx] = 1;
-    const pi = idx * 4;
-    if (d[pi+3] === 0) continue; // already transparent
-    if (colorDist(pi) > tolerance && !isCheckerboard(pi)) continue; // not background
-    d[pi+3] = 0; // make transparent
-    // Expand to neighbors
-    queue.push(x-1, y, x+1, y, x, y-1, x, y+1);
-  }
-
-  // Soften edges: semi-transparent border pixels
-  const edgeData = new Uint8Array(W * H);
-  for (let y = 1; y < H-1; y++) {
-    for (let x = 1; x < W-1; x++) {
-      const idx = y * W + x;
-      if (d[idx*4+3] > 0) {
-        // Check if any neighbor is transparent
-        const neighbors = [(y-1)*W+x, (y+1)*W+x, y*W+x-1, y*W+x+1];
-        for (const ni of neighbors) {
-          if (d[ni*4+3] === 0) { edgeData[idx] = 1; break; }
-        }
-      }
+  // Pixel-wise removal: only remove pixels matching BG color
+  const strictTol = 30, softTol = 50;
+  for (let i = 0; i < W * H; i++) {
+    const pi = i * 4;
+    if (d[pi+3] === 0) continue;
+    const dist = colorDist(pi);
+    if (dist <= strictTol) {
+      d[pi+3] = 0;
+    } else if (dist <= softTol) {
+      d[pi+3] = Math.min(d[pi+3], Math.round(255 * (dist - strictTol) / (softTol - strictTol)));
     }
-  }
-  for (let i = 0; i < edgeData.length; i++) {
-    if (edgeData[i]) d[i*4+3] = Math.min(d[i*4+3], 180); // soften edge
   }
 
   tctx.putImageData(imgData, 0, 0);
@@ -1306,9 +1337,15 @@ function loadTemplate(tplId, url, w, h, colors) {
   const img = new Image();
   img.crossOrigin = 'anonymous';
   img.onload = () => {
+    const oldW = canvas.width, oldH = canvas.height;
     canvas.width  = img.naturalWidth;
     canvas.height = img.naturalHeight;
-    bgImage = img; objects = []; selIdx = -1;
+    bgImage = img;
+    // Vorhandene Objekte beibehalten und an neue Canvas-Größe anpassen
+    if (objects.length > 0 && (oldW !== canvas.width || oldH !== canvas.height)) {
+      const sx = canvas.width / oldW, sy = canvas.height / oldH;
+      objects.forEach(o => { o.x *= sx; o.y *= sy; o.w *= sx; o.h *= sy; });
+    }
     render();
     scaleCanvas();
     // Extract dominant colors from the template image
@@ -1417,12 +1454,7 @@ function _makeSwatch(col, title, num) {
 
 // ── Add library image at position ──
 function addLibraryImage(url, dropX, dropY) {
-  // Check if URL is a GIF — offer animated loading
   const isGif = url.toLowerCase().replace(/\?.*$/, '').endsWith('.gif');
-  if (isGif && confirm('GIF als animierten Hintergrund laden?\n(OK = Animiert, Abbrechen = Standbild-Element)')) {
-    _loadAnimatedGifFromUrl(url);
-    return;
-  }
   const img = new Image();
   if (url.startsWith('http') && !url.startsWith(location.origin)) img.crossOrigin = 'anonymous';
   img.onload = () => {
@@ -1431,12 +1463,15 @@ function addLibraryImage(url, dropX, dropY) {
     if (w > maxSize) { h = h * maxSize / w; w = maxSize; }
     const x = (dropX !== undefined) ? Math.max(0, dropX - w/2) : (canvas.width/2 - w/2);
     const y = (dropY !== undefined) ? Math.max(0, dropY - h/2) : (canvas.height/2 - h/2);
-    objects.push({ type:'img', x, y, w, h, img, url, originalUrl: url });
+    const obj = { type:'img', x, y, w, h, img, url, originalUrl: url };
+    if (isGif) { obj.animType = 'pulse'; obj.animDur = 1500; obj.animDelay = 0; obj.effectType = 'sparkle'; }
+    objects.push(obj);
     selIdx = objects.length - 1;
     render();
-    autoRemoveBg(objects.length - 1);
+    showImageOptions(objects.length - 1);
   };
   img.onerror = () => console.error('Bild konnte nicht geladen werden:', url);
+  if (!img.crossOrigin) img.crossOrigin = 'anonymous';
   img.src = url;
 }
 
@@ -1462,6 +1497,74 @@ async function _loadAnimatedGifFromUrl(url) {
   }
 }
 
+// Check if image has transparent pixels (already freigestellt)
+function imageHasTransparency(imgEl) {
+  try {
+    const tc = document.createElement('canvas');
+    const w = Math.min(imgEl.naturalWidth || imgEl.width, 200);
+    const h = Math.min(imgEl.naturalHeight || imgEl.height, 200);
+    tc.width = w; tc.height = h;
+    const tctx = tc.getContext('2d');
+    // Clear to a known marker color first, then draw image
+    // If the image has transparency, the marker will show through
+    tctx.fillStyle = 'rgba(1,2,3,1)';
+    tctx.fillRect(0, 0, w, h);
+    tctx.drawImage(imgEl, 0, 0, w, h);
+    const d = tctx.getImageData(0, 0, w, h).data;
+    let transparentCount = 0;
+    for (let i = 0; i < d.length; i += 4) {
+      // Check if pixel is still our marker (image was transparent there)
+      // OR if alpha < 250 (image has partial/full transparency)
+      if (d[i+3] < 250 || (d[i] === 1 && d[i+1] === 2 && d[i+2] === 3)) {
+        transparentCount++;
+      }
+    }
+    console.log('Transparency check:', transparentCount, 'of', w*h, '=', (transparentCount/(w*h)*100).toFixed(1)+'%');
+    // More than 3% transparent → already freigestellt
+    return transparentCount > (w * h * 0.03);
+  } catch(e) {
+    console.warn('Transparency check failed (CORS?):', e);
+    // CORS error → can't analyze pixels → assume freigestellt to be safe
+    return true;
+  }
+}
+
+// Show options dialog when an image is loaded
+function showImageOptions(idx) {
+  const obj = objects[idx];
+  if (!obj || obj.type !== 'img') return;
+
+  // Already freigestellt? Skip dialog, just mark it
+  if (imageHasTransparency(obj.img)) {
+    obj.bgRemoved = true;
+    return;
+  }
+
+  // Opaque image → ask what to do
+  let dlg = document.getElementById('img-options-dlg');
+  if (dlg) dlg.remove();
+  dlg = document.createElement('div');
+  dlg.id = 'img-options-dlg';
+  dlg.style.cssText = 'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:#fff;border-radius:12px;box-shadow:0 8px 32px rgba(0,0,0,.3);padding:20px 24px;z-index:10000;max-width:320px;text-align:center;font-family:inherit;';
+  dlg.innerHTML = `
+    <div style="font-weight:600;font-size:1rem;margin-bottom:12px">Bild-Optionen</div>
+    <div style="font-size:.82rem;color:#555;margin-bottom:16px">Was möchtest du mit diesem Bild machen?</div>
+    <div style="display:flex;flex-direction:column;gap:8px">
+      <button id="imgopt-asis" style="padding:8px 12px;border:1px solid #ddd;border-radius:8px;background:#f8f8f8;cursor:pointer;font-size:.82rem">📌 So lassen (als Element verschieben)</button>
+      <button id="imgopt-rmbg" style="padding:8px 12px;border:1px solid #ddd;border-radius:8px;background:#f8f8f8;cursor:pointer;font-size:.82rem">✂ Hintergrund entfernen</button>
+      <button id="imgopt-split" style="padding:8px 12px;border:1px solid #ddd;border-radius:8px;background:#f8f8f8;cursor:pointer;font-size:.82rem">🧩 In Einzelteile aufteilen</button>
+    </div>
+  `;
+  document.body.appendChild(dlg);
+  document.getElementById('imgopt-asis').onclick = () => { dlg.remove(); };
+  document.getElementById('imgopt-rmbg').onclick = () => { dlg.remove(); autoRemoveBg(idx); };
+  document.getElementById('imgopt-split').onclick = () => {
+    dlg.remove();
+    selIdx = idx;
+    startCropMode();
+  };
+}
+
 // Auto-remove BG for a given object index (non-interactive version of removeImageBg)
 function autoRemoveBg(idx) {
   const obj = objects[idx];
@@ -1475,32 +1578,34 @@ function autoRemoveBg(idx) {
     tctx.drawImage(obj.img, 0, 0, W, H);
     const imgData = tctx.getImageData(0, 0, W, H);
     const d = imgData.data;
-    const tolerance = 45;
-    function getPixel(px, py) { const i = (py * W + px) * 4; return [d[i], d[i+1], d[i+2], d[i+3]]; }
-    const bgC = getPixel(0,0);
-    const bgR = bgC[0], bgG = bgC[1], bgB = bgC[2];
+    // Sample background from all 4 corners (8x8 blocks)
+    let bgR=0, bgG=0, bgB=0, cnt=0;
+    const sampleCorner = (sx,sy) => {
+      for(let y=sy;y<sy+8&&y<H;y++) for(let x=sx;x<sx+8&&x<W;x++){
+        const i=(y*W+x)*4; bgR+=d[i]; bgG+=d[i+1]; bgB+=d[i+2]; cnt++;
+      }
+    };
+    sampleCorner(0,0); sampleCorner(W-8,0); sampleCorner(0,H-8); sampleCorner(W-8,H-8);
+    bgR=Math.round(bgR/cnt); bgG=Math.round(bgG/cnt); bgB=Math.round(bgB/cnt);
     function colorDist(i) { const dr=d[i]-bgR, dg=d[i+1]-bgG, db=d[i+2]-bgB; return Math.sqrt(dr*dr+dg*dg+db*db); }
-    function isCheckerboard(i) { const r=d[i],g=d[i+1],b=d[i+2]; if(Math.abs(r-g)>8||Math.abs(g-b)>8)return false; return(r>180&&r<255); }
-    const visited = new Uint8Array(W * H);
-    const queue = [];
-    for (let x=0;x<W;x++){queue.push(x,0,x,H-1);}
-    for (let y=1;y<H-1;y++){queue.push(0,y,W-1,y);}
-    let qi = 0;
-    while (qi < queue.length) {
-      const x=queue[qi++], y=queue[qi++];
-      if(x<0||x>=W||y<0||y>=H)continue;
-      const idx2=y*W+x;
-      if(visited[idx2])continue; visited[idx2]=1;
-      const pi=idx2*4;
-      if(d[pi+3]===0)continue;
-      if(colorDist(pi)>tolerance&&!isCheckerboard(pi))continue;
-      d[pi+3]=0;
-      queue.push(x-1,y,x+1,y,x,y-1,x,y+1);
+
+    // Pure pixel-wise removal: remove all pixels that match the BG color
+    // regardless of position. This avoids flood-fill "leaking" through
+    // anti-aliased edges into the foreground.
+    const strictTol = 30;
+    const softTol = 50;
+    for (let i = 0; i < W * H; i++) {
+      const pi = i * 4;
+      if (d[pi+3] === 0) continue;
+      const dist = colorDist(pi);
+      if (dist <= strictTol) {
+        d[pi+3] = 0; // definitely background
+      } else if (dist <= softTol) {
+        // Partial transparency for anti-aliased edges
+        const alpha = Math.round(255 * (dist - strictTol) / (softTol - strictTol));
+        d[pi+3] = Math.min(d[pi+3], alpha);
+      }
     }
-    // Soften edges
-    const edgeData = new Uint8Array(W * H);
-    for(let y=1;y<H-1;y++){for(let x=1;x<W-1;x++){const i=y*W+x;if(d[i*4+3]>0){const nb=[(y-1)*W+x,(y+1)*W+x,y*W+x-1,y*W+x+1];for(const ni of nb){if(d[ni*4+3]===0){edgeData[i]=1;break;}}}}}
-    for(let i=0;i<edgeData.length;i++){if(edgeData[i])d[i*4+3]=Math.min(d[i*4+3],180);}
     tctx.putImageData(imgData, 0, 0);
     const cleaned = new Image();
     const dataUrl = tmp.toDataURL('image/png');
@@ -1562,14 +1667,26 @@ function restorePostCanvas() {
 }
 
 // Lade eine URL als Canvas-Hintergrund
-function loadBackground(url) {
+function loadBackground(url, asObject, isGif) {
   const img = new Image();
+  img.crossOrigin = 'anonymous';
   img.onload = () => {
-    canvas.width  = img.naturalWidth  || 1200;
-    canvas.height = img.naturalHeight || 628;
-    bgImage = img;
-    objects = []; selIdx = -1;
+    if (asObject) {
+      // Canvas auf Bildgröße setzen + als verschiebbares Objekt laden
+      canvas.width  = img.naturalWidth  || 1200;
+      canvas.height = img.naturalHeight || 628;
+      const obj = {type:'img', img, x:0, y:0, w:canvas.width, h:canvas.height, url, originalUrl: url};
+      if (isGif) { obj.animType = 'pulse'; obj.animDur = 1500; obj.animDelay = 0; obj.effectType = 'sparkle'; }
+      objects.push(obj);
+      selIdx = objects.length - 1;
+    } else {
+      canvas.width  = img.naturalWidth  || 1200;
+      canvas.height = img.naturalHeight || 628;
+      bgImage = img;
+      objects = []; selIdx = -1;
+    }
     render();
+    if (asObject) showImageOptions(objects.length - 1);
     scaleCanvas();
   };
   img.onerror = () => console.error('loadBackground error:', url);
@@ -1613,8 +1730,9 @@ async function restoreLibImage() {
       restoreCanvas(cj, bgUrl);
     }
   } else {
-    // Bild ohne Canvas-JSON → als Hintergrund laden
-    loadBackground(LIB_IMAGE_URL);
+    // Bild (auch GIF) → als verschiebbares Objekt laden
+    const isGif = info && info.is_gif;
+    loadBackground(LIB_IMAGE_URL, true, isGif);
   }
 }
 
@@ -3246,17 +3364,19 @@ document.getElementById('lib-folder-filter').addEventListener('change', function
 let cropMode = false;
 let cropStart = null;
 let cropRect = null;
+let cropSourceIdx = -1;
 let cutouts = []; // {src, origX, origY, w, h, placed, fillColor}
 
 function startCropMode() {
   cropMode = true;
   cropStart = null;
   cropRect = null;
-  selIdx = -1;
+  cropSourceIdx = selIdx; // remember which object we're cropping from
   canvas.style.cursor = 'crosshair';
   document.getElementById('crop-btn').style.background = '#F56E28';
   document.getElementById('crop-btn').style.color = '#fff';
   document.getElementById('sel-info').textContent = '✂ Ziehe ein Rechteck über den Bereich, den du ausschneiden willst';
+  selIdx = -1;
   render();
 }
 
@@ -3265,6 +3385,7 @@ function endCropMode() {
   autoDetectMode = false;
   cropStart = null;
   cropRect = null;
+  cropSourceIdx = -1;
   canvas.style.cursor = '';
   document.getElementById('crop-btn').style.background = '';
   document.getElementById('crop-btn').style.color = '';
@@ -3288,10 +3409,278 @@ function resetAllModes() {
   render();
 }
 
+// ── Canvas komplett leeren (für neues Bild) ──
+function clearCanvas() {
+  if (!confirm('Canvas wirklich komplett leeren?')) return;
+  resetAllModes();
+  stopBgGif();
+  if (bgVideoAnimFrame) { cancelAnimationFrame(bgVideoAnimFrame); bgVideoAnimFrame = null; }
+  bgImage = null;
+  bgVideo = null;
+  bgGifFrames = [];
+  objects = [];
+  selIdx = -1;
+  canvas.width = 1200;
+  canvas.height = 628;
+  imageUndoStack = [];
+  document.getElementById('title-input').value = '';
+  // Remove dynamic bars
+  const gifBar = document.getElementById('bg-gif-bar');
+  if (gifBar) gifBar.remove();
+  const vidBar = document.getElementById('bg-video-bar');
+  if (vidBar) vidBar.remove();
+  render();
+  scaleCanvas();
+  if (typeof updateCanvasElemList === 'function') updateCanvasElemList();
+  if (typeof updateTimeline === 'function') updateTimeline();
+}
+
+// ── BG → Objekt: Hintergrundbild als verschiebbares Element ──
+function bgToObject() {
+  if (!bgImage) { alert('Kein Hintergrundbild vorhanden.'); return; }
+  const img = bgImage;
+  const s = Math.min(canvas.width / img.width, canvas.height / img.height, 1);
+  objects.push({
+    type: 'img', img: img, x: 0, y: 0,
+    w: img.width * s, h: img.height * s,
+    url: img.src, originalUrl: img.src
+  });
+  bgImage = null;
+  selIdx = objects.length - 1;
+  render();
+  updateCanvasElemList();
+}
+
+// ── Ausgewähltes Element horizontal spiegeln ──
+function flipSelectedH() {
+  if (selIdx < 0 || !objects[selIdx]) { alert('Bitte erst ein Element auswählen.'); return; }
+  const obj = objects[selIdx];
+  if (obj.type !== 'img' || !obj.img) { alert('Nur Bilder können gespiegelt werden.'); return; }
+  const tmp = document.createElement('canvas');
+  tmp.width = obj.img.naturalWidth || obj.w;
+  tmp.height = obj.img.naturalHeight || obj.h;
+  const tc = tmp.getContext('2d');
+  tc.translate(tmp.width, 0);
+  tc.scale(-1, 1);
+  tc.drawImage(obj.img, 0, 0);
+  const ni = new Image();
+  ni.onload = () => { obj.img = ni; obj.url = ni.src; render(); };
+  ni.src = tmp.toDataURL('image/png');
+}
+
+// ── Canvas-Größe ändern ──
+function setCanvasSize() {
+  const w = prompt('Breite (px):', canvas.width);
+  if (!w) return;
+  const h = prompt('Höhe (px):', canvas.height);
+  if (!h) return;
+  const nw = parseInt(w), nh = parseInt(h);
+  if (nw < 50 || nh < 50 || isNaN(nw) || isNaN(nh)) { alert('Ungültige Größe.'); return; }
+  canvas.width = nw;
+  canvas.height = nh;
+  render();
+  scaleCanvas();
+}
+
+// ── Ausgewähltes Element vertikal spiegeln ──
+function flipSelectedV() {
+  if (selIdx < 0 || !objects[selIdx]) { alert('Bitte erst ein Element auswählen.'); return; }
+  const obj = objects[selIdx];
+  if (obj.type !== 'img' || !obj.img) { alert('Nur Bilder können gespiegelt werden.'); return; }
+  const tmp = document.createElement('canvas');
+  tmp.width = obj.img.naturalWidth || obj.w;
+  tmp.height = obj.img.naturalHeight || obj.h;
+  const tc = tmp.getContext('2d');
+  tc.translate(0, tmp.height);
+  tc.scale(1, -1);
+  tc.drawImage(obj.img, 0, 0);
+  const ni = new Image();
+  ni.onload = () => { obj.img = ni; obj.url = ni.src; render(); };
+  ni.src = tmp.toDataURL('image/png');
+}
+
+// ── Element duplizieren ──
+function duplicateSelected() {
+  if (selIdx < 0 || !objects[selIdx]) return;
+  const o = objects[selIdx];
+  const copy = Object.assign({}, o, {x: o.x + 20, y: o.y + 20});
+  if (o.img) copy.img = o.img; // gleiche Image-Referenz
+  objects.push(copy);
+  selIdx = objects.length - 1;
+  render();
+}
+
+// ── Drehung/Spiegelung zurücksetzen ──
+function resetObjTransform() {
+  if (selIdx < 0 || !objects[selIdx]) return;
+  objects[selIdx].rotation = 0;
+  render();
+}
+
+// ── Auto-Split: Bild-Objekt in Einzelteile zerlegen ──
+function autoSplitObject(idx) {
+  if (idx === undefined) idx = selIdx;
+  const obj = objects[idx];
+  if (!obj || obj.type !== 'img' || !obj.img) { alert('Bitte ein Bild-Element auswählen.'); return; }
+
+  // Bild auf Temp-Canvas zeichnen
+  const W = obj.img.naturalWidth || obj.w;
+  const H = obj.img.naturalHeight || obj.h;
+  const tc = document.createElement('canvas');
+  tc.width = W; tc.height = H;
+  const tctx = tc.getContext('2d');
+  tctx.drawImage(obj.img, 0, 0, W, H);
+
+  let imgData;
+  try { imgData = tctx.getImageData(0, 0, W, H); }
+  catch(e) { console.warn('autoSplitObject CORS:', e); alert('Bild kann nicht analysiert werden (CORS).'); return; }
+  const d = imgData.data;
+
+  // Hintergrundfarbe aus Ecken
+  let bgR=0,bgG=0,bgB=0,cnt=0;
+  const sample = (sx,sy) => { for(let y=sy;y<sy+8&&y<H;y++) for(let x=sx;x<sx+8&&x<W;x++){const i=(y*W+x)*4;bgR+=d[i];bgG+=d[i+1];bgB+=d[i+2];cnt++;} };
+  sample(0,0); sample(W-8,0); sample(0,H-8); sample(W-8,H-8);
+  bgR=Math.round(bgR/cnt); bgG=Math.round(bgG/cnt); bgB=Math.round(bgB/cnt);
+
+  // Vordergrund-Maske: helle Regionen auf dunklem Hintergrund ODER dunkle auf hellem
+  const tol = 40;
+  const bgLum = 0.299*bgR + 0.587*bgG + 0.114*bgB;
+  const darkBg = bgLum < 128;
+  const mask = new Uint8Array(W * H);
+  for (let i=0; i<W*H; i++) {
+    const p=i*4;
+    if (d[p+3] < 30) continue;
+    const r=d[p], g=d[p+1], b=d[p+2];
+    const lum = 0.299*r + 0.587*g + 0.114*b;
+    const dr=r-bgR, dg=g-bgG, db=b-bgB;
+    const dist = Math.sqrt(dr*dr+dg*dg+db*db);
+    // Helle Karten auf dunklem BG: hohe Luminanz + Abstand vom BG
+    if (darkBg && lum > 160 && dist >= tol) mask[i] = 1;
+    // Dunkle Elemente auf hellem BG: niedrige Luminanz + Abstand
+    else if (!darkBg && lum < 100 && dist >= tol) mask[i] = 1;
+    // Bunte Elemente: hohe Sättigung + Abstand vom BG
+    else if (dist >= tol * 1.5) mask[i] = 1;
+  }
+
+  // Connected Components (BFS)
+  const labels = new Int32Array(W * H);
+  let nextLabel = 1;
+  const components = [];
+  for (let i=0; i<W*H; i++) {
+    if (!mask[i] || labels[i]) continue;
+    const label = nextLabel++;
+    let minX=W, minY=H, maxX=0, maxY=0, size=0;
+    const q = [i]; let qi = 0;
+    while (qi < q.length) {
+      const pos = q[qi++];
+      if (pos<0||pos>=W*H||labels[pos]||!mask[pos]) continue;
+      labels[pos] = label; size++;
+      const x=pos%W, y=(pos-x)/W;
+      if(x<minX)minX=x; if(x>maxX)maxX=x; if(y<minY)minY=y; if(y>maxY)maxY=y;
+      if(x>0)q.push(pos-1); if(x<W-1)q.push(pos+1);
+      if(y>0)q.push(pos-W); if(y<H-1)q.push(pos+W);
+    }
+    components.push({label, minX, minY, maxX, maxY, size});
+  }
+
+  // Filtern: nur bedeutende Teile (mindestens 0.5% der Fläche, min 20px)
+  const minSize = W * H * 0.005;
+  const minDim = 20;
+  const kept = components.filter(c => {
+    const cw=c.maxX-c.minX+1, ch=c.maxY-c.minY+1;
+    return c.size >= minSize && cw >= minDim && ch >= minDim;
+  });
+
+  if (kept.length <= 1) {
+    alert('Nur 1 Element erkannt — Bild kann nicht weiter aufgeteilt werden.');
+    return;
+  }
+
+  // Überlappende Boxen mergen
+  const pad = 10;
+  const merged = [];
+  const used = new Uint8Array(kept.length);
+  for (let i=0; i<kept.length; i++) {
+    if (used[i]) continue;
+    let {minX,minY,maxX,maxY} = kept[i]; used[i]=1;
+    let changed = true;
+    while (changed) {
+      changed = false;
+      for (let j=0; j<kept.length; j++) {
+        if (used[j]) continue;
+        const c = kept[j];
+        if (c.minX-pad<=maxX && c.maxX+pad>=minX && c.minY-pad<=maxY && c.maxY+pad>=minY) {
+          minX=Math.min(minX,c.minX); minY=Math.min(minY,c.minY);
+          maxX=Math.max(maxX,c.maxX); maxY=Math.max(maxY,c.maxY);
+          used[j]=1; changed=true;
+        }
+      }
+    }
+    merged.push({minX,minY,maxX,maxY});
+  }
+
+  if (merged.length <= 1) {
+    alert('Nur 1 zusammenhängendes Element erkannt.');
+    return;
+  }
+
+  // Skalierungsfaktor: Objekt-Größe vs. Original-Bildgröße
+  const sx = obj.w / W, sy = obj.h / H;
+
+  // Original-Objekt entfernen
+  objects.splice(idx, 1);
+
+  // Jedes erkannte Teil als neues Objekt einfügen
+  merged.forEach(r => {
+    const ex = Math.max(0, r.minX-3), ey = Math.max(0, r.minY-3);
+    const ew = Math.min(W, r.maxX+4)-ex, eh = Math.min(H, r.maxY+4)-ey;
+
+    // Region ausschneiden mit BG-Entfernung
+    const regionData = tctx.getImageData(ex, ey, ew, eh);
+    const rd = regionData.data;
+    const visited = new Uint8Array(ew*eh);
+    const fq = [];
+    for(let x=0;x<ew;x++){fq.push(x);fq.push((eh-1)*ew+x);}
+    for(let y=1;y<eh-1;y++){fq.push(y*ew);fq.push(y*ew+ew-1);}
+    let fqi=0;
+    while(fqi<fq.length){
+      const pos=fq[fqi++];
+      if(pos<0||pos>=ew*eh||visited[pos])continue;
+      const pi=pos*4;
+      const dr2=rd[pi]-bgR,dg2=rd[pi+1]-bgG,db2=rd[pi+2]-bgB;
+      if(Math.sqrt(dr2*dr2+dg2*dg2+db2*db2)>=tol){continue;}
+      visited[pos]=1; rd[pi+3]=0;
+      const x2=pos%ew, y2=(pos-x2)/ew;
+      if(x2>0)fq.push(pos-1); if(x2<ew-1)fq.push(pos+1);
+      if(y2>0)fq.push(pos-ew); if(y2<eh-1)fq.push(pos+ew);
+    }
+
+    const ec = document.createElement('canvas');
+    ec.width = ew; ec.height = eh;
+    ec.getContext('2d').putImageData(regionData, 0, 0);
+
+    const partImg = new Image();
+    partImg.src = ec.toDataURL('image/png');
+    partImg.onload = () => {
+      objects.push({
+        type:'img', img:partImg, url:partImg.src, originalUrl:partImg.src,
+        x: obj.x + ex*sx, y: obj.y + ey*sy,
+        w: ew*sx, h: eh*sy,
+        bgRemoved: true
+      });
+      render();
+    };
+  });
+
+  selIdx = -1;
+  render();
+  console.log(`autoSplit: ${merged.length} Elemente erkannt`);
+}
+
 let autoDetectMode = false;
 
 function startAutoDetectMode() {
-  if (!bgImage) { alert('Bitte zuerst ein Template/Bild laden.'); return; }
+  if (!bgImage && objects.length === 0) { alert('Bitte zuerst ein Template/Bild laden.'); return; }
   autoDetectMode = true;
   cropMode = true;
   cropStart = null;
@@ -3305,14 +3694,18 @@ function startAutoDetectMode() {
 // ── Auto-detect distinct elements in a region ──
 // If cropRect is set, only analyze that area; otherwise whole canvas
 function autoDetectElements() {
-  if (!bgImage) { alert('Bitte zuerst ein Template/Bild laden.'); return; }
+  if (!bgImage && objects.length === 0) { alert('Bitte zuerst ein Template/Bild laden.'); return; }
   document.getElementById('sel-info').textContent = '🔍 Analysiere Bereich…';
 
-  // Draw clean image
+  // Draw clean image (bg + all objects)
   const fullTc = document.createElement('canvas');
   fullTc.width = canvas.width; fullTc.height = canvas.height;
   const fctx = fullTc.getContext('2d');
-  fctx.drawImage(bgImage, 0, 0, canvas.width, canvas.height);
+  if (bgImage) fctx.drawImage(bgImage, 0, 0, canvas.width, canvas.height);
+  objects.forEach(o => {
+    if (o.type === 'img' && o.img) fctx.drawImage(o.img, o.x, o.y, o.w, o.h);
+    else if (o.type === 'shape') drawShape(fctx, o);
+  });
 
   // Region to analyze
   const rx = cropRect ? cropRect.x : 0;
@@ -3807,12 +4200,15 @@ function clearElementBoard() {
 let cleanBgCanvas = null;
 
 function rebuildCleanBg() {
-  if (!bgImage) return;
+  if (!bgImage && objects.length === 0) return;
   cleanBgCanvas = document.createElement('canvas');
   cleanBgCanvas.width = canvas.width;
   cleanBgCanvas.height = canvas.height;
   const c = cleanBgCanvas.getContext('2d');
-  c.drawImage(bgImage, 0, 0, canvas.width, canvas.height);
+  if (bgImage) c.drawImage(bgImage, 0, 0, canvas.width, canvas.height);
+  objects.forEach(o => {
+    if (o.type === 'img' && o.img) c.drawImage(o.img, o.x, o.y, o.w, o.h);
+  });
 
   // Paint over each cutout region with sampled edge color (fully opaque)
   cutouts.forEach(co => {
@@ -3912,21 +4308,36 @@ canvas.addEventListener('mouseup', function cropUp(e) {
     return;
   }
 
-  // Render clean (no selection, no masks) to get pixel data
+  // Extract pixel data — from source object if cropping from one, otherwise composite
   selIdx = -1;
-  // Draw bg + existing objects cleanly
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-  if (bgImage) ctx.drawImage(bgImage, 0, 0, canvas.width, canvas.height);
-  objects.forEach(o => {
-    if (o.type === 'img' && o.img) ctx.drawImage(o.img, o.x, o.y, o.w, o.h);
-    else if (o.type === 'shape') drawShape(ctx, o);
-  });
+  const srcObj = (cropSourceIdx >= 0) ? objects[cropSourceIdx] : null;
+  if (srcObj && srcObj.type === 'img' && srcObj.img) {
+    // Extract from the source object's image directly
+    const tmpC = document.createElement('canvas');
+    tmpC.width = srcObj.w; tmpC.height = srcObj.h;
+    const tmpCtx = tmpC.getContext('2d');
+    tmpCtx.drawImage(srcObj.img, 0, 0, srcObj.w, srcObj.h);
+    // Map crop rect from canvas coords to object-local coords
+    const localX = Math.max(0, cropRect.x - srcObj.x);
+    const localY = Math.max(0, cropRect.y - srcObj.y);
+    const localW = Math.min(cropRect.w, srcObj.w - localX);
+    const localH = Math.min(cropRect.h, srcObj.h - localY);
+    if (localW < 10 || localH < 10) { endCropMode(); return; }
+    cropRect = {x: cropRect.x, y: cropRect.y, w: localW, h: localH};
+    var imgData = tmpCtx.getImageData(localX, localY, localW, localH);
+  } else {
+    // Composite canvas fallback
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    if (bgImage) ctx.drawImage(bgImage, 0, 0, canvas.width, canvas.height);
+    objects.forEach(o => {
+      if (o.type === 'img' && o.img) ctx.drawImage(o.img, o.x, o.y, o.w, o.h);
+      else if (o.type === 'shape') drawShape(ctx, o);
+    });
+    var imgData = ctx.getImageData(cropRect.x, cropRect.y, cropRect.w, cropRect.h);
+  }
 
   // Sample fill color for masking
   const fillColor = sampleEdgeColor(cropRect.x, cropRect.y, cropRect.w, cropRect.h);
-
-  // Extract region and flood-fill remove background from corners
-  const imgData = ctx.getImageData(cropRect.x, cropRect.y, cropRect.w, cropRect.h);
   const d = imgData.data;
   const pw = cropRect.w, ph = cropRect.h;
 
@@ -4007,19 +4418,21 @@ canvas.addEventListener('mouseup', function cropUp(e) {
   tc.getContext('2d').drawImage(fullTc, minX, minY, trimW, trimH, 0, 0, trimW, trimH);
   const actualX = cropRect.x + minX, actualY = cropRect.y + minY;
 
-  cutouts.push({
-    src: tc.toDataURL('image/png'),
-    origX: actualX, origY: actualY,
-    w: trimW, h: trimH,
-    maskX: cropRect.x, maskY: cropRect.y, maskW: cropRect.w, maskH: cropRect.h,
-    placed: false,
-    fillColor: fillColor
-  });
-
-  rebuildCleanBg();
-  updateCutoutsPanel();
+  // Directly create a movable object from the extracted region
+  const extractedSrc = tc.toDataURL('image/png');
+  const newImg = new window.Image();
+  newImg.onload = function() {
+    objects.push({
+      type: 'img', img: newImg, src: extractedSrc,
+      x: actualX, y: actualY, w: trimW, h: trimH,
+      bgRemoved: true
+    });
+    selIdx = objects.length - 1;
+    render(); updateSelInfo();
+    document.getElementById('sel-info').textContent = `✂ Element ausgeschnitten und platziert! Ausschneiden für weitere Elemente.`;
+  };
+  newImg.src = extractedSrc;
   endCropMode();
-  document.getElementById('sel-info').textContent = `✂ Element ${cutouts.length} ausgeschnitten! Klick "Ausschneiden" für weitere, oder "Alle platzieren".`;
 }, true);
 
 // ══════════════════════════════════════════
@@ -4682,7 +5095,15 @@ document.addEventListener('keydown', e => { if (e.key === 'Escape') resetAllMode
 
 
 function floodFillAtClick(e) {
-  if (selIdx < 0 || objects[selIdx]?.type !== 'img') return;
+  // Auto-select object under click if nothing selected
+  if (selIdx < 0 || objects[selIdx]?.type !== 'img') {
+    const {x, y} = canvasXY(e);
+    const hit = hitTest(x, y);
+    if (hit >= 0 && objects[hit]?.type === 'img') {
+      selIdx = hit;
+      render();
+    } else { return; }
+  }
   const obj = objects[selIdx];
   const rect = canvas.getBoundingClientRect();
   const mx = (e.clientX - rect.left) * (canvas.width / rect.width);
@@ -4889,23 +5310,62 @@ function _sharedImgThumb(item) {
     e.dataTransfer.setDragImage(img, img.width/2, img.height/2);
   });
   wrap.addEventListener('click', () => {
+    // Immer als verschiebbares Objekt laden (auch GIFs → erster Frame)
     const ni = new Image();
     ni.crossOrigin = 'anonymous';
     ni.onload = () => {
       const s = Math.min(300/ni.width, 300/ni.height, 1);
-      objects.push({type:'img', img:ni, x:50, y:50, w:ni.width*s, h:ni.height*s, url:item.url, originalUrl:item.url});
+      const obj = {type:'img', img:ni, x:50, y:50, w:ni.width*s, h:ni.height*s, url:item.url, originalUrl:item.url};
+      // GIF → Animation + Deko voreingestellt
+      if (item.name && item.name.toLowerCase().endsWith('.gif')) {
+        obj.animType = 'pulse';
+        obj.animDur = 1500;
+        obj.animDelay = 0;
+        obj.effectType = 'sparkle';
+      }
+      objects.push(obj);
       selIdx = objects.length - 1;
       render();
+      updateSelInfo();
+      showImageOptions(objects.length - 1);
     };
     ni.src = item.url;
   });
   return wrap;
 }
 
+// Load available NC subfolders into dropdown
+async function loadSharedFolders() {
+  const sel = document.getElementById('shared-folder-select');
+  try {
+    const res = await fetch('/library/studio/api/shared-assets/?folders_only=1');
+    const data = await res.json();
+    // Keep first option, clear rest
+    while (sel.options.length > 1) sel.remove(1);
+    (data.folders || []).forEach(f => {
+      const opt = document.createElement('option');
+      opt.value = f;
+      opt.textContent = '📂 ' + f;
+      sel.appendChild(opt);
+    });
+  } catch(e) { console.warn('Folder list error:', e); }
+}
+
+document.getElementById('shared-folder-select').addEventListener('change', function() {
+  loadSharedAssets(document.getElementById('shared-search').value);
+});
+
 async function loadSharedAssets(q='') {
   const tree = document.getElementById('shared-tree');
+  const folder = document.getElementById('shared-folder-select').value;
+  if (!folder) {
+    tree.innerHTML = '<span style="color:#888">Ordner wählen…</span>';
+    return;
+  }
   try {
-    const res = await fetch('/library/studio/api/shared-assets/?q=' + encodeURIComponent(q));
+    let url = '/library/studio/api/shared-assets/?q=' + encodeURIComponent(q);
+    url += '&folder=' + encodeURIComponent(folder);
+    const res = await fetch(url);
     const data = await res.json();
     if (!data.items || !data.items.length) {
       tree.innerHTML = '<span style="color:#888">Keine Bilder</span>';
@@ -4971,7 +5431,7 @@ document.getElementById('shared-upload-input').addEventListener('change', async 
 // Init
 loadTemplateSidebar();
 loadLibrarySidebar();
-loadSharedAssets();
+loadSharedFolders();
 loadSavedItems();
 loadVideoTemplates();
 render();

@@ -13,7 +13,7 @@ FOLDER_TREE = [
     "Templates/PowerPoint", "Templates/Reports",
     "Flowcharts", "Screenshots", "Archive",
     # Output-Ordner für erstellte Dateien
-    "Studio_Output", "Studio_Output/Images", "Studio_Output/Videos",
+    "Studio_Output", "Studio_Output/Images", "Studio_Output/Videos", "Studio_Output/Video_Images",
     "Uploads",  # Bilder die ohne Studio hochgeladen werden
 ]
 

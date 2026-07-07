@@ -410,6 +410,7 @@ def item_studio_info(request, item_id):
             return JsonResponse({'has_canvas': False})
         nc_path = rows[0][0] or ''
         is_video = nc_path.lower().endswith(('.mp4', '.webm', '.mov', '.avi', '.mkv'))
+        is_gif = nc_path.lower().endswith('.gif')
         studio_rows = _safe(c, """SELECT id, canvas_json, template_id, post_id
                                   FROM studio_images WHERE nc_path=%s
                                   ORDER BY created_at DESC LIMIT 1""", [nc_path])
@@ -417,8 +418,8 @@ def item_studio_info(request, item_id):
             r = studio_rows[0]
             cj = _resolve_nc_refs_in_json(r[1])
             return JsonResponse({'has_canvas': True, 'studio_id': r[0], 'post_id': r[3],
-                                 'template_id': r[2], 'canvas_json': cj, 'is_video': is_video})
-    return JsonResponse({'has_canvas': False, 'is_video': is_video})
+                                 'template_id': r[2], 'canvas_json': cj, 'is_video': is_video, 'is_gif': is_gif})
+    return JsonResponse({'has_canvas': False, 'is_video': is_video, 'is_gif': is_gif})
 
 
 # ─────────────────────────────────────────────
@@ -429,31 +430,94 @@ NC_STUDIO_LIBRARY_FOLDER   = "Marketing & Design/Octotrial_Assets/Studio_Output/
 NC_STUDIO_VIDEOS_FOLDER    = "Marketing & Design/Octotrial_Assets/Studio_Output/Videos"
 
 
+def _nc_delete_old_files(nc_folder, safe_prefix):
+    """Delete old timestamp-based files for this title prefix from NC.
+    Removes files matching pattern: {safe_prefix}_\d+_(preview|snap|obj).* """
+    import re as _re
+    try:
+        from posts_posted.nc_storage import _get_nc_credentials
+        nc_url, username, password = _get_nc_credentials()
+        if not all([nc_url, username, password]):
+            return
+        from requests.auth import HTTPBasicAuth
+        from urllib.parse import quote, unquote
+        from xml.etree import ElementTree
+        auth = HTTPBasicAuth(username, password)
+        base = f"{nc_url.rstrip('/')}/remote.php/dav/files/{username}"
+        pattern = _re.compile(rf'^{_re.escape(safe_prefix)}_\d+_(preview|snap|obj)')
+        for folder in [nc_folder, f"{nc_folder}/_data"]:
+            url = f"{base}/{quote(folder, safe='/')}"
+            try:
+                r = requests.request("PROPFIND", url, auth=auth,
+                    headers={"Depth": "1", "Content-Type": "application/xml"}, timeout=15)
+                if r.status_code not in (207, 200):
+                    continue
+                ns = {"d": "DAV:"}
+                tree = ElementTree.fromstring(r.content)
+                base_href = f"/remote.php/dav/files/{username}/{quote(folder, safe='/')}"
+                for resp in tree.findall("d:response", ns):
+                    href = resp.findtext("d:href", "", ns)
+                    if href.rstrip("/") == base_href.rstrip("/"):
+                        continue
+                    filename = unquote(href.rstrip("/").split("/")[-1])
+                    if pattern.match(filename):
+                        del_url = f"{base}/{quote(folder, safe='/')}/{quote(filename, safe='')}"
+                        requests.delete(del_url, auth=auth, timeout=10)
+            except Exception:
+                pass
+    except Exception:
+        pass
+
+
 def _optimize_canvas_json(canvas_json_str, nc_folder, title_prefix):
     """Extract base64 images from canvas_json, upload to NC, replace with nc:// refs.
+    Internal images (snap, objects) go to _data/ subfolder to keep main folder clean.
+    Only the preview stays in the main folder.
     Returns optimized JSON string."""
-    import json as _json, base64, re as _re, time
+    import json as _json, base64, re as _re
     if not canvas_json_str:
         return canvas_json_str
     try:
         state = _json.loads(canvas_json_str)
         safe = _re.sub(r'[^a-zA-Z0-9_-]', '_', title_prefix)
-        ts = int(time.time())
+        data_folder = f"{nc_folder}/_data"
+
+        # Alte Timestamp-Dateien für diesen Titel löschen
+        _nc_delete_old_files(nc_folder, safe)
+
+        # Bestehende nc:// Refs löschen (werden durch neue ersetzt)
+        old_refs = []
+        for key in ('snapshotDataUrl', 'previewDataUrl'):
+            v = state.get(key, '')
+            if v and v.startswith('nc://'):
+                old_refs.append(v[5:])
+        for obj in state.get('objects', []):
+            src = obj.get('imgSrc', '')
+            if src and src.startswith('nc://'):
+                old_refs.append(src[5:])
+        # Alte nc://-Dateien löschen
+        if old_refs:
+            try:
+                from posts_posted.nc_storage import _get_nc_credentials, delete_image_from_nextcloud
+                for ref in old_refs:
+                    delete_image_from_nextcloud(ref)
+            except Exception:
+                pass
 
         snap = state.get('snapshotDataUrl', '')
         if snap and snap.startswith('data:image'):
             b64 = snap.split(',', 1)[1]
             img_bytes = base64.b64decode(b64)
-            nc = _nc_upload(img_bytes, f"{nc_folder}/{safe}_{ts}_snap.png", 'image/png')
+            nc = _nc_upload(img_bytes, f"{data_folder}/{safe}_snap.png", 'image/png')
             if nc:
                 state['snapshotDataUrl'] = f"nc://{nc}"
 
-        # Preview (with all objects) for sidebar thumbnail
+        # Preview — stays in main folder
         preview = state.get('previewDataUrl', '')
         if preview and preview.startswith('data:image'):
             b64 = preview.split(',', 1)[1]
             img_bytes = base64.b64decode(b64)
-            nc = _nc_upload(img_bytes, f"{nc_folder}/{safe}_{ts}_preview.png", 'image/png')
+            nc = _nc_upload(img_bytes, f"{nc_folder}/{safe}_preview.png", 'image/png')
             if nc:
                 state['previewDataUrl'] = f"nc://{nc}"
 
@@ -464,7 +528,7 @@ def _optimize_canvas_json(canvas_json_str, nc_folder, title_prefix):
                     ext = 'png' if 'png' in src.split(';')[0] else 'jpg'
                     b64 = src.split(',', 1)[1]
                     img_bytes = base64.b64decode(b64)
-                    nc = _nc_upload(img_bytes, f"{nc_folder}/{safe}_{ts}_obj{i}.{ext}", f"image/{ext}")
+                    nc = _nc_upload(img_bytes, f"{data_folder}/{safe}_obj{i}.{ext}", f"image/{ext}")
                     if nc:
                         obj['imgSrc'] = f"nc://{nc}"
                 except Exception:
@@ -887,6 +951,50 @@ def studio_template_image(request, tpl_id):
     return resp
 
 
+def _extract_canvas_tags(canvas_json_str):
+    """Extract searchable tags from canvas_json (texts, colors, shapes, object count)."""
+    try:
+        state = json.loads(canvas_json_str)
+    except Exception:
+        return ''
+    tags = set()
+    objects = state.get('objects', [])
+    for obj in objects:
+        otype = obj.get('type', '')
+        # Texte extrahieren
+        if otype == 'text':
+            text = (obj.get('text') or '').strip()
+            # Jedes Wort als Tag (>2 Zeichen)
+            for word in text.split():
+                w = word.strip('.,!?;:()[]{}"\'-–—').lower()
+                if len(w) > 2:
+                    tags.add(w)
+        # Shape-Typ
+        if otype == 'shape':
+            shape = obj.get('shape', '')
+            if shape:
+                tags.add(shape)
+            fill = obj.get('fill', '')
+            if fill:
+                tags.add(fill.lower())
+        # Animation-Typ
+        anim = obj.get('animType', '')
+        if anim and anim != 'none':
+            tags.add('animation')
+            tags.add(anim)
+        # Bild-Objekte
+        if otype == 'img':
+            tags.add('bild')
+    # Canvas-Größe / Elementanzahl
+    if len(objects) > 0:
+        tags.add(f'{len(objects)}-elemente')
+    # Hintergrund
+    bg = state.get('bgColor', '')
+    if bg:
+        tags.add(bg.lower())
+    return ','.join(sorted(tags)[:30])  # max 30 Tags
+
+
 @login_required
 def studio_save(request):
     """Save finished studio canvas as PNG → Nextcloud Studio/Bibliothek."""
@@ -926,10 +1034,14 @@ def studio_save(request):
             fh.write(content)
         nc_path = f"__local__/studio/bibliothek/{filename}"
 
+    # Auto-Tags aus Canvas extrahieren
+    auto_tags = _extract_canvas_tags(canvas_json) if canvas_json else ''
+    all_tags = ','.join(filter(None, ['studio', auto_tags]))
+
     # Save to media_library_items so it appears in Bibliothek tab
     with connection.cursor() as c:
         c.execute("""INSERT INTO media_library_items (nc_path, title, series, tags, folder_id)
-                     VALUES (%s, %s, 'Studio', 'studio', %s)""", [nc_path, title, folder_id])
+                     VALUES (%s, %s, 'Studio', %s, %s)""", [nc_path, title, all_tags, folder_id])
         lib_id = c.lastrowid
 
     # Optimize canvas_json: upload base64 images to NC
@@ -982,10 +1094,15 @@ def studio_save_video(request):
     if not video_file:
         return JsonResponse({'error': 'No video file'}, status=400)
     content = video_file.read()
-    filename = title.replace(' ', '_') + f"_{int(time.time())}.webm"
     import re
-    filename = re.sub(r'[^a-zA-Z0-9_.-]', '', filename)
-    nc_path = _nc_upload(content, f"{NC_STUDIO_VIDEOS_FOLDER}/{filename}", 'video/webm')
+    # Detect file type from uploaded filename
+    orig_name = video_file.name or ''
+    if orig_name.lower().endswith('.gif'):
+        ext, ct = '.gif', 'image/gif'
+    else:
+        ext, ct = '.webm', 'video/webm'
+    filename = re.sub(r'[^a-zA-Z0-9_.-]', '', title.replace(' ', '_')) + ext
+    nc_path = _nc_upload(content, f"{NC_STUDIO_VIDEOS_FOLDER}/{filename}", ct)
     if not nc_path:
         from django.conf import settings as _s
         local_dir = os.path.join(_s.BASE_DIR, 'media', 'studio', 'videos')
@@ -993,18 +1110,30 @@ def studio_save_video(request):
         with open(os.path.join(local_dir, filename), 'wb') as fh:
             fh.write(content)
         nc_path = f"__local__/studio/videos/{filename}"
-    # Save to media_library_items so it appears in Bibliothek
+    # Save to media_library_items — update if same title exists, else insert
     with connection.cursor() as c:
-        c.execute("""INSERT INTO media_library_items (nc_path, title, series, tags, folder_id)
-                     VALUES (%s, %s, 'Studio', 'video', %s)""", [nc_path, title, folder_id])
-        lib_id = c.lastrowid
+        tag = 'gif' if ext == '.gif' else 'video'
+        existing = _safe(c, "SELECT id FROM media_library_items WHERE title=%s AND (tags='video' OR tags='gif') LIMIT 1", [title])
+        if existing:
+            lib_id = existing[0][0]
+            c.execute("UPDATE media_library_items SET nc_path=%s, folder_id=%s, tags=%s WHERE id=%s",
+                      [nc_path, folder_id, tag, lib_id])
+        else:
+            c.execute("""INSERT INTO media_library_items (nc_path, title, series, tags, folder_id)
+                         VALUES (%s, %s, 'Studio', %s, %s)""", [nc_path, title, tag, folder_id])
+            lib_id = c.lastrowid
     # Save canvas state so video can be reopened for editing
     canvas_json = request.POST.get('canvas_json', '')
     if canvas_json:
         canvas_json = _optimize_canvas_json(canvas_json, NC_STUDIO_VIDEOS_FOLDER, title)
         with connection.cursor() as c:
-            c.execute("""INSERT INTO studio_images (nc_path, title, canvas_json)
-                         VALUES (%s, %s, %s)""", [nc_path, title, canvas_json])
+            existing_si = _safe(c, "SELECT id FROM studio_images WHERE title=%s AND nc_path LIKE '%%/Videos/%%' LIMIT 1", [title])
+            if existing_si:
+                c.execute("UPDATE studio_images SET nc_path=%s, canvas_json=%s WHERE id=%s",
+                          [nc_path, canvas_json, existing_si[0][0]])
+            else:
+                c.execute("""INSERT INTO studio_images (nc_path, title, canvas_json)
+                             VALUES (%s, %s, %s)""", [nc_path, title, canvas_json])
     return JsonResponse({'ok': True, 'nc_path': nc_path, 'filename': filename, 'lib_id': lib_id})
 
 
@@ -1025,7 +1154,7 @@ def studio_api_templates(request):
     return JsonResponse({'templates': data})
 
 
-NC_STUDIO_VIDEO_TEMPLATES_FOLDER = "Marketing & Design/LinkedIn/Studio/VideoVorlagen"
+NC_STUDIO_VIDEO_TEMPLATES_FOLDER = "Marketing & Design/Octotrial_Assets/Studio_Output/Video_Images"
 
 
 def _ensure_video_template_table():
@@ -1193,6 +1322,13 @@ def studio_api_saved(request):
     import json as _json
     _ensure_table()
     _ensure_studio_tables()
+    q = request.GET.get('q', '').strip()
+    q_filter = ''
+    q_params = []
+    if q:
+        q_filter = " AND (m.title LIKE %s OR m.tags LIKE %s)"
+        like = f"%{q}%"
+        q_params = [like, like]
     with connection.cursor() as c:
         # Load studio images together with their canvas_json to check for animations
         img_rows = _safe(c, """SELECT m.id, m.title, m.nc_path,
@@ -1201,11 +1337,11 @@ def studio_api_saved(request):
                                LEFT JOIN studio_images si
                                  ON si.nc_path = m.nc_path
                                  AND si.id = (SELECT MAX(s2.id) FROM studio_images s2 WHERE s2.nc_path = m.nc_path)
-                               WHERE m.tags='studio' ORDER BY m.id DESC""")
+                               WHERE FIND_IN_SET('studio', REPLACE(m.tags,' ',''))""" + q_filter + " ORDER BY m.id DESC", q_params)
         vid_rows = _safe(c, """SELECT m.id, m.title, m.nc_path,
                                       (SELECT COUNT(*) FROM studio_images s WHERE s.nc_path=m.nc_path AND s.canvas_json IS NOT NULL) as has_canvas
                                FROM media_library_items m
-                               WHERE m.tags='video' ORDER BY m.id DESC""")
+                               WHERE FIND_IN_SET('video', REPLACE(m.tags,' ',''))""" + q_filter + " ORDER BY m.id DESC", q_params)
 
     def _has_anim(canvas_json_str):
         """Return True if any object in canvas_json has an animation set."""
@@ -1326,6 +1462,155 @@ def studio_drawio_save(request):
                          'url': f"/library/image/{lib_id}/"})
 
 
+# ── NC-basierte Bibliothek (Ordner + Bilder aus Octotrial_Assets) ──
+
+NC_ASSETS_ROOT = "Marketing & Design/Octotrial_Assets"
+
+
+@login_required
+def studio_nc_folders(request):
+    """List top-level subfolders of Octotrial_Assets via WebDAV PROPFIND."""
+    from posts_posted.nc_storage import _get_nc_credentials
+    from urllib.parse import quote, unquote
+    import xml.etree.ElementTree as ET
+
+    nc_url, username, password = _get_nc_credentials()
+    if not all([nc_url, username, password]):
+        return JsonResponse({'folders': [], 'error': 'NC nicht konfiguriert'})
+
+    propfind_url = "{}/remote.php/dav/files/{}/{}".format(
+        nc_url.rstrip('/'), username, quote(NC_ASSETS_ROOT, safe='/')
+    )
+    try:
+        import requests as _req
+        from requests.auth import HTTPBasicAuth
+        r = _req.request('PROPFIND', propfind_url,
+                         auth=HTTPBasicAuth(username, password),
+                         headers={'Depth': '1', 'Content-Type': 'application/xml'},
+                         timeout=15)
+        if r.status_code not in [200, 207]:
+            return JsonResponse({'folders': [], 'error': f'NC {r.status_code}'})
+    except Exception as e:
+        return JsonResponse({'folders': [], 'error': str(e)})
+
+    folders = []
+    base_prefix = f"/remote.php/dav/files/{username}/"
+    root_href_suffix = quote(NC_ASSETS_ROOT, safe='/') + '/'
+    try:
+        root = ET.fromstring(r.text)
+        ns = {'d': 'DAV:'}
+        for resp_el in root.findall('.//d:response', ns):
+            href = resp_el.findtext('d:href', '', ns)
+            decoded = unquote(href)
+            if not decoded.endswith('/'):
+                continue  # skip files
+            # Skip the root folder itself
+            bp = decoded.find(base_prefix)
+            if bp >= 0:
+                rel = decoded[bp + len(base_prefix):]
+            else:
+                continue
+            rel = rel.strip('/')
+            if rel == NC_ASSETS_ROOT.strip('/') or not rel.startswith(NC_ASSETS_ROOT):
+                continue
+            folder_name = rel.split('/')[-1]
+            if folder_name.startswith('.') or folder_name == '_data':
+                continue
+            folders.append({'name': folder_name, 'nc_path': rel})
+    except Exception as e:
+        return JsonResponse({'folders': [], 'error': f'XML: {e}'})
+
+    folders.sort(key=lambda f: f['name'].lower())
+    return JsonResponse({'folders': folders})
+
+
+@login_required
+def studio_nc_browse(request):
+    """List images in a specific NC folder (subfolder of Octotrial_Assets)."""
+    from posts_posted.nc_storage import _get_nc_credentials
+    from urllib.parse import quote, unquote
+    import xml.etree.ElementTree as ET
+
+    folder = request.GET.get('folder', '').strip()
+    q = request.GET.get('q', '').strip().lower()
+    show_all = (folder == '__all__')
+
+    if not folder:
+        return JsonResponse({'items': [], 'subfolders': []})
+
+    # Security: only allow browsing within Octotrial_Assets
+    nc_folder = NC_ASSETS_ROOT if show_all else f"{NC_ASSETS_ROOT}/{folder}"
+    if '..' in nc_folder:
+        return JsonResponse({'items': [], 'error': 'Ungültiger Pfad'})
+
+    nc_url, username, password = _get_nc_credentials()
+    if not all([nc_url, username, password]):
+        return JsonResponse({'items': [], 'error': 'NC nicht konfiguriert'})
+
+    propfind_url = "{}/remote.php/dav/files/{}/{}".format(
+        nc_url.rstrip('/'), username, quote(nc_folder, safe='/')
+    )
+    try:
+        import requests as _req
+        from requests.auth import HTTPBasicAuth
+        depth = 'infinity' if show_all else '1'
+        r = _req.request('PROPFIND', propfind_url,
+                         auth=HTTPBasicAuth(username, password),
+                         headers={'Depth': depth, 'Content-Type': 'application/xml'},
+                         timeout=30)
+        if r.status_code == 507 and show_all:
+            r = _req.request('PROPFIND', propfind_url,
+                             auth=HTTPBasicAuth(username, password),
+                             headers={'Depth': '1', 'Content-Type': 'application/xml'},
+                             timeout=15)
+        if r.status_code not in [200, 207]:
+            return JsonResponse({'items': [], 'subfolders': [], 'error': f'NC {r.status_code}'})
+    except Exception as e:
+        return JsonResponse({'items': [], 'subfolders': [], 'error': str(e)})
+
+    items = []
+    subfolders = []
+    IMAGE_EXTS = {'.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg'}
+    base_prefix = f"/remote.php/dav/files/{username}/"
+    root_href = f"/remote.php/dav/files/{username}/{quote(nc_folder, safe='/')}/"
+    try:
+        root = ET.fromstring(r.text)
+        ns = {'d': 'DAV:'}
+        for resp_el in root.findall('.//d:response', ns):
+            href = resp_el.findtext('d:href', '', ns)
+            decoded = unquote(href)
+            # Skip the folder itself
+            if decoded.rstrip('/') == unquote(root_href).rstrip('/'):
+                continue
+            name = decoded.rstrip('/').split('/')[-1]
+            if name.startswith('.') or name == '_data':
+                continue
+            # Unterordner (bei __all__ überspringen, nur Bilder zeigen)
+            if decoded.endswith('/'):
+                if not show_all:
+                    subfolders.append({'name': name})
+                continue
+            # Dateien
+            ext = os.path.splitext(name)[1].lower()
+            if ext not in IMAGE_EXTS:
+                continue
+            if q and q not in name.lower():
+                continue
+            bp = decoded.find(base_prefix)
+            if bp >= 0:
+                nc_path = decoded[bp + len(base_prefix):]
+            else:
+                nc_path = f"{nc_folder}/{name}"
+            proxy_url = f"/library/studio/nc-image/?p={quote(nc_path, safe='/')}"
+            title = os.path.splitext(name)[0].replace('_', ' ')
+            items.append({'name': name, 'title': title, 'url': proxy_url, 'nc_path': nc_path})
+    except Exception as e:
+        return JsonResponse({'items': [], 'subfolders': [], 'error': f'XML: {e}'})
+
+    subfolders.sort(key=lambda f: f['name'].lower())
+    return JsonResponse({'items': items, 'subfolders': subfolders})
+
+
 # ── Shared Assets (geteilter NC-Ordner für Bilderpool) ──
 
 NC_SHARED_ASSETS_FOLDER = "Marketing & Design/Bilder_Bibliothek"
@@ -1333,7 +1618,9 @@ NC_SHARED_ASSETS_FOLDER = "Marketing & Design/Bilder_Bibliothek"
 
 @login_required
 def studio_shared_assets_list(request):
-    """List images from the shared NC folder via WebDAV PROPFIND (recursive)."""
+    """List images from the shared NC folder via WebDAV PROPFIND.
+    Supports ?folder=subfolder to list only a specific subfolder,
+    and ?folders_only=1 to list only subfolder names (for dropdown)."""
     from posts_posted.nc_storage import _get_nc_credentials
     from urllib.parse import quote, unquote
     import xml.etree.ElementTree as ET
@@ -1346,19 +1633,23 @@ def studio_shared_assets_list(request):
     _nc_ensure_folder(nc_url, username, password, NC_SHARED_ASSETS_FOLDER)
 
     q = (request.GET.get('q') or '').strip().lower()
+    subfolder = (request.GET.get('folder') or '').strip().strip('/')
+    folders_only = request.GET.get('folders_only') == '1'
 
+    # Always PROPFIND the base folder (with infinity) to get all subfolders + files
     propfind_url = "{}/remote.php/dav/files/{}/{}".format(
         nc_url.rstrip('/'), username, quote(NC_SHARED_ASSETS_FOLDER, safe='/')
     )
-    # Depth: infinity to include subfolders
+    # Use infinity to find all subfolders and files recursively
+    depth = 'infinity'
     try:
         import requests as _req
         from requests.auth import HTTPBasicAuth
         r = _req.request('PROPFIND', propfind_url,
                          auth=HTTPBasicAuth(username, password),
-                         headers={'Depth': 'infinity', 'Content-Type': 'application/xml'},
+                         headers={'Depth': depth, 'Content-Type': 'application/xml'},
                          timeout=30)
-        if r.status_code == 507:
+        if r.status_code == 507 and depth == 'infinity':
             # Some NC servers reject infinity, fall back to Depth:1
             r = _req.request('PROPFIND', propfind_url,
                              auth=HTTPBasicAuth(username, password),
@@ -1368,6 +1659,41 @@ def studio_shared_assets_list(request):
             return JsonResponse({'items': [], 'error': f'NC {r.status_code}'})
     except Exception as e:
         return JsonResponse({'items': [], 'error': str(e)})
+
+    # folders_only mode: return just subfolder names
+    if folders_only:
+        folder_names = []
+        base_prefix = f"/remote.php/dav/files/{username}/"
+        base_nc = NC_SHARED_ASSETS_FOLDER.rstrip('/')
+        try:
+            root = ET.fromstring(r.text)
+            ns = {'d': 'DAV:'}
+            for resp_el in root.findall('.//d:response', ns):
+                href = resp_el.findtext('d:href', '', ns)
+                decoded = unquote(href)
+                if not decoded.endswith('/'):
+                    continue
+                bp = decoded.find(base_prefix)
+                if bp >= 0:
+                    nc_path = decoded[bp + len(base_prefix):].rstrip('/')
+                else:
+                    continue
+                # Skip the base folder itself
+                if nc_path == base_nc:
+                    continue
+                # Get relative name
+                if nc_path.startswith(base_nc + '/'):
+                    rel = nc_path[len(base_nc) + 1:]
+                else:
+                    rel = nc_path
+                if rel:
+                    folder_names.append(rel)
+        except Exception as e:
+            print(f"folders_only XML error: {e}")
+            return JsonResponse({'folders': [], 'error': f'XML parse: {e}'})
+        folder_names.sort()
+        print(f"folders_only: found {len(folder_names)} folders: {folder_names[:10]}")
+        return JsonResponse({'folders': folder_names})
 
     items = []
     IMAGE_EXTS = {'.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg'}
@@ -1398,6 +1724,10 @@ def studio_shared_assets_list(request):
             proxy_url = f"/library/studio/nc-image/?p={quote(nc_path, safe='/')}"
             # Subfolder label
             rel = nc_path[len(NC_SHARED_ASSETS_FOLDER):].lstrip('/')
+            # Filter by selected subfolder
+            if subfolder:
+                if not rel.startswith(subfolder + '/') and rel != subfolder:
+                    continue
             items.append({'name': filename, 'url': proxy_url, 'nc_path': nc_path, 'path': rel})
     except Exception as e:
         return JsonResponse({'items': [], 'error': f'XML parse: {e}'})
@@ -1442,7 +1772,21 @@ def studio_shared_assets_upload(request):
         return JsonResponse({'error': str(e)}, status=500)
 
     proxy_url = f"/library/studio/nc-image/?p={quote(nc_path, safe='/')}"
-    return JsonResponse({'ok': True, 'name': filename, 'url': proxy_url, 'nc_path': nc_path})
+
+    # Also save to media_library_items (Studio-Elemente) for DB search/access
+    try:
+        title = os.path.splitext(filename)[0].replace('_', ' ')
+        with connection.cursor() as c:
+            c.execute(
+                """INSERT INTO media_library_items (nc_path, title, series, tags, folder_id)
+                   VALUES (%s, %s, %s, %s, NULL)""",
+                [nc_path, title, '', 'upload,studio']
+            )
+            db_id = c.lastrowid
+    except Exception:
+        db_id = None
+
+    return JsonResponse({'ok': True, 'name': filename, 'url': proxy_url, 'nc_path': nc_path, 'db_id': db_id})
 
 
 @login_required
@@ -1456,3 +1800,62 @@ def studio_shared_assets_delete(request):
     from posts_posted.nc_storage import delete_image_from_nextcloud
     ok = delete_image_from_nextcloud(nc_path)
     return JsonResponse({'ok': ok})
+
+
+NC_STUDIO_ELEMENTE_NC_FOLDER = "Marketing & Design/Octotrial_Assets/Studio_Elemente"
+
+
+@login_required
+def studio_db_item_to_nc(request):
+    """Copy a DB-based Studio-Element image to NC so it's also in the NC library."""
+    if request.method != 'POST':
+        return JsonResponse({'error': 'POST required'}, status=405)
+
+    item_id = request.POST.get('item_id')
+    nc_folder = request.POST.get('nc_folder', NC_STUDIO_ELEMENTE_NC_FOLDER)
+    if not item_id:
+        return JsonResponse({'error': 'item_id required'}, status=400)
+
+    _ensure_table()
+    with connection.cursor() as c:
+        rows = _safe(c, "SELECT id, nc_path, title FROM media_library_items WHERE id=%s", [item_id])
+    if not rows:
+        return JsonResponse({'error': 'Element nicht gefunden'}, status=404)
+
+    row = rows[0]
+    existing_nc_path = row[1]
+    title = row[2] or f"element_{item_id}"
+
+    # Download the image from its current source
+    from posts_posted.nc_storage import _get_nc_credentials, download_image_from_nextcloud
+    from urllib.parse import quote
+    import requests as _req
+    from requests.auth import HTTPBasicAuth
+
+    content, ct = download_image_from_nextcloud(existing_nc_path)
+    if not content:
+        # Try via library image endpoint (local DB proxy)
+        return JsonResponse({'error': 'Bild nicht ladbar'}, status=500)
+
+    nc_url, username, password = _get_nc_credentials()
+    if not all([nc_url, username, password]):
+        return JsonResponse({'error': 'Nextcloud nicht konfiguriert'}, status=500)
+
+    _nc_ensure_folder(nc_url, username, password, nc_folder)
+
+    filename = title.replace(' ', '_') + '.png'
+    dest_path = f"{nc_folder}/{filename}"
+    upload_url = "{}/remote.php/dav/files/{}/{}".format(
+        nc_url.rstrip('/'), username, quote(dest_path, safe='/')
+    )
+    try:
+        r = _req.put(upload_url, data=content,
+                     auth=HTTPBasicAuth(username, password),
+                     headers={'Content-Type': ct or 'image/png'},
+                     timeout=60)
+        if r.status_code not in [200, 201, 204]:
+            return JsonResponse({'error': f'Upload fehlgeschlagen: {r.status_code}'}, status=500)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+    return JsonResponse({'ok': True, 'nc_path': dest_path})

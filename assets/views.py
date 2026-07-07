@@ -259,10 +259,13 @@ def assets_api_list(request):
     files = []
     folders = []
 
+    nc_paths_seen = set()
+
     for item in items_raw:
         if item["is_dir"]:
             folders.append(item)
         else:
+            nc_paths_seen.add(item["nc_path"])
             # Enrich with metadata
             ext = os.path.splitext(item["name"])[1].lstrip(".").lower()
             meta = _get_or_create_meta(item["nc_path"], name=item["name"], file_type=ext, file_size=item["size"])
@@ -284,6 +287,20 @@ def assets_api_list(request):
 
             meta["content_type"] = item["content_type"]
             files.append(meta)
+
+    # Lazy cleanup: DB-Einträge löschen deren Dateien auf NC nicht mehr existieren
+    if folder is not None:
+        rel = f"{NC_ASSETS_ROOT}/{folder}".rstrip("/") if folder else NC_ASSETS_ROOT
+        try:
+            with connection.cursor() as c:
+                c.execute("SELECT id, nc_path FROM asset_metadata WHERE nc_path LIKE %s",
+                          [f"{rel}/%"])
+                for row in c.fetchall():
+                    if row[1] not in nc_paths_seen:
+                        c.execute("DELETE FROM asset_tags WHERE asset_id=%s", [row[0]])
+                        c.execute("DELETE FROM asset_metadata WHERE id=%s", [row[0]])
+        except Exception:
+            pass
 
     return JsonResponse({"items": files, "folders": folders, "path": folder})
 
