@@ -50,6 +50,18 @@
     </section>
 
     <section class="sidebar-section">
+      <h3>🖼 Canvas</h3>
+      <div class="section-body">
+        <div class="swatch-row" style="margin-bottom:4px">
+          <button class="tbtn" data-act="canvas-size">📐 Größe</button>
+          <button class="tbtn" data-act="clear-bg">🚫 BG weg</button>
+          <button class="tbtn danger" data-act="clear-all" title="Alles löschen">🧹 Leeren</button>
+        </div>
+        <div id="bg-info" style="font-size:.65rem;color:#888"></div>
+      </div>
+    </section>
+
+    <section class="sidebar-section">
       <h3>✏️ Text</h3>
       <div class="section-body">
         <input type="text" id="text-input" class="field" placeholder="Text eingeben…" style="width:100%;margin-bottom:5px">
@@ -69,7 +81,6 @@
           <button class="tbtn" data-act="text-center" title="Zentriert">≡</button>
           <button class="tbtn" data-act="text-right" title="Rechtsbündig">⯈</button>
         </div>
-        <div id="palette-row" class="swatch-row"></div>
       </div>
     </section>
 
@@ -85,19 +96,14 @@
           <button class="tbtn" data-shape="rect"        title="Rechteck">▭</button>
           <button class="tbtn" data-shape="filledRect"  title="Gef. Rechteck">■</button>
         </div>
-        <div id="shape-palette-row" class="swatch-row"></div>
       </div>
     </section>
 
     <section class="sidebar-section">
-      <h3>🖼 Canvas</h3>
+      <h3>🎨 Farbe</h3>
       <div class="section-body">
-        <div class="swatch-row" style="margin-bottom:4px">
-          <button class="tbtn" data-act="canvas-size">📐 Größe</button>
-          <button class="tbtn" data-act="clear-bg">🚫 BG weg</button>
-          <button class="tbtn danger" data-act="clear-all" title="Alles löschen">🧹 Leeren</button>
-        </div>
-        <div id="bg-info" style="font-size:.65rem;color:#888"></div>
+        <div style="font-size:.68rem;color:#888;margin-bottom:4px">Gilt für ausgewählten Text/Form und neue Formen:</div>
+        <div id="palette-row" class="swatch-row"></div>
       </div>
     </section>
 
