@@ -273,7 +273,13 @@ async function loadOutput() {
       el.src = item.url;
       el.title = item.title || '';
       if (isVideo) { el.muted = true; el.loop = true; el.addEventListener('mouseenter', () => el.play()); el.addEventListener('mouseleave', () => el.pause()); }
-      el.onclick = () => { location.href = '/library/studio/?lib_item=' + item.id; };
+      // Nur editierbare Ausgaben (mit gespeichertem Canvas) im Editor öffnen.
+      const editable = item.has_canvas !== false;
+      el.style.cursor = editable ? 'pointer' : 'not-allowed';
+      el.onclick = () => {
+        if (editable) location.href = '/library/studio/?lib_item=' + item.id;
+        else toast('Diese ältere Ausgabe hat keinen Bearbeitungsstand – nicht editierbar. Neu exportierte Videos/GIFs lassen sich öffnen.', 'err');
+      };
       grid.appendChild(el);
     });
   } catch (e) {

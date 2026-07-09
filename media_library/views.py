@@ -402,6 +402,7 @@ def item_studio_info(request, item_id):
 NC_STUDIO_TEMPLATES_FOLDER = "Marketing & Design/LinkedIn/Studio/Templates"
 NC_STUDIO_LIBRARY_FOLDER   = "Marketing & Design/Octotrial_Assets/Studio_Work/Output/Images"
 NC_STUDIO_VIDEOS_FOLDER    = "Marketing & Design/Octotrial_Assets/Studio_Work/Output/Videos"
+NC_STUDIO_GIFS_FOLDER      = "Marketing & Design/Octotrial_Assets/Studio_Work/Output/GIFs"
 
 
 def _nc_delete_old_files(nc_folder, safe_prefix):
@@ -1132,10 +1133,12 @@ def studio_save_video(request):
     orig_name = video_file.name or ''
     if orig_name.lower().endswith('.gif'):
         ext, ct = '.gif', 'image/gif'
+        target_folder = NC_STUDIO_GIFS_FOLDER
     else:
         ext, ct = '.webm', 'video/webm'
+        target_folder = NC_STUDIO_VIDEOS_FOLDER
     filename = re.sub(r'[^a-zA-Z0-9_.-]', '', title.replace(' ', '_')) + ext
-    nc_path = _nc_upload(content, f"{NC_STUDIO_VIDEOS_FOLDER}/{filename}", ct)
+    nc_path = _nc_upload(content, f"{target_folder}/{filename}", ct)
     if not nc_path:
         from django.conf import settings as _s
         local_dir = os.path.join(_s.BASE_DIR, 'media', 'studio', 'videos')
@@ -1158,9 +1161,10 @@ def studio_save_video(request):
     # Save canvas state so video can be reopened for editing
     canvas_json = request.POST.get('canvas_json', '')
     if canvas_json:
-        canvas_json = _optimize_canvas_json(canvas_json, NC_STUDIO_VIDEOS_FOLDER, title)
+        canvas_json = _optimize_canvas_json(canvas_json, target_folder, title)
+        like_folder = '%/GIFs/%' if ext == '.gif' else '%/Videos/%'
         with connection.cursor() as c:
-            existing_si = _safe(c, "SELECT id FROM studio_images WHERE title=%s AND nc_path LIKE '%%/Videos/%%' LIMIT 1", [title])
+            existing_si = _safe(c, "SELECT id FROM studio_images WHERE title=%s AND nc_path LIKE %s LIMIT 1", [title, like_folder])
             if existing_si:
                 c.execute("UPDATE studio_images SET nc_path=%s, canvas_json=%s WHERE id=%s",
                           [nc_path, canvas_json, existing_si[0][0]])

@@ -2,6 +2,14 @@
 // Django-Backend an (studio_save). Reload rekonstruiert exakt den Fabric-State.
 import { URLS, POST_ID, CONFIG, getCookie, proxyUrl } from './config.js';
 import { toast, status } from './util.js';
+import { fabric } from './editor.js';
+
+// Fabric-Objekttypen, die sich sicher wiederherstellen lassen.
+function _klassOk(type) {
+  if (!type || typeof type !== 'string') return false;
+  const name = type.split('-').map(s => s.charAt(0).toUpperCase() + s.slice(1)).join('');
+  return !!(fabric && fabric[name] && typeof fabric[name].fromObject === 'function');
+}
 
 const FABRIC_PROPS = ['srcUrl', 'originalUrl', 'bgRemoved', 'anim', 'shapeKind'];
 
@@ -137,8 +145,23 @@ export function restoreCanvas(editor, canvasJsonStr) {
   if (state.width && state.height) editor.setSize(state.width, state.height);
 
   const fabricState = state.fabric || state;   // v2 hat .fabric, sonst direkt
+  // Nur wiederherstellbare Objekte behalten – ein einziges unbekanntes Objekt
+  // ließ sonst das ganze loadFromJSON abstürzen (fromObject undefined).
+  const before = (fabricState.objects || []).length;
+  fabricState.objects = (fabricState.objects || []).filter(o => o && _klassOk(o.type));
+  if (fabricState.objects.length < before) {
+    console.warn(`restoreCanvas: ${before - fabricState.objects.length} unlesbare(s) Objekt(e) übersprungen`);
+  }
+  // Beschädigte Text-Styles neutralisieren – sonst stürzt Fabric beim
+  // Serialisieren (stylesToArray) ab. Basisformatierung bleibt erhalten.
+  fabricState.objects.forEach(o => {
+    if (['text', 'textbox', 'i-text'].includes(o.type)) {
+      if (!o.styles || typeof o.styles !== 'object' || Array.isArray(o.styles)) o.styles = {};
+      if (typeof o.text !== 'string') o.text = String(o.text || '');
+    }
+  });
   // Bildquellen auf Proxy umschreiben + crossOrigin erzwingen
-  (fabricState.objects || []).forEach(o => {
+  fabricState.objects.forEach(o => {
     if (o.type === 'image' && o.src) { o.src = proxyUrl(o.srcUrl || o.src); o.crossOrigin = 'anonymous'; }
   });
   if (fabricState.backgroundImage?.src) {
