@@ -429,4 +429,4 @@ def post_delete_image(request, pk):
         messages.success(request, "Bild gelöscht.")
     else:
         messages.info(request, "Kein Bild vorhanden.")
-    return redirect("posts_posted:list
+    return redirect("posts_posted:list")

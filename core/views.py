@@ -384,4 +384,9 @@ def api_categories(request):
         action = data.get('action')
         with connection.cursor() as c:
             if action == 'add':
-                c.execute("INSERT INTO linkedin_post_categories (name, 
+                c.execute("INSERT INTO linkedin_post_categories (name, color) VALUES (%s, %s)",
+                         [data.get('name'), data.get('color', 'gray')])
+            elif action == 'delete':
+                c.execute("DELETE FROM linkedin_post_categories WHERE id=%s", [data.get('id')])
+        return JsonResponse({'ok': True})
+    return JsonResponse({'ok': False}, status=400)
