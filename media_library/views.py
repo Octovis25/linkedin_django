@@ -400,8 +400,8 @@ def item_studio_info(request, item_id):
 #  NEXTCLOUD FOLDERS FOR STUDIO
 # ─────────────────────────────────────────────
 NC_STUDIO_TEMPLATES_FOLDER = "Marketing & Design/LinkedIn/Studio/Templates"
-NC_STUDIO_LIBRARY_FOLDER   = "Marketing & Design/Octotrial_Assets/Studio_Work/Bilder"
-NC_STUDIO_VIDEOS_FOLDER    = "Marketing & Design/Octotrial_Assets/Studio_Work/Bewegte_Bilder"
+NC_STUDIO_LIBRARY_FOLDER   = "Marketing & Design/Octotrial_Assets/Studio_Work/Output/Images"
+NC_STUDIO_VIDEOS_FOLDER    = "Marketing & Design/Octotrial_Assets/Studio_Work/Output/Videos"
 
 
 def _nc_delete_old_files(nc_folder, safe_prefix):
@@ -723,12 +723,13 @@ def studio_view(request):
     if lib_item_id and not post_id:
         try:
             with connection.cursor() as c:
-                rows = _safe(c, "SELECT nc_path FROM media_library_items WHERE id=%s", [lib_item_id])
+                rows = _safe(c, "SELECT nc_path, title FROM media_library_items WHERE id=%s", [lib_item_id])
                 if rows:
                     nc_path = rows[0][0]
                     studio_rows = _safe(c, """SELECT canvas_json, template_id FROM studio_images
                                              WHERE nc_path=%s ORDER BY created_at DESC LIMIT 1""", [nc_path])
-                    lib_data = {'item_id': lib_item_id, 'image_url': f"/library/image/{lib_item_id}/"}
+                    lib_data = {'item_id': lib_item_id, 'image_url': f"/library/image/{lib_item_id}/",
+                                'title': rows[0][1] or ''}
                     if studio_rows and studio_rows[0][0]:
                         lib_data['canvas_json'] = studio_rows[0][0]
                         lib_data['template_id'] = studio_rows[0][1]
@@ -758,6 +759,8 @@ def studio_view(request):
         'brandExtraColors': brand.get('extra_colors', []),
         'urls': {
             'save':          '/library/studio/save/',
+            'upload':        '/library/studio/upload/',
+            'uploadDelete':  '/library/studio/upload/delete/',
             'saveVideo':     '/library/studio/video-template/save/',
             'apiTemplates':  '/library/studio/api/templates/',
             'apiLibrary':    '/library/studio/api/library/',
@@ -1017,6 +1020,15 @@ def studio_save(request):
     canvas_json = data.get('canvasJson', '')
     template_id = data.get('templateId') or None
     folder_id   = data.get('folderId') or None
+    lib_item_id = data.get('lib_item_id') or None   # gesetzt beim Weiterbearbeiten
+
+    # Alten nc_path des bearbeiteten Elements holen (für Update statt Neuanlage).
+    old_nc_path = None
+    if lib_item_id and not post_id:
+        with connection.cursor() as c:
+            _r = _safe(c, "SELECT nc_path FROM media_library_items WHERE id=%s", [lib_item_id])
+            if _r:
+                old_nc_path = _r[0][0]
 
     if ',' in data_url:
         _, b64 = data_url.split(',', 1)
@@ -1042,11 +1054,17 @@ def studio_save(request):
     auto_tags = _extract_canvas_tags(canvas_json) if canvas_json else ''
     all_tags = ','.join(filter(None, ['studio', auto_tags]))
 
-    # Save to media_library_items so it appears in Bibliothek tab
+    # Weiterbearbeitung: bestehendes Element aktualisieren (Name bleibt/aktualisiert,
+    # kein neues Bild). Sonst neu anlegen.
     with connection.cursor() as c:
-        c.execute("""INSERT INTO media_library_items (nc_path, title, series, tags, folder_id)
-                     VALUES (%s, %s, 'Studio', %s, %s)""", [nc_path, title, all_tags, folder_id])
-        lib_id = c.lastrowid
+        if lib_item_id and not post_id:
+            c.execute("""UPDATE media_library_items SET nc_path=%s, title=%s, tags=%s WHERE id=%s""",
+                      [nc_path, title, all_tags, lib_item_id])
+            lib_id = lib_item_id
+        else:
+            c.execute("""INSERT INTO media_library_items (nc_path, title, series, tags, folder_id)
+                         VALUES (%s, %s, 'Studio', %s, %s)""", [nc_path, title, all_tags, folder_id])
+            lib_id = c.lastrowid
 
     # Optimize canvas_json: upload base64 images to NC
     if canvas_json:
@@ -1064,6 +1082,16 @@ def studio_save(request):
             else:
                 c.execute("""INSERT INTO studio_images (nc_path, title, canvas_json, template_id, post_id)
                              VALUES (%s,%s,%s,%s,%s)""", [nc_path, title, canvas_json or None, template_id, post_id])
+                studio_image_id = c.lastrowid
+        elif lib_item_id and old_nc_path:
+            rows = _safe(c, "SELECT id FROM studio_images WHERE nc_path=%s ORDER BY created_at DESC LIMIT 1", [old_nc_path])
+            if rows:
+                studio_image_id = rows[0][0]
+                c.execute("""UPDATE studio_images SET nc_path=%s, title=%s, canvas_json=%s, template_id=%s
+                             WHERE id=%s""", [nc_path, title, canvas_json or None, template_id, studio_image_id])
+            else:
+                c.execute("""INSERT INTO studio_images (nc_path, title, canvas_json, template_id)
+                             VALUES (%s,%s,%s,%s)""", [nc_path, title, canvas_json or None, template_id])
                 studio_image_id = c.lastrowid
         else:
             c.execute("""INSERT INTO studio_images (nc_path, title, canvas_json, template_id)
@@ -1574,7 +1602,7 @@ def studio_nc_browse(request):
 
     items = []
     subfolders = []
-    IMAGE_EXTS = {'.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg'}
+    IMAGE_EXTS = {'.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg', '.webm', '.mp4', '.mov'}
     base_prefix = f"/remote.php/dav/files/{username}/"
     root_href = f"/remote.php/dav/files/{username}/{quote(nc_folder, safe='/')}/"
     try:
@@ -1791,6 +1819,51 @@ def studio_shared_assets_upload(request):
         db_id = None
 
     return JsonResponse({'ok': True, 'name': filename, 'url': proxy_url, 'nc_path': nc_path, 'db_id': db_id})
+
+
+NC_STUDIO_UPLOAD_FOLDER = "Marketing & Design/Octotrial_Assets/Studio_Work/Upload"
+
+
+@login_required
+def studio_upload(request):
+    """Lädt eine Datei nach Studio_Work/Upload in Nextcloud hoch und gibt die
+    Proxy-URL zurück (zum sofortigen Einfügen in den Canvas). Kein DB-Eintrag."""
+    if request.method != 'POST':
+        return JsonResponse({'error': 'POST required'}, status=405)
+    from posts_posted.nc_storage import _get_nc_credentials
+    from urllib.parse import quote
+    nc_url, username, password = _get_nc_credentials()
+    if not all([nc_url, username, password]):
+        return JsonResponse({'error': 'Nextcloud nicht konfiguriert'}, status=500)
+
+    f = request.FILES.get('file')
+    if not f:
+        return JsonResponse({'error': 'Keine Datei'}, status=400)
+
+    filename = f.name.replace(' ', '_')
+    content = f.read()
+    nc_path = _nc_upload(content, f"{NC_STUDIO_UPLOAD_FOLDER}/{filename}",
+                         f.content_type or 'image/png')
+    if not nc_path:
+        return JsonResponse({'error': 'Upload fehlgeschlagen'}, status=500)
+
+    proxy_url = f"/library/studio/nc-image/?p={quote(nc_path, safe='/')}"
+    return JsonResponse({'ok': True, 'name': filename, 'url': proxy_url, 'nc_path': nc_path})
+
+
+@login_required
+def studio_upload_delete(request):
+    """Loescht eine Datei aus Studio_Work/Upload. Nur innerhalb dieses Ordners
+    erlaubt (Sicherheit)."""
+    if request.method != 'POST':
+        return JsonResponse({'error': 'POST required'}, status=405)
+    nc_path = (request.POST.get('nc_path') or '').strip()
+    if not nc_path or not nc_path.startswith(NC_STUDIO_UPLOAD_FOLDER + '/'):
+        return JsonResponse({'error': 'Ungueltiger Pfad'}, status=400)
+    if '..' in nc_path:
+        return JsonResponse({'error': 'Ungueltiger Pfad'}, status=400)
+    _nc_delete(nc_path)
+    return JsonResponse({'ok': True})
 
 
 @login_required

@@ -4,7 +4,22 @@
 // interpoliert und der Canvas Frame für Frame gerendert.
 import { toast, status } from './util.js';
 
-export const ANIM_TYPES = ['none', 'fadeIn', 'slideLeft', 'slideUp', 'pulse', 'spin', 'zoomIn'];
+export const ANIM_TYPES = [
+  'none', 'fadeIn', 'fadeOut',
+  'slideLeft', 'slideRight', 'slideUp', 'slideDown',
+  'zoomIn', 'zoomOut', 'bounce',
+  'pulse', 'float', 'spin', 'flash', 'wobble', 'shake',
+];
+// Menschliche Beschriftung + Gruppierung (einmalig = spielt einmal, endlos = Schleife)
+export const ANIM_LABELS = {
+  none: 'Keine', fadeIn: 'Einblenden', fadeOut: 'Ausblenden',
+  slideLeft: 'Rein von rechts', slideRight: 'Rein von links',
+  slideUp: 'Rein von unten', slideDown: 'Rein von oben',
+  zoomIn: 'Reinzoomen', zoomOut: 'Rauszoomen', bounce: 'Hüpfen (einmal)',
+  pulse: 'Pulsieren (Schleife)', float: 'Schweben (Schleife)',
+  spin: 'Drehen (Schleife)', flash: 'Blinken (Schleife)',
+  wobble: 'Wackeln (Schleife)', shake: 'Zittern (Schleife)',
+};
 
 // Setzt eine Animation auf das aktuell gewählte Element.
 export function setAnim(editor, type, dur = 1200, delay = 0) {
@@ -30,13 +45,28 @@ function applyAt(o, t) {
   const ease = 1 - Math.pow(1 - p, 3);     // easeOutCubic
 
   o.set({ opacity: b.opacity, left: b.left, top: b.top, scaleX: b.scaleX, scaleY: b.scaleY, angle: b.angle });
+  const tt = t / 1000;   // Sekunden (für Schleifen)
   switch (type) {
-    case 'fadeIn':    o.set({ opacity: b.opacity * ease }); break;
-    case 'slideLeft': o.set({ left: b.left - 200 * (1 - ease), opacity: b.opacity * ease }); break;
-    case 'slideUp':   o.set({ top: b.top + 200 * (1 - ease), opacity: b.opacity * ease }); break;
-    case 'zoomIn':    o.set({ scaleX: b.scaleX * (0.3 + 0.7 * ease), scaleY: b.scaleY * (0.3 + 0.7 * ease), opacity: b.opacity * ease }); break;
-    case 'pulse':   { const s = 1 + 0.08 * Math.sin(t / 200); o.set({ scaleX: b.scaleX * s, scaleY: b.scaleY * s }); break; }
-    case 'spin':      o.set({ angle: b.angle + (t / dur) * 360 }); break;
+    // — einmalige Effekte (über die Dauer) —
+    case 'fadeIn':     o.set({ opacity: b.opacity * ease }); break;
+    case 'fadeOut':    o.set({ opacity: b.opacity * (1 - ease) }); break;
+    case 'slideLeft':  o.set({ left: b.left + 220 * (1 - ease), opacity: b.opacity * ease }); break;
+    case 'slideRight': o.set({ left: b.left - 220 * (1 - ease), opacity: b.opacity * ease }); break;
+    case 'slideUp':    o.set({ top: b.top + 220 * (1 - ease), opacity: b.opacity * ease }); break;
+    case 'slideDown':  o.set({ top: b.top - 220 * (1 - ease), opacity: b.opacity * ease }); break;
+    case 'zoomIn':     o.set({ scaleX: b.scaleX * (0.3 + 0.7 * ease), scaleY: b.scaleY * (0.3 + 0.7 * ease), opacity: b.opacity * ease }); break;
+    case 'zoomOut':    o.set({ scaleX: b.scaleX * (1.7 - 0.7 * ease), scaleY: b.scaleY * (1.7 - 0.7 * ease), opacity: b.opacity * ease }); break;
+    case 'bounce': {   // hüpft einmal rein
+      const bo = Math.abs(Math.sin(p * Math.PI * 2)) * (1 - p);
+      o.set({ top: b.top - 60 * bo, opacity: b.opacity * Math.min(1, p * 2) }); break;
+    }
+    // — Schleifen-Effekte (dauerhaft) —
+    case 'pulse':  { const s = 1 + 0.08 * Math.sin(tt * 4); o.set({ scaleX: b.scaleX * s, scaleY: b.scaleY * s }); break; }
+    case 'float':  o.set({ top: b.top + 12 * Math.sin(tt * 2) }); break;
+    case 'spin':   o.set({ angle: b.angle + tt * 90 }); break;
+    case 'flash':  o.set({ opacity: b.opacity * (0.5 + 0.5 * Math.abs(Math.sin(tt * 3))) }); break;
+    case 'wobble': o.set({ angle: b.angle + 6 * Math.sin(tt * 4) }); break;
+    case 'shake':  o.set({ left: b.left + 5 * Math.sin(tt * 25) }); break;
   }
   o.setCoords();
 }
@@ -68,6 +98,16 @@ export function previewAnimation(editor) {
   play(editor, animDuration(editor));
 }
 
+// Für Export: Canvas auf volle Auflösung (Zoom 1) setzen, danach zurück.
+function toFullRes(editor) {
+  editor.canvas.setZoom(1);
+  editor.canvas.setDimensions({ width: editor.width, height: editor.height });
+}
+function restoreFit(editor) {
+  if (editor._lastFit) editor.fitTo(editor._lastFit.w, editor._lastFit.h);
+  else editor.canvas.requestRenderAll();
+}
+
 function animDuration(editor) {
   let max = 1500;
   editor.canvas.getObjects().forEach(o => { if (o.anim) max = Math.max(max, (o.anim.delay || 0) + (o.anim.dur || 1200) + 300); });
@@ -82,6 +122,7 @@ export async function exportVideo(editor) {
 
   status('🎬 Nehme Video auf…');
   editor.canvas.discardActiveObject();
+  toFullRes(editor);
   const stream = canvasEl.captureStream(30);
   const mime = MediaRecorder.isTypeSupported('video/webm;codecs=vp9') ? 'video/webm;codecs=vp9' : 'video/webm';
   const rec = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: 6_000_000 });
@@ -94,6 +135,7 @@ export async function exportVideo(editor) {
   await new Promise(r => setTimeout(r, 400));   // letzten Frame halten
   rec.stop();
   await done;
+  restoreFit(editor);
 
   const blob = new Blob(chunks, { type: 'video/webm' });
   const a = document.createElement('a');
@@ -132,12 +174,14 @@ export async function exportGif(editor) {
     });
 
     editor.canvas.discardActiveObject();
+    toFullRes(editor);
     for (let t = 0; t <= total; t += frameMs) {
       editor.canvas.getObjects().forEach(o => applyAt(o, t));
       editor.canvas.renderAll();
       gif.addFrame(editor.canvas.lowerCanvasEl, { copy: true, delay: frameMs });
     }
     resetAnim(editor);
+    restoreFit(editor);
 
     gif.on('finished', blob => {
       const a = document.createElement('a');

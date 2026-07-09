@@ -6,13 +6,17 @@ import { proxyUrl } from './config.js';
 export const fabric = window.fabric;
 if (!fabric) console.error('Fabric.js nicht geladen!');
 
+// Objekt-Caching global aus: verhindert grundsätzlich jedes "Verschmelzen"
+// von altem und neuem Bild beim Bearbeiten (immer direkt gerendert).
+if (fabric) fabric.Object.prototype.objectCaching = false;
+
 // Eigenschaften, die in den Snapshot/das Canvas-JSON serialisiert werden.
 const EXTRA_PROPS = ['srcUrl', 'originalUrl', 'bgRemoved', 'anim', 'shapeKind'];
 
 export class Editor {
   constructor(canvasEl) {
     this.canvas = new fabric.Canvas(canvasEl, {
-      backgroundColor: '#1a1a2e',
+      backgroundColor: '',        // transparent → Schachbrett scheint durch
       preserveObjectStacking: true,
       selection: true,          // Rubber-band Multi-Select
       controlsAboveOverlay: true,
@@ -52,13 +56,39 @@ export class Editor {
   // bleibt intern full-res (z.B. 1080²), nur die dargestellte Größe schrumpft –
   // inkl. Fabric-Container, daher keine Scrollbalken mehr.
   fitTo(maxW, maxH) {
-    const scale = Math.min(maxW / this.width, maxH / this.height, 1);
+    this._baseScale = Math.min(maxW / this.width, maxH / this.height, 1);
+    this._userZoom = this._userZoom || 1;
+    this._applyZoom();
+  }
+
+  _applyZoom() {
+    const scale = (this._baseScale || 1) * (this._userZoom || 1);
     this.canvas.setZoom(scale);
     this.canvas.setDimensions({
       width:  Math.round(this.width  * scale),
       height: Math.round(this.height * scale),
     });
     this.canvas.requestRenderAll();
+  }
+
+  // Zoom rein/raus/zurück (für präzises Arbeiten an kleinen Details).
+  zoom(dir) {
+    this._userZoom = this._userZoom || 1;
+    if (dir === 'in')   this._userZoom = Math.min(this._userZoom * 1.25, 8);
+    else if (dir === 'out') this._userZoom = Math.max(this._userZoom / 1.25, 1);
+    else this._userZoom = 1;   // reset
+    this._applyZoom();
+  }
+
+  // Leert die gesamte Arbeitsfläche: alle Objekte + Hintergrund.
+  clearAll() {
+    this.canvas.getObjects().slice().forEach(o => this.canvas.remove(o));
+    this.canvas.discardActiveObject();
+    this.canvas.setBackgroundImage(null, () => {});
+    this.canvas.setBackgroundColor('#1a1a2e', () => {});
+    this._templateId = null;
+    this.canvas.requestRenderAll();
+    this.snapshot();
   }
 
   setSize(w, h) {
@@ -103,7 +133,7 @@ export class Editor {
       fontWeight: opts.fontWeight || 'bold',
       fontFamily: 'Roboto, Arial, sans-serif',
       fill: opts.color || '#ffffff',
-      textAlign: 'center',
+      textAlign: 'left',
       shadow: 'rgba(0,0,0,0.6) 0 0 4px',
       editable: true,
     });
@@ -176,6 +206,19 @@ export class Editor {
 
   bringForward() { this.activeAll().forEach(o => this.canvas.bringForward(o)); this.canvas.requestRenderAll(); this.snapshot(); }
   sendBackward() { this.activeAll().forEach(o => this.canvas.sendBackwards(o)); this.canvas.requestRenderAll(); this.snapshot(); }
+
+  // Einzelnes Objekt in der Ebenen-Reihenfolge bewegen.
+  moveObj(o, dir) {
+    if (!o) return;
+    if (dir === 'up')       this.canvas.bringForward(o);
+    else if (dir === 'down') this.canvas.sendBackwards(o);
+    else if (dir === 'front') this.canvas.bringToFront(o);
+    else if (dir === 'back')  this.canvas.sendToBack(o);
+    this.canvas.requestRenderAll(); this.snapshot();
+  }
+  selectObj(o) { if (o) { this.canvas.setActiveObject(o); this.canvas.requestRenderAll(); } }
+  // Nur echte Objekte (ohne Snapping-Hilfslinien).
+  realObjects() { return this.canvas.getObjects().filter(o => !o._snap); }
 
   // Ausrichten relativ zum Canvas (oder zur Gruppe bei Multi-Select).
   align(where) {

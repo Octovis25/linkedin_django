@@ -1,6 +1,6 @@
 // io.js – Speichern & Laden. Erzeugt PNG + canvas_json, spricht das bestehende
 // Django-Backend an (studio_save). Reload rekonstruiert exakt den Fabric-State.
-import { URLS, POST_ID, getCookie, proxyUrl } from './config.js';
+import { URLS, POST_ID, CONFIG, getCookie, proxyUrl } from './config.js';
 import { toast, status } from './util.js';
 
 const FABRIC_PROPS = ['srcUrl', 'originalUrl', 'bgRemoved', 'anim', 'shapeKind'];
@@ -62,6 +62,7 @@ export async function saveImage(editor) {
   const body = {
     dataUrl, title,
     post_id: POST_ID || '',
+    lib_item_id: CONFIG.libData?.item_id || null,   // beim Weiterbearbeiten → gleiches Bild aktualisieren
     templateId: editor._templateId || null,
     folderId: document.getElementById('save-folder')?.value || null,
     canvasJson: buildCanvasJson(editor, preview),
@@ -113,9 +114,20 @@ export function restoreCanvas(editor, canvasJsonStr) {
   }
 
   editor._locked = true;
-  editor.canvas.loadFromJSON(fabricState, () => {
-    editor.canvas.requestRenderAll();
+  let done = false;
+  const finish = () => {
+    if (done) return; done = true;
     editor._locked = false;
+    editor.canvas.requestRenderAll();
     editor.snapshot();
-  });
+  };
+  try {
+    editor.canvas.loadFromJSON(fabricState, finish);
+  } catch (e) {
+    console.warn('restoreCanvas Fehler:', e);
+    finish();
+  }
+  // Sicherheitsnetz: falls ein fehlendes Bild den Callback blockiert,
+  // nach 4s trotzdem freigeben, damit der Editor nie „hängt".
+  setTimeout(finish, 4000);
 }

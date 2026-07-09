@@ -57,16 +57,26 @@ export function renderPalette(container, onPick) {
 }
 
 // ---- Hintergrund setzen ---------------------------------------------------
-export async function setBackgroundImage(editor, url) {
+// mode: 'cover'  = füllt den Canvas (schneidet ggf. über) – für beliebige Hintergründe
+//       'stretch'= legt das Bild exakt auf die Canvas-Maße (1:1) – für Templates,
+//                  damit Logo/Layout unbeschnitten und in richtiger Größe sitzen.
+export async function setBackgroundImage(editor, url, mode = 'cover') {
   const imgEl = await loadImage(url);
   const fImg = new window.fabric.Image(imgEl, { crossOrigin: 'anonymous' });
-  // Auf Canvas-Größe skalieren (cover).
-  const scale = Math.max(editor.width / fImg.width, editor.height / fImg.height);
-  fImg.set({
-    scaleX: scale, scaleY: scale,
-    originX: 'center', originY: 'center',
-    left: editor.width / 2, top: editor.height / 2,
-  });
+  if (mode === 'stretch') {
+    fImg.set({
+      scaleX: editor.width / fImg.width,
+      scaleY: editor.height / fImg.height,
+      originX: 'left', originY: 'top', left: 0, top: 0,
+    });
+  } else {
+    const scale = Math.max(editor.width / fImg.width, editor.height / fImg.height);
+    fImg.set({
+      scaleX: scale, scaleY: scale,
+      originX: 'center', originY: 'center',
+      left: editor.width / 2, top: editor.height / 2,
+    });
+  }
   editor.canvas.setBackgroundImage(fImg, editor.canvas.renderAll.bind(editor.canvas));
   editor.snapshot();
   updateBgInfo(editor);
@@ -113,14 +123,19 @@ export async function loadTemplateList(editor) {
 export async function applyTemplate(editor, tpl) {
   status('Template wird geladen…');
   try {
-    const tw = tpl.width || tpl.w, th = tpl.height || tpl.h;
-    if (tw && th && (tw !== editor.width || th !== editor.height)) {
-      editor.setSize(tw, th);
-    }
-    await setBackgroundImage(editor, tpl.url);
+    // Canvas-Größe wird NICHT geändert – die bleibt fix und wird nur über
+    // "📐 Größe" explizit umgestellt. Das Template füllt die aktuelle Größe.
+    const imgEl = await loadImage(tpl.url);
+    const fImg = new window.fabric.Image(imgEl, { crossOrigin: 'anonymous' });
+    fImg.set({ scaleX: editor.width / fImg.width, scaleY: editor.height / fImg.height,
+               originX: 'left', originY: 'top', left: 0, top: 0 });
+    editor.canvas.setBackgroundImage(fImg, editor.canvas.renderAll.bind(editor.canvas));
     editor._templateId = tpl.id || null;
+    editor.snapshot();
+    updateBgInfo(editor);
     status('✅ Template geladen', 'green');
   } catch (e) {
+    console.error('Template-Fehler:', e);
     status('❌ Template-Fehler', 'red');
     toast('Template konnte nicht geladen werden', 'err');
   }

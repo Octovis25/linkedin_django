@@ -64,6 +64,11 @@
           </select>
           <button class="tbtn primary" data-act="add-text" style="margin-left:auto">+ Text</button>
         </div>
+        <div class="swatch-row" style="margin-bottom:6px">
+          <button class="tbtn" data-act="text-left" title="Linksbündig">⯇</button>
+          <button class="tbtn" data-act="text-center" title="Zentriert">≡</button>
+          <button class="tbtn" data-act="text-right" title="Rechtsbündig">⯈</button>
+        </div>
         <div id="palette-row" class="swatch-row"></div>
       </div>
     </section>
@@ -90,8 +95,69 @@
         <div class="swatch-row" style="margin-bottom:4px">
           <button class="tbtn" data-act="canvas-size">📐 Größe</button>
           <button class="tbtn" data-act="clear-bg">🚫 BG weg</button>
+          <button class="tbtn danger" data-act="clear-all" title="Alles löschen">🧹 Leeren</button>
         </div>
         <div id="bg-info" style="font-size:.65rem;color:#888"></div>
+      </div>
+    </section>
+
+    <section class="sidebar-section" id="layers-section">
+      <h3>🗂 Ebenen</h3>
+      <div class="section-body">
+        <div id="layers-list"><span class="no-templates">Noch keine Elemente.</span></div>
+      </div>
+    </section>
+
+    <section class="sidebar-section" id="retouch-section">
+      <h3>✂ Freistellen & Korrigieren</h3>
+      <div class="section-body">
+        <div id="retouch-hint" class="no-templates">Wähle ein Bild.</div>
+        <div id="retouch-body" style="display:none">
+          <button class="tbtn" data-act="cutout" style="width:100%;margin-bottom:4px">✂ Hintergrund automatisch entfernen</button>
+          <button class="tbtn" data-act="checker-remove" style="width:100%;margin-bottom:10px" title="Nur das eingebackene Schachbrettmuster entfernen (Weiß bleibt)">🧩 Nur Schachbrettmuster entfernen</button>
+
+          <!-- 1a) Transparent machen (Klick) -->
+          <div class="retouch-label">Fläche durchsichtig machen (Klick):</div>
+          <div class="swatch-row" style="margin-bottom:8px">
+            <button class="tbtn" data-tool="fill" title="In eine zusammenhängende Fläche klicken → wird transparent">🪄 Transparent machen</button>
+            <button class="tbtn" data-tool="pick" title="Pipette: Hintergrundfarbe anklicken → diese Farbe wird ÜBERALL im Bild transparent">💧 Hintergrund-Pipette</button>
+          </div>
+
+          <!-- 1b) Farbe ändern (Klick) -->
+          <div class="retouch-label">Farbe einer Fläche ändern (Klick):</div>
+          <div class="swatch-row" style="margin-bottom:6px">
+            <button class="tbtn" data-tool="swap" title="In eine Farbfläche klicken → dieser Bereich bekommt die gewählte Farbe">🎨 Farbe ändern</button>
+          </div>
+
+          <!-- 2) Bereich auswählen → umfärben oder löschen -->
+          <div class="retouch-label">Bereich auswählen, dann bearbeiten:</div>
+          <div class="swatch-row" style="margin-bottom:4px">
+            <button class="tbtn" data-tool="rect" title="Rechteck über die Fläche ziehen">🔲 Rechteck wählen</button>
+            <button class="tbtn" data-tool="mark" title="Fläche mit dem Pinsel frei markieren">✏️ Freihand wählen</button>
+          </div>
+          <div id="mark-apply-row" class="swatch-row" style="display:none;margin-bottom:4px">
+            <button class="tbtn primary" data-mark="recolor" title="Ausgewählte Fläche in die Farbe umfärben">🎨 Umfärben</button>
+            <button class="tbtn danger" data-mark="remove" title="Ausgewählte Fläche transparent machen">🗑 Löschen</button>
+          </div>
+          <div class="tl-row" id="recolor-color-row" style="display:none">
+            Farbe <input type="color" id="recolor-color" class="field-color" value="#F56E28">
+          </div>
+
+          <!-- 3) Pinsel (fein) -->
+          <div class="retouch-label" style="margin-top:8px">Pinsel (feine Korrektur):</div>
+          <div class="tl-row">Pinselgröße
+            <input id="brush-slider" type="range" class="tl-slider" min="4" max="80" step="2" value="20">
+            <span id="brush-val">20</span>
+          </div>
+          <div class="swatch-row">
+            <button class="tbtn" data-tool="paint" title="Mit der gewählten Farbe übermalen">🖌 Farbe malen</button>
+            <button class="tbtn" data-tool="erase" title="Wegwischen (transparent)">🧽 Radierer</button>
+            <button class="tbtn" data-tool="restore" title="Original zurückholen">↩ Wiederherstellen</button>
+          </div>
+
+          <button class="tbtn" data-tool="off" title="Werkzeug beenden" style="width:100%;margin-top:8px">✋ Fertig / Werkzeug aus</button>
+          <div id="tool-status" style="font-size:.65rem;color:#888;margin-top:6px;min-height:1em"></div>
+        </div>
       </div>
     </section>
 
@@ -129,6 +195,11 @@
         <button class="tbtn" data-act="undo" title="Rückgängig (Strg+Z)">↶</button>
         <button class="tbtn" data-act="redo" title="Wiederholen (Strg+Y)">↷</button>
       </div>
+      <div class="group" title="Zoom (für kleine Details)">
+        <button class="tbtn" data-act="zoom-out" title="Verkleinern">🔍−</button>
+        <button class="tbtn" data-act="zoom-reset" title="Zoom zurücksetzen">⤢</button>
+        <button class="tbtn" data-act="zoom-in" title="Vergrößern">🔍+</button>
+      </div>
       <div class="group" title="Export als Bewegtbild">
         <button class="tbtn" data-act="export-gif" title="Als GIF exportieren">🎞 GIF</button>
         <button class="tbtn" data-act="export-video" title="Als bewegtes Bild / Video">🎬 Video</button>
@@ -139,26 +210,38 @@
 
   <!-- ============ RECHTE SIDEBAR: BIBLIOTHEK ============ -->
   <aside class="studio-right">
+    <!-- Upload nach Studio_Work/Upload -->
     <section class="sidebar-section">
-      <h3>🖼 Bibliothek</h3>
+      <h3>⬆ Upload</h3>
       <div class="section-body">
-        <label style="font-size:.72rem;color:#666;display:block;margin-bottom:3px">Speichern in:</label>
-        <select id="save-folder" class="lib-search" style="margin-bottom:8px">
-          <option value="">📁 Bibliothek (Standard)</option>
-          {% for f in folders %}<option value="{{ f.id }}">{{ f.name }}</option>{% endfor %}
-        </select>
-        <input type="text" id="lib-search" class="lib-search" placeholder="Suchen…">
-        <div id="lib-tabs" class="swatch-row" style="margin-bottom:6px">
-          <button class="tbtn" data-tab="db">DB</button>
-          <button class="tbtn" data-tab="nc">Nextcloud</button>
-          <button class="tbtn" data-tab="shared">Pool</button>
-        </div>
+        <button class="tbtn primary" id="upload-btn" style="width:100%">📤 Bild hochladen</button>
+        <input type="file" id="upload-input" accept="image/*" multiple style="display:none">
+        <div id="upload-status" style="font-size:.7rem;color:#888;margin:4px 0"></div>
+        <div id="upload-grid" class="lib-grid"><span class="no-templates">Lädt…</span></div>
+      </div>
+    </section>
+
+    <!-- Assets aus Nextcloud: Ordner-Browser -->
+    <section class="sidebar-section">
+      <h3>🗂 Assets</h3>
+      <div class="section-body">
+        <div id="lib-crumb" class="lib-crumb"></div>
+        <input type="text" id="lib-search" class="lib-search" placeholder="Im Ordner suchen…">
         <div id="lib-grid" class="lib-grid"><span class="no-templates">Lädt…</span></div>
       </div>
     </section>
-    <section class="sidebar-section collapsed">
-      <h3>💾 Gespeichert</h3>
-      <div class="section-body"><div id="saved-grid" class="lib-grid"></div></div>
+
+    <!-- Fertige Ausgaben: Images / GIFs / Videos -->
+    <section class="sidebar-section">
+      <h3>🎬 Meine Ausgaben</h3>
+      <div class="section-body">
+        <div id="output-tabs" class="swatch-row" style="margin-bottom:6px">
+          <button class="tbtn primary" data-out="Images">Images</button>
+          <button class="tbtn" data-out="GIFs">GIFs</button>
+          <button class="tbtn" data-out="Videos">Videos</button>
+        </div>
+        <div id="output-grid" class="lib-grid"><span class="no-templates">Lädt…</span></div>
+      </div>
     </section>
   </aside>
 
@@ -169,6 +252,6 @@
 <!-- Fabric.js (Editor-Engine) – lokal ausgeliefert, kein CDN nötig -->
 <script src="{% static 'media_library/studio/vendor/fabric.min.js' %}"></script>
 <!-- Studio-Module -->
-<script type="module" src="{% static 'media_library/studio/studio.js' %}"></script>
+<script type="module" src="{% static 'media_library/studio/studio.js' %}?v={% now 'U' %}"></script>
 
 {% endblock %}
