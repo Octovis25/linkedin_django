@@ -249,7 +249,7 @@ def post_list(request):
 def buffer_post_list(request):
     """
     Tab 'Buffer Posts Posted': liest aus der Tabelle buffer_posts_posted,
-    die per 'python manage.py fetch_buffer_posts' aus Buffer befuellt wird.
+    die beim Upload und taeglich per Cron mit fetch_buffer_posts befuellt wird.
     Spalten wie bei 'Posts Posted' (Text, Bild, ID, LinkedIn-Link), ohne Bearbeiten.
     """
     error = None
@@ -429,4 +429,4 @@ def post_delete_image(request, pk):
         messages.success(request, "Bild gelöscht.")
     else:
         messages.info(request, "Kein Bild vorhanden.")
-    return redirect("posts_posted:list")
+    return redirect("posts_posted:list

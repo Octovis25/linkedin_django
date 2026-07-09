@@ -209,8 +209,14 @@ def upload_import_view(request):
                             results.append({'file': filename, 'type': 'Unknown', 'status': 'unrecognized', 'stats': []})
                             error_count += 1
 
-            # AUTOMATISCH nach dem Import: fehlende Post-Bilder aus Buffer befuellen.
+            # AUTOMATISCH nach dem Import: erst Buffer-Posts frisch holen,
+            # dann fehlende Post-Bilder/Daten aus Buffer befuellen.
             if success_count > 0:
+                try:
+                    from django.core.management import call_command
+                    call_command('fetch_buffer_posts')
+                except Exception as _e:
+                    print('Auto-fetch_buffer_posts (Upload) fehlgeschlagen:', _e)
                 try:
                     from posts_posted.views import fill_missing_post_images
                     filled, checked, img_err, dates_filled = fill_missing_post_images()
@@ -378,9 +384,4 @@ def api_categories(request):
         action = data.get('action')
         with connection.cursor() as c:
             if action == 'add':
-                c.execute("INSERT INTO linkedin_post_categories (name, color) VALUES (%s, %s)",
-                         [data.get('name'), data.get('color', 'gray')])
-            elif action == 'delete':
-                c.execute("DELETE FROM linkedin_post_categories WHERE id=%s", [data.get('id')])
-        return JsonResponse({'ok': True})
-    return JsonResponse({'ok': False}, status=400)
+                c.execute("INSERT INTO linkedin_post_categories (name, 

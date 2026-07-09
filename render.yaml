@@ -31,3 +31,21 @@ services:
         sync: false
       - key: MYSQL_PASSWORD
         sync: false
+
+  - type: cron
+    name: buffer-posts-daily
+    runtime: python
+    schedule: "0 4 * * *"
+    buildCommand: pip install -r requirements.txt
+    startCommand: python manage.py fetch_buffer_posts
+    envVars:
+      - key: DJANGO_SECRET_KEY
+        generateValue: true
+      - key: MYSQL_HOST
+        sync: false
+      - key: MYSQL_DATABASE
+        sync: false
+      - key: MYSQL_USER
+        sync: false
+      - key: MYSQL_PASSWORD
+        sync: false
