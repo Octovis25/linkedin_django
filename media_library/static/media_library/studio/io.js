@@ -86,6 +86,7 @@ export async function saveImage(editor) {
     if (d.ok) {
       status('✅ Bild gespeichert!', 'green');
       toast('Gespeichert', 'ok');
+      window.dispatchEvent(new CustomEvent('studio:output-changed', { detail: { tab: 'Images' } }));
       if (d.lib_id && !POST_ID) history.replaceState(null, '', '/library/studio/?lib_item=' + d.lib_id);
     } else {
       status('❌ ' + (d.error || 'Fehler'), 'red');
@@ -99,7 +100,13 @@ export async function saveImage(editor) {
 // – inkl. canvas_json, damit es später wieder im Editor geöffnet werden kann.
 export async function saveAnimation(editor, blob, ext) {
   const titleEl = document.getElementById('title-input');
-  const title = (titleEl?.value.trim()) || ('Studio_' + Date.now());
+  const title = titleEl?.value.trim();
+  if (!title) {
+    if (titleEl) { titleEl.style.border = '2px solid #dc3545'; titleEl.focus(); }
+    status('⚠️ Bitte zuerst einen Titel eingeben!', '#dc3545');
+    setTimeout(() => { if (titleEl) titleEl.style.border = ''; }, 2500);
+    return;
+  }
   let preview = '';
   try { preview = editor.canvas.toDataURL({ format: 'png', multiplier: 0.4 }); } catch (e) { /* egal */ }
   const safe = title.replace(/[^a-zA-Z0-9_.-]/g, '_') + ext;
@@ -118,7 +125,8 @@ export async function saveAnimation(editor, blob, ext) {
     const d = await res.json();
     if (d.ok) {
       toast('In „Meine Ausgaben" gespeichert', 'ok');
-      window.dispatchEvent(new CustomEvent('studio:output-changed'));
+      window.dispatchEvent(new CustomEvent('studio:output-changed',
+        { detail: { tab: ext === '.gif' ? 'GIFs' : 'Videos' } }));
     } else {
       toast('Speichern in Ausgaben fehlgeschlagen', 'err');
     }

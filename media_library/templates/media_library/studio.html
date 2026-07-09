@@ -186,9 +186,12 @@
 
     <!-- Aktionsleiste UNTER dem Canvas: aufgeräumt in Gruppen -->
     <div class="studio-actionbar">
+      <div class="group">
+        <button class="tbtn" data-act="new" title="Leeren Editor starten">🆕 Neu</button>
+      </div>
       <div class="group group-save">
         <input type="text" id="title-input" class="field" placeholder="Titel (Pflicht)…">
-        <button class="tbtn primary" data-act="save">💾 Speichern</button>
+        <button class="tbtn primary" data-act="save-as">💾 Speichern als…</button>
         <button class="tbtn" data-act="download">📥 Download</button>
       </div>
       <div class="group" title="Verlauf">
@@ -199,10 +202,6 @@
         <button class="tbtn" data-act="zoom-out" title="Verkleinern">🔍−</button>
         <button class="tbtn" data-act="zoom-reset" title="Zoom zurücksetzen">⤢</button>
         <button class="tbtn" data-act="zoom-in" title="Vergrößern">🔍+</button>
-      </div>
-      <div class="group" title="Export als Bewegtbild">
-        <button class="tbtn" data-act="export-gif" title="Als GIF exportieren">🎞 GIF</button>
-        <button class="tbtn" data-act="export-video" title="Als bewegtes Bild / Video">🎬 Video</button>
       </div>
       <span id="status-msg"></span>
     </div>

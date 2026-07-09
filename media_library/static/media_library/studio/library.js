@@ -32,8 +32,16 @@ export function initLibrary(editor) {
   loadOutput();      // Output-Auswahl laden
   enableCanvasDrop();
   initUpload();
-  // Nach Video-/GIF-Export die Ausgaben-Liste auffrischen
-  window.addEventListener('studio:output-changed', () => loadOutput());
+  // Nach dem Speichern die Ausgaben-Liste auffrischen und auf den passenden
+  // Tab springen (Bild→Images, GIF→GIFs, Video→Videos).
+  window.addEventListener('studio:output-changed', e => {
+    const tab = e.detail?.tab;
+    if (tab && ['Images', 'GIFs', 'Videos'].includes(tab)) {
+      _outputTab = tab;
+      highlightOutput();
+    }
+    loadOutput();
+  });
 }
 
 // ── Upload nach Studio_Work/Upload + Vorschau ───────────────────────────────
@@ -253,32 +261,60 @@ function highlightOutput() {
     b.classList.toggle('primary', b.dataset.out === _outputTab));
 }
 
+// Ausgabe-Ordner in Nextcloud (relativ zu Octotrial_Assets) – wie die Assets
+// zeigen wir hier DIREKT den Ordnerinhalt an (nicht die DB), damit wirklich
+// alles auftaucht, was gespeichert wurde.
+const OUTPUT_FOLDERS = {
+  Images: 'Studio_Work/Output/Images',
+  GIFs:   'Studio_Work/Output/GIFs',
+  Videos: 'Studio_Work/Output/Videos',
+};
+
 async function loadOutput() {
   const grid = document.getElementById('output-grid');
   if (!grid) return;
   grid.innerHTML = '<span class="no-templates">Lädt…</span>';
+  const folder = OUTPUT_FOLDERS[_outputTab] || OUTPUT_FOLDERS.Images;
   try {
-    const r = await fetch(URLS.apiSaved);
-    const d = await r.json();
-    let items;
-    if (_outputTab === 'Images')      items = d.images || [];
-    else if (_outputTab === 'GIFs')   items = d.anim_images || [];
-    else                              items = d.videos || [];
+    // NC-Ordner (zeigt alles). Fehlschlag hier = echter Fehler.
+    const rNc = await fetch(URLS.ncBrowse + '?folder=' + encodeURIComponent(folder));
+    const d = await rNc.json();
+    // DB-Liste (liefert die bewährte lib_item-ID zum Öffnen). Fehlschlag ignorieren.
+    let db = {};
+    try { const rDb = await fetch(URLS.apiSaved); db = await rDb.json(); } catch (e) { /* egal */ }
+    const dbList = _outputTab === 'Images' ? (db.images || [])
+                 : _outputTab === 'GIFs'   ? (db.anim_images || [])
+                 :                            (db.videos || []);
+    // Titel → DB-ID (zum Öffnen über den bewährten Weg).
+    const idByTitle = {};
+    dbList.forEach(it => { if (it.title) idByTitle[it.title.trim().toLowerCase()] = it.id; });
+
+    // Hilfsdateien (Vorschau/Snapshot/ausgelagerte Objektbilder) nicht anzeigen.
+    const items = (d.items || []).filter(it => !/_preview\.|_snap\.|_obj\d+\./i.test(it.name || ''));
     grid.innerHTML = '';
     if (!items.length) { grid.innerHTML = '<span class="no-templates">Nichts gespeichert.</span>'; return; }
+    const isVideo = _outputTab === 'Videos';
     items.forEach(item => {
-      const isVideo = _outputTab === 'Videos';
       const el = isVideo ? document.createElement('video') : document.createElement('img');
       el.className = 'lib-thumb';
       el.src = item.url;
-      el.title = item.title || '';
-      if (isVideo) { el.muted = true; el.loop = true; el.addEventListener('mouseenter', () => el.play()); el.addEventListener('mouseleave', () => el.pause()); }
-      // Nur editierbare Ausgaben (mit gespeichertem Canvas) im Editor öffnen.
-      const editable = item.has_canvas !== false;
-      el.style.cursor = editable ? 'pointer' : 'not-allowed';
+      el.title = item.title || item.name || '';
+      if (isVideo) {
+        el.muted = true; el.loop = true; el.playsInline = true; el.preload = 'metadata';
+        el.style.background = '#000';
+        el.addEventListener('loadeddata', () => { try { el.currentTime = 0.1; } catch (e) {} });
+        el.addEventListener('mouseenter', () => el.play());
+        el.addEventListener('mouseleave', () => el.pause());
+      } else {
+        el.onerror = () => { el.style.opacity = .3; };
+      }
+      // Öffnen: bevorzugt über die DB-ID (bewährter Weg, stellt Canvas wieder her),
+      // sonst über den NC-Pfad.
+      const dbId = idByTitle[(item.title || '').trim().toLowerCase()];
       el.onclick = () => {
-        if (editable) location.href = '/library/studio/?lib_item=' + item.id;
-        else toast('Diese ältere Ausgabe hat keinen Bearbeitungsstand – nicht editierbar. Neu exportierte Videos/GIFs lassen sich öffnen.', 'err');
+        location.href = dbId
+          ? '/library/studio/?lib_item=' + dbId
+          : '/library/studio/?nc_path=' + encodeURIComponent(item.nc_path);
       };
       grid.appendChild(el);
     });

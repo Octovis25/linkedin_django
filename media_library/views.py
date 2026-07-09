@@ -736,6 +736,28 @@ def studio_view(request):
                         lib_data['template_id'] = studio_rows[0][1]
         except Exception as e:
             print("Studio lib lookup:", e)
+
+    # Öffnen einer Ausgabe direkt über ihren Nextcloud-Pfad (Meine Ausgaben zeigt
+    # jetzt NC-Ordner direkt an). Canvas_json aus studio_images (falls vorhanden).
+    nc_open = request.GET.get('nc_path', '')
+    if nc_open and not lib_data and not post_id:
+        try:
+            from urllib.parse import quote as _q
+            _fname = nc_open.rsplit('/', 1)[-1]
+            with connection.cursor() as c:
+                si = _safe(c, "SELECT canvas_json FROM studio_images WHERE nc_path=%s ORDER BY id DESC LIMIT 1", [nc_open])
+                if not (si and si[0][0]):
+                    # Fallback: nach Dateiname suchen (falls Pfadpräfix minimal abweicht)
+                    si = _safe(c, "SELECT canvas_json FROM studio_images WHERE nc_path LIKE %s ORDER BY id DESC LIMIT 1", ['%/' + _fname])
+                mi = _safe(c, "SELECT id FROM media_library_items WHERE nc_path=%s LIMIT 1", [nc_open])
+            lib_data = {'item_id': (mi[0][0] if mi else None),
+                        'title': nc_open.rsplit('/', 1)[-1],
+                        'image_url': '/library/studio/nc-image/?p=' + _q(nc_open)}
+            if si and si[0][0]:
+                lib_data['canvas_json'] = si[0][0]
+        except Exception as e:
+            print("Studio nc_path open:", e)
+
     folders = _all_folders()
     # Pass Nextcloud base URL for draw.io embed
     try:
@@ -1023,6 +1045,16 @@ def studio_save(request):
     template_id = data.get('templateId') or None
     folder_id   = data.get('folderId') or None
     lib_item_id = data.get('lib_item_id') or None   # gesetzt beim Weiterbearbeiten
+
+    # „Immer überschreiben": Gibt es bereits ein Studio-Bild mit gleichem Titel,
+    # wird dieses aktualisiert statt ein Duplikat anzulegen.
+    if not lib_item_id and not post_id and title:
+        with connection.cursor() as c:
+            _dup = _safe(c, """SELECT id FROM media_library_items
+                               WHERE title=%s AND FIND_IN_SET('studio', REPLACE(tags,' ',''))
+                               ORDER BY id DESC LIMIT 1""", [title])
+            if _dup:
+                lib_item_id = _dup[0][0]
 
     # Alten nc_path des bearbeiteten Elements holen (für Update statt Neuanlage).
     old_nc_path = None

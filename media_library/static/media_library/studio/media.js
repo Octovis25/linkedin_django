@@ -139,12 +139,8 @@ export async function exportVideo(editor) {
   restoreFit(editor);
 
   const blob = new Blob(chunks, { type: 'video/webm' });
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = (document.getElementById('title-input')?.value.trim() || 'studio') + '.webm';
-  a.click();
-  status('✅ Video exportiert', 'green');
-  // zusätzlich in „Meine Ausgaben" ablegen (mit canvas_json → wieder editierbar)
+  // Kein Auto-Download – nur in „Meine Ausgaben" speichern (mit canvas_json → editierbar).
+  status('💾 Video wird gespeichert…');
   await saveAnimation(editor, blob, '.webm');
 }
 
@@ -187,12 +183,8 @@ export async function exportGif(editor) {
     restoreFit(editor);
 
     gif.on('finished', async blob => {
-      const a = document.createElement('a');
-      a.href = URL.createObjectURL(blob);
-      a.download = (document.getElementById('title-input')?.value.trim() || 'studio') + '.gif';
-      a.click();
-      status('✅ GIF exportiert', 'green');
-      // zusätzlich in „Meine Ausgaben" ablegen (mit canvas_json → wieder editierbar)
+      // Kein Auto-Download – nur in „Meine Ausgaben" speichern.
+      status('💾 GIF wird gespeichert…');
       await saveAnimation(editor, blob, '.gif');
     });
     gif.render();

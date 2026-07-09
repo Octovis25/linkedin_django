@@ -50,7 +50,35 @@ bg.renderPalette(document.getElementById('shape-palette-row'), col => {
 // ---- Toolbar-Aktionen (data-act) -----------------------------------------
 const actions = {
   save:        async () => { await io.saveImage(editor); refreshOutput(); },
+  'save-as':   async () => {
+    const titleEl = document.getElementById('title-input');
+    if (!titleEl || !titleEl.value.trim()) {
+      if (titleEl) { titleEl.style.border = '2px solid #dc3545'; titleEl.focus(); }
+      status('⚠️ Bitte zuerst einen Titel eingeben!', '#dc3545');
+      setTimeout(() => { if (titleEl) titleEl.style.border = ''; }, 2500);
+      return;
+    }
+    const choice = await modal('Speichern als…', 'Was möchtest du speichern?', [
+      { label: '🖼 Bild (PNG)', value: 'image' },
+      { label: '🎞 GIF (mit Animationen)', value: 'gif' },
+      { label: '🎬 Video (mit Animationen)', value: 'video' },
+    ]);
+    if (choice === 'image')      { await io.saveImage(editor); refreshOutput(); }
+    else if (choice === 'gif')   { await media.exportGif(editor); }
+    else if (choice === 'video') { await media.exportVideo(editor); }
+  },
   download:    () => io.downloadImage(editor),
+  'new':       async () => {
+    const ok = await modal('Neu anfangen?', 'Leert den Editor (alle Elemente + Hintergrund). Nicht Gespeichertes geht verloren.', [
+      { label: '🆕 Ja, neuer Editor', value: true },
+      { label: 'Abbrechen', value: false },
+    ]);
+    if (!ok) return;
+    editor.clearAll();
+    const t = document.getElementById('title-input'); if (t) t.value = '';
+    if (location.search) history.replaceState(null, '', '/library/studio/');
+    status('Neuer, leerer Editor.', '#888');
+  },
   undo:        () => editor.undo(),
   redo:        () => editor.redo(),
   'add-text':  () => {
