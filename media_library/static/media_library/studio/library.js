@@ -32,6 +32,8 @@ export function initLibrary(editor) {
   loadOutput();      // Output-Auswahl laden
   enableCanvasDrop();
   initUpload();
+  // Nach Video-/GIF-Export die Ausgaben-Liste auffrischen
+  window.addEventListener('studio:output-changed', () => loadOutput());
 }
 
 // ── Upload nach Studio_Work/Upload + Vorschau ───────────────────────────────

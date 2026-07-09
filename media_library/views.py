@@ -762,6 +762,7 @@ def studio_view(request):
             'upload':        '/library/studio/upload/',
             'uploadDelete':  '/library/studio/upload/delete/',
             'saveVideo':     '/library/studio/video-template/save/',
+            'saveVideoFile': '/library/studio/save-video/',
             'apiTemplates':  '/library/studio/api/templates/',
             'apiLibrary':    '/library/studio/api/library/',
             'apiSaved':      '/library/studio/api/saved/',
@@ -1374,6 +1375,10 @@ def studio_api_saved(request):
                                       (SELECT COUNT(*) FROM studio_images s WHERE s.nc_path=m.nc_path AND s.canvas_json IS NOT NULL) as has_canvas
                                FROM media_library_items m
                                WHERE FIND_IN_SET('video', REPLACE(m.tags,' ',''))""" + q_filter + " ORDER BY m.id DESC", q_params)
+        gif_rows = _safe(c, """SELECT m.id, m.title, m.nc_path,
+                                      (SELECT COUNT(*) FROM studio_images s WHERE s.nc_path=m.nc_path AND s.canvas_json IS NOT NULL) as has_canvas
+                               FROM media_library_items m
+                               WHERE FIND_IN_SET('gif', REPLACE(m.tags,' ',''))""" + q_filter + " ORDER BY m.id DESC", q_params)
 
     def _has_anim(canvas_json_str):
         """Return True if any object in canvas_json has an animation set."""
@@ -1389,10 +1394,13 @@ def studio_api_saved(request):
     # Nicht-animierte Studio-Bilder → Bilder-Sektion
     images = [{'id': r[0], 'title': r[1] or '', 'url': f"/library/image/{r[0]}/"}
               for r in (img_rows or []) if not _has_anim(r[3])]
-    # Animierte Studio-Bilder → Video-Bilder-Sektion (legacy, vor neuem System)
+    # GIFs-Sektion: echte GIF-Dateien (Tag 'gif') + Legacy-animierte Studio-Bilder
     anim_images = [{'id': r[0], 'title': r[1] or '', 'url': f"/library/image/{r[0]}/",
-                    'lib_item_id': r[0]}
-                   for r in (img_rows or []) if _has_anim(r[3])]
+                    'lib_item_id': r[0], 'has_canvas': bool(r[3])}
+                   for r in (gif_rows or [])]
+    anim_images += [{'id': r[0], 'title': r[1] or '', 'url': f"/library/image/{r[0]}/",
+                     'lib_item_id': r[0]}
+                    for r in (img_rows or []) if _has_anim(r[3])]
     videos = [{'id': r[0], 'title': r[1] or '', 'url': f"/library/image/{r[0]}/", 'has_canvas': bool(r[3])}
               for r in (vid_rows or [])]
     return JsonResponse({'images': images, 'videos': videos, 'anim_images': anim_images})

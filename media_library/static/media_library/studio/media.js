@@ -3,6 +3,7 @@
 // Beim Abspielen werden Opacity/Position/Skalierung/Winkel über die Zeit
 // interpoliert und der Canvas Frame für Frame gerendert.
 import { toast, status } from './util.js';
+import { saveAnimation } from './io.js';
 
 export const ANIM_TYPES = [
   'none', 'fadeIn', 'fadeOut',
@@ -143,6 +144,8 @@ export async function exportVideo(editor) {
   a.download = (document.getElementById('title-input')?.value.trim() || 'studio') + '.webm';
   a.click();
   status('✅ Video exportiert', 'green');
+  // zusätzlich in „Meine Ausgaben" ablegen (mit canvas_json → wieder editierbar)
+  await saveAnimation(editor, blob, '.webm');
 }
 
 // ---- Export als GIF -------------------------------------------------------
@@ -183,12 +186,14 @@ export async function exportGif(editor) {
     resetAnim(editor);
     restoreFit(editor);
 
-    gif.on('finished', blob => {
+    gif.on('finished', async blob => {
       const a = document.createElement('a');
       a.href = URL.createObjectURL(blob);
       a.download = (document.getElementById('title-input')?.value.trim() || 'studio') + '.gif';
       a.click();
       status('✅ GIF exportiert', 'green');
+      // zusätzlich in „Meine Ausgaben" ablegen (mit canvas_json → wieder editierbar)
+      await saveAnimation(editor, blob, '.gif');
     });
     gif.render();
   } catch (e) {

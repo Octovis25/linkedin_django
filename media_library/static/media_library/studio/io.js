@@ -87,6 +87,39 @@ export async function saveImage(editor) {
   }
 }
 
+// Speichert ein exportiertes bewegtes Bild (WebM/GIF) in „Meine Ausgaben"
+// – inkl. canvas_json, damit es später wieder im Editor geöffnet werden kann.
+export async function saveAnimation(editor, blob, ext) {
+  const titleEl = document.getElementById('title-input');
+  const title = (titleEl?.value.trim()) || ('Studio_' + Date.now());
+  let preview = '';
+  try { preview = editor.canvas.toDataURL({ format: 'png', multiplier: 0.4 }); } catch (e) { /* egal */ }
+  const safe = title.replace(/[^a-zA-Z0-9_.-]/g, '_') + ext;
+  const fd = new FormData();
+  fd.append('video', blob, safe);
+  fd.append('title', title);
+  fd.append('canvas_json', buildCanvasJson(editor, preview));
+  const folder = document.getElementById('save-folder')?.value;
+  if (folder) fd.append('folder_id', folder);
+  try {
+    const res = await fetch(URLS.saveVideoFile, {
+      method: 'POST',
+      headers: { 'X-CSRFToken': getCookie('csrftoken') },
+      body: fd,
+    });
+    const d = await res.json();
+    if (d.ok) {
+      toast('In „Meine Ausgaben" gespeichert', 'ok');
+      window.dispatchEvent(new CustomEvent('studio:output-changed'));
+    } else {
+      toast('Speichern in Ausgaben fehlgeschlagen', 'err');
+    }
+    return d;
+  } catch (e) {
+    toast('Fehler beim Speichern in Ausgaben', 'err');
+  }
+}
+
 export function downloadImage(editor) {
   const a = document.createElement('a');
   a.href = exportPng(editor);

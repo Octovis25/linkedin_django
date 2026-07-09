@@ -10,7 +10,7 @@
 .studio-sidebar     { flex:0 0 260px; width:260px; display:flex; flex-direction:column;
                       gap:0; max-height:calc(100vh - 80px); overflow-y:auto; }
 .studio-main        { flex:1 1 auto; min-width:0; }
-.studio-right       { flex:0 0 250px; width:250px; max-height:calc(100vh - 80px); overflow-y:auto; }
+.studio-right       { flex:0 0 340px; width:340px; max-height:calc(100vh - 80px); overflow-y:auto; }
 
 /* ---- Sidebar sections --------------------------------------------------- */
 .sidebar-section    { background:#fff; border-radius:6px; box-shadow:0 1px 4px rgba(0,0,0,.1);
@@ -64,8 +64,8 @@
                       border:2px solid transparent; transition:border-color .2s; }
 .tpl-thumb:hover, .tpl-thumb.selected { border-color:var(--octo-orange,#F56E28); }
 
-.lib-grid           { display:grid; grid-template-columns:repeat(3,1fr); gap:.3rem;
-                      max-height:240px; overflow-y:auto; }
+.lib-grid           { display:grid; grid-template-columns:repeat(auto-fill, minmax(80px, 1fr)); gap:.3rem;
+                      max-height:300px; overflow-y:auto; }
 .lib-thumb          { width:100%; aspect-ratio:1; object-fit:cover; border-radius:4px; cursor:grab;
                       border:2px solid transparent; transition:border-color .2s; background:#eee; }
 .lib-thumb:hover    { border-color:var(--octo-orange,#F56E28); }
