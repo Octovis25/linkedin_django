@@ -190,3 +190,9 @@ a.manage-link       { font-size:.75rem; color:var(--octo-petrol,#008591); }
 
 /* ---- Upload-Vorschau: scrollbar ---------------------------------------- */
 #upload-grid        { max-height:150px; overflow-y:auto; }
+
+/* ---- Rechteck-Auswahl (eigene Zeichenebene über dem Canvas) ------------- */
+#rect-overlay       { position:absolute; inset:0; z-index:30; display:none; cursor:crosshair; }
+#rect-overlay.active { display:block; }
+#rect-marquee       { position:absolute; border:2px solid var(--octo-orange,#F56E28);
+                      background:rgba(245,110,40,.22); pointer-events:none; box-sizing:border-box; }

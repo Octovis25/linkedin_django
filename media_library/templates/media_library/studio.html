@@ -3,7 +3,7 @@
 {% block title %}🎨 Image Studio{% endblock %}
 {% block content %}
 
-<link rel="stylesheet" href="{% static 'media_library/studio/studio.css' %}">
+<link rel="stylesheet" href="{% static 'media_library/studio/studio.css' %}?v={% now 'U' %}">
 
 <h1 style="margin-bottom:.5rem">🎨 Image Studio</h1>
 
@@ -124,9 +124,13 @@
 
           <!-- Pipette: Farbe anklicken -->
           <div class="retouch-label">Farbe anklicken (Pipette):</div>
-          <div class="swatch-row" style="margin-bottom:10px">
+          <div class="swatch-row" style="margin-bottom:6px">
             <button class="tbtn" data-tool="pick" title="Farbe anklicken → wird ÜBERALL transparent (auch das Schachbrett-Muster)">💧 transparent</button>
-            <button class="tbtn" data-tool="swap" title="Farbe anklicken → wird in die oben gewählte 🎨 Farbe umgefärbt">🎨 umfärben</button>
+            <button class="tbtn" data-tool="swap" title="Farbe anklicken → nur diese Farbe wird umgefärbt">🎨 umfärben</button>
+          </div>
+          <div class="tl-row" style="margin-bottom:10px">
+            🎨 Umfärben-Farbe
+            <input type="color" id="recolor-color" class="field-color" value="#F56E28" title="Farbe für „umfärben“ – auch aus der Palette oben wählbar">
           </div>
 
           <!-- Rechteck-Bereich -->
@@ -138,9 +142,6 @@
             <button class="tbtn danger" data-mark="remove" title="Bereich transparent machen">🗑 Löschen</button>
             <button class="tbtn primary" data-mark="recolor" title="Bereich in die oben gewählte 🎨 Farbe umfärben">🎨 Umfärben</button>
           </div>
-
-          <!-- Umfärben-Farbe: kommt aus der 🎨-Palette oben (versteckt gehalten) -->
-          <input type="color" id="recolor-color" value="#F56E28" style="display:none">
 
           <button class="tbtn" data-tool="off" title="Werkzeug beenden" style="width:100%;margin-top:10px">✋ Fertig / Werkzeug aus</button>
           <div id="tool-status" style="font-size:.65rem;color:#888;margin-top:6px;min-height:1em"></div>
@@ -168,6 +169,7 @@
     <div class="canvas-host">
       <div id="canvas-wrap">
         <canvas id="main-canvas" width="1080" height="1080"></canvas>
+        <div id="rect-overlay"></div>
       </div>
     </div>
 

@@ -211,6 +211,9 @@ function setTool(tool) {
   const dragTool = ['mark', 'rect', 'paint', 'erase', 'restore'].includes(tool);
   editor.canvas.skipTargetFind = dragTool;
   editor.canvas.selection = !active;
+  // Zieh-Werkzeuge: aktives Objekt abwählen, sonst verschiebt das Ziehen das Bild
+  // statt ein Rechteck aufzuziehen. (Werkzeug bleibt an – siehe selection:cleared-Guard.)
+  if (dragTool) editor.canvas.discardActiveObject();
   editor.canvas.requestRenderAll();
   const hints = {
     fill: 'In eine Fläche klicken → wird transparent (durchsichtig)',
@@ -230,6 +233,10 @@ function setTool(tool) {
   if (colorRow) colorRow.style.display = (tool === 'recolor' || tool === 'paint' || tool === 'swap' || isMark) ? 'flex' : 'none';
   const markRow = document.getElementById('mark-apply-row');
   if (markRow) markRow.style.display = isMark ? 'flex' : 'none';
+  // Rechteck-Zeichenebene nur beim Rechteck-Werkzeug aktiv (Style direkt gesetzt,
+  // unabhängig von der CSS – cache-fest).
+  const ov = document.getElementById('rect-overlay');
+  if (ov) ov.style.display = (tool === 'rect') ? 'block' : 'none';
   updateRetouchPanel();
 }
 
@@ -328,12 +335,70 @@ async function applyMark(mode) {
 
 let _rectStart = null;   // Bild-Pixel Startpunkt
 let _rectEnd = null;     // Bild-Pixel Endpunkt
-let _selRect = null;     // sichtbares Auswahl-Rechteck (fabric.Rect)
+let _selRect = null;     // (alt, ungenutzt)
+let _mqStart = null;     // Marquee-Start in Overlay-Pixeln
+let _mqDrawing = false;
 
 function clearSelRect() {
   if (_selRect) { editor.canvas.remove(_selRect); _selRect = null; }
+  const mq = document.getElementById('rect-marquee'); if (mq) mq.style.display = 'none';
+  _mqDrawing = false;
   _rectStart = _rectEnd = null;
 }
+
+// ---- Rechteck-Auswahl über die eigene Zeichenebene (#rect-overlay) --------
+(function initRectOverlay() {
+  const ov = document.getElementById('rect-overlay');
+  if (!ov) return;
+  // Kritische Styles direkt setzen (unabhängig von evtl. gecachter CSS).
+  Object.assign(ov.style, {
+    position: 'absolute', left: '0', top: '0', right: '0', bottom: '0',
+    zIndex: '30', cursor: 'crosshair', display: 'none',
+  });
+  function marquee() {
+    let mq = document.getElementById('rect-marquee');
+    if (!mq) {
+      mq = document.createElement('div'); mq.id = 'rect-marquee';
+      Object.assign(mq.style, {
+        position: 'absolute', border: '2px solid #F56E28',
+        background: 'rgba(245,110,40,0.22)', pointerEvents: 'none', boxSizing: 'border-box',
+      });
+      ov.appendChild(mq);
+    }
+    return mq;
+  }
+  function draw(mq, a, b) {
+    mq.style.left = Math.min(a.x, b.x) + 'px';
+    mq.style.top = Math.min(a.y, b.y) + 'px';
+    mq.style.width = Math.abs(b.x - a.x) + 'px';
+    mq.style.height = Math.abs(b.y - a.y) + 'px';
+  }
+  ov.addEventListener('pointerdown', ev => {
+    if (_tool !== 'rect' || !_toolTarget) return;
+    ev.preventDefault();
+    try { ov.setPointerCapture(ev.pointerId); } catch (e) {}
+    const r = ov.getBoundingClientRect();
+    _mqStart = { x: ev.clientX - r.left, y: ev.clientY - r.top };
+    _rectStart = imgPixel(_toolTarget, ev);
+    _rectEnd = _rectStart;
+    const mq = marquee(); mq.style.display = 'block'; draw(mq, _mqStart, _mqStart);
+    _mqDrawing = true;
+  });
+  ov.addEventListener('pointermove', ev => {
+    if (!_mqDrawing) return;
+    const r = ov.getBoundingClientRect();
+    draw(marquee(), _mqStart, { x: ev.clientX - r.left, y: ev.clientY - r.top });
+    _rectEnd = imgPixel(_toolTarget, ev);
+  });
+  const finish = ev => {
+    if (!_mqDrawing) return;
+    _mqDrawing = false;
+    _rectEnd = imgPixel(_toolTarget, ev);
+    setToolStatus('✅ Bereich gewählt → „🗑 Löschen" oder „🎨 Umfärben"');
+  };
+  ov.addEventListener('pointerup', finish);
+  ov.addEventListener('pointercancel', finish);
+})();
 
 editor.canvas.on('mouse:down', async (opt) => {
   if (_tool === 'off' || !_toolTarget) return;
@@ -503,7 +568,8 @@ function renderAnimPanel() {
 // ---- Selektion-Events koppeln --------------------------------------------
 ['selection:created', 'selection:updated', 'selection:cleared'].forEach(ev =>
   editor.canvas.on(ev, () => {
-    if (ev === 'selection:cleared' && _tool !== 'off' && !_suppressClear) setTool('off');
+    if (ev === 'selection:cleared' && _tool !== 'off' && !_suppressClear
+        && !['rect', 'mark', 'paint', 'erase', 'restore'].includes(_tool)) setTool('off');
     renderSelBar(); renderAnimPanel(); updateRetouchPanel(); renderLayers();
   }));
 
