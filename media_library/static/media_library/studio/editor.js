@@ -11,7 +11,7 @@ if (!fabric) console.error('Fabric.js nicht geladen!');
 if (fabric) fabric.Object.prototype.objectCaching = false;
 
 // Eigenschaften, die in den Snapshot/das Canvas-JSON serialisiert werden.
-const EXTRA_PROPS = ['srcUrl', 'originalUrl', 'bgRemoved', 'anim', 'shapeKind'];
+const EXTRA_PROPS = ['srcUrl', 'originalUrl', 'bgRemoved', 'anim', 'shapeKind', 'fx'];
 
 export class Editor {
   constructor(canvasEl) {

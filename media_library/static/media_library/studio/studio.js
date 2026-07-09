@@ -565,12 +565,97 @@ function renderAnimPanel() {
   panel.querySelector('#anim-preview').onclick = () => media.previewAnimation(editor);
 }
 
+// ---- Animations-Leiste unter dem Canvas (pro Element ein Effekt) ----------
+function renderAnimBar() {
+  const bar = document.getElementById('anim-bar');
+  if (!bar) return;
+  const objs = editor.realObjects();
+  if (!objs.length) { bar.innerHTML = '<span class="hint">Elemente hinzufügen, um sie zu animieren.</span>'; return; }
+  bar.innerHTML = '';
+  const head = document.createElement('div'); head.className = 'anim-bar-head';
+  const title = document.createElement('span');
+  title.className = 'anim-bar-title'; title.textContent = '🎬 Animation je Element';
+  const prevTop = document.createElement('button');
+  prevTop.className = 'tbtn primary'; prevTop.textContent = '▶ Vorschau';
+  prevTop.onclick = () => media.previewAnimation(editor);
+  head.appendChild(title); head.appendChild(prevTop);
+  bar.appendChild(head);
+
+  objs.forEach((o, idx) => {
+    const row = document.createElement('div'); row.className = 'anim-row';
+
+    // Vorschaubild des Elements
+    const th = document.createElement('img'); th.className = 'anim-thumb';
+    th.title = layerLabel(o, idx + 1) + ' – auswählen';
+    th.onclick = () => editor.selectObj(o);
+    try {
+      const dim = Math.max(o.getScaledWidth?.() || o.width || 1, o.getScaledHeight?.() || o.height || 1);
+      th.src = o.toDataURL({ format: 'png', multiplier: Math.min(1, 90 / Math.max(dim, 1)) });
+    } catch (e) { th.style.background = '#dfe3e6'; }
+
+    // Regler-Spalte (untereinander)
+    const col = document.createElement('div'); col.className = 'anim-col';
+
+    const selRow = document.createElement('label'); selRow.className = 'anim-ctl';
+    selRow.innerHTML = '<span>Bewegung</span>';
+    const sel = document.createElement('select'); sel.className = 'field';
+    media.ANIM_TYPES.forEach(t => {
+      const op = document.createElement('option'); op.value = t;
+      op.textContent = media.ANIM_LABELS[t] || t;
+      if ((o.anim?.type || 'none') === t) op.selected = true; sel.appendChild(op);
+    });
+    sel.onchange = () => {
+      const t = sel.value;
+      o.anim = (t && t !== 'none') ? { type: t, dur: o.anim?.dur || 1200, delay: o.anim?.delay || 0 } : null;
+      editor.snapshot(); renderAnimPanel();
+    };
+    selRow.appendChild(sel);
+
+    const fxRow = document.createElement('label'); fxRow.className = 'anim-ctl';
+    fxRow.innerHTML = '<span>Effekt</span>';
+    const fxsel = document.createElement('select'); fxsel.className = 'field';
+    media.EFFECTS.forEach(t => {
+      const op = document.createElement('option'); op.value = t;
+      op.textContent = media.EFFECT_LABELS[t] || t;
+      if ((o.fx || 'none') === t) op.selected = true; fxsel.appendChild(op);
+    });
+    fxsel.onchange = () => { const v = fxsel.value; o.fx = (v && v !== 'none') ? v : null; editor.snapshot(); };
+    fxRow.appendChild(fxsel);
+
+    // Tempo + Start (Verzögerung) nebeneinander
+    const timeRow = document.createElement('div'); timeRow.className = 'anim-ctl anim-time';
+    const durWrap = document.createElement('label'); durWrap.className = 'anim-time-item';
+    durWrap.innerHTML = '<span>Tempo</span>';
+    const dur = document.createElement('input');
+    dur.type = 'range'; dur.className = 'tl-slider'; dur.min = 300; dur.max = 4000; dur.step = 100;
+    dur.value = o.anim?.dur || 1200; dur.title = 'Tempo (Dauer)';
+    dur.oninput = () => { if (o.anim) o.anim.dur = +dur.value; };
+    dur.onchange = () => editor.snapshot();
+    durWrap.appendChild(dur);
+
+    const delWrap = document.createElement('label'); delWrap.className = 'anim-time-item';
+    delWrap.innerHTML = '<span>Start</span>';
+    const del = document.createElement('input');
+    del.type = 'range'; del.className = 'tl-slider'; del.min = 0; del.max = 3000; del.step = 100;
+    del.value = o.anim?.delay || 0; del.title = 'Start-Verzögerung: wann der Effekt einsetzt';
+    del.oninput = () => { if (o.anim) o.anim.delay = +del.value; };
+    del.onchange = () => editor.snapshot();
+    delWrap.appendChild(del);
+
+    timeRow.appendChild(durWrap); timeRow.appendChild(delWrap);
+
+    col.appendChild(selRow); col.appendChild(fxRow); col.appendChild(timeRow);
+    row.appendChild(th); row.appendChild(col);
+    bar.appendChild(row);
+  });
+}
+
 // ---- Selektion-Events koppeln --------------------------------------------
 ['selection:created', 'selection:updated', 'selection:cleared'].forEach(ev =>
   editor.canvas.on(ev, () => {
     if (ev === 'selection:cleared' && _tool !== 'off' && !_suppressClear
         && !['rect', 'mark', 'paint', 'erase', 'restore'].includes(_tool)) setTool('off');
-    renderSelBar(); renderAnimPanel(); updateRetouchPanel(); renderLayers();
+    renderSelBar(); renderAnimPanel(); updateRetouchPanel(); renderLayers(); renderAnimBar();
   }));
 
 // ---- Undo/Redo-Buttons aktiv/inaktiv --------------------------------------
@@ -580,7 +665,7 @@ editor.onChange(() => {
   if (u) u.disabled = !editor.canUndo();
   if (r) r.disabled = !editor.canRedo();
   bg.updateBgInfo(editor);
-  renderLayers();
+  renderLayers(); renderAnimBar();
 });
 
 // ---- Auto-Integration: eingebackenes Rautenmuster beim Einfügen entfernen --
