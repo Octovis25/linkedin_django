@@ -119,49 +119,30 @@
       <div class="section-body">
         <div id="retouch-hint" class="no-templates">Wähle ein Bild.</div>
         <div id="retouch-body" style="display:none">
-          <button class="tbtn" data-act="cutout" style="width:100%;margin-bottom:4px">✂ Hintergrund automatisch entfernen</button>
-          <button class="tbtn" data-act="checker-remove" style="width:100%;margin-bottom:10px" title="Nur das eingebackene Schachbrettmuster entfernen (Weiß bleibt)">🧩 Nur Schachbrettmuster entfernen</button>
+          <div class="retouch-label">Ganzer Hintergrund:</div>
+          <button class="tbtn" data-act="cutout" style="width:100%;margin-bottom:10px" title="Erkannten Hintergrund rundum entfernen (inkl. Schachbrettmuster)">✂ Hintergrund automatisch entfernen</button>
 
-          <!-- 1a) Transparent machen (Klick) -->
-          <div class="retouch-label">Fläche durchsichtig machen (Klick):</div>
-          <div class="swatch-row" style="margin-bottom:8px">
-            <button class="tbtn" data-tool="fill" title="In eine zusammenhängende Fläche klicken → wird transparent">🪄 Transparent machen</button>
-            <button class="tbtn" data-tool="pick" title="Pipette: Hintergrundfarbe anklicken → diese Farbe wird ÜBERALL im Bild transparent">💧 Hintergrund-Pipette</button>
+          <!-- Pipette: Farbe anklicken -->
+          <div class="retouch-label">Farbe anklicken (Pipette):</div>
+          <div class="swatch-row" style="margin-bottom:10px">
+            <button class="tbtn" data-tool="pick" title="Farbe anklicken → wird ÜBERALL transparent (auch das Schachbrett-Muster)">💧 transparent</button>
+            <button class="tbtn" data-tool="swap" title="Farbe anklicken → wird in die oben gewählte 🎨 Farbe umgefärbt">🎨 umfärben</button>
           </div>
 
-          <!-- 1b) Farbe ändern (Klick) -->
-          <div class="retouch-label">Farbe einer Fläche ändern (Klick):</div>
-          <div class="swatch-row" style="margin-bottom:6px">
-            <button class="tbtn" data-tool="swap" title="In eine Farbfläche klicken → dieser Bereich bekommt die gewählte Farbe">🎨 Farbe ändern</button>
-          </div>
-
-          <!-- 2) Bereich auswählen → umfärben oder löschen -->
-          <div class="retouch-label">Bereich auswählen, dann bearbeiten:</div>
+          <!-- Rechteck-Bereich -->
+          <div class="retouch-label">Rechteck-Bereich ziehen, dann:</div>
           <div class="swatch-row" style="margin-bottom:4px">
             <button class="tbtn" data-tool="rect" title="Rechteck über die Fläche ziehen">🔲 Rechteck wählen</button>
-            <button class="tbtn" data-tool="mark" title="Fläche mit dem Pinsel frei markieren">✏️ Freihand wählen</button>
           </div>
           <div id="mark-apply-row" class="swatch-row" style="display:none;margin-bottom:4px">
-            <button class="tbtn primary" data-mark="recolor" title="Ausgewählte Fläche in die Farbe umfärben">🎨 Umfärben</button>
-            <button class="tbtn danger" data-mark="remove" title="Ausgewählte Fläche transparent machen">🗑 Löschen</button>
-          </div>
-          <div class="tl-row" id="recolor-color-row" style="display:none">
-            Farbe <input type="color" id="recolor-color" class="field-color" value="#F56E28">
+            <button class="tbtn danger" data-mark="remove" title="Bereich transparent machen">🗑 Löschen</button>
+            <button class="tbtn primary" data-mark="recolor" title="Bereich in die oben gewählte 🎨 Farbe umfärben">🎨 Umfärben</button>
           </div>
 
-          <!-- 3) Pinsel (fein) -->
-          <div class="retouch-label" style="margin-top:8px">Pinsel (feine Korrektur):</div>
-          <div class="tl-row">Pinselgröße
-            <input id="brush-slider" type="range" class="tl-slider" min="4" max="80" step="2" value="20">
-            <span id="brush-val">20</span>
-          </div>
-          <div class="swatch-row">
-            <button class="tbtn" data-tool="paint" title="Mit der gewählten Farbe übermalen">🖌 Farbe malen</button>
-            <button class="tbtn" data-tool="erase" title="Wegwischen (transparent)">🧽 Radierer</button>
-            <button class="tbtn" data-tool="restore" title="Original zurückholen">↩ Wiederherstellen</button>
-          </div>
+          <!-- Umfärben-Farbe: kommt aus der 🎨-Palette oben (versteckt gehalten) -->
+          <input type="color" id="recolor-color" value="#F56E28" style="display:none">
 
-          <button class="tbtn" data-tool="off" title="Werkzeug beenden" style="width:100%;margin-top:8px">✋ Fertig / Werkzeug aus</button>
+          <button class="tbtn" data-tool="off" title="Werkzeug beenden" style="width:100%;margin-top:10px">✋ Fertig / Werkzeug aus</button>
           <div id="tool-status" style="font-size:.65rem;color:#888;margin-top:6px;min-height:1em"></div>
         </div>
       </div>

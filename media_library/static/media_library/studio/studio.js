@@ -40,6 +40,7 @@ bg.renderPalette(document.getElementById('palette-row'), col => {
   currentTextColor = col;
   currentShapeColor = col;
   const picker = document.getElementById('text-color'); if (picker) picker.value = col;
+  const rc = document.getElementById('recolor-color'); if (rc) rc.value = col;   // Umfärben nutzt dieselbe Farbe
   const o = editor.active();
   if (o && o.type === 'textbox') { o.set('fill', col); editor.canvas.requestRenderAll(); editor.snapshot(); }
   else if (o && o.shapeKind) { o.set(o.fill ? 'fill' : 'stroke', col); editor.canvas.requestRenderAll(); editor.snapshot(); }
