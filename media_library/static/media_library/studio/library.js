@@ -1,52 +1,47 @@
-// library.js – rechte Sidebar, neu:
-//   OBEN: Assets aus Nextcloud als Ordner-Browser (rein/raus navigieren),
-//         Elemente per Klick oder Drag&Drop in den Canvas.
+// library.js – rechte Sidebar:
+//   OBEN: Upload nach Studio_Work/Upload (mit Vorschau + Löschen).
+//   MITTE: Assets aus Nextcloud als anhakbare Ordner-Struktur. Angehakte Ordner
+//          (auch Überordner rekursiv) zeigen ihre Bilder gesammelt im Raster.
 //   UNTEN: fertige Studio-Ausgaben Images / GIFs / Videos zum Weiterbearbeiten.
 import { URLS, getCookie } from './config.js';
 import { toast } from './util.js';
 
 let _editor = null;
 
-// Aktueller Pfad im Assets-Browser, relativ zu Octotrial_Assets.
-// [] = oberste Ebene (Top-Level-Ordner).
-let _path = [];
+// Angehakte Ordner-Pfade (relativ zu Octotrial_Assets) + aufgeklappte Ordner.
+const _checked = new Set();
+const _expanded = new Set();
+// Cache: Ordnerpfad → { subfolders:[names], items:[bilder] }. '' = oberste Ebene.
+const _cache = new Map();
 
-// Ausgabe-Ordner (relativ zu Octotrial_Assets) für die untere Auswahl.
-// Muss zu den Speicherzielen in views.py passen (studio_save).
-const OUTPUT = {
-  Images: 'Studio_Work/Bilder',
-  GIFs:   'Studio_Work/Bewegte_Bilder',
-  Videos: 'Studio_Work/Bewegte_Bilder',
-};
 let _outputTab = 'Images';
 
 export function initLibrary(editor) {
   _editor = editor;
-  // Suche filtert den aktuellen Ordner
+  // Suche filtert die aktuell angezeigten Bilder (aus den angehakten Ordnern).
   const search = document.getElementById('lib-search');
   if (search) {
     let t;
-    search.oninput = () => { clearTimeout(t); t = setTimeout(browse, 300); };
+    search.oninput = () => { clearTimeout(t); t = setTimeout(refreshImages, 250); };
   }
-  // Output-Tabs
   document.querySelectorAll('#output-tabs [data-out]').forEach(btn => {
     btn.onclick = () => { _outputTab = btn.dataset.out; highlightOutput(); loadOutput(); };
   });
   highlightOutput();
-  browse();          // Assets-Wurzel laden
+  loadTree();        // Assets-Ordnerbaum laden
   loadOutput();      // Output-Auswahl laden
   enableCanvasDrop();
   initUpload();
 }
 
-// ── Upload nach Studio_Work/Upload + direkt einfügen ────────────────────────
+// ── Upload nach Studio_Work/Upload + Vorschau ───────────────────────────────
 function initUpload() {
   const btn = document.getElementById('upload-btn');
   const input = document.getElementById('upload-input');
   const statusEl = document.getElementById('upload-status');
   if (!btn || !input) return;
   btn.onclick = () => input.click();
-  loadUploads();     // schon vorhandene Uploads sofort anzeigen
+  loadUploads();
   input.onchange = async () => {
     const files = [...input.files];
     input.value = '';
@@ -61,25 +56,18 @@ function initUpload() {
           body: fd,
         });
         const d = await r.json();
-        if (d.ok) {
-          // NICHT in den Canvas laden – erscheint nur als Vorschau im Assets-Browser.
-          statusEl.textContent = `✓ ${file.name} hochgeladen`;
-        } else {
-          statusEl.textContent = `✗ ${d.error || 'Fehler'}`;
-          toast('Upload fehlgeschlagen', 'err');
-        }
+        if (d.ok) statusEl.textContent = `✓ ${file.name} hochgeladen`;
+        else { statusEl.textContent = `✗ ${d.error || 'Fehler'}`; toast('Upload fehlgeschlagen', 'err'); }
       } catch (e) {
         statusEl.textContent = '✗ Fehler';
         toast('Upload-Fehler', 'err');
       }
     }
     setTimeout(() => { if (statusEl) statusEl.textContent = ''; }, 3000);
-    loadUploads();   // Vorschau-Raster unter dem Knopf aktualisieren
+    loadUploads();
   };
 }
 
-// Zeigt den Inhalt von Studio_Work/Upload als Vorschau-Kacheln (nur Vorschau;
-// Klick/Drag fügt bei Bedarf in den Canvas ein).
 async function loadUploads() {
   const grid = document.getElementById('upload-grid');
   if (!grid) return;
@@ -128,69 +116,119 @@ async function loadUploads() {
   }
 }
 
-// ── Assets-Browser ─────────────────────────────────────────────────────────
-async function browse() {
-  const grid = document.getElementById('lib-grid');
-  const crumb = document.getElementById('lib-crumb');
-  const q = document.getElementById('lib-search')?.value || '';
-  grid.innerHTML = '<span class="no-templates">Lädt…</span>';
-
-  // Breadcrumb (Pfad + Zurück)
-  renderCrumb(crumb);
-
+// ── Assets: anhakbarer Ordnerbaum ───────────────────────────────────────────
+// Holt Inhalt eines Ordners (gecacht). path '' = oberste Ebene.
+async function fetchFolder(path) {
+  if (_cache.has(path)) return _cache.get(path);
+  let data = { subfolders: [], items: [] };
   try {
-    if (_path.length === 0) {
-      // Oberste Ebene: Top-Level-Ordner der Assets
+    if (path === '') {
       const r = await fetch(URLS.ncFolders);
       const d = await r.json();
-      grid.innerHTML = '';
-      renderFolders(grid, (d.folders || []).map(f => f.name));
-      if (!(d.folders || []).length) grid.innerHTML = '<span class="no-templates">Keine Ordner.</span>';
+      data = { subfolders: (d.folders || []).map(f => f.name), items: [] };
     } else {
-      // In einem Ordner: Unterordner + Bilder
-      const folder = _path.join('/');
-      const r = await fetch(URLS.ncBrowse + '?folder=' + encodeURIComponent(folder) + '&q=' + encodeURIComponent(q));
+      const r = await fetch(URLS.ncBrowse + '?folder=' + encodeURIComponent(path));
       const d = await r.json();
-      grid.innerHTML = '';
-      renderFolders(grid, (d.subfolders || []).map(f => f.name));
-      renderImages(grid, d.items || []);
-      if (!(d.subfolders || []).length && !(d.items || []).length) {
-        grid.innerHTML += '<span class="no-templates">Ordner ist leer.</span>';
+      data = { subfolders: (d.subfolders || []).map(f => f.name), items: d.items || [] };
+    }
+  } catch (e) { /* leer lassen */ }
+  _cache.set(path, data);
+  return data;
+}
+
+async function loadTree() {
+  const tree = document.getElementById('lib-tree');
+  if (!tree) return;
+  tree.innerHTML = '<span class="no-templates">Lädt…</span>';
+  const root = await fetchFolder('');
+  tree.innerHTML = '';
+  if (!root.subfolders.length) { tree.innerHTML = '<span class="no-templates">Keine Ordner.</span>'; return; }
+  for (const name of root.subfolders) tree.appendChild(await makeRow(name, name, 0));
+}
+
+// Baut eine Ordnerzeile (Pfeil + Checkbox + Name) inkl. Kindercontainer.
+async function makeRow(name, path, depth) {
+  const wrap = document.createElement('div');
+
+  const row = document.createElement('div');
+  row.className = 'lib-trow';
+  row.style.paddingLeft = (depth * 14 + 2) + 'px';
+
+  const exp = document.createElement('span');
+  exp.className = 'fexp';
+  exp.textContent = _expanded.has(path) ? '▾' : '▸';
+
+  const cb = document.createElement('input');
+  cb.type = 'checkbox';
+  cb.checked = _checked.has(path);
+
+  const label = document.createElement('span');
+  label.className = 'fname';
+  label.textContent = '📁 ' + name;
+
+  const kids = document.createElement('div');
+  kids.className = 'lib-kids';
+  kids.style.display = _expanded.has(path) ? 'block' : 'none';
+
+  const expand = async () => {
+    if (_expanded.has(path)) {
+      _expanded.delete(path); kids.style.display = 'none'; exp.textContent = '▸';
+    } else {
+      _expanded.add(path); exp.textContent = '▾'; kids.style.display = 'block';
+      if (!kids.dataset.loaded) {
+        kids.dataset.loaded = '1';
+        const d = await fetchFolder(path);
+        if (!d.subfolders.length) {
+          const empty = document.createElement('div');
+          empty.className = 'no-templates';
+          empty.style.paddingLeft = (depth * 14 + 20) + 'px';
+          empty.textContent = 'keine Unterordner';
+          kids.appendChild(empty);
+        } else {
+          for (const sub of d.subfolders) kids.appendChild(await makeRow(sub, path + '/' + sub, depth + 1));
+        }
       }
     }
-  } catch (e) {
-    grid.innerHTML = '<span class="no-templates">Fehler beim Laden.</span>';
+  };
+  exp.onclick = expand;
+  label.onclick = expand;
+  cb.onchange = () => {
+    if (cb.checked) _checked.add(path); else _checked.delete(path);
+    refreshImages();
+  };
+
+  row.appendChild(exp);
+  row.appendChild(cb);
+  row.appendChild(label);
+  wrap.appendChild(row);
+  wrap.appendChild(kids);
+  return wrap;
+}
+
+// Sammelt rekursiv alle Bilder aus einem Ordner und seinen Unterordnern.
+async function gatherImages(path, acc, seen, depth = 0) {
+  if (depth > 6) return;
+  const d = await fetchFolder(path);
+  for (const it of d.items) {
+    const key = it.nc_path || it.url;
+    if (!seen.has(key)) { seen.add(key); acc.push(it); }
   }
+  for (const sub of d.subfolders) await gatherImages(path + '/' + sub, acc, seen, depth + 1);
 }
 
-function renderCrumb(crumb) {
-  if (!crumb) return;
-  crumb.innerHTML = '';
-  const root = document.createElement('button');
-  root.className = 'crumb-btn';
-  root.textContent = '📁 Assets';
-  root.onclick = () => { _path = []; browse(); };
-  crumb.appendChild(root);
-  _path.forEach((seg, i) => {
-    const sep = document.createElement('span'); sep.textContent = ' / '; sep.style.color = '#aaa';
-    crumb.appendChild(sep);
-    const b = document.createElement('button');
-    b.className = 'crumb-btn';
-    b.textContent = seg;
-    b.onclick = () => { _path = _path.slice(0, i + 1); browse(); };
-    crumb.appendChild(b);
-  });
-}
-
-function renderFolders(grid, names) {
-  names.forEach(name => {
-    const tile = document.createElement('div');
-    tile.className = 'lib-folder';
-    tile.innerHTML = `<div class="lib-folder-icon">📁</div><div class="lib-folder-name">${name}</div>`;
-    tile.title = name;
-    tile.onclick = () => { _path.push(name); browse(); };
-    grid.appendChild(tile);
-  });
+// Zeigt die Bilder aller angehakten Ordner (rekursiv) im Raster.
+async function refreshImages() {
+  const grid = document.getElementById('lib-grid');
+  if (!grid) return;
+  if (!_checked.size) { grid.innerHTML = '<span class="no-templates">Ordner anhaken zum Anzeigen.</span>'; return; }
+  grid.innerHTML = '<span class="no-templates">Lädt…</span>';
+  const acc = [], seen = new Set();
+  for (const p of _checked) await gatherImages(p, acc, seen);
+  const q = (document.getElementById('lib-search')?.value || '').toLowerCase();
+  const items = q ? acc.filter(it => (it.title || it.name || '').toLowerCase().includes(q)) : acc;
+  grid.innerHTML = '';
+  if (!items.length) { grid.innerHTML = '<span class="no-templates">Keine Bilder gefunden.</span>'; return; }
+  renderImages(grid, items);
 }
 
 function renderImages(grid, items) {
@@ -218,8 +256,6 @@ async function loadOutput() {
   if (!grid) return;
   grid.innerHTML = '<span class="no-templates">Lädt…</span>';
   try {
-    // Aus der DB (nur echte Studio-Speicherungen) – enthält Canvas-Daten
-    // zum vollen Weiterbearbeiten. Klick öffnet den kompletten Canvas.
     const r = await fetch(URLS.apiSaved);
     const d = await r.json();
     let items;
@@ -235,7 +271,6 @@ async function loadOutput() {
       el.src = item.url;
       el.title = item.title || '';
       if (isVideo) { el.muted = true; el.loop = true; el.addEventListener('mouseenter', () => el.play()); el.addEventListener('mouseleave', () => el.pause()); }
-      // Klick → kompletten Canvas mit allen Ebenen wiederherstellen (weiterbearbeiten).
       el.onclick = () => { location.href = '/library/studio/?lib_item=' + item.id; };
       grid.appendChild(el);
     });

@@ -174,3 +174,19 @@ a.manage-link       { font-size:.75rem; color:var(--octo-petrol,#008591); }
 .studio-toast.show  { opacity:.95; }
 .studio-toast.err   { background:#c0392b; }
 .studio-toast.ok    { background:#1e8449; }
+
+/* ---- Assets: anhakbarer Ordnerbaum ------------------------------------- */
+.lib-hint           { font-size:.68rem; color:#888; margin-bottom:3px; }
+.lib-tree           { max-height:190px; overflow-y:auto; border:1px solid #e6e8ea;
+                      border-radius:6px; padding:3px; margin-bottom:.4rem; background:#fafbfc; }
+.lib-trow           { display:flex; align-items:center; gap:5px; padding:2px 3px;
+                      font-size:.74rem; border-radius:4px; }
+.lib-trow:hover     { background:#eef4f4; }
+.lib-trow input[type=checkbox] { margin:0; cursor:pointer; flex:0 0 auto; }
+.lib-trow .fexp     { width:12px; text-align:center; cursor:pointer; color:#999;
+                      user-select:none; flex:0 0 auto; }
+.lib-trow .fname    { flex:1; cursor:pointer; overflow:hidden; text-overflow:ellipsis;
+                      white-space:nowrap; }
+
+/* ---- Upload-Vorschau: scrollbar ---------------------------------------- */
+#upload-grid        { max-height:150px; overflow-y:auto; }
