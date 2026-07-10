@@ -71,6 +71,7 @@ export async function saveImage(editor) {
     dataUrl, title,
     post_id: POST_ID || '',
     lib_item_id: CONFIG.libData?.item_id || null,   // beim Weiterbearbeiten → gleiches Bild aktualisieren
+    openNcPath: CONFIG.libData?.nc_path || null,    // geöffnete Datei → genau diese überschreiben
     templateId: editor._templateId || null,
     folderId: document.getElementById('save-folder')?.value || null,
     canvasJson: buildCanvasJson(editor, preview),

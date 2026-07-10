@@ -709,7 +709,7 @@ updateRetouchPanel();
 }
 
 // Vorhandene Ausgabe geöffnet? → Knopf „Speichern" (gleiches Format) statt „Speichern als…".
-if (CONFIG.libData?.item_id) {
+if (CONFIG.libData?.item_id || CONFIG.libData?.nc_path) {
   const b = document.querySelector('[data-act="save-as"]');
   if (b) { b.textContent = '💾 Speichern'; b.dataset.act = 'save-existing'; b.title = 'Vorhandene Ausgabe im gleichen Format überschreiben'; }
 }

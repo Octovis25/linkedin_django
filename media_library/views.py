@@ -1050,6 +1050,14 @@ def studio_save(request):
     template_id = data.get('templateId') or None
     folder_id   = data.get('folderId') or None
     lib_item_id = data.get('lib_item_id') or None   # gesetzt beim Weiterbearbeiten
+    open_nc     = data.get('openNcPath') or None    # geöffnete Ausgabe-Datei
+
+    # Geöffnete Ausgabe → genau dieses Element wiederverwenden (überschreiben).
+    if not lib_item_id and not post_id and open_nc:
+        with connection.cursor() as c:
+            _r = _safe(c, "SELECT id FROM media_library_items WHERE nc_path=%s ORDER BY id DESC LIMIT 1", [open_nc])
+            if _r:
+                lib_item_id = _r[0][0]
 
     # „Immer überschreiben": Gibt es bereits ein Studio-Bild mit gleichem Titel,
     # wird dieses aktualisiert statt ein Duplikat anzulegen.
@@ -1061,13 +1069,15 @@ def studio_save(request):
             if _dup:
                 lib_item_id = _dup[0][0]
 
-    # Alten nc_path des bearbeiteten Elements holen (für Update statt Neuanlage).
+    # Alten nc_path holen (für Update + exaktes Überschreiben derselben Datei).
     old_nc_path = None
     if lib_item_id and not post_id:
         with connection.cursor() as c:
             _r = _safe(c, "SELECT nc_path FROM media_library_items WHERE id=%s", [lib_item_id])
             if _r:
                 old_nc_path = _r[0][0]
+    if not old_nc_path and open_nc:
+        old_nc_path = open_nc
 
     if ',' in data_url:
         _, b64 = data_url.split(',', 1)
@@ -1078,7 +1088,13 @@ def studio_save(request):
     except Exception:
         return JsonResponse({'error': 'Invalid image data'}, status=400)
 
-    filename = f"studio_{int(time.time())}.png"
+    # Dateiname: vorhandene Datei EXAKT überschreiben, sonst stabiler Titel-Name.
+    import re as _re_fn
+    if old_nc_path and old_nc_path.lower().endswith('.png') and '/Output/Images/' in old_nc_path:
+        filename = old_nc_path.rsplit('/', 1)[-1]
+    else:
+        _safe_name = _re_fn.sub(r'[^a-zA-Z0-9_.-]', '', (title or 'studio').replace(' ', '_')) or 'studio'
+        filename = _safe_name + '.png'
     nc_path  = _nc_upload(content, f"{NC_STUDIO_LIBRARY_FOLDER}/{filename}", 'image/png')
     if not nc_path:
         # local fallback
