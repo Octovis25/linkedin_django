@@ -66,6 +66,13 @@ const actions = {
     else if (choice === 'gif')   { await media.exportGif(editor); }
     else if (choice === 'video') { await media.exportVideo(editor); }
   },
+  // Vorhandene Ausgabe: nur speichern (gleiches Format, überschreibt).
+  'save-existing': async () => {
+    const kind = CONFIG.libData?.kind;
+    if (kind === 'gif') await media.exportGif(editor);
+    else if (kind === 'video') await media.exportVideo(editor);
+    else { await io.saveImage(editor); refreshOutput(); }
+  },
   download:    () => io.downloadImage(editor),
   'new':       async () => {
     const ok = await modal('Neu anfangen?', 'Leert den Editor (alle Elemente + Hintergrund). Nicht Gespeichertes geht verloren.', [
@@ -695,6 +702,12 @@ updateRetouchPanel();
   const t = CONFIG.libData?.title || CONFIG.postData?.title || '';
   const ti = document.getElementById('title-input');
   if (ti && t) ti.value = t;
+}
+
+// Vorhandene Ausgabe geöffnet? → Knopf „Speichern" (gleiches Format) statt „Speichern als…".
+if (CONFIG.libData?.item_id) {
+  const b = document.querySelector('[data-act="save-as"]');
+  if (b) { b.textContent = '💾 Speichern'; b.dataset.act = 'save-existing'; b.title = 'Vorhandene Ausgabe im gleichen Format überschreiben'; }
 }
 
 (function restoreInitial() {

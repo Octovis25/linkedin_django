@@ -729,8 +729,10 @@ def studio_view(request):
                     nc_path = rows[0][0]
                     studio_rows = _safe(c, """SELECT canvas_json, template_id FROM studio_images
                                              WHERE nc_path=%s ORDER BY created_at DESC LIMIT 1""", [nc_path])
+                    _low = (nc_path or '').lower()
                     lib_data = {'item_id': lib_item_id, 'image_url': f"/library/image/{lib_item_id}/",
-                                'title': rows[0][1] or ''}
+                                'title': rows[0][1] or '',
+                                'kind': 'gif' if _low.endswith('.gif') else ('video' if _low.endswith(('.webm', '.mp4', '.mov')) else 'image')}
                     if studio_rows and studio_rows[0][0]:
                         lib_data['canvas_json'] = studio_rows[0][0]
                         lib_data['template_id'] = studio_rows[0][1]
@@ -750,9 +752,11 @@ def studio_view(request):
                     # Fallback: nach Dateiname suchen (falls Pfadpräfix minimal abweicht)
                     si = _safe(c, "SELECT canvas_json FROM studio_images WHERE nc_path LIKE %s ORDER BY id DESC LIMIT 1", ['%/' + _fname])
                 mi = _safe(c, "SELECT id FROM media_library_items WHERE nc_path=%s LIMIT 1", [nc_open])
+            _low = _fname.lower()
             lib_data = {'item_id': (mi[0][0] if mi else None),
-                        'title': nc_open.rsplit('/', 1)[-1],
-                        'image_url': '/library/studio/nc-image/?p=' + _q(nc_open)}
+                        'title': _fname.rsplit('.', 1)[0],
+                        'image_url': '/library/studio/nc-image/?p=' + _q(nc_open),
+                        'kind': 'gif' if _low.endswith('.gif') else ('video' if _low.endswith(('.webm', '.mp4', '.mov')) else 'image')}
             if si and si[0][0]:
                 lib_data['canvas_json'] = si[0][0]
         except Exception as e:
@@ -1157,6 +1161,13 @@ def studio_save_video(request):
     if folder_id:
         try: folder_id = int(folder_id)
         except: folder_id = None
+    lib_item_id = request.POST.get('lib_item_id') or None   # gesetzt beim „Speichern" einer vorhandenen Ausgabe
+    old_nc_path = None
+    if lib_item_id:
+        with connection.cursor() as c:
+            _r = _safe(c, "SELECT nc_path FROM media_library_items WHERE id=%s", [lib_item_id])
+            if _r:
+                old_nc_path = _r[0][0]
     if not video_file:
         return JsonResponse({'error': 'No video file'}, status=400)
     content = video_file.read()
@@ -1181,11 +1192,13 @@ def studio_save_video(request):
     # Save to media_library_items — update if same title exists, else insert
     with connection.cursor() as c:
         tag = 'gif' if ext == '.gif' else 'video'
-        existing = _safe(c, "SELECT id FROM media_library_items WHERE title=%s AND (tags='video' OR tags='gif') LIMIT 1", [title])
+        # Beim „Speichern" einer vorhandenen Ausgabe gezielt dieses Element überschreiben.
+        existing = ([[lib_item_id]] if lib_item_id else
+                    _safe(c, "SELECT id FROM media_library_items WHERE title=%s AND (tags='video' OR tags='gif') LIMIT 1", [title]))
         if existing:
             lib_id = existing[0][0]
-            c.execute("UPDATE media_library_items SET nc_path=%s, folder_id=%s, tags=%s WHERE id=%s",
-                      [nc_path, folder_id, tag, lib_id])
+            c.execute("UPDATE media_library_items SET nc_path=%s, title=%s, folder_id=%s, tags=%s WHERE id=%s",
+                      [nc_path, title, folder_id, tag, lib_id])
         else:
             c.execute("""INSERT INTO media_library_items (nc_path, title, series, tags, folder_id)
                          VALUES (%s, %s, 'Studio', %s, %s)""", [nc_path, title, tag, folder_id])
@@ -1196,7 +1209,10 @@ def studio_save_video(request):
         canvas_json = _optimize_canvas_json(canvas_json, target_folder, title)
         like_folder = '%/GIFs/%' if ext == '.gif' else '%/Videos/%'
         with connection.cursor() as c:
-            existing_si = _safe(c, "SELECT id FROM studio_images WHERE title=%s AND nc_path LIKE %s LIMIT 1", [title, like_folder])
+            if old_nc_path:
+                existing_si = _safe(c, "SELECT id FROM studio_images WHERE nc_path=%s ORDER BY id DESC LIMIT 1", [old_nc_path])
+            else:
+                existing_si = _safe(c, "SELECT id FROM studio_images WHERE title=%s AND nc_path LIKE %s LIMIT 1", [title, like_folder])
             if existing_si:
                 c.execute("UPDATE studio_images SET nc_path=%s, canvas_json=%s WHERE id=%s",
                           [nc_path, canvas_json, existing_si[0][0]])
