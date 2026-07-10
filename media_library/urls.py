@@ -46,6 +46,7 @@ urlpatterns = [
     path('studio/api/shared-assets/',        views.studio_shared_assets_list,   name='studio_shared_assets_list'),
     path('studio/api/shared-assets/upload/', views.studio_shared_assets_upload, name='studio_shared_assets_upload'),
     path('studio/api/shared-assets/delete/', views.studio_shared_assets_delete, name='studio_shared_assets_delete'),
+    path('studio/api/output/delete/',        views.studio_output_delete,        name='studio_output_delete'),
     # DB-Element nach NC kopieren
     path('studio/api/db-to-nc/',             views.studio_db_item_to_nc,        name='studio_db_item_to_nc'),
 ]

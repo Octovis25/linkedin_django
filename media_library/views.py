@@ -788,6 +788,7 @@ def studio_view(request):
             'save':          '/library/studio/save/',
             'upload':        '/library/studio/upload/',
             'uploadDelete':  '/library/studio/upload/delete/',
+            'outputDelete':  '/library/studio/api/output/delete/',
             'saveVideo':     '/library/studio/video-template/save/',
             'saveVideoFile': '/library/studio/save-video/',
             'apiTemplates':  '/library/studio/api/templates/',
@@ -1923,6 +1924,34 @@ def studio_upload_delete(request):
     if '..' in nc_path:
         return JsonResponse({'error': 'Ungueltiger Pfad'}, status=400)
     _nc_delete(nc_path)
+    return JsonResponse({'ok': True})
+
+
+@login_required
+def studio_output_delete(request):
+    """Löscht eine fertige Ausgabe (Bild/GIF/Video) aus Studio_Work/Output/*
+    inklusive Vorschau und DB-Einträgen. Nur innerhalb der Output-Ordner erlaubt."""
+    if request.method != 'POST':
+        return JsonResponse({'error': 'POST required'}, status=405)
+    nc_path = (request.POST.get('nc_path') or '').strip()
+    allowed = (NC_STUDIO_LIBRARY_FOLDER, NC_STUDIO_GIFS_FOLDER, NC_STUDIO_VIDEOS_FOLDER)
+    if not nc_path or '..' in nc_path or not any(nc_path.startswith(f + '/') for f in allowed):
+        return JsonResponse({'error': 'Ungueltiger Pfad'}, status=400)
+    _nc_delete(nc_path)
+    # zugehörige Vorschau-Datei ebenfalls entfernen (best effort)
+    try:
+        folder, fname = nc_path.rsplit('/', 1)
+        stem = fname.rsplit('.', 1)[0]
+        _nc_delete(f"{folder}/{stem}_preview.png")
+    except Exception:
+        pass
+    # DB-Einträge entfernen
+    try:
+        with connection.cursor() as c:
+            c.execute("DELETE FROM studio_images WHERE nc_path=%s", [nc_path])
+            c.execute("DELETE FROM media_library_items WHERE nc_path=%s", [nc_path])
+    except Exception as e:
+        print("output delete db:", e)
     return JsonResponse({'ok': True})
 
 

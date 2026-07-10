@@ -316,7 +316,27 @@ async function loadOutput() {
           ? '/library/studio/?lib_item=' + dbId
           : '/library/studio/?nc_path=' + encodeURIComponent(item.nc_path);
       };
-      grid.appendChild(el);
+      // Kachel mit Löschen-Knopf
+      const tile = document.createElement('div'); tile.className = 'lib-tile';
+      tile.appendChild(el);
+      const del = document.createElement('button');
+      del.className = 'tile-del'; del.textContent = '✕'; del.title = 'Ausgabe löschen';
+      del.onclick = async (e) => {
+        e.stopPropagation();
+        if (!confirm('Diese Ausgabe wirklich löschen? Das entfernt die Datei auch aus Nextcloud.')) return;
+        del.disabled = true;
+        try {
+          const fd = new FormData(); fd.append('nc_path', item.nc_path);
+          const r = await fetch(URLS.outputDelete, { method: 'POST', headers: { 'X-CSRFToken': getCookie('csrftoken') }, body: fd });
+          const dd = await r.json();
+          if (dd.ok) {
+            tile.remove();
+            if (!grid.querySelector('.lib-tile')) grid.innerHTML = '<span class="no-templates">Nichts gespeichert.</span>';
+          } else { toast('Löschen fehlgeschlagen', 'err'); del.disabled = false; }
+        } catch (err) { toast('Fehler beim Löschen', 'err'); del.disabled = false; }
+      };
+      tile.appendChild(del);
+      grid.appendChild(tile);
     });
   } catch (e) {
     grid.innerHTML = '<span class="no-templates">Fehler beim Laden.</span>';
