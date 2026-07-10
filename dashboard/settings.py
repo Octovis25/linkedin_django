@@ -11,6 +11,12 @@ ALLOWED_HOSTS = os.getenv("DJANGO_ALLOWED_HOSTS", "localhost,127.0.0.1").split("
 
 DATA_UPLOAD_MAX_MEMORY_SIZE = 20 * 1024 * 1024  # 20MB for Studio canvas images
 
+# Sessions: lange Gültigkeit + gleitende Verlängerung bei Aktivität,
+# damit man nicht ständig ausgeloggt wird (auch nach Server-Neustarts).
+SESSION_COOKIE_AGE = 60 * 60 * 24 * 30          # 30 Tage
+SESSION_SAVE_EVERY_REQUEST = True               # bei jeder Anfrage verlängern
+SESSION_EXPIRE_AT_BROWSER_CLOSE = False
+
 INSTALLED_APPS = [
     "django.contrib.admin",
     "django.contrib.auth",
