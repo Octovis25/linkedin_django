@@ -13,19 +13,44 @@
   </thead>
   <tbody>
     {% for u in users %}
-    <tr>
+    <tr style="{% if not u.is_active %}opacity:.5;{% endif %}">
       <td>{{ u.get_full_name|default:"-" }}</td>
       <td>{{ u.username }}</td>
       <td>{{ u.email|default:"-" }}</td>
       <td>{% if u.is_superuser %}Superuser{% elif u.is_staff %}Staff{% else %}User{% endif %}</td>
-      <td>{% if u.is_active %}Ja{% else %}Nein{% endif %}</td>
+      <td>
+        {% if u.is_active %}
+          <span style="color:var(--octo-petrol);font-weight:500">✓ Aktiv</span>
+        {% else %}
+          <span style="color:#aaa">✗ Inaktiv</span>
+        {% endif %}
+      </td>
       <td>
         {% if u != request.user %}
-        <form method="post" action="/users/{{ u.id }}/delete/" style="display:inline;"
-              onsubmit="return confirm('User {{ u.username }} wirklich loeschen?')">
-          {% csrf_token %}
-          <button type="submit" class="btn btn-danger btn-sm">Loeschen</button>
-        </form>
+        <div style="display:flex;gap:6px;align-items:center">
+          <!-- Aktivieren / Deaktivieren -->
+          <form method="post" action="/users/{{ u.id }}/toggle-active/" style="display:inline">
+            {% csrf_token %}
+            {% if u.is_active %}
+              <button type="submit" class="btn btn-sm"
+                      style="background:#f0f0f0;color:#555;border:1px solid #ccc"
+                      onclick="return confirm('{{ u.username }} deaktivieren? Der Account bleibt erhalten.')">
+                Deaktivieren
+              </button>
+            {% else %}
+              <button type="submit" class="btn btn-sm"
+                      style="background:var(--octo-petrol);color:#fff;border:none">
+                Aktivieren
+              </button>
+            {% endif %}
+          </form>
+          <!-- Löschen -->
+          <form method="post" action="/users/{{ u.id }}/delete/" style="display:inline"
+                onsubmit="return confirm('User {{ u.username }} wirklich endgültig löschen?')">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-danger btn-sm">Löschen</button>
+          </form>
+        </div>
         {% else %}
         <span style="color:#aaa; font-size:0.85rem;">Du selbst</span>
         {% endif %}

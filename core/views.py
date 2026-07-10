@@ -332,6 +332,21 @@ def user_delete(request, user_id):
         return redirect('user_list')
     return render(request, 'core/user_confirm_delete.html', {'target_user': user})
 
+@login_required
+@user_passes_test(is_staff)
+def user_toggle_active(request, user_id):
+    user = get_object_or_404(User, pk=user_id)
+    if user == request.user:
+        messages.error(request, 'Du kannst deinen eigenen Account nicht deaktivieren.')
+        return redirect('user_list')
+    if request.method == 'POST':
+        user.is_active = not user.is_active
+        user.save()
+        status = 'aktiviert' if user.is_active else 'deaktiviert'
+        messages.success(request, f'User "{user.username}" wurde {status}.')
+    return redirect('user_list')
+
+
 from django.contrib.auth import logout as auth_logout
 
 def custom_logout(request):
