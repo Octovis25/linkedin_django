@@ -3,7 +3,7 @@
 //   MITTE: Assets aus Nextcloud als anhakbare Ordner-Struktur. Angehakte Ordner
 //          (auch Überordner rekursiv) zeigen ihre Bilder gesammelt im Raster.
 //   UNTEN: fertige Studio-Ausgaben Images / GIFs / Videos zum Weiterbearbeiten.
-import { URLS, getCookie } from './config.js';
+import { URLS, getCookie, CONFIG } from './config.js';
 import { toast } from './util.js';
 
 let _editor = null;
@@ -318,6 +318,12 @@ async function loadOutput() {
       };
       // Kachel mit Löschen-Knopf
       const tile = document.createElement('div'); tile.className = 'lib-tile';
+      // aktuell im Editor geöffnete Ausgabe hervorheben (über NC-Pfad, sonst DB-ID)
+      const openNc = CONFIG.libData?.nc_path;
+      if ((openNc && item.nc_path && openNc === item.nc_path) ||
+          (CONFIG.libData?.item_id && dbId && String(CONFIG.libData.item_id) === String(dbId))) {
+        tile.classList.add('active');
+      }
       tile.appendChild(el);
       const del = document.createElement('button');
       del.className = 'tile-del'; del.textContent = '✕'; del.title = 'Ausgabe löschen';

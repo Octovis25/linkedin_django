@@ -37,7 +37,7 @@ export class Editor {
     this._enableSnapping();
     this._enableKeyboard();
 
-    // Schöneres Auswahl-Styling (Octotrial-Orange)
+    // Dezentes Auswahl-Styling (Octotrial-Orange)
     fabric.Object.prototype.set({
       borderColor: '#F56E28',
       cornerColor: '#F56E28',
@@ -109,9 +109,15 @@ export class Editor {
       srcUrl: url, originalUrl: opts.originalUrl || url,
       crossOrigin: 'anonymous',
     });
-    // Auf sinnvolle Größe skalieren
-    const maxSize = Math.min(this.width, this.height) * 0.5;
-    if (img.width > maxSize) img.scaleToWidth(maxSize);
+    if (opts.fill) {
+      // Ganzen Canvas ausfüllen (z.B. beim Öffnen einer fertigen Ausgabe zum Bearbeiten)
+      const s = Math.max(this.width / img.width, this.height / img.height);
+      img.scale(s);
+    } else {
+      // Auf sinnvolle Größe skalieren
+      const maxSize = Math.min(this.width, this.height) * 0.5;
+      if (img.width > maxSize) img.scaleToWidth(maxSize);
+    }
     img.set({
       left: opts.x != null ? opts.x : this.width / 2,
       top:  opts.y != null ? opts.y : this.height / 2,

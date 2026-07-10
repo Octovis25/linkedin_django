@@ -731,7 +731,7 @@ def studio_view(request):
                                              WHERE nc_path=%s ORDER BY created_at DESC LIMIT 1""", [nc_path])
                     _low = (nc_path or '').lower()
                     lib_data = {'item_id': lib_item_id, 'image_url': f"/library/image/{lib_item_id}/",
-                                'title': rows[0][1] or '',
+                                'title': rows[0][1] or '', 'nc_path': nc_path,
                                 'kind': 'gif' if _low.endswith('.gif') else ('video' if _low.endswith(('.webm', '.mp4', '.mov')) else 'image')}
                     if studio_rows and studio_rows[0][0]:
                         lib_data['canvas_json'] = studio_rows[0][0]
@@ -754,7 +754,7 @@ def studio_view(request):
                 mi = _safe(c, "SELECT id FROM media_library_items WHERE nc_path=%s LIMIT 1", [nc_open])
             _low = _fname.lower()
             lib_data = {'item_id': (mi[0][0] if mi else None),
-                        'title': _fname.rsplit('.', 1)[0],
+                        'title': _fname.rsplit('.', 1)[0], 'nc_path': nc_open,
                         'image_url': '/library/studio/nc-image/?p=' + _q(nc_open),
                         'kind': 'gif' if _low.endswith('.gif') else ('video' if _low.endswith(('.webm', '.mp4', '.mov')) else 'image')}
             if si and si[0][0]:

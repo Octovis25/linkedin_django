@@ -56,6 +56,9 @@
 .sel-bar            { display:flex; gap:4px; margin-bottom:6px; flex-wrap:wrap; align-items:center;
                       min-height:30px; }
 .sel-bar .hint      { font-size:.72rem; color:#888; }
+.sel-active         { font-size:.72rem; font-weight:600; color:var(--octo-orange,#F56E28);
+                      background:#fff3ec; border:1px solid #f5c9ad; border-radius:5px;
+                      padding:2px 8px; margin-right:4px; white-space:nowrap; }
 
 /* ---- Grids: templates + library ---------------------------------------- */
 .tpl-grid           { display:grid; grid-template-columns:repeat(4,1fr); gap:.3rem;
@@ -72,7 +75,12 @@
 .lib-thumb.dragging { opacity:.5; cursor:grabbing; }
 
 /* Upload-Kachel mit Löschen-✕ */
-.lib-tile           { position:relative; }
+.lib-tile           { position:relative; border-radius:6px; }
+.lib-tile.active     { outline:3px solid var(--octo-orange,#F56E28); outline-offset:1px;
+                       box-shadow:0 0 0 4px rgba(245,110,40,.25); }
+.lib-tile.active::after { content:'✎ geöffnet'; position:absolute; left:2px; bottom:2px;
+                       font-size:.6rem; background:var(--octo-orange,#F56E28); color:#fff;
+                       padding:1px 5px; border-radius:4px; }
 .lib-tile .tile-del { position:absolute; top:2px; right:2px; width:18px; height:18px;
                       border:none; border-radius:50%; background:rgba(0,0,0,.55); color:#fff;
                       font-size:11px; line-height:1; cursor:pointer; display:flex;

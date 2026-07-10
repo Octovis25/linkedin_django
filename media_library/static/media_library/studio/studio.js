@@ -486,7 +486,11 @@ function renderSelBar() {
   const isImg = objs.length === 1 && objs[0].type === 'image';
   const d = hasSel ? '' : 'disabled';
   const dImg = isImg ? '' : 'disabled';
+  const activeLabel = !hasSel ? ''
+    : (objs.length > 1 ? `${objs.length} Elemente`
+       : layerLabel(objs[0], editor.realObjects().indexOf(objs[0]) + 1));
   bar.innerHTML = `
+    ${hasSel ? `<span class="sel-active" title="Aktives Element">${activeLabel}</span>` : ''}
     <button class="tbtn" data-act="duplicate" title="Duplizieren (Strg+D)" ${d}>📋</button>
     <button class="tbtn" data-act="flip-h" title="Horizontal spiegeln" ${d}>↔</button>
     <button class="tbtn" data-act="flip-v" title="Vertikal spiegeln" ${d}>↕</button>
@@ -715,8 +719,17 @@ if (CONFIG.libData?.item_id) {
     const post = CONFIG.postData, lib = CONFIG.libData;
     if (post?.canvas_json) { io.restoreCanvas(editor, post.canvas_json); return; }
     if (lib?.canvas_json)  { io.restoreCanvas(editor, lib.canvas_json); return; }
-    if (lib?.image_url)    { editor.addImageUrl(lib.image_url, { silent: true }); }
+    if (lib?.image_url)    { editor.addImageUrl(lib.image_url, { silent: true, fill: true }); }
   } catch (e) { console.warn('restoreInitial:', e); editor._locked = false; }
 })();
+
+// Sicherstellen, dass Elemente normal anklickbar/auswählbar sind (kein Werkzeug/
+// keine Zeichenebene blockiert die Auswahl nach dem Laden).
+_tool = 'off';
+editor.canvas.skipTargetFind = false;
+editor.canvas.selection = true;
+{ const ov = document.getElementById('rect-overlay'); if (ov) ov.style.display = 'none'; }
+editor.canvas.getObjects().forEach(o => { if (!o._snap) { o.selectable = true; o.evented = true; } });
+editor.canvas.requestRenderAll();
 
 status('Bereit.', '#888');
