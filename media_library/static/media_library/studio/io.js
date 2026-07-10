@@ -168,9 +168,15 @@ export function restoreCanvas(editor, canvasJsonStr) {
       if (typeof o.text !== 'string') o.text = String(o.text || '');
     }
   });
-  // Bildquellen auf Proxy umschreiben + crossOrigin erzwingen
+  // Bildquellen auf Proxy umschreiben + crossOrigin erzwingen.
+  // WICHTIG: Freigestellte/bearbeitete Bilder tragen ihren transparenten Stand
+  // direkt in src (data:/nc://) – die dürfen NICHT durch das Original (srcUrl)
+  // ersetzt werden, sonst ist die Transparenz nach dem Öffnen weg.
   fabricState.objects.forEach(o => {
-    if (o.type === 'image' && o.src) { o.src = proxyUrl(o.srcUrl || o.src); o.crossOrigin = 'anonymous'; }
+    if (o.type === 'image' && o.src) {
+      o.src = o.bgRemoved ? proxyUrl(o.src) : proxyUrl(o.srcUrl || o.src);
+      o.crossOrigin = 'anonymous';
+    }
   });
   if (fabricState.backgroundImage?.src) {
     fabricState.backgroundImage.src = proxyUrl(fabricState.backgroundImage.src);
