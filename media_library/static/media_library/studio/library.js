@@ -105,6 +105,7 @@ async function loadUploads() {
       del.title = 'Upload löschen';
       del.onclick = async (e) => {
         e.stopPropagation();
+        if (!confirm('Dieses hochgeladene Bild wirklich löschen?')) return;
         del.disabled = true;
         try {
           const fd = new FormData();
