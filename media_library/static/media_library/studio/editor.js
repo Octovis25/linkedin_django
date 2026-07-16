@@ -150,7 +150,12 @@ export class Editor {
     return t;
   }
 
+  // Wabe (Sechseck, Spitze oben) – Punkte relativ, Fabric setzt die Bounding-Box
   addShape(kind, color = '#F56E28') {
+    const hexPoints = r => Array.from({ length: 6 }, (_, i) => {
+      const a = (Math.PI / 3) * i - Math.PI / 2;
+      return { x: r * Math.cos(a), y: r * Math.sin(a) };
+    });
     const cx = this.width / 2, cy = this.height / 2;
     const common = { left: cx, top: cy, originX: 'center', originY: 'center', shapeKind: kind };
     let obj;
@@ -163,6 +168,10 @@ export class Editor {
         obj = new fabric.Circle({ ...common, radius: 70, fill: '', stroke: color, strokeWidth: 3 }); break;
       case 'filledCircle':
         obj = new fabric.Circle({ ...common, radius: 70, fill: color }); break;
+      case 'hex':
+        obj = new fabric.Polygon(hexPoints(70), { ...common, fill: '', stroke: color, strokeWidth: 3 }); break;
+      case 'filledHex':
+        obj = new fabric.Polygon(hexPoints(70), { ...common, fill: color }); break;
       case 'line':
         obj = new fabric.Line([cx - 100, cy, cx + 100, cy], { ...common, stroke: color, strokeWidth: 3 }); break;
       case 'dottedLine':

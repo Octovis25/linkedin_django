@@ -59,6 +59,13 @@
 .sel-active         { font-size:.72rem; font-weight:600; color:var(--octo-orange,#F56E28);
                       background:#fff3ec; border:1px solid #f5c9ad; border-radius:5px;
                       padding:2px 8px; margin-right:4px; white-space:nowrap; }
+.sel-size           { display:inline-flex; align-items:center; gap:3px; font-size:.72rem;
+                      color:#666; background:#fafafa; border:1px solid #e2e2e2;
+                      border-radius:5px; padding:1px 4px; margin-right:4px; white-space:nowrap; }
+.sel-num            { width:52px; font-size:.72rem; padding:2px 3px; text-align:right;
+                      border:1px solid #ccc; border-radius:4px; background:#fff; }
+.sel-num:focus      { outline:none; border-color:var(--octo-orange,#F56E28); }
+.sel-size .tbtn     { padding:1px 4px; line-height:1; }
 
 /* ---- Grids: templates + library ---------------------------------------- */
 .tpl-grid           { display:grid; grid-template-columns:repeat(4,1fr); gap:.3rem;

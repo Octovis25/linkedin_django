@@ -43,8 +43,26 @@ bg.renderPalette(document.getElementById('palette-row'), col => {
   const rc = document.getElementById('recolor-color'); if (rc) rc.value = col;   // Umfärben nutzt dieselbe Farbe
   const o = editor.active();
   if (o && o.type === 'textbox') { o.set('fill', col); editor.canvas.requestRenderAll(); editor.snapshot(); }
+  else if (isBadge(o)) {
+    // Badge: Palette färbt die Scheibe, Text bleibt lesbar
+    o._objects[0].set('fill', col);
+    const t = o._objects[1];
+    if (_hex(t.fill) === _hex(col)) t.set('fill', autoContrast(col));
+    editor.canvas.requestRenderAll(); editor.snapshot();
+  }
   else if (o && o.shapeKind) { o.set(o.fill ? 'fill' : 'stroke', col); editor.canvas.requestRenderAll(); editor.snapshot(); }
 });
+
+// Eigenes Textfarben-Feld: überschreibt die Palette für Text/Badge-Beschriftung
+{
+  const tc = document.getElementById('text-color');
+  if (tc) tc.oninput = () => {
+    currentTextColor = tc.value;
+    const o = editor.active();
+    if (o && o.type === 'textbox') { o.set('fill', tc.value); editor.canvas.requestRenderAll(); editor.snapshot(); }
+    else if (isBadge(o)) { o._objects[1].set('fill', tc.value); editor.canvas.requestRenderAll(); editor.snapshot(); }
+  };
+}
 
 // ---- Toolbar-Aktionen (data-act) -----------------------------------------
 const actions = {
@@ -467,7 +485,137 @@ function updateRetouchPanel() {
     b.classList.toggle('primary', b.dataset.tool === _tool && _tool !== 'off'));
 }
 
+// ---- Kreis/Banner mit Text (Füllfarbe = Palette, Textfarbe = Textfarben-Feld) ----
+const _hex = c => String(c || '').trim().toLowerCase();
+// Weiß oder Dunkelgrau – je nachdem, was auf der Füllfarbe lesbar ist
+function autoContrast(fill) {
+  const m = /^#?([0-9a-f]{6})$/i.exec(_hex(fill));
+  if (!m) return '#ffffff';
+  const n = parseInt(m[1], 16);
+  const lum = (0.299 * ((n >> 16) & 255) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255)) / 255;
+  return lum > 0.6 ? '#1a1a1a' : '#ffffff';
+}
+
+// Wabe: Sechseck mit Spitze oben
+const hexPoints = r => Array.from({ length: 6 }, (_, i) => {
+  const a = (Math.PI / 3) * i - Math.PI / 2;
+  return { x: r * Math.cos(a), y: r * Math.sin(a) };
+});
+
+function buildBadge(kind, txt, fill, textColor) {
+  const fs = (kind === 'circle' || kind === 'hex') ? 30 : 28;
+  const label = new fabric.Text(txt, {
+    fontSize: fs, fontWeight: 'bold', fontFamily: 'Roboto, Arial, sans-serif',
+    fill: textColor, originX: 'center', originY: 'center', left: 0, top: 0,
+  });
+  let shape;
+  if (kind === 'circle') {
+    const r = Math.max(36, Math.hypot(label.width, label.height) / 2 + 12);
+    shape = new fabric.Circle({ radius: r, fill, originX: 'center', originY: 'center', left: 0, top: 0 });
+  } else if (kind === 'hex') {
+    // Text muss in die schmalere Breite der Wabe passen -> Radius großzügiger
+    const r = Math.max(40, label.width / 1.55 + 16, label.height / 1.4 + 14);
+    shape = new fabric.Polygon(hexPoints(r), { fill, originX: 'center', originY: 'center', left: 0, top: 0 });
+  } else {
+    const h = Math.max(64, label.height + 26);
+    const w = Math.max(140, label.width + 56);
+    shape = new fabric.Rect({ width: w, height: h, rx: h / 2, ry: h / 2, fill,
+      originX: 'center', originY: 'center', left: 0, top: 0 });
+  }
+  return new fabric.Group([shape, label], {
+    originX: 'center', originY: 'center', shapeKind: 'badge-' + kind,
+  });
+}
+
+function addBadge(kind) {
+  const inp = document.getElementById('text-input');
+  const typed = inp?.value.trim();
+  const fill = currentShapeColor;
+  let textColor = document.getElementById('text-color')?.value || '#ffffff';
+  // Gemeinsame Palette färbt beides gleich -> Text wäre unsichtbar. Dann automatisch.
+  if (_hex(textColor) === _hex(fill)) textColor = autoContrast(fill);
+
+  const dflt = (kind === 'circle' || kind === 'hex') ? '1' : 'Titel';
+  const g = buildBadge(kind, typed || dflt, fill, textColor);
+  g.set({ left: editor.width / 2, top: editor.height / 2 });
+  editor.canvas.add(g);
+  editor.canvas.setActiveObject(g);
+  editor.canvas.requestRenderAll();
+  editor.snapshot();
+  if (inp) inp.value = '';
+  if (!typed) startBadgeEdit(g);   // nichts vorgetippt -> gleich losschreiben
+}
+
+// ---- Text direkt im Badge schreiben (Doppelklick oder direkt nach dem Anlegen) ----
+function isBadge(o) { return !!(o && typeof o.shapeKind === 'string' && o.shapeKind.startsWith('badge-')); }
+
+function rebuildBadge(g, txt) {
+  const kind = g.shapeKind.replace('badge-', '');
+  const old = g._objects || [];
+  const fill = old[0]?.fill || currentShapeColor;
+  const textColor = old[1]?.fill || '#ffffff';
+  const c = g.getCenterPoint();
+  const ng = buildBadge(kind, txt, fill, textColor);
+  ng.set({ left: c.x, top: c.y, angle: g.angle, scaleX: g.scaleX, scaleY: g.scaleY,
+           anim: g.anim, fx: g.fx });
+  const idx = editor.canvas.getObjects().indexOf(g);
+  editor.canvas.remove(g);
+  editor.canvas.add(ng);
+  if (idx >= 0) ng.moveTo(idx);
+  editor.canvas.setActiveObject(ng);
+  editor.canvas.requestRenderAll();
+  editor.snapshot();
+  return ng;
+}
+
+function startBadgeEdit(g) {
+  if (!isBadge(g)) return;
+  document.getElementById('badge-edit')?.remove();
+  const cur = g._objects?.[1]?.text || '';
+  const cEl = editor.canvas.upperCanvasEl;
+  const r = cEl.getBoundingClientRect();
+  const k = r.width / editor.canvas.getWidth();
+  const p = g.getCenterPoint();
+  const vt = editor.canvas.viewportTransform || [1, 0, 0, 1, 0, 0];
+  const zoom = editor.canvas.getZoom();
+  const x = r.left + (p.x * zoom + vt[4]) * k;
+  const y = r.top + (p.y * zoom + vt[5]) * k;
+
+  const inp = document.createElement('input');
+  inp.id = 'badge-edit';
+  inp.type = 'text';
+  inp.value = cur;
+  inp.style.cssText = `position:fixed;left:${x}px;top:${y}px;transform:translate(-50%,-50%);
+    z-index:9999;min-width:120px;max-width:60vw;text-align:center;font-weight:700;font-size:15px;
+    padding:6px 10px;border:2px solid #F56E28;border-radius:8px;background:#fff;color:#222;
+    box-shadow:0 4px 14px rgba(0,0,0,.25);outline:none;`;
+  document.body.appendChild(inp);
+  inp.focus(); inp.select();
+  status('Text eintippen, Enter = fertig (Esc = abbrechen).');
+
+  let done = false;
+  const finish = save => {
+    if (done) return; done = true;
+    const v = inp.value.trim();
+    inp.remove();
+    if (save && v && v !== cur) rebuildBadge(g, v);
+    status('Bereit.');
+  };
+  inp.onkeydown = e => {
+    e.stopPropagation();
+    if (e.key === 'Enter') { e.preventDefault(); finish(true); }
+    else if (e.key === 'Escape') { e.preventDefault(); finish(false); }
+  };
+  inp.onblur = () => finish(true);
+}
+
+editor.canvas.on('mouse:dblclick', e => {
+  if (isBadge(e.target)) startBadgeEdit(e.target);
+});
+
 document.addEventListener('click', e => {
+  const bb = e.target.closest('[data-badge]');
+  if (bb) { e.preventDefault(); addBadge(bb.dataset.badge); return; }
   const tb = e.target.closest('#retouch-body [data-tool]');
   if (tb) { e.preventDefault(); setTool(tb.dataset.tool); }
   const mb = e.target.closest('#retouch-body [data-mark]');
@@ -479,6 +627,8 @@ document.addEventListener('click', e => {
 }
 
 // ---- Element-Leiste: IMMER sichtbar, Buttons inaktiv wenn nichts gewählt ---
+let _keepRatio = true;
+
 function renderSelBar() {
   const bar = document.getElementById('sel-bar');
   const objs = editor.activeAll();
@@ -489,8 +639,16 @@ function renderSelBar() {
   const activeLabel = !hasSel ? ''
     : (objs.length > 1 ? `${objs.length} Elemente`
        : layerLabel(objs[0], editor.realObjects().indexOf(objs[0]) + 1));
+  const first = objs[0];
+  const sw = first ? Math.round(first.getScaledWidth()) : '';
+  const sh = first ? Math.round(first.getScaledHeight()) : '';
   bar.innerHTML = `
     ${hasSel ? `<span class="sel-active" title="Aktives Element">${activeLabel}</span>` : ''}
+    ${hasSel ? `<span class="sel-size" title="Größe in Pixel${objs.length > 1 ? ' – gilt für alle ausgewählten Elemente' : ''}">
+        B <input type="number" id="sel-w" class="sel-num" min="1" step="1" value="${sw}">
+        H <input type="number" id="sel-h" class="sel-num" min="1" step="1" value="${sh}">
+        <button class="tbtn" id="sel-lock" title="${_keepRatio ? 'Seitenverhältnis bleibt erhalten – klicken zum Entsperren' : 'Breite/Höhe frei – klicken zum Sperren'}">${_keepRatio ? '🔗' : '🔓'}</button>
+      </span>` : ''}
     <button class="tbtn" data-act="duplicate" title="Duplizieren (Strg+D)" ${d}>📋</button>
     <button class="tbtn" data-act="flip-h" title="Horizontal spiegeln" ${d}>↔</button>
     <button class="tbtn" data-act="flip-v" title="Vertikal spiegeln" ${d}>↕</button>
@@ -509,6 +667,44 @@ function renderSelBar() {
     <button class="tbtn danger" data-act="delete" title="Löschen (Entf)" ${d}>🗑</button>
     ${hasSel ? '' : '<span class="hint" style="margin-left:8px">Element wählen zum Bearbeiten</span>'}
   `;
+  wireSizeFields();
+}
+
+// ---- Größe per Zahl setzen (bei Mehrfachauswahl: für alle) -----------------
+function wireSizeFields() {
+  const wi = document.getElementById('sel-w');
+  const hi = document.getElementById('sel-h');
+  const lk = document.getElementById('sel-lock');
+  if (lk) lk.onclick = e => { e.preventDefault(); _keepRatio = !_keepRatio; renderSelBar(); };
+  if (!wi || !hi) return;
+
+  const apply = dim => {
+    const list = editor.activeAll();
+    if (!list.length) return;
+    const wv = +wi.value, hv = +hi.value;
+    if (dim === 'w' && !(wv > 0)) return;
+    if (dim === 'h' && !(hv > 0)) return;
+    list.forEach(o => {
+      if (_keepRatio) {
+        if (dim === 'w') o.scaleToWidth(wv); else o.scaleToHeight(hv);
+      } else {
+        if (dim === 'w') o.scaleX = (wv / o.getScaledWidth())  * o.scaleX;
+        else             o.scaleY = (hv / o.getScaledHeight()) * o.scaleY;
+      }
+      o.setCoords();
+    });
+    const a = editor.active();
+    if (a && a.type === 'activeSelection') { a._calcBounds?.(); a._updateObjectsCoords?.(); a.setCoords(); }
+    const f = list[0];
+    wi.value = Math.round(f.getScaledWidth());
+    hi.value = Math.round(f.getScaledHeight());
+    editor.canvas.requestRenderAll();
+    editor.snapshot();
+  };
+  wi.onchange = () => apply('w');
+  hi.onchange = () => apply('h');
+  const enter = e => { if (e.key === 'Enter') { e.preventDefault(); e.target.blur(); } };
+  wi.onkeydown = enter; hi.onkeydown = enter;
 }
 
 // ---- Ebenen-Liste ---------------------------------------------------------
@@ -587,149 +783,4 @@ function renderAnimBar() {
   const title = document.createElement('span');
   title.className = 'anim-bar-title'; title.textContent = '🎬 Animation je Element';
   const prevTop = document.createElement('button');
-  prevTop.className = 'tbtn primary'; prevTop.textContent = '▶ Vorschau';
-  prevTop.onclick = () => media.previewAnimation(editor);
-  head.appendChild(title); head.appendChild(prevTop);
-  bar.appendChild(head);
-
-  objs.forEach((o, idx) => {
-    const row = document.createElement('div'); row.className = 'anim-row';
-
-    // Vorschaubild des Elements
-    const th = document.createElement('img'); th.className = 'anim-thumb';
-    th.title = layerLabel(o, idx + 1) + ' – auswählen';
-    th.onclick = () => editor.selectObj(o);
-    try {
-      const dim = Math.max(o.getScaledWidth?.() || o.width || 1, o.getScaledHeight?.() || o.height || 1);
-      th.src = o.toDataURL({ format: 'png', multiplier: Math.min(1, 90 / Math.max(dim, 1)) });
-    } catch (e) { th.style.background = '#dfe3e6'; }
-
-    // Regler-Spalte (untereinander)
-    const col = document.createElement('div'); col.className = 'anim-col';
-
-    const selRow = document.createElement('label'); selRow.className = 'anim-ctl';
-    selRow.innerHTML = '<span>Bewegung</span>';
-    const sel = document.createElement('select'); sel.className = 'field';
-    media.ANIM_TYPES.forEach(t => {
-      const op = document.createElement('option'); op.value = t;
-      op.textContent = media.ANIM_LABELS[t] || t;
-      if ((o.anim?.type || 'none') === t) op.selected = true; sel.appendChild(op);
-    });
-    sel.onchange = () => {
-      const t = sel.value;
-      o.anim = (t && t !== 'none') ? { type: t, dur: o.anim?.dur || 1200, delay: o.anim?.delay || 0 } : null;
-      editor.snapshot(); renderAnimPanel();
-    };
-    selRow.appendChild(sel);
-
-    const fxRow = document.createElement('label'); fxRow.className = 'anim-ctl';
-    fxRow.innerHTML = '<span>Effekt</span>';
-    const fxsel = document.createElement('select'); fxsel.className = 'field';
-    media.EFFECTS.forEach(t => {
-      const op = document.createElement('option'); op.value = t;
-      op.textContent = media.EFFECT_LABELS[t] || t;
-      if ((o.fx || 'none') === t) op.selected = true; fxsel.appendChild(op);
-    });
-    fxsel.onchange = () => { const v = fxsel.value; o.fx = (v && v !== 'none') ? v : null; editor.snapshot(); };
-    fxRow.appendChild(fxsel);
-
-    // Tempo + Start (Verzögerung) nebeneinander
-    const timeRow = document.createElement('div'); timeRow.className = 'anim-ctl anim-time';
-    const durWrap = document.createElement('label'); durWrap.className = 'anim-time-item';
-    durWrap.innerHTML = '<span>Tempo</span>';
-    const dur = document.createElement('input');
-    dur.type = 'range'; dur.className = 'tl-slider'; dur.min = 300; dur.max = 4000; dur.step = 100;
-    dur.value = o.anim?.dur || 1200; dur.title = 'Tempo (Dauer)';
-    dur.oninput = () => { if (o.anim) o.anim.dur = +dur.value; };
-    dur.onchange = () => editor.snapshot();
-    durWrap.appendChild(dur);
-
-    const delWrap = document.createElement('label'); delWrap.className = 'anim-time-item';
-    delWrap.innerHTML = '<span>Start</span>';
-    const del = document.createElement('input');
-    del.type = 'range'; del.className = 'tl-slider'; del.min = 0; del.max = 3000; del.step = 100;
-    del.value = o.anim?.delay || 0; del.title = 'Start-Verzögerung: wann der Effekt einsetzt';
-    del.oninput = () => { if (o.anim) o.anim.delay = +del.value; };
-    del.onchange = () => editor.snapshot();
-    delWrap.appendChild(del);
-
-    timeRow.appendChild(durWrap); timeRow.appendChild(delWrap);
-
-    col.appendChild(selRow); col.appendChild(fxRow); col.appendChild(timeRow);
-    row.appendChild(th); row.appendChild(col);
-    bar.appendChild(row);
-  });
-}
-
-// ---- Selektion-Events koppeln --------------------------------------------
-['selection:created', 'selection:updated', 'selection:cleared'].forEach(ev =>
-  editor.canvas.on(ev, () => {
-    if (ev === 'selection:cleared' && _tool !== 'off' && !_suppressClear
-        && !['rect', 'mark', 'paint', 'erase', 'restore'].includes(_tool)) setTool('off');
-    renderSelBar(); renderAnimPanel(); updateRetouchPanel(); renderLayers(); renderAnimBar();
-  }));
-
-// ---- Undo/Redo-Buttons aktiv/inaktiv --------------------------------------
-editor.onChange(() => {
-  const u = document.querySelector('[data-act="undo"]');
-  const r = document.querySelector('[data-act="redo"]');
-  if (u) u.disabled = !editor.canUndo();
-  if (r) r.disabled = !editor.canRedo();
-  bg.updateBgInfo(editor);
-  renderLayers(); renderAnimBar();
-});
-
-// ---- Auto-Integration: eingebackenes Rautenmuster beim Einfügen entfernen --
-const _origAddImg = editor.addImageUrl.bind(editor);
-editor.addImageUrl = async (url, opts) => {
-  const img = await _origAddImg(url, opts);
-  try {
-    if (!opts?.silent && img && img._element && hasCheckerboardBorder(img._element)) {
-      status('✨ Muster erkannt – entferne nur das Schachbrett…');
-      const cleaned = await removeCheckerboard(img._element);   // nur Muster weg, Weiß bleibt
-      img.bgRemoved = true; img._work = null;
-      retouch.replaceElement(img, cleaned); editor.snapshot();
-      status('✅ Muster entfernt', 'green');
-    }
-  } catch (e) { /* still */ }
-  return img;
-};
-
-// ---- Init -----------------------------------------------------------------
-bg.loadTemplateList(editor);
-initLibrary(editor);
-renderSelBar();
-updateRetouchPanel();
-
-// Titel vorausfüllen (beim Weiterbearbeiten bleibt der Name erhalten).
-{
-  const t = CONFIG.libData?.title || CONFIG.postData?.title || '';
-  const ti = document.getElementById('title-input');
-  if (ti && t) ti.value = t;
-}
-
-// Vorhandene Ausgabe geöffnet? → Knopf „Speichern" (gleiches Format) statt „Speichern als…".
-if (CONFIG.libData?.item_id || CONFIG.libData?.nc_path) {
-  const b = document.querySelector('[data-act="save-as"]');
-  if (b) { b.textContent = '💾 Speichern'; b.dataset.act = 'save-existing'; b.title = 'Vorhandene Ausgabe im gleichen Format überschreiben'; }
-}
-
-(function restoreInitial() {
-  try {
-    const post = CONFIG.postData, lib = CONFIG.libData;
-    if (post?.canvas_json) { io.restoreCanvas(editor, post.canvas_json); return; }
-    if (lib?.canvas_json)  { io.restoreCanvas(editor, lib.canvas_json); return; }
-    if (lib?.image_url)    { editor.addImageUrl(lib.image_url, { silent: true, fill: true }); }
-  } catch (e) { console.warn('restoreInitial:', e); editor._locked = false; }
-})();
-
-// Sicherstellen, dass Elemente normal anklickbar/auswählbar sind (kein Werkzeug/
-// keine Zeichenebene blockiert die Auswahl nach dem Laden).
-_tool = 'off';
-editor.canvas.skipTargetFind = false;
-editor.canvas.selection = true;
-{ const ov = document.getElementById('rect-overlay'); if (ov) ov.style.display = 'none'; }
-editor.canvas.getObjects().forEach(o => { if (!o._snap) { o.selectable = true; o.evented = true; } });
-editor.canvas.requestRenderAll();
-
-status('Bereit.', '#888');
+  prevTop.className = 'tbtn primary'; prevT
