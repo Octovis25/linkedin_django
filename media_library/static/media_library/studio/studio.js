@@ -546,6 +546,73 @@ function addBadge(kind) {
   if (!typed) startBadgeEdit(g);   // nichts vorgetippt -> gleich losschreiben
 }
 
+// ---- SVG importieren: zerlegt in einzelne Ebenen -------------------------
+function importSvgText(svgText, asGroup) {
+  return new Promise(resolve => {
+    fabric.loadSVGFromString(svgText, (objects, options) => {
+      const objs = (objects || []).filter(Boolean);
+      if (!objs.length) { status('SVG enthielt keine lesbaren Formen.', '#dc3545'); return resolve(0); }
+
+      // Auf die Canvas-Groesse einpassen (90 %, mittig)
+      const sw = options?.width || editor.width;
+      const sh = options?.height || editor.height;
+      const s = Math.min(editor.width / sw, editor.height / sh) * 0.9;
+      const offX = (editor.width - sw * s) / 2;
+      const offY = (editor.height - sh * s) / 2;
+
+      if (asGroup) {
+        const g = fabric.util.groupSVGElements(objs, options);
+        g.set({
+          left: editor.width / 2, top: editor.height / 2,
+          originX: 'center', originY: 'center',
+          scaleX: (g.scaleX || 1) * s, scaleY: (g.scaleY || 1) * s,
+          shapeKind: 'svg',
+        });
+        editor.canvas.add(g);
+        editor.canvas.setActiveObject(g);
+      } else {
+        objs.forEach((o, i) => {
+          o.set({
+            left: offX + (o.left || 0) * s,
+            top:  offY + (o.top  || 0) * s,
+            scaleX: (o.scaleX || 1) * s,
+            scaleY: (o.scaleY || 1) * s,
+            shapeKind: o.shapeKind || 'svg',
+            svgPart: i + 1,
+          });
+          o.setCoords();
+          editor.canvas.add(o);
+        });
+      }
+      editor.canvas.requestRenderAll();
+      editor.snapshot();
+      resolve(asGroup ? 1 : objs.length);
+    });
+  });
+}
+
+{
+  const btn = document.getElementById('svg-import-btn');
+  const inp = document.getElementById('svg-file-input');
+  if (btn && inp) {
+    btn.onclick = e => { e.preventDefault(); inp.value = ''; inp.click(); };
+    inp.onchange = async () => {
+      const f = inp.files?.[0];
+      if (!f) return;
+      status('SVG wird gelesen…');
+      try {
+        const text = await f.text();
+        const asGroup = !!document.getElementById('svg-as-group')?.checked;
+        const n = await importSvgText(text, asGroup);
+        if (n) status(asGroup ? 'SVG als 1 Objekt eingefügt.' : `SVG eingefügt: ${n} Ebene(n).`, '#198754');
+      } catch (err) {
+        console.error(err);
+        status('SVG konnte nicht gelesen werden: ' + err.message, '#dc3545');
+      }
+    };
+  }
+}
+
 // ---- Text direkt im Badge schreiben (Doppelklick oder direkt nach dem Anlegen) ----
 function isBadge(o) { return !!(o && typeof o.shapeKind === 'string' && o.shapeKind.startsWith('badge-')); }
 
@@ -711,6 +778,7 @@ function wireSizeFields() {
 function layerLabel(o, i) {
   if (o.type === 'image')   return '🖼 Bild ' + i;
   if (o.type === 'textbox') return '✏️ ' + (o.text || 'Text').slice(0, 14);
+  if (o.svgPart)            return '📐 SVG-Teil ' + o.svgPart;
   if (o.shapeKind)          return '🔷 Form ' + i;
   return 'Element ' + i;
 }
@@ -783,4 +851,160 @@ function renderAnimBar() {
   const title = document.createElement('span');
   title.className = 'anim-bar-title'; title.textContent = '🎬 Animation je Element';
   const prevTop = document.createElement('button');
-  prevTop.className = 'tbtn primary'; prevT
+  prevTop.className = 'tbtn primary'; prevTop.textContent = '▶ Vorschau';
+  prevTop.onclick = () => media.previewAnimation(editor);
+  head.appendChild(title); head.appendChild(prevTop);
+  bar.appendChild(head);
+
+  objs.forEach((o, idx) => {
+    const row = document.createElement('div'); row.className = 'anim-row';
+
+    // Vorschaubild des Elements
+    const th = document.createElement('img'); th.className = 'anim-thumb';
+    th.title = layerLabel(o, idx + 1) + ' – auswählen';
+    th.onclick = () => editor.selectObj(o);
+    try {
+      const dim = Math.max(o.getScaledWidth?.() || o.width || 1, o.getScaledHeight?.() || o.height || 1);
+      th.src = o.toDataURL({ format: 'png', multiplier: Math.min(1, 90 / Math.max(dim, 1)) });
+    } catch (e) { th.style.background = '#dfe3e6'; }
+
+    // Regler-Spalte (untereinander)
+    const col = document.createElement('div'); col.className = 'anim-col';
+
+    const selRow = document.createElement('label'); selRow.className = 'anim-ctl';
+    selRow.innerHTML = '<span>Bewegung</span>';
+    const sel = document.createElement('select'); sel.className = 'field';
+    media.ANIM_TYPES.forEach(t => {
+      const op = document.createElement('option'); op.value = t;
+      op.textContent = media.ANIM_LABELS[t] || t;
+      if ((o.anim?.type || 'none') === t) op.selected = true; sel.appendChild(op);
+    });
+    sel.onchange = () => {
+      const t = sel.value;
+      o.anim = (t && t !== 'none') ? { type: t, dur: o.anim?.dur || 1200, delay: o.anim?.delay || 0 } : null;
+      editor.snapshot(); renderAnimPanel();
+    };
+    selRow.appendChild(sel);
+
+    const fxRow = document.createElement('label'); fxRow.className = 'anim-ctl';
+    fxRow.innerHTML = '<span>Effekt</span>';
+    const fxsel = document.createElement('select'); fxsel.className = 'field';
+    media.EFFECTS.forEach(t => {
+      const op = document.createElement('option'); op.value = t;
+      op.textContent = media.EFFECT_LABELS[t] || t;
+      if ((o.fx || 'none') === t) op.selected = true; fxsel.appendChild(op);
+    });
+    fxsel.onchange = () => { const v = fxsel.value; o.fx = (v && v !== 'none') ? v : null; editor.snapshot(); };
+    fxRow.appendChild(fxsel);
+
+    // Tempo + Start (Verzögerung) nebeneinander
+    const timeRow = document.createElement('div'); timeRow.className = 'anim-ctl anim-time';
+    const durWrap = document.createElement('label'); durWrap.className = 'anim-time-item';
+    durWrap.innerHTML = '<span>Tempo</span>';
+    const dur = document.createElement('input');
+    dur.type = 'range'; dur.className = 'tl-slider'; dur.min = 300; dur.max = 4000; dur.step = 100;
+    dur.value = o.anim?.dur || 1200; dur.title = 'Tempo (Dauer)';
+    dur.oninput = () => { if (o.anim) o.anim.dur = +dur.value; };
+    dur.onchange = () => editor.snapshot();
+    durWrap.appendChild(dur);
+
+    const delWrap = document.createElement('label'); delWrap.className = 'anim-time-item';
+    delWrap.innerHTML = '<span>Start</span>';
+    const del = document.createElement('input');
+    del.type = 'range'; del.className = 'tl-slider'; del.min = 0; del.max = 3000; del.step = 100;
+    del.value = o.anim?.delay || 0; del.title = 'Start-Verzögerung: wann der Effekt einsetzt';
+    del.oninput = () => { if (o.anim) o.anim.delay = +del.value; };
+    del.onchange = () => editor.snapshot();
+    delWrap.appendChild(del);
+
+    timeRow.appendChild(durWrap); timeRow.appendChild(delWrap);
+
+    col.appendChild(selRow); col.appendChild(fxRow); col.appendChild(timeRow);
+    row.appendChild(th); row.appendChild(col);
+    bar.appendChild(row);
+  });
+}
+
+// ---- Selektion-Events koppeln --------------------------------------------
+['selection:created', 'selection:updated', 'selection:cleared'].forEach(ev =>
+  editor.canvas.on(ev, () => {
+    if (ev === 'selection:cleared' && _tool !== 'off' && !_suppressClear
+        && !['rect', 'mark', 'paint', 'erase', 'restore'].includes(_tool)) setTool('off');
+    renderSelBar(); renderAnimPanel(); updateRetouchPanel(); renderLayers(); renderAnimBar();
+  }));
+
+// Größenfelder mitführen, wenn per Maus skaliert/gedreht wird
+['object:modified', 'object:scaling'].forEach(ev =>
+  editor.canvas.on(ev, () => {
+    const o = editor.activeAll()[0];
+    const wi = document.getElementById('sel-w'), hi = document.getElementById('sel-h');
+    if (!o || !wi || !hi) return;
+    if (document.activeElement === wi || document.activeElement === hi) return;
+    wi.value = Math.round(o.getScaledWidth());
+    hi.value = Math.round(o.getScaledHeight());
+  }));
+
+// ---- Undo/Redo-Buttons aktiv/inaktiv --------------------------------------
+editor.onChange(() => {
+  const u = document.querySelector('[data-act="undo"]');
+  const r = document.querySelector('[data-act="redo"]');
+  if (u) u.disabled = !editor.canUndo();
+  if (r) r.disabled = !editor.canRedo();
+  bg.updateBgInfo(editor);
+  renderLayers(); renderAnimBar();
+});
+
+// ---- Auto-Integration: eingebackenes Rautenmuster beim Einfügen entfernen --
+const _origAddImg = editor.addImageUrl.bind(editor);
+editor.addImageUrl = async (url, opts) => {
+  const img = await _origAddImg(url, opts);
+  try {
+    if (!opts?.silent && img && img._element && hasCheckerboardBorder(img._element)) {
+      status('✨ Muster erkannt – entferne nur das Schachbrett…');
+      const cleaned = await removeCheckerboard(img._element);   // nur Muster weg, Weiß bleibt
+      img.bgRemoved = true; img._work = null;
+      retouch.replaceElement(img, cleaned); editor.snapshot();
+      status('✅ Muster entfernt', 'green');
+    }
+  } catch (e) { /* still */ }
+  return img;
+};
+
+// ---- Init -----------------------------------------------------------------
+bg.loadTemplateList(editor);
+initLibrary(editor);
+renderSelBar();
+updateRetouchPanel();
+
+// Titel vorausfüllen (beim Weiterbearbeiten bleibt der Name erhalten).
+{
+  const t = CONFIG.libData?.title || CONFIG.postData?.title || '';
+  const ti = document.getElementById('title-input');
+  if (ti && t) ti.value = t;
+}
+
+// Vorhandene Ausgabe geöffnet? → Knopf „Speichern" (gleiches Format) statt „Speichern als…".
+if (CONFIG.libData?.item_id || CONFIG.libData?.nc_path) {
+  const b = document.querySelector('[data-act="save-as"]');
+  if (b) { b.textContent = '💾 Speichern'; b.dataset.act = 'save-existing'; b.title = 'Vorhandene Ausgabe im gleichen Format überschreiben'; }
+}
+
+(function restoreInitial() {
+  try {
+    const post = CONFIG.postData, lib = CONFIG.libData;
+    if (post?.canvas_json) { io.restoreCanvas(editor, post.canvas_json); return; }
+    if (lib?.canvas_json)  { io.restoreCanvas(editor, lib.canvas_json); return; }
+    if (lib?.image_url)    { editor.addImageUrl(lib.image_url, { silent: true, fill: true }); }
+  } catch (e) { console.warn('restoreInitial:', e); editor._locked = false; }
+})();
+
+// Sicherstellen, dass Elemente normal anklickbar/auswählbar sind (kein Werkzeug/
+// keine Zeichenebene blockiert die Auswahl nach dem Laden).
+_tool = 'off';
+editor.canvas.skipTargetFind = false;
+editor.canvas.selection = true;
+{ const ov = document.getElementById('rect-overlay'); if (ov) ov.style.display = 'none'; }
+editor.canvas.getObjects().forEach(o => { if (!o._snap) { o.selectable = true; o.evented = true; } });
+editor.canvas.requestRenderAll();
+
+status('Bereit.', '#888');

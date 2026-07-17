@@ -104,6 +104,14 @@
           <button class="tbtn" data-badge="hex" title="Wabe mit Nummer/Text – Text direkt eintippen, Doppelklick zum Ändern">⬢ Wabe + Text</button>
           <button class="tbtn" data-badge="pill" title="Banner-Pille mit Text – Text direkt eintippen, Doppelklick zum Ändern">▭ Banner + Text</button>
         </div>
+        <div class="lib-hint" style="margin-top:8px">SVG einfügen – jedes Teil wird eine eigene Ebene:</div>
+        <div class="swatch-row">
+          <button class="tbtn" id="svg-import-btn" title="SVG-Datei zerlegt einfügen: Bänder, Formen, Icons werden einzelne Objekte">📐 SVG importieren</button>
+          <label style="display:inline-flex;align-items:center;gap:4px;font-size:.72rem;color:#666;white-space:nowrap">
+            <input type="checkbox" id="svg-as-group"> als 1 Objekt
+          </label>
+        </div>
+        <input type="file" id="svg-file-input" accept=".svg,image/svg+xml" hidden>
       </div>
     </section>
 

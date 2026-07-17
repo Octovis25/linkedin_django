@@ -11,7 +11,7 @@ function _klassOk(type) {
   return !!(fabric && fabric[name] && typeof fabric[name].fromObject === 'function');
 }
 
-const FABRIC_PROPS = ['srcUrl', 'originalUrl', 'bgRemoved', 'anim', 'shapeKind', 'fx'];
+const FABRIC_PROPS = ['srcUrl', 'originalUrl', 'bgRemoved', 'anim', 'shapeKind', 'fx', 'svgPart'];
 
 // Baut das canvas_json. Enthält:
 //   fabric        – vollständiger Fabric-State für exakten Reload
