@@ -23,7 +23,9 @@
   {% endif %}
 </div>
 {% elif post_id %}
-<div class="post-banner"><div class="post-info"><strong>📌 Post #{{ post_id }}</strong><p>Bild wird beim Speichern am Post angehängt.</p></div></div>
+<div class="post-banner"><div class="post-info"><strong>📌 Post #{{ post_id }}</strong><p>Bild wird beim Speichern am Post angehängt.</p></div>
+  <button class="tbtn" data-act="copy-from-post" title="Ein bestehendes Bild von einem anderen Post übernehmen – wird als Kopie an diesen Post gespeichert">📥 Bild von anderem Post</button>
+</div>
 {% elif lib_data %}
 <div class="post-banner">
   <img src="{{ lib_data.image_url }}" alt="">
@@ -39,12 +41,14 @@
 <div class="studio-wrap">
 
   <!-- ============ LINKE SIDEBAR ============ -->
+  <button class="panel-toggle" id="toggle-left" title="Werkzeugleiste ein-/ausklappen">‹</button>
   <aside class="studio-sidebar">
 
     <section class="sidebar-section">
-      <h3>📐 Templates</h3>
+      <h3>🗂 Templates</h3>
       <div class="section-body">
         <div id="tpl-list" class="tpl-grid"><span class="no-templates">Lädt…</span></div>
+        <button class="tbtn primary" data-act="save-template" style="width:100%;margin-top:4px" title="Die aktuelle Arbeitsfläche als wiederverwendbare Vorlage speichern">➕ Aktuelle als Vorlage</button>
         <a class="manage-link" href="/library/studio/templates/">+ Verwalten</a>
       </div>
     </section>
@@ -57,6 +61,13 @@
           <button class="tbtn" data-act="clear-bg">🚫 BG weg</button>
           <button class="tbtn danger" data-act="clear-all" title="Alles löschen">🧹 Leeren</button>
         </div>
+        <div style="display:flex;gap:4px;align-items:center;margin-bottom:4px">
+          <label style="font-size:.72rem;color:#666;white-space:nowrap">Hintergrundfarbe</label>
+          <input type="color" id="bg-color" class="field-color" value="#FBF8F0" title="Canvas-Hintergrund einfärben">
+          <button class="tbtn" data-act="bg-creme" title="Octotrial-Creme">Creme</button>
+          <button class="tbtn" data-act="bg-weiss" title="Weiß">Weiß</button>
+          <button class="tbtn" data-act="bg-transparent" title="Transparent (Schachbrett)">Transparent</button>
+        </div>
         <div id="bg-info" style="font-size:.65rem;color:#888"></div>
       </div>
     </section>
@@ -66,11 +77,9 @@
       <div class="section-body">
         <input type="text" id="text-input" class="field" placeholder="Text eingeben…" style="width:100%;margin-bottom:5px">
         <div style="display:flex;gap:4px;align-items:center;margin-bottom:6px">
-          <select id="font-size" class="field" style="width:60px">
-            <option>16</option><option>20</option><option>24</option><option>28</option>
-            <option selected>32</option><option>40</option><option>48</option><option>64</option><option>80</option>
-          </select>
-          <input type="color" id="text-color" class="field-color" value="#ffffff">
+          <input type="number" id="font-size" class="field" value="32" min="6" max="400" step="1"
+                 title="Schriftgröße in Pixel – frei wählbar" style="width:58px">
+          <input type="color" id="text-color" class="field-color" value="#111111">
           <select id="font-weight" class="field" style="width:70px">
             <option value="normal">Normal</option><option value="bold" selected>Fett</option>
           </select>
@@ -80,6 +89,18 @@
           <button class="tbtn" data-act="text-left" title="Linksbündig">⯇</button>
           <button class="tbtn" data-act="text-center" title="Zentriert">≡</button>
           <button class="tbtn" data-act="text-right" title="Rechtsbündig">⯈</button>
+        </div>
+
+        <div class="lib-hint" style="margin-top:8px">Textblock: Überschrift + Fließtext als <b>ein</b> Objekt</div>
+        <input type="text" id="tb-head" class="field" placeholder="Überschrift…" style="width:100%;margin-bottom:4px">
+        <textarea id="tb-body" class="field" placeholder="Beschreibung…" rows="2"
+                  style="width:100%;margin-bottom:5px;resize:vertical;font-family:inherit"></textarea>
+        <div style="display:flex;gap:4px;align-items:center">
+          <label style="font-size:.72rem;color:#666">Breite</label>
+          <input type="number" id="tb-width" class="field" value="260" min="60" step="10" style="width:64px">
+          <label style="font-size:.72rem;color:#666">Größe</label>
+          <input type="number" id="tb-size" class="field" value="19" min="8" step="1" style="width:52px">
+          <button class="tbtn primary" data-act="add-textblock" style="margin-left:auto">+ Textblock</button>
         </div>
       </div>
     </section>
@@ -104,14 +125,6 @@
           <button class="tbtn" data-badge="hex" title="Wabe mit Nummer/Text – Text direkt eintippen, Doppelklick zum Ändern">⬢ Wabe + Text</button>
           <button class="tbtn" data-badge="pill" title="Banner-Pille mit Text – Text direkt eintippen, Doppelklick zum Ändern">▭ Banner + Text</button>
         </div>
-        <div class="lib-hint" style="margin-top:8px">SVG einfügen – jedes Teil wird eine eigene Ebene:</div>
-        <div class="swatch-row">
-          <button class="tbtn" id="svg-import-btn" title="SVG-Datei zerlegt einfügen: Bänder, Formen, Icons werden einzelne Objekte">📐 SVG importieren</button>
-          <label style="display:inline-flex;align-items:center;gap:4px;font-size:.72rem;color:#666;white-space:nowrap">
-            <input type="checkbox" id="svg-as-group"> als 1 Objekt
-          </label>
-        </div>
-        <input type="file" id="svg-file-input" accept=".svg,image/svg+xml" hidden>
       </div>
     </section>
 
@@ -203,11 +216,6 @@
         <button class="tbtn" data-act="undo" title="Rückgängig (Strg+Z)">↶</button>
         <button class="tbtn" data-act="redo" title="Wiederholen (Strg+Y)">↷</button>
       </div>
-      <div class="group" title="Zoom (für kleine Details)">
-        <button class="tbtn" data-act="zoom-out" title="Verkleinern">🔍−</button>
-        <button class="tbtn" data-act="zoom-reset" title="Zoom zurücksetzen">⤢</button>
-        <button class="tbtn" data-act="zoom-in" title="Vergrößern">🔍+</button>
-      </div>
       <span id="status-msg"></span>
     </div>
 
@@ -216,6 +224,7 @@
   </main>
 
   <!-- ============ RECHTE SIDEBAR: BIBLIOTHEK ============ -->
+  <button class="panel-toggle" id="toggle-right" title="Bibliothek ein-/ausklappen">›</button>
   <aside class="studio-right">
     <!-- Upload nach Studio_Work/Upload -->
     <section class="sidebar-section">
@@ -223,6 +232,12 @@
       <div class="section-body">
         <button class="tbtn primary" id="upload-btn" style="width:100%">📤 Bild hochladen</button>
         <input type="file" id="upload-input" accept="image/*" multiple style="display:none">
+        <button class="tbtn" id="svg-import-btn" style="width:100%;margin-top:6px" title="SVG-Datei zerlegt einfügen: Bänder, Formen, Icons werden einzelne Objekte">📐 SVG importieren</button>
+        <label style="display:flex;align-items:center;gap:4px;font-size:.72rem;color:#666;margin-top:3px">
+          <input type="checkbox" id="svg-as-group"> als 1 Objekt einfügen
+        </label>
+        <input type="file" id="svg-file-input" accept=".svg,image/svg+xml" hidden>
+        <div class="lib-hint" style="margin-top:4px">SVGs aus Assets/Ausgaben öffnen sich per Klick automatisch zerlegt.</div>
         <div id="upload-status" style="font-size:.7rem;color:#888;margin:4px 0"></div>
         <div id="upload-grid" class="lib-grid"><span class="no-templates">Lädt…</span></div>
       </div>
@@ -260,6 +275,24 @@
 <!-- Fabric.js (Editor-Engine) – lokal ausgeliefert, kein CDN nötig -->
 <script src="{% static 'media_library/studio/vendor/fabric.min.js' %}"></script>
 <!-- Studio-Module -->
+{# Nur studio.js bekam bisher einen Versions-Stempel. Die davon importierten   #}
+{# Module (library.js usw.) holte der Browser aus dem Cache – dann passten     #}
+{# neue und alte Dateien nicht zusammen. Die Import-Map stempelt alle mit.     #}
+<script type="importmap">
+{
+  "imports": {
+    "{% static 'media_library/studio/background.js' %}": "{% static 'media_library/studio/background.js' %}?v={% now 'U' %}",
+    "{% static 'media_library/studio/config.js' %}":     "{% static 'media_library/studio/config.js' %}?v={% now 'U' %}",
+    "{% static 'media_library/studio/cutout.js' %}":     "{% static 'media_library/studio/cutout.js' %}?v={% now 'U' %}",
+    "{% static 'media_library/studio/editor.js' %}":     "{% static 'media_library/studio/editor.js' %}?v={% now 'U' %}",
+    "{% static 'media_library/studio/io.js' %}":         "{% static 'media_library/studio/io.js' %}?v={% now 'U' %}",
+    "{% static 'media_library/studio/library.js' %}":    "{% static 'media_library/studio/library.js' %}?v={% now 'U' %}",
+    "{% static 'media_library/studio/media.js' %}":      "{% static 'media_library/studio/media.js' %}?v={% now 'U' %}",
+    "{% static 'media_library/studio/retouch.js' %}":    "{% static 'media_library/studio/retouch.js' %}?v={% now 'U' %}",
+    "{% static 'media_library/studio/util.js' %}":       "{% static 'media_library/studio/util.js' %}?v={% now 'U' %}"
+  }
+}
+</script>
 <script type="module" src="{% static 'media_library/studio/studio.js' %}?v={% now 'U' %}"></script>
 
 {% endblock %}

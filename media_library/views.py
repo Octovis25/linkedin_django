@@ -800,6 +800,8 @@ def studio_view(request):
             'sharedAssets':  '/library/studio/api/shared-assets/',
             'dbToNc':        '/library/studio/api/db-to-nc/',
             'brandColors':   '/library/studio/brand-colors/save/',
+            'postsWithImages': '/library/studio/api/posts-with-images/',
+            'saveTemplate':  '/library/studio/template/save-canvas/',
         },
     }
 
@@ -933,6 +935,49 @@ def studio_template_upload(request):
                   [nc_path, title, width, height, colors_json])
     messages.success(request, 'Template gespeichert!')
     return redirect('media_library:studio_templates')
+
+
+@login_required
+def studio_template_save_from_canvas(request):
+    """Aktuelle Studio-Leinwand direkt als Vorlage speichern (kein Datei-Upload).
+    Erwartet JSON: {dataUrl, title, width, height, colors?}."""
+    if request.method != 'POST':
+        return JsonResponse({'ok': False, 'error': 'POST required'}, status=405)
+    _ensure_studio_tables()
+    import time, base64, json as _j
+    try:
+        data = _j.loads(request.body)
+    except Exception:
+        return JsonResponse({'ok': False, 'error': 'Bad JSON'}, status=400)
+    data_url = data.get('dataUrl') or ''
+    title = (data.get('title') or '').strip() or f'Vorlage {time.strftime("%d.%m.%Y %H:%M")}'
+    try:
+        width = int(data.get('width') or 1080)
+        height = int(data.get('height') or 1080)
+    except Exception:
+        width, height = 1080, 1080
+    if ',' not in data_url:
+        return JsonResponse({'ok': False, 'error': 'Kein Bild übermittelt'}, status=400)
+    try:
+        content = base64.b64decode(data_url.split(',', 1)[1])
+    except Exception:
+        return JsonResponse({'ok': False, 'error': 'Bild konnte nicht gelesen werden'}, status=400)
+    filename = f"tpl_{int(time.time())}.png"
+    nc_path = _nc_upload(content, f"{NC_STUDIO_TEMPLATES_FOLDER}/{filename}", 'image/png')
+    if not nc_path:
+        from django.conf import settings as _s
+        local_dir = os.path.join(_s.BASE_DIR, 'media', 'studio', 'templates')
+        os.makedirs(local_dir, exist_ok=True)
+        with open(os.path.join(local_dir, filename), 'wb') as fh:
+            fh.write(content)
+        nc_path = f"__local__/studio/templates/{filename}"
+    cols = data.get('colors') or []
+    colors_json = _j.dumps([c for c in cols if c]) if cols else None
+    with connection.cursor() as c:
+        c.execute("INSERT INTO studio_templates (nc_path, title, width, height, colors) VALUES (%s,%s,%s,%s,%s)",
+                  [nc_path, title, width, height, colors_json])
+        new_id = c.lastrowid
+    return JsonResponse({'ok': True, 'id': new_id, 'title': title})
 
 
 @login_required
@@ -1377,6 +1422,10 @@ def studio_nc_image_proxy(request):
     content, ct = download_image_from_nextcloud(nc_path)
     if not content:
         raise Http404
+    # Nextcloud meldet den Typ nicht immer korrekt. Bei SVG ist das fatal:
+    # als image/png ausgeliefert kann der Browser die Datei nicht lesen.
+    if nc_path.lower().endswith('.svg'):
+        ct = 'image/svg+xml'
     resp = HttpResponse(content, content_type=ct or 'image/png')
     resp['Cache-Control'] = 'public, max-age=3600'
     return resp
@@ -1497,6 +1546,24 @@ def studio_api_library(request):
 
     data = [{'id': i['id'], 'title': i['title'], 'url': f"/library/image/{i['id']}/"} for i in items]
     return JsonResponse({'items': data, 'folders': [{'id': f['id'], 'name': f['name']} for f in folders]})
+
+
+@login_required
+def studio_api_posts_with_images(request):
+    """Liste aller Posts, die ein Bild haben – für den Picker „Bild von anderem
+    Post übernehmen". Liefert id, Titel und eine same-origin-Thumbnail-URL."""
+    posts = []
+    with connection.cursor() as c:
+        rows = _safe(c, """SELECT id, COALESCE(title,''), COALESCE(planned_date,'')
+                           FROM planner_posts
+                           WHERE image IS NOT NULL AND image <> '' AND COALESCE(is_oj,0)=0
+                           ORDER BY COALESCE(planned_date,'9999-12-31') DESC, id DESC
+                           LIMIT 300""") or []
+    for r in rows:
+        posts.append({'id': r[0], 'title': (r[1] or '(ohne Titel)'),
+                      'date': str(r[2] or ''),
+                      'thumb': f'/planner/image/{r[0]}/'})
+    return JsonResponse({'ok': True, 'posts': posts})
 
 
 @login_required

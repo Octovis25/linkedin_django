@@ -438,6 +438,88 @@ def all_view(request):
 
 
 @login_required
+def uebersicht_view(request):
+    """Gesamtübersicht: alle Posts (vergangen, aktuell, zukünftig) in einer
+    durchsuchbaren, sortierbaren Liste. Reine Lese-Anzeige; Anlegen und
+    Status-Wechsel laufen über den bestehenden Endpunkt /planner/api/post/.
+    """
+    # 'Planned' ist die Planungsstufe (Redaktionsplan): Slot eingeplant, Inhalt
+    # noch nicht erstellt. Steht bewusst vor 'Draft'.
+    STATUSES = ['Planned', 'Draft', 'Review', 'Ready', 'Scheduled', 'Posted', 'Archive']
+    STATUS_LABEL = {s: s for s in STATUSES}
+    STATUS_STYLE = {
+        'Planned': ('#E4F3F1', '#0E7C86'), 'Draft': ('#f5f5f5', '#6c757d'),
+        'Review': ('#EEEDFE', '#3C3489'), 'Ready': ('#E1F5EE', '#0F6E56'),
+        'Scheduled': ('#FAEEDA', '#854F0B'), 'Posted': ('#E6F1FB', '#185FA5'),
+        'Archive': ('#f5f5f5', '#6c757d'),
+    }
+    with connection.cursor() as c:
+        topics = _topics(c)
+        _ensure_media_columns()
+        rows = _q(c, """SELECT p.id, p.title, p.content, p.status, p.planned_date,
+                               p.image, t.name, t.color, p.topic_id, COALESCE(p.comment,''),
+                               p.planned_time, COALESCE(p.video_nc_path,''), COALESCE(p.link,'')
+                        FROM planner_posts p
+                        LEFT JOIN planner_topics t ON p.topic_id = t.id
+                        WHERE COALESCE(p.is_oj,0) = 0
+                        ORDER BY COALESCE(p.planned_date,'9999-12-31') DESC, p.created_at DESC""")
+
+        # Fallback-Bild + -Link aus den Buffer-Daten (über planner_post_id),
+        # falls der Post im Planner selbst kein Bild/keinen Link gespeichert hat.
+        buf = {}
+        try:
+            c.execute("""SELECT planner_post_id,
+                                MAX(NULLIF(thumbnail_url,'')),
+                                MAX(NULLIF(linkedin_url,''))
+                         FROM buffer_posts_posted
+                         WHERE planner_post_id IS NOT NULL
+                         GROUP BY planner_post_id""")
+            for pid, th, lu in c.fetchall():
+                buf[pid] = (th or '', lu or '')
+        except Exception:
+            buf = {}
+
+    posts = []
+    edit_map = {}
+    for r in rows:
+        tbg, tfg = COLOR_MAP.get(r[7] or 'gray', ('#f5f5f5', '#6c757d'))
+        st = r[3] or 'Draft'
+        sbg, sfg = STATUS_STYLE.get(st, ('#f5f5f5', '#6c757d'))
+        pdate = r[4].strftime('%Y-%m-%d') if r[4] else ''
+        ptime = r[10].strftime('%H:%M') if r[10] else ''
+        bthumb, blink = buf.get(r[0], ('', ''))
+        # Bildquelle: Planner-Bild bevorzugt, sonst Buffer-Thumbnail.
+        img_url = ('/planner/image/%d/' % r[0]) if r[5] else (bthumb or '')
+        link = (r[12] or '') or blink
+        posts.append({
+            'id': r[0], 'title': r[1] or '(untitled)', 'content': r[2] or '',
+            'status': st, 'status_label': STATUS_LABEL.get(st, st),
+            'status_bg': sbg, 'status_fg': sfg,
+            'planned_date': r[4], 'img_url': img_url,
+            'topic_name': r[6] or '', 'topic_bg': tbg, 'topic_fg': tfg,
+            'topic_id': r[8] or '', 'planned_time': r[10],
+            'has_video': bool(r[11]), 'link': link,
+        })
+        # Vollstaendige Werte fuer die Inline-Bearbeitung (verhindert das
+        # Ueberschreiben nicht editierter Felder beim update).
+        edit_map[r[0]] = {
+            'title': r[1] or '', 'content': r[2] or '', 'status': st,
+            'planned_date': pdate, 'planned_time': ptime,
+            'topic_id': r[8] or '', 'comment': r[9] or '', 'link': r[12] or '',
+        }
+
+    status_choices = [(s, STATUS_LABEL.get(s, s)) for s in STATUSES]
+    return render(request, 'planner/uebersicht.html', {
+        'posts': posts,
+        'topics': topics,
+        'status_choices': status_choices,
+        'edit_map': edit_map,
+        'tab': 'uebersicht',
+        'page_title': '📋 Overview',
+    })
+
+
+@login_required
 def oj_view(request):
     with connection.cursor() as c:
         topics = _topics(c)

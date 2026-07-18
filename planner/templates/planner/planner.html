@@ -450,6 +450,8 @@ const ALL_POSTS = [
    image:'{{ p.image|escapejs }}',
    fullTitle:'{{ p.title|escapejs }}',
    content:'{{ p.content|escapejs }}',
+   link:'{{ p.link|escapejs }}',
+   time:'{{ p.planned_time|time:"H:i" }}',
    topic:'{{ t.name|escapejs }}',
    topicColor:'{{ t.accent }}'},
   {% endfor %}{% endfor %}
@@ -659,16 +661,18 @@ async function deletePostFromEdit() {
   if (!id) return;
   if (!confirm('Delete this post permanently?')) return;
   await api('/planner/api/post/', {action:'delete', id});
-  location.reload();
+  ovBack();
 }
 
 /* ── Modal helpers ── */
 function closeModal(id) {
   document.getElementById(id).classList.remove('open');
+  // Aus der Übersicht geöffnet? Beim Schließen des Editors dorthin zurück.
+  if (id === 'edit-modal' && window.OV_RETURN) { window.location.href = '/planner/uebersicht/'; }
 }
 document.addEventListener('DOMContentLoaded', () => {
   document.querySelectorAll('.modal-bg').forEach(bg => {
-    bg.addEventListener('click', e => { if (e.target === bg) bg.classList.remove('open'); });
+    bg.addEventListener('click', e => { if (e.target === bg) { const wasEdit = bg.id === 'edit-modal'; bg.classList.remove('open'); if (wasEdit && window.OV_RETURN) window.location.href = '/planner/uebersicht/'; } });
   });
 });
 
@@ -702,8 +706,21 @@ function openPostModal(topicId) {
       const topic = params.get('topic') || '';
       setTimeout(() => openPostModal(topic || undefined), 100);
     }
+    // Deep-Link aus der Übersicht: ?edit=<id> öffnet den Post-Editor direkt.
+    const eid = params.get('edit');
+    if (eid) {
+      window.OV_RETURN = true;   // nach Speichern/Löschen/Schließen zurück zur Übersicht
+      const p = ALL_POSTS.find(x => String(x.id) === String(eid));
+      if (p) setTimeout(() => openEditModal(p.id, p.fullTitle, p.content, p.status, p.date, p.comment, p.image, p.link, p.time), 150);
+    }
   } catch (e) {}
 })();
+
+// Nach einer Aktion zurück zur Übersicht, falls von dort gekommen – sonst neu laden.
+function ovBack() {
+  if (window.OV_RETURN) window.location.href = '/planner/uebersicht/';
+  else location.reload();
+}
 
 /* ── Save new post ── */
 async function savePost() {
@@ -845,7 +862,7 @@ async function updatePost() {
       await uploadVideoNC(id, vidInputE, document.getElementById('e-vid-status'));
     }
     closeModal('edit-modal');
-    location.reload();
+    ovBack();
   }
 }
 

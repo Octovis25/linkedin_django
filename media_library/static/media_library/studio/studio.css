@@ -6,11 +6,41 @@
 
 /* ---- Layout ------------------------------------------------------------- */
 .studio-wrap        { display:flex; gap:.6rem; align-items:flex-start; width:100%;
-                      max-width:100%; box-sizing:border-box; }
-.studio-sidebar     { flex:0 0 260px; width:260px; display:flex; flex-direction:column;
-                      gap:0; max-height:calc(100vh - 80px); overflow-y:auto; }
+                      max-width:100%; box-sizing:border-box; position:relative; }
+.studio-sidebar     { flex:0 0 250px; width:250px; display:flex; flex-direction:column;
+                      gap:0; max-height:calc(100vh - 80px); overflow-y:auto;
+                      transition:flex-basis .18s ease, width .18s ease; }
 .studio-main        { flex:1 1 auto; min-width:0; }
-.studio-right       { flex:0 0 340px; width:340px; max-height:calc(100vh - 80px); overflow-y:auto; }
+.studio-right       { flex:0 0 260px; width:260px; max-height:calc(100vh - 80px); overflow-y:auto;
+                      transition:flex-basis .18s ease, width .18s ease; }
+
+/* ---- Leisten einklappen: schweben über dem Canvas statt zu verschwinden --- */
+.studio-wrap.hide-left  .studio-sidebar,
+.studio-wrap.hide-right .studio-right {
+  position:absolute; top:0; z-index:40; width:250px; flex-basis:0;
+  background:#eef1f3; border-radius:8px; padding:6px;
+  box-shadow:0 8px 30px rgba(0,0,0,.28);
+  transition:transform .18s ease, opacity .18s ease;
+}
+.studio-wrap.hide-left  .studio-sidebar { left:26px;  transform:translateX(calc(-100% - 30px)); opacity:0; pointer-events:none; }
+.studio-wrap.hide-right .studio-right   { right:26px; width:260px;
+                                          transform:translateX(calc(100% + 30px)); opacity:0; pointer-events:none; }
+/* eingeblendet: beim Überfahren des Griffs oder solange festgepinnt */
+.studio-wrap.hide-left.peek-left   .studio-sidebar,
+.studio-wrap.hide-right.peek-right .studio-right { transform:none; opacity:1; pointer-events:auto; }
+
+/* ---- Große Arbeitsfläche: Leisten schweben zur Seite (per Randgriff wieder
+       einblendbar), Canvas wird höher. Werkzeuge bleiben erreichbar. -------- */
+.studio-wrap.maxi .canvas-host  { height:calc(100vh - 130px); }
+
+.panel-toggle       { position:sticky; top:0; z-index:50; align-self:flex-start;
+                      flex:0 0 22px; width:22px; height:90px; margin-top:4px;
+                      border:1px solid #dfe3e6; border-radius:6px; background:#fff;
+                      color:#0E7C86; cursor:pointer; font-size:.8rem; line-height:1;
+                      display:flex; align-items:center; justify-content:center;
+                      box-shadow:0 1px 4px rgba(0,0,0,.08); padding:0; }
+.panel-toggle:hover { background:#e8f5f6; }
+.panel-toggle.aus   { background:#0E7C86; color:#fff; border-color:#0E7C86; }
 
 /* ---- Sidebar sections --------------------------------------------------- */
 .sidebar-section    { background:#fff; border-radius:6px; box-shadow:0 1px 4px rgba(0,0,0,.1);
@@ -23,7 +53,7 @@
 .sidebar-section.collapsed .section-body { display:none; }
 
 /* ---- Canvas: fester Rahmen, kein Scrollen ------------------------------- */
-.canvas-host        { height:calc(100vh - 230px); min-height:360px;
+.canvas-host        { height:calc(100vh - 195px); min-height:460px;
                       display:flex; align-items:center; justify-content:center;
                       background:#f4f5f7; border:1px solid #dcdfe3; border-radius:8px;
                       overflow:auto; padding:10px; box-sizing:border-box; }

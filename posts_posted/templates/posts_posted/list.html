@@ -147,7 +147,7 @@ function fillImagesFromBuffer(btn) {
         msg.style.display = 'block';
         if (d.ok) {
             msg.style.background = '#e1f5ee'; msg.style.color = '#0F6E56';
-            msg.textContent = '\u2705 ' + d.filled + ' Bild(er) und ' + (d.dates_filled || 0) + ' Datum/Daten aus Buffer bef\u00fcllt' + (d.errors ? ' (Fehler: ' + d.errors + ')' : '') + '. Seite neu laden zum Anzeigen.';
+            msg.textContent = '\u2705 ' + d.filled + ' Bild(er), ' + (d.dates_filled || 0) + ' Datum/Daten bef\u00fcllt und ' + (d.promoted || 0) + ' Post(s) auf \u201ePosted\u201c gesetzt' + (d.errors ? ' (Fehler: ' + d.errors + ')' : '') + '. Seite neu laden zum Anzeigen.';
         } else {
             msg.style.background = '#fdecea'; msg.style.color = '#b71c1c';
             msg.textContent = '\u274c Fehler: ' + (d.error || 'unbekannt');

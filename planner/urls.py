@@ -10,6 +10,7 @@ urlpatterns = [
     path('scheduled/', views.scheduled_view, name='scheduled'),
     path('archive/', views.archive_view, name='archive'),
     path('all/', views.all_view, name='all'),
+    path('uebersicht/', views.uebersicht_view, name='uebersicht'),
     path('oj/', views.oj_view, name='oj'),
     path('aufgaben/', views.aufgaben_view, name='aufgaben'),
     path('aufgaben/api/', views.aufgaben_api, name='aufgaben_api'),

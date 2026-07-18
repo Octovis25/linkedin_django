@@ -255,6 +255,7 @@ export async function exportVideo(editor) {
 
   status('🎬 Nehme Video auf…');
   editor.canvas.discardActiveObject();
+  editor.setGridVisible(false);   // Raster nicht mit aufnehmen
   toFullRes(editor);
   const stream = canvasEl.captureStream(30);
   const mime = MediaRecorder.isTypeSupported('video/webm;codecs=vp9') ? 'video/webm;codecs=vp9' : 'video/webm';
@@ -269,6 +270,7 @@ export async function exportVideo(editor) {
   rec.stop();
   await done;
   restoreFit(editor);
+  if (editor.gridOn) editor.setGridVisible(true);
 
   const blob = new Blob(chunks, { type: 'video/webm' });
   // Kein Auto-Download – nur in „Meine Ausgaben" speichern (mit canvas_json → editierbar).
@@ -305,6 +307,7 @@ export async function exportGif(editor) {
     });
 
     editor.canvas.discardActiveObject();
+    editor.setGridVisible(false);   // Raster nicht mit aufnehmen
     ensureFxHook(editor);
     toFullRes(editor);
     _fxOn = true;
@@ -317,6 +320,7 @@ export async function exportGif(editor) {
     _fxOn = false;
     resetAnim(editor);
     restoreFit(editor);
+    if (editor.gridOn) editor.setGridVisible(true);
 
     gif.on('finished', async blob => {
       // Kein Auto-Download – nur in „Meine Ausgaben" speichern.

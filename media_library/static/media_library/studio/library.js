@@ -8,6 +8,34 @@ import { toast } from './util.js';
 
 let _editor = null;
 
+// SVGs müssen zerlegt eingefügt werden, nicht als flaches Bild.
+// Der Studio-Teil meldet dazu einen Handler an (siehe studio.js).
+let _svgHandler = null;
+export function setSvgHandler(fn) { _svgHandler = fn; }
+const istSvg = (u) => /\.svg(\?|$)/i.test(String(u || ''));
+
+// Einfügen: bei SVG über den Import, sonst als Bild.
+async function einfuegen(item, opts) {
+  const url = item.url || item;
+  const name = item.name || url;
+  if (istSvg(name) || istSvg(url)) {
+    if (!_svgHandler) { toast('SVG-Import nicht bereit – bitte Seite neu laden', 'err'); return; }
+    try {
+      const res = await fetch(url, { credentials: 'same-origin' });
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const text = await res.text();
+      const n = await _svgHandler(text, false, opts);
+      toast(n ? `SVG eingefügt: ${n} Ebene(n)` : 'SVG enthielt keine Formen', n ? 'ok' : 'err');
+    } catch (e) {
+      console.error(e);
+      toast('SVG-Fehler: ' + e.message, 'err');
+    }
+    return;
+  }
+  try { await _editor.addImageUrl(url, opts); }
+  catch { toast('Bild-Fehler', 'err'); }
+}
+
 // Angehakte Ordner-Pfade (relativ zu Octotrial_Assets) + aufgeklappte Ordner.
 const _checked = new Set();
 const _expanded = new Set();
@@ -97,7 +125,7 @@ async function loadUploads() {
       img.title = item.title || item.name || '';
       img.draggable = true;
       img.onerror = () => { img.style.opacity = .3; };
-      img.onclick = () => _editor.addImageUrl(item.url).catch(() => toast('Bild-Fehler', 'err'));
+      img.onclick = () => einfuegen(item);
       img.addEventListener('dragstart', e => e.dataTransfer.setData('text/studio-url', item.url));
       const del = document.createElement('button');
       del.className = 'tile-del';
@@ -250,7 +278,7 @@ function renderImages(grid, items) {
     img.title = item.title || item.name || '';
     img.draggable = true;
     img.onerror = () => { img.style.opacity = .3; img.title += ' (nicht ladbar)'; };
-    img.onclick = () => _editor.addImageUrl(item.url).catch(() => toast('Bild-Fehler', 'err'));
+    img.onclick = () => einfuegen(item);
     img.addEventListener('dragstart', e => e.dataTransfer.setData('text/studio-url', item.url));
     grid.appendChild(img);
   });
@@ -364,7 +392,7 @@ function enableCanvasDrop() {
     const rect = wrap.getBoundingClientRect();
     const x = (e.clientX - rect.left) * (_editor.width / rect.width);
     const y = (e.clientY - rect.top) * (_editor.height / rect.height);
-    _editor.addImageUrl(url, { x, y }).catch(() => toast('Bild-Fehler', 'err'));
+    einfuegen({ url, name: url }, { x, y });
   });
 }
 
