@@ -78,7 +78,13 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 STATIC_URL = "/static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
 STATICFILES_DIRS = [BASE_DIR / "static"]
-STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
+# Produktion: komprimierte, gehashte Dateien via WhiteNoise.
+# Entwicklung: Quelldateien direkt ausliefern, sonst erscheinen CSS/JS-Änderungen
+# erst nach 'collectstatic' (das war die Ursache für "keine Änderung").
+if DEBUG:
+    STATICFILES_STORAGE = 'django.contrib.staticfiles.storage.StaticFilesStorage'
+else:
+    STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 
 LOGIN_URL = "/login/"
 LOGIN_REDIRECT_URL = "/"

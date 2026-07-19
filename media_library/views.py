@@ -669,6 +669,10 @@ def _ensure_studio_tables():
         try:
             c.execute("ALTER TABLE studio_templates ADD COLUMN colors VARCHAR(512) DEFAULT NULL")
         except Exception: pass
+        # Migration: Layout der Vorlage (Hintergrund + Logo + Textfelder) speichern.
+        try:
+            c.execute("ALTER TABLE studio_templates ADD COLUMN canvas_json LONGTEXT DEFAULT NULL")
+        except Exception: pass
         try:
             c.execute("""CREATE TABLE IF NOT EXISTS studio_images (
                 id          INT AUTO_INCREMENT PRIMARY KEY,
@@ -973,11 +977,27 @@ def studio_template_save_from_canvas(request):
         nc_path = f"__local__/studio/templates/{filename}"
     cols = data.get('colors') or []
     colors_json = _j.dumps([c for c in cols if c]) if cols else None
+    canvas_json = data.get('canvasJson') or None   # Hintergrund + Logo + Textfelder
     with connection.cursor() as c:
-        c.execute("INSERT INTO studio_templates (nc_path, title, width, height, colors) VALUES (%s,%s,%s,%s,%s)",
-                  [nc_path, title, width, height, colors_json])
+        try:
+            c.execute("""INSERT INTO studio_templates (nc_path, title, width, height, colors, canvas_json)
+                         VALUES (%s,%s,%s,%s,%s,%s)""",
+                      [nc_path, title, width, height, colors_json, canvas_json])
+        except Exception:
+            c.execute("INSERT INTO studio_templates (nc_path, title, width, height, colors) VALUES (%s,%s,%s,%s,%s)",
+                      [nc_path, title, width, height, colors_json])
         new_id = c.lastrowid
     return JsonResponse({'ok': True, 'id': new_id, 'title': title})
+
+
+@login_required
+def studio_template_canvas(request, tpl_id):
+    """Liefert das gespeicherte Layout (canvas_json) einer Vorlage zum Anwenden."""
+    _ensure_studio_tables()
+    with connection.cursor() as c:
+        rows = _safe(c, "SELECT canvas_json FROM studio_templates WHERE id=%s", [tpl_id])
+    cj = rows[0][0] if rows else None
+    return JsonResponse({'ok': bool(cj), 'canvas_json': cj or ''})
 
 
 @login_required
@@ -1288,7 +1308,8 @@ def studio_save_video(request):
 def studio_api_templates(request):
     _ensure_studio_tables()
     with connection.cursor() as c:
-        rows = _safe(c, "SELECT id, title, width, height, colors FROM studio_templates ORDER BY created_at DESC")
+        rows = _safe(c, "SELECT id, title, width, height, colors, canvas_json FROM studio_templates ORDER BY created_at DESC") \
+            or _safe(c, "SELECT id, title, width, height, colors FROM studio_templates ORDER BY created_at DESC")
     data = []
     for r in (rows or []):
         colors = []
@@ -1296,8 +1317,10 @@ def studio_api_templates(request):
             try:
                 import json as _j; colors = _j.loads(r[4])
             except Exception: pass
+        has_canvas = bool(len(r) > 5 and r[5])
         data.append({'id': r[0], 'title': r[1] or '', 'width': r[2], 'height': r[3],
-                     'url': f"/library/studio/template/image/{r[0]}/", 'colors': colors})
+                     'url': f"/library/studio/template/image/{r[0]}/", 'colors': colors,
+                     'has_canvas': has_canvas})
     return JsonResponse({'templates': data})
 
 

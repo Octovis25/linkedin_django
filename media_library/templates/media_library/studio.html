@@ -48,7 +48,10 @@
       <h3>🗂 Templates</h3>
       <div class="section-body">
         <div id="tpl-list" class="tpl-grid"><span class="no-templates">Lädt…</span></div>
-        <button class="tbtn primary" data-act="save-template" style="width:100%;margin-top:4px" title="Die aktuelle Arbeitsfläche als wiederverwendbare Vorlage speichern">➕ Aktuelle als Vorlage</button>
+        <div class="swatch-row" style="margin-top:4px">
+          <button class="tbtn primary" data-act="new-template" title="Leere Fläche, um eine neue Vorlage zu bauen (Hintergrund, Logo, Textfelder)">➕ Neue Vorlage</button>
+          <button class="tbtn" data-act="save-template" title="Die aktuelle Vorlage speichern (Hintergrund + Logo + Textfelder)">💾 Vorlage speichern</button>
+        </div>
         <a class="manage-link" href="/library/studio/templates/">+ Verwalten</a>
       </div>
     </section>
@@ -67,6 +70,10 @@
           <button class="tbtn" data-act="bg-creme" title="Octotrial-Creme">Creme</button>
           <button class="tbtn" data-act="bg-weiss" title="Weiß">Weiß</button>
           <button class="tbtn" data-act="bg-transparent" title="Transparent (Schachbrett)">Transparent</button>
+        </div>
+        <div class="swatch-row" style="margin-bottom:4px">
+          <button class="tbtn" data-act="set-as-bg" title="Das ausgewählte Bild als Hintergrund festlegen – ideal, um daraus eine Vorlage zu bauen">🖼 Bild als Hintergrund</button>
+          <button class="tbtn" data-act="clear-bg" title="Hintergrundbild entfernen">Hintergrundbild entfernen</button>
         </div>
         <div id="bg-info" style="font-size:.65rem;color:#888"></div>
       </div>

@@ -256,6 +256,17 @@ const actions = {
     setTimeout(() => window.dispatchEvent(new Event('resize')), 220);
     status(gross ? 'Große Fläche – Werkzeuge über die Randgriffe (‹ ›).' : 'Normale Ansicht.', '#888');
   },
+  'set-as-bg': () => {
+    const o = editor.active();
+    if (!o || o.type !== 'image') { toast('Erst ein Bild wählen', 'err'); return; }
+    editor.canvas.remove(o);
+    o.set({ left: 0, top: 0, originX: 'left', originY: 'top',
+            scaleX: editor.width / o.width, scaleY: editor.height / o.height, selectable: false, evented: false });
+    editor.canvas.setBackgroundImage(o, editor.canvas.renderAll.bind(editor.canvas));
+    editor.snapshot();
+    bg.updateBgInfo?.(editor);
+    status('Bild als Hintergrund gesetzt.', '#198754');
+  },
   'add-textblock': () => addTextblock(),
   'add-text':  () => {
     const inp = document.getElementById('text-input');
@@ -331,6 +342,16 @@ const actions = {
   'post-overlay': () => CONFIG.postData?.id && editor.addImageUrl(`/library/studio/api/post-image/${CONFIG.postData.id}/`),
   'copy-from-post': () => copyImageFromPost(),
   'save-template': () => saveAsTemplate(),
+  'new-template': async () => {
+    const ok = await modal('Neue Vorlage', 'Leert die Arbeitsfläche, damit du eine neue Vorlage baust – Hintergrund, Logo, Textfelder. Nicht Gespeichertes geht verloren.', [
+      { label: '➕ Ja, neue Vorlage', value: true },
+      { label: 'Abbrechen', value: false },
+    ]);
+    if (!ok) return;
+    editor.clearAll();
+    const t = document.getElementById('title-input'); if (t) t.value = '';
+    status('Vorlage bauen: Hintergrund, Logo, Textfelder – dann „💾 Vorlage speichern".', '#888');
+  },
 };
 
 // Aktuelle Leinwand als wiederverwendbare Vorlage speichern.
@@ -338,15 +359,18 @@ async function saveAsTemplate() {
   const vorschlag = (document.getElementById('title-input')?.value || '').trim() || 'Neue Vorlage';
   const title = window.prompt('Name der Vorlage:', vorschlag);
   if (title === null) return;                 // abgebrochen
-  let dataUrl;
-  try { dataUrl = editor.exportDataURL({ multiplier: 1 }); }  // ohne Raster
-  catch (e) { toast('Export fehlgeschlagen', 'err'); return; }
+  let dataUrl, canvasJson;
+  try {
+    const preview = editor.exportDataURL({ multiplier: 0.4 });
+    dataUrl = editor.exportDataURL({ multiplier: 1 });     // Vorschau-PNG (ohne Raster)
+    canvasJson = io.buildCanvasJson(editor, preview);      // Layout: Hintergrund + Logo + Textfelder
+  } catch (e) { toast('Export fehlgeschlagen', 'err'); return; }
   status('💾 Vorlage wird gespeichert…');
   try {
     const res = await fetch(CONFIG.urls?.saveTemplate || '/library/studio/template/save-canvas/', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'X-CSRFToken': _cookie('csrftoken') },
-      body: JSON.stringify({ dataUrl, title: title.trim(), width: editor.width, height: editor.height }),
+      body: JSON.stringify({ dataUrl, canvasJson, title: title.trim(), width: editor.width, height: editor.height }),
     });
     const d = await res.json();
     if (d.ok) { toast('Vorlage gespeichert', 'ok'); status('✅ Als Vorlage gespeichert.', '#198754'); bg.loadTemplateList(editor); }
