@@ -349,6 +349,7 @@ const actions = {
     ]);
     if (!ok) return;
     editor.clearAll();
+    _editingTemplateId = null;   // frische Vorlage → beim Speichern neu anlegen
     const t = document.getElementById('title-input'); if (t) t.value = '';
     status('Vorlage bauen: Hintergrund, Logo, Textfelder – dann „💾 Vorlage speichern".', '#888');
   },
@@ -370,11 +371,17 @@ async function saveAsTemplate() {
     const res = await fetch(CONFIG.urls?.saveTemplate || '/library/studio/template/save-canvas/', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'X-CSRFToken': _cookie('csrftoken') },
-      body: JSON.stringify({ dataUrl, canvasJson, title: title.trim(), width: editor.width, height: editor.height }),
+      body: JSON.stringify({ dataUrl, canvasJson, title: title.trim(),
+                             width: editor.width, height: editor.height,
+                             tplId: _editingTemplateId || undefined }),
     });
     const d = await res.json();
-    if (d.ok) { toast('Vorlage gespeichert', 'ok'); status('✅ Als Vorlage gespeichert.', '#198754'); bg.loadTemplateList(editor); }
-    else { toast('Fehler: ' + (d.error || ''), 'err'); status('❌ ' + (d.error || 'Fehler'), 'red'); }
+    if (d.ok) {
+      _editingTemplateId = d.id;   // ab jetzt weiter dieselbe Vorlage aktualisieren
+      toast(d.updated ? 'Vorlage aktualisiert' : 'Vorlage gespeichert', 'ok');
+      status(d.updated ? '✅ Vorlage aktualisiert.' : '✅ Als Vorlage gespeichert.', '#198754');
+      bg.loadTemplateList(editor);
+    } else { toast('Fehler: ' + (d.error || ''), 'err'); status('❌ ' + (d.error || 'Fehler'), 'red'); }
   } catch (e) { toast('Speichern fehlgeschlagen', 'err'); status('❌ ' + e, 'red'); }
 }
 function _cookie(name) {
@@ -1652,9 +1659,12 @@ initLibrary(editor);
 renderSelBar();
 updateRetouchPanel();
 
+// Vorlage zum Bearbeiten geöffnet? Merken, damit „Vorlage speichern" sie AKTUALISIERT.
+let _editingTemplateId = CONFIG.tplData?.id || null;
+
 // Titel vorausfüllen (beim Weiterbearbeiten bleibt der Name erhalten).
 {
-  const t = CONFIG.libData?.title || CONFIG.postData?.title || '';
+  const t = CONFIG.libData?.title || CONFIG.postData?.title || CONFIG.tplData?.title || '';
   const ti = document.getElementById('title-input');
   if (ti && t) ti.value = t;
 }
@@ -1667,7 +1677,14 @@ if (CONFIG.libData?.item_id || CONFIG.libData?.nc_path) {
 
 (function restoreInitial() {
   try {
-    const post = CONFIG.postData, lib = CONFIG.libData;
+    const post = CONFIG.postData, lib = CONFIG.libData, tpl = CONFIG.tplData;
+    // Vorlage bearbeiten: Größe der Vorlage setzen und Layout laden.
+    if (tpl?.canvas_json) {
+      if (tpl.width && tpl.height) { editor.setSize(tpl.width, tpl.height); fit(); }
+      io.restoreCanvas(editor, tpl.canvas_json);
+      status('Vorlage wird bearbeitet – „💾 Vorlage speichern" aktualisiert sie.', '#0E7C86');
+      return;
+    }
     if (post?.canvas_json) { io.restoreCanvas(editor, post.canvas_json); return; }
     if (lib?.canvas_json)  { io.restoreCanvas(editor, lib.canvas_json); return; }
     if (lib?.image_url)    { editor.addImageUrl(lib.image_url, { silent: true, fill: true }); }

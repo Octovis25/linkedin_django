@@ -5,6 +5,29 @@
 
 <link rel="stylesheet" href="{% static 'media_library/studio/studio.css' %}?v={% now 'U' %}">
 
+<style>
+/* Inline im Template, damit die einheitliche Schriftgröße unabhängig vom
+   Static-Cache/collectstatic sofort greift. Alles auf 11px vereinheitlicht. */
+.studio-sidebar .sidebar-section h3 { font-size:11px !important; }
+.studio-sidebar .tbtn,
+.studio-sidebar .field,
+.studio-sidebar input,
+.studio-sidebar select,
+.studio-sidebar textarea,
+.studio-sidebar label,
+.studio-sidebar .lib-hint,
+.studio-sidebar .retouch-label,
+.studio-sidebar .no-templates,
+.studio-sidebar div[style*="font-size"] { font-size:10px !important; line-height:1.25; }
+.studio-sidebar .tbtn { padding:3px 5px !important; }
+.studio-sidebar .field,
+.studio-sidebar input[type=number],
+.studio-sidebar input[type=text] { padding:2px 4px !important; }
+.studio-sidebar #tb-width { width:46px !important; }
+.studio-sidebar #tb-size  { width:40px !important; }
+.studio-sidebar #font-size { width:46px !important; }
+</style>
+
 <h1 style="margin-bottom:.5rem">🎨 Image Studio</h1>
 
 {% if post_data %}

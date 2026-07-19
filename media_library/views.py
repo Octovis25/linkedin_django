@@ -766,6 +766,20 @@ def studio_view(request):
         except Exception as e:
             print("Studio nc_path open:", e)
 
+    # Vorlage zum Bearbeiten öffnen (?template=<id>) → editierbares Layout laden.
+    tpl_data = None
+    tpl_id_param = request.GET.get('template', '')
+    if tpl_id_param and not post_id and not lib_data:
+        try:
+            with connection.cursor() as c:
+                trows = _safe(c, "SELECT id, title, width, height, canvas_json FROM studio_templates WHERE id=%s", [tpl_id_param])
+            if trows:
+                tr = trows[0]
+                tpl_data = {'id': tr[0], 'title': tr[1] or '', 'width': tr[2] or 1080,
+                            'height': tr[3] or 1080, 'canvas_json': tr[4] or ''}
+        except Exception as e:
+            print("Studio template open:", e)
+
     folders = _all_folders()
     # Pass Nextcloud base URL for draw.io embed
     try:
@@ -780,12 +794,15 @@ def studio_view(request):
         post_data['canvas_json'] = _resolve_nc_refs_in_json(post_data['canvas_json'])
     if lib_data and lib_data.get('canvas_json'):
         lib_data['canvas_json'] = _resolve_nc_refs_in_json(lib_data['canvas_json'])
+    if tpl_data and tpl_data.get('canvas_json'):
+        tpl_data['canvas_json'] = _resolve_nc_refs_in_json(tpl_data['canvas_json'])
 
     # Zentrale Konfiguration fuers Frontend (studio.js liest #studio-config)
     studio_config = {
         'postId': post_id or None,
         'postData': post_data,
         'libData': lib_data,
+        'tplData': tpl_data,
         'ncUrl': (nc_url_val or '').rstrip('/'),
         'brandExtraColors': brand.get('extra_colors', []),
         'urls': {
@@ -978,7 +995,19 @@ def studio_template_save_from_canvas(request):
     cols = data.get('colors') or []
     colors_json = _j.dumps([c for c in cols if c]) if cols else None
     canvas_json = data.get('canvasJson') or None   # Hintergrund + Logo + Textfelder
+    tpl_id = data.get('tplId') or None              # gesetzt → bestehende Vorlage aktualisieren
     with connection.cursor() as c:
+        if tpl_id:
+            # Bestehende Vorlage überschreiben (Layout + Vorschau + Größe/Titel).
+            try:
+                c.execute("""UPDATE studio_templates
+                             SET nc_path=%s, title=%s, width=%s, height=%s, canvas_json=%s
+                             WHERE id=%s""",
+                          [nc_path, title, width, height, canvas_json, tpl_id])
+            except Exception:
+                c.execute("UPDATE studio_templates SET nc_path=%s, title=%s, width=%s, height=%s WHERE id=%s",
+                          [nc_path, title, width, height, tpl_id])
+            return JsonResponse({'ok': True, 'id': tpl_id, 'title': title, 'updated': True})
         try:
             c.execute("""INSERT INTO studio_templates (nc_path, title, width, height, colors, canvas_json)
                          VALUES (%s,%s,%s,%s,%s,%s)""",
