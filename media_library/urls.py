@@ -22,6 +22,7 @@ urlpatterns = [
     path('studio/template/upload/',       views.studio_template_upload, name='studio_template_upload'),
     path('studio/template/save-canvas/',  views.studio_template_save_from_canvas, name='studio_template_save_from_canvas'),
     path('studio/template/canvas/<int:tpl_id>/', views.studio_template_canvas, name='studio_template_canvas'),
+    path('studio/template/toggle-active/<int:tpl_id>/', views.studio_template_toggle_active, name='studio_template_toggle_active'),
     path('studio/template/delete/<int:tpl_id>/', views.studio_template_delete, name='studio_template_delete'),
     path('studio/template/colors/<int:tpl_id>/', views.studio_template_colors, name='studio_template_colors'),
     path('studio/template/image/<int:tpl_id>/',  views.studio_template_image,  name='studio_template_image'),

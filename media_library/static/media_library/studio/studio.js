@@ -268,6 +268,35 @@ const actions = {
     status('Bild als Hintergrund gesetzt.', '#198754');
   },
   'add-textblock': () => addTextblock(),
+  'add-checktext': () => {
+    const txt = (document.getElementById('tb-head')?.value.trim())
+             || (document.getElementById('text-input')?.value.trim()) || 'Dein Text';
+    const g = buildTextblock(txt, '', {
+      width: +(document.getElementById('tb-width')?.value || 260),
+      size:  +(document.getElementById('tb-size')?.value || 19),
+      color: document.getElementById('text-color')?.value || '#161616',
+      align: 'left', check: true,
+    });
+    if (!g) return;
+    editor.canvas.add(g);
+    editor.canvas.setActiveObject(g);
+    editor.canvas.requestRenderAll();
+    editor.snapshot();
+    status('Haken + Text eingefügt – Doppelklick zum Ändern, an der Ecke skalieren.', '#198754');
+  },
+  'add-checklist': () => {
+    const g = buildCheckList(['Erste Zeile', 'Zweite Zeile', 'Dritte Zeile'], {
+      width: +(document.getElementById('tb-width')?.value || 300),
+      size:  +(document.getElementById('tb-size')?.value || 22),
+      color: document.getElementById('text-color')?.value || '#161616',
+    });
+    if (!g) return;
+    editor.canvas.add(g);
+    editor.canvas.setActiveObject(g);
+    editor.canvas.requestRenderAll();
+    editor.snapshot();
+    status('Dreihaken eingefügt – Doppelklick: eine Zeile je Haken. An der Ecke skalieren.', '#198754');
+  },
   'add-text':  () => {
     const inp = document.getElementById('text-input');
     editor.addText(inp.value.trim() || 'Text', {
@@ -311,6 +340,8 @@ const actions = {
   'zoom-out':   () => zeigeZoom(editor.zoom('out')),
   'zoom-reset': () => zeigeZoom(editor.zoom('reset')),
   duplicate:   () => editor.duplicateSelected(),
+  group:       () => { if (editor.group()) { renderSelBar(); status('Zu einer Gruppe verklebt.', '#198754'); } },
+  ungroup:     () => { if (editor.ungroup()) { renderSelBar(); status('Gruppierung gelöst.', '#888'); } },
   delete:      () => editor.deleteSelected(),
   'flip-h':    () => editor.flip('h'),
   'flip-v':    () => editor.flip('v'),
@@ -341,6 +372,12 @@ const actions = {
   'post-bg':      () => CONFIG.postData?.id && bg.setBackgroundImage(editor, `/library/studio/api/post-image/${CONFIG.postData.id}/`),
   'post-overlay': () => CONFIG.postData?.id && editor.addImageUrl(`/library/studio/api/post-image/${CONFIG.postData.id}/`),
   'copy-from-post': () => copyImageFromPost(),
+  'open-post-file': (btn) => {
+    const url = btn && btn.dataset.url;
+    if (!url) return;
+    editor.addImageUrl(url, { fill: true });
+    status('Datei vom Post geladen – jetzt bearbeiten und speichern.', '#198754');
+  },
   'save-template': () => saveAsTemplate(),
   'new-template': async () => {
     const ok = await modal('Neue Vorlage', 'Leert die Arbeitsfläche, damit du eine neue Vorlage baust – Hintergrund, Logo, Textfelder. Nicht Gespeichertes geht verloren.', [
@@ -438,7 +475,7 @@ async function ladeBildVonPost(p) {
 
 document.addEventListener('click', e => {
   const btn = e.target.closest('[data-act]');
-  if (btn && actions[btn.dataset.act]) { e.preventDefault(); actions[btn.dataset.act](); }
+  if (btn && actions[btn.dataset.act]) { e.preventDefault(); actions[btn.dataset.act](btn); }
   const shape = e.target.closest('[data-shape]');
   if (shape) { e.preventDefault(); editor.addShape(shape.dataset.shape, currentShapeColor); }
 });
@@ -816,14 +853,19 @@ function addBadge(kind) {
 
 // ---- Textblock: Überschrift + Fließtext als EIN Objekt --------------------
 function buildTextblock(head, body, opts) {
-  const w = opts.width, size = opts.size, col = opts.color, align = opts.align || 'center';
+  const w = opts.width, size = opts.size, col = opts.color;
+  const check = !!opts.check;
+  const align = opts.align || (check ? 'left' : 'center');
   const parts = [];
+  // Bei Haken den Text nach rechts einrücken, damit Platz für den Haken ist.
+  const r = size * 0.42;                 // Haken-Radius ~ Buchstabenhöhe
+  const textLeft = check ? Math.round(2 * r + size * 0.22) : 0;   // kleiner Abstand Haken→Text
   let y = 0;
   if (head) {
     const h = new fabric.Textbox(head, {
       width: w, fontSize: size, fontWeight: 'bold',
       fontFamily: 'Roboto, Arial, sans-serif', fill: col,
-      textAlign: align, left: 0, top: 0, lineHeight: 1.25, splitByGrapheme: false,
+      textAlign: align, left: textLeft, top: 0, lineHeight: 1.25, splitByGrapheme: false,
     });
     parts.push(h);
     y = h.height + Math.round(size * 0.45);
@@ -832,16 +874,25 @@ function buildTextblock(head, body, opts) {
     const b = new fabric.Textbox(body, {
       width: w, fontSize: Math.max(9, Math.round(size * 0.74)), fontWeight: 'normal',
       fontFamily: 'Roboto, Arial, sans-serif', fill: col,
-      textAlign: align, left: 0, top: y, lineHeight: 1.35, splitByGrapheme: false,
+      textAlign: align, left: textLeft, top: y, lineHeight: 1.35, splitByGrapheme: false,
     });
     parts.push(b);
   }
   if (!parts.length) return null;
+  if (check) {
+    // Octovis-Haken links, mittig zur ersten Zeile.
+    const cx = r, cy = size * 0.62;
+    const sc = r / 226;
+    const circle = new fabric.Circle({ left: cx, top: cy, originX: 'center', originY: 'center', radius: r, fill: '#EB6E08' });
+    const pd = `M ${cx + (-111) * sc} ${cy + 9 * sc} L ${cx + (-37) * sc} ${cy + 84 * sc} L ${cx + 123 * sc} ${cy - 87 * sc}`;
+    const tick = new fabric.Path(pd, { fill: '', stroke: '#FFFFFF', strokeWidth: 58 * sc, strokeLineCap: 'round', strokeLineJoin: 'round' });
+    parts.unshift(circle, tick);
+  }
   const g = new fabric.Group(parts, {
     left: editor.width / 2, top: editor.height / 2,
     originX: 'center', originY: 'center',
     shapeKind: 'textblock', tbWidth: w, tbSize: size, tbAlign: align,
-    tbHead: head, tbBody: body,
+    tbHead: head, tbBody: body, tbCheck: check,
   });
   return g;
 }
@@ -872,7 +923,7 @@ function rebuildTextblock(g, head, body, over = {}) {
   const ng = buildTextblock(head, body, {
     width: over.width || g.tbWidth || 260,
     size:  over.size  || g.tbSize  || 19,
-    color: col, align: g.tbAlign || 'center',
+    color: col, align: g.tbAlign || 'center', check: !!g.tbCheck,
   });
   if (!ng) return null;
   ng.set({ left: c.x, top: c.y, angle: g.angle, scaleX: g.scaleX, scaleY: g.scaleY,
@@ -934,6 +985,105 @@ function startTextblockEdit(g) {
     const geaendert = h !== (g.tbHead || '') || b !== (g.tbBody || '')
       || sz !== (g.tbSize || 19) || wd !== (g.tbWidth || 260);
     if (save && geaendert) rebuildTextblock(g, h, b, { size: sz, width: wd });
+    status('Bereit.');
+  };
+  box.addEventListener('keydown', e => {
+    e.stopPropagation();
+    if (e.key === 'Escape') { e.preventDefault(); finish(false); }
+    else if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); finish(true); }
+  });
+  setTimeout(() => {
+    document.addEventListener('mousedown', function out(ev) {
+      if (!box.contains(ev.target)) { document.removeEventListener('mousedown', out); finish(true); }
+    });
+  }, 50);
+}
+
+// ---- Mehrzeilige Haken-Liste (Dreihaken): je Zeile ein Haken, EIN Objekt --
+function isChecklist(o) { return !!(o && o.shapeKind === 'checklist'); }
+
+function buildCheckList(items, opts) {
+  const w = opts.width, size = opts.size, col = opts.color;
+  const r = size * 0.42;
+  const textLeft = Math.round(2 * r + size * 0.22);
+  const parts = [];
+  let y = 0;
+  (items.length ? items : ['Zeile']).forEach(txt => {
+    const tb = new fabric.Textbox(txt || ' ', {
+      width: w, fontSize: size, fontWeight: 'bold',
+      fontFamily: 'Roboto, Arial, sans-serif', fill: col,
+      textAlign: 'left', left: textLeft, top: y, lineHeight: 1.25, splitByGrapheme: false,
+    });
+    const cx = r, cy = y + size * 0.62, sc = r / 226;
+    const circle = new fabric.Circle({ left: cx, top: cy, originX: 'center', originY: 'center', radius: r, fill: '#EB6E08' });
+    const pd = `M ${cx + (-111) * sc} ${cy + 9 * sc} L ${cx + (-37) * sc} ${cy + 84 * sc} L ${cx + 123 * sc} ${cy - 87 * sc}`;
+    const tick = new fabric.Path(pd, { fill: '', stroke: '#FFFFFF', strokeWidth: 58 * sc, strokeLineCap: 'round', strokeLineJoin: 'round' });
+    parts.push(circle, tick, tb);
+    y += Math.max(tb.height, size * 1.25) + Math.round(size * 0.5);
+  });
+  const g = new fabric.Group(parts, {
+    left: editor.width / 2, top: editor.height / 2,
+    originX: 'center', originY: 'center',
+    shapeKind: 'checklist', clItems: items.slice(), clWidth: w, clSize: size, clColor: col,
+  });
+  return g;
+}
+
+function rebuildChecklist(g, items, over = {}) {
+  const c = g.getCenterPoint();
+  const ng = buildCheckList(items, {
+    width: over.width || g.clWidth || 300,
+    size:  over.size  || g.clSize  || 22,
+    color: g.clColor || '#161616',
+  });
+  if (!ng) return null;
+  ng.set({ left: c.x, top: c.y, angle: g.angle, scaleX: g.scaleX, scaleY: g.scaleY, anim: g.anim, fx: g.fx });
+  const idx = editor.canvas.getObjects().indexOf(g);
+  editor.canvas.remove(g);
+  editor.canvas.add(ng);
+  if (idx >= 0) ng.moveTo(idx);
+  editor.canvas.setActiveObject(ng);
+  editor.canvas.requestRenderAll();
+  editor.snapshot();
+  return ng;
+}
+
+function startChecklistEdit(g) {
+  if (!isChecklist(g)) return;
+  document.getElementById('tb-edit')?.remove();
+  const p = g.getCenterPoint();
+  const cEl = editor.canvas.upperCanvasEl, r = cEl.getBoundingClientRect();
+  const k = r.width / editor.canvas.getWidth();
+  const vt = editor.canvas.viewportTransform || [1, 0, 0, 1, 0, 0], zoom = editor.canvas.getZoom();
+  const x = r.left + (p.x * zoom + vt[4]) * k, y = r.top + (p.y * zoom + vt[5]) * k;
+  const box = document.createElement('div');
+  box.id = 'tb-edit';
+  box.style.cssText = `position:fixed;left:${x}px;top:${y}px;transform:translate(-50%,-50%);
+    z-index:9999;background:#fff;border:2px solid #F56E28;border-radius:8px;padding:8px;
+    box-shadow:0 6px 20px rgba(0,0,0,.3);display:flex;flex-direction:column;gap:5px;width:320px;`;
+  box.innerHTML = `
+    <div style="font-size:11px;color:#666">Eine Zeile = ein Haken:</div>
+    <textarea id="cl-e-body" rows="4" style="font-size:13px;padding:5px;border:1px solid #ccc;border-radius:4px;resize:vertical;font-family:inherit"></textarea>
+    <div style="display:flex;gap:8px;align-items:center;font-size:11px;color:#666">
+      <label style="display:flex;gap:3px;align-items:center">Schriftgröße
+        <input type="number" id="cl-e-size" min="8" step="1" style="width:56px;padding:3px;border:1px solid #ccc;border-radius:4px"></label>
+      <label style="display:flex;gap:3px;align-items:center">Breite
+        <input type="number" id="cl-e-width" min="60" step="10" style="width:64px;padding:3px;border:1px solid #ccc;border-radius:4px"></label>
+    </div>
+    <div style="font-size:11px;color:#888">Strg+Enter = fertig, Esc = abbrechen</div>`;
+  document.body.appendChild(box);
+  const bi = box.querySelector('#cl-e-body'), si = box.querySelector('#cl-e-size'), wi = box.querySelector('#cl-e-width');
+  bi.value = (g.clItems || []).join('\n'); si.value = g.clSize || 22; wi.value = g.clWidth || 300;
+  bi.focus();
+  status('Haken-Liste bearbeiten – eine Zeile je Haken, Strg+Enter = fertig.');
+  let done = false;
+  const finish = save => {
+    if (done) return; done = true;
+    const items = bi.value.split('\n').map(s => s.trim()).filter(Boolean);
+    const sz = Math.max(8, +si.value || g.clSize || 22);
+    const wd = Math.max(60, +wi.value || g.clWidth || 300);
+    box.remove();
+    if (save && items.length) rebuildChecklist(g, items, { size: sz, width: wd });
     status('Bereit.');
   };
   box.addEventListener('keydown', e => {
@@ -1204,6 +1354,7 @@ function textZuIText(o) {
 editor.canvas.on('mouse:dblclick', e => {
   const o = e.target;
   if (isBadge(o)) startBadgeEdit(o);
+  else if (isChecklist(o)) startChecklistEdit(o);
   else if (isTextblock(o)) startTextblockEdit(o);
   else if (o && o.type === 'text') { textZuIText(o); status('Text ändern, dann daneben klicken.'); }
 });
@@ -1264,6 +1415,8 @@ function renderSelBar() {
         <button class="tbtn" id="dist-v" title="Senkrecht gleichmäßig verteilen">↕≡</button>
       </span>` : ''}
     <button class="tbtn" data-act="duplicate" title="Duplizieren (Strg+D)" ${d}>📋</button>
+    ${objs.length > 1 ? `<button class="tbtn" data-act="group" title="Ausgewählte Teile zu einer Gruppe verkleben">🔗 Gruppieren</button>` : ''}
+    ${editor.isGroup() ? `<button class="tbtn" data-act="ungroup" title="Gruppierung wieder lösen">✂ Lösen</button>` : ''}
     <button class="tbtn" data-act="flip-h" title="Horizontal spiegeln" ${d}>↔</button>
     <button class="tbtn" data-act="flip-v" title="Vertikal spiegeln" ${d}>↕</button>
     <button class="tbtn" data-act="forward" title="Nach vorne" ${d}>⬆</button>

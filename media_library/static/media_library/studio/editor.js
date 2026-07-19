@@ -220,6 +220,27 @@ export class Editor {
   active() { return this.canvas.getActiveObject(); }
   activeAll() { const a = this.active(); if (!a) return []; return a.type === 'activeSelection' ? a.getObjects() : [a]; }
 
+  // Mehrere ausgewählte Objekte zu EINER Gruppe zusammenfassen (verkleben).
+  group() {
+    const a = this.active();
+    if (!a || a.type !== 'activeSelection') return false;
+    const g = a.toGroup();
+    g.set({ shapeKind: 'group' });
+    this.canvas.requestRenderAll();
+    this.snapshot();
+    return true;
+  }
+  // Gruppe wieder in Einzelteile auflösen.
+  ungroup() {
+    const a = this.active();
+    if (!a || a.type !== 'group') return false;
+    a.toActiveSelection();
+    this.canvas.requestRenderAll();
+    this.snapshot();
+    return true;
+  }
+  isGroup() { const a = this.active(); return !!(a && a.type === 'group'); }
+
   deleteSelected() {
     this.activeAll().forEach(o => this.canvas.remove(o));
     this.canvas.discardActiveObject();
@@ -349,8 +370,13 @@ export class Editor {
     const weg = this._grid.filter(l => l.visible !== false);
     weg.forEach(l => (l.visible = false));
     this.canvas.discardActiveObject();
+    // Zoom/Verschiebung fürs Bild neutralisieren, sonst wird der sichtbare
+    // (verschobene) Ausschnitt exportiert statt der ganzen Arbeitsfläche.
+    const vpt = this.canvas.viewportTransform ? this.canvas.viewportTransform.slice() : null;
+    this.canvas.setViewportTransform([1, 0, 0, 1, 0, 0]);
     this.canvas.renderAll();
     const url = this.canvas.toDataURL({ format: 'png', multiplier: 1, ...opts });
+    if (vpt) this.canvas.setViewportTransform(vpt);
     weg.forEach(l => (l.visible = true));
     this.canvas.requestRenderAll();
     return url;

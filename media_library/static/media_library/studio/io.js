@@ -118,6 +118,7 @@ export async function saveAnimation(editor, blob, ext) {
   const folder = document.getElementById('save-folder')?.value;
   if (folder) fd.append('folder_id', folder);
   if (CONFIG.libData?.item_id) fd.append('lib_item_id', CONFIG.libData.item_id);   // vorhandene Ausgabe überschreiben
+  if (CONFIG.postId) fd.append('post_id', CONFIG.postId);   // GIF/Video an den Post hängen
   try {
     const res = await fetch(URLS.saveVideoFile, {
       method: 'POST',

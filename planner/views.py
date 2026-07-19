@@ -676,11 +676,26 @@ def api_post(request):
             nc_path = (data.get('video_nc_path') or '').strip()
             if not nc_path:
                 return JsonResponse({'ok': False, 'error': 'video_nc_path fehlt'}, status=400)
+            # Studio-Ausgabe → in den Planner/Videos-Ordner verschieben (keine Kopie).
+            nc_path = _move_studio_output_to_planner(nc_path, PLANNER_VIDEOS_FOLDER)
             c.execute(
                 "UPDATE planner_posts SET video_nc_path=%s, image=NULL WHERE id=%s",
                 [nc_path, data.get('id')]
             )
-            return JsonResponse({'ok': True})
+            return JsonResponse({'ok': True, 'nc_path': nc_path})
+        elif action == 'set_image':
+            # Ein bestehendes Nextcloud-/Studio-Bild an den Post hängen (kein Upload).
+            _ensure_media_columns()
+            nc_path = (data.get('image_nc_path') or '').strip()
+            if not nc_path:
+                return JsonResponse({'ok': False, 'error': 'image_nc_path fehlt'}, status=400)
+            # Studio-Ausgabe → in den Planner/Images-Ordner verschieben (keine Kopie).
+            nc_path = _move_studio_output_to_planner(nc_path, PLANNER_IMAGES_FOLDER)
+            c.execute(
+                "UPDATE planner_posts SET image=%s, video_nc_path=NULL WHERE id=%s",
+                [nc_path, data.get('id')]
+            )
+            return JsonResponse({'ok': True, 'nc_path': nc_path})
         elif action == 'to_archive':
             c.execute("UPDATE planner_posts SET status='Posted', in_pipeline=1 WHERE id=%s", [data.get('id')])
             return JsonResponse({'ok': True})
@@ -988,7 +1003,12 @@ def _upload_video_to_cloudinary(post_id):
     to_sign = f"public_id={public_id}&timestamp={timestamp}{api_secret}"
     signature = _hashlib.sha1(to_sign.encode("utf-8")).hexdigest()
 
-    upload_url = f"https://api.cloudinary.com/v1_1/{cloud_name}/video/upload"
+    # Cloudinary-Video-Upload akzeptiert KEIN GIF. Animierte GIFs daher über den
+    # Bild-Endpunkt hochladen und als MP4 ausliefern (Cloudinary konvertiert das
+    # animierte GIF on-the-fly), damit LinkedIn ein echtes Video bekommt.
+    is_gif = local_path.lower().endswith(".gif")
+    endpoint = "image" if is_gif else "video"
+    upload_url = f"https://api.cloudinary.com/v1_1/{cloud_name}/{endpoint}/upload"
     with open(local_path, "rb") as f:
         files = {"file": f}
         data = {
@@ -1006,6 +1026,9 @@ def _upload_video_to_cloudinary(post_id):
     secure_url = result.get("secure_url")
     if not secure_url:
         raise Exception("Cloudinary lieferte keine URL: " + json.dumps(result)[:300])
+    # Animiertes GIF → als MP4 ausliefern (Dateiendung tauschen).
+    if is_gif and secure_url.lower().endswith(".gif"):
+        secure_url = secure_url[:-4] + ".mp4"
     return secure_url
 
 
@@ -1095,9 +1118,9 @@ def _upload_video_to_nextcloud(video_file, post_id):
     return nc_path
 
 
-def _list_nextcloud_videos():
+def _list_nc_folder_media(nc_folder, exts):
     """
-    List video files in the Nextcloud Planner/Videos folder via WebDAV PROPFIND.
+    List files with the given extensions in a Nextcloud folder via WebDAV PROPFIND.
     Returns a list of dicts: {'filename', 'nc_path'}. Newest first by name.
     """
     import requests as _req
@@ -1106,7 +1129,6 @@ def _list_nextcloud_videos():
     from requests.auth import HTTPBasicAuth as _BA
     import xml.etree.ElementTree as _ET
 
-    nc_folder = "Marketing & Design/LinkedIn/Planner/Videos"
     nc_url, username, password = _get_nc_credentials()
     if not all([nc_url, username, password]):
         raise Exception('Nextcloud nicht verbunden')
@@ -1128,7 +1150,6 @@ def _list_nextcloud_videos():
     if r.status_code not in (207, 200):
         raise Exception(f'NC PROPFIND HTTP {r.status_code}: {r.text[:200]}')
 
-    video_exts = ('.mp4', '.mov', '.webm', '.m4v', '.avi')
     results = []
     root = _ET.fromstring(r.content)
     ns = {'d': 'DAV:'}
@@ -1138,12 +1159,37 @@ def _list_nextcloud_videos():
             continue
         href = _unq(href_el.text)
         filename = href.rstrip('/').split('/')[-1]
-        if not filename or not filename.lower().endswith(video_exts):
+        if not filename or not filename.lower().endswith(tuple(exts)):
             continue
         results.append({'filename': filename, 'nc_path': f"{nc_folder}/{filename}"})
 
     results.sort(key=lambda x: x['filename'], reverse=True)
     return results
+
+
+def _list_nextcloud_videos():
+    """List video files in the Nextcloud Planner/Videos folder."""
+    return _list_nc_folder_media(
+        "Marketing & Design/LinkedIn/Planner/Videos",
+        ('.mp4', '.mov', '.webm', '.m4v', '.avi'))
+
+
+# Studio-Ausgaben (bewegte Medien) aus Studio_Work/Output.
+STUDIO_OUTPUT_VIDEOS = "Marketing & Design/Octotrial_Assets/Studio_Work/Output/Videos"
+STUDIO_OUTPUT_GIFS   = "Marketing & Design/Octotrial_Assets/Studio_Work/Output/GIFs"
+
+
+def _list_studio_outputs():
+    """List moving Studio outputs (Videos + GIFs) from Studio_Work/Output."""
+    out = []
+    for folder, exts in ((STUDIO_OUTPUT_VIDEOS, ('.mp4', '.mov', '.webm', '.m4v', '.avi')),
+                         (STUDIO_OUTPUT_GIFS, ('.gif',))):
+        try:
+            out.extend(_list_nc_folder_media(folder, exts))
+        except Exception as e:
+            print("studio outputs list:", folder, e)
+    out.sort(key=lambda x: x['filename'], reverse=True)
+    return out
 
 
 @login_required
@@ -1153,6 +1199,75 @@ def api_nc_videos(request):
         return JsonResponse({'ok': True, 'videos': _list_nextcloud_videos()})
     except Exception as e:
         return JsonResponse({'ok': False, 'error': str(e)}, status=500)
+
+
+@login_required
+def api_studio_outputs(request):
+    """JSON endpoint: list moving Studio outputs (Videos + GIFs)."""
+    try:
+        return JsonResponse({'ok': True, 'videos': _list_studio_outputs()})
+    except Exception as e:
+        return JsonResponse({'ok': False, 'error': str(e)}, status=500)
+
+
+# Statische Studio-Bilder aus Studio_Work/Output/Images.
+STUDIO_OUTPUT_IMAGES = "Marketing & Design/Octotrial_Assets/Studio_Work/Output/Images"
+
+
+def _list_studio_images():
+    """List static Studio image outputs from Studio_Work/Output/Images."""
+    try:
+        return _list_nc_folder_media(STUDIO_OUTPUT_IMAGES, ('.png', '.jpg', '.jpeg', '.webp'))
+    except Exception as e:
+        print("studio images list:", e)
+        return []
+
+
+@login_required
+def api_studio_images(request):
+    """JSON endpoint: list static Studio image outputs."""
+    try:
+        return JsonResponse({'ok': True, 'images': _list_studio_images()})
+    except Exception as e:
+        return JsonResponse({'ok': False, 'error': str(e)}, status=500)
+
+
+STUDIO_OUTPUT_PREFIX = "Marketing & Design/Octotrial_Assets/Studio_Work/Output/"
+PLANNER_IMAGES_FOLDER = "Marketing & Design/LinkedIn/Planner/Images"
+PLANNER_VIDEOS_FOLDER = "Marketing & Design/LinkedIn/Planner/Videos"
+
+
+def _nc_move(src_nc_path, dst_nc_path):
+    """WebDAV MOVE a file within Nextcloud. Returns dst_nc_path on success, else None."""
+    import requests as _req
+    from posts_posted.nc_storage import _get_nc_credentials
+    from urllib.parse import quote as _q2
+    from requests.auth import HTTPBasicAuth as _BA
+    nc_url, username, password = _get_nc_credentials()
+    if not all([nc_url, username, password]):
+        return None
+    base = f"{nc_url}/remote.php/dav/files/{username}/"
+    src = base + _q2(src_nc_path, safe='/')
+    dst = base + _q2(dst_nc_path, safe='/')
+    try:
+        r = _req.request('MOVE', src, auth=_BA(username, password),
+                         headers={'Destination': dst, 'Overwrite': 'T'}, timeout=30)
+        if r.status_code in (200, 201, 204):
+            return dst_nc_path
+        print("nc move failed", r.status_code, r.text[:200])
+    except Exception as e:
+        print("nc move error", e)
+    return None
+
+
+def _move_studio_output_to_planner(nc_path, dest_folder):
+    """Studio-Ausgaben aus Studio_Work/Output in den Planner-Ordner verschieben,
+    damit die Datei beim Post liegt (keine Kopie)."""
+    if not nc_path or not nc_path.startswith(STUDIO_OUTPUT_PREFIX):
+        return nc_path
+    fname = nc_path.rsplit('/', 1)[-1]
+    moved = _nc_move(nc_path, f"{dest_folder}/{fname}")
+    return moved or nc_path
 
 
 @login_required

@@ -35,7 +35,19 @@
   {% if post_data.image %}<img src="/library/studio/api/post-image/{{ post_data.id }}/" alt="">{% endif %}
   <div class="post-info">
     <strong>📌 Post #{{ post_data.id }}: {{ post_data.title|default:"Ohne Titel" }}</strong>
-    <p>Bild wird beim Speichern am Post angehängt.</p>
+    <p>Bild, GIF und Video werden beim Speichern am Post angehängt.</p>
+    <div class="post-files">
+      <span class="post-files-label">Dateien am Post:</span>
+      {% if post_data.image_url %}
+        <button class="tbtn" data-act="open-post-file" data-kind="image" data-url="{{ post_data.image_url }}" title="Bild auf die Arbeitsfläche laden">📷 Bild</button>
+      {% else %}<span class="tbtn tbtn-off">📷 kein Bild</span>{% endif %}
+      {% if post_data.gif_url %}
+        <button class="tbtn" data-act="open-post-file" data-kind="gif" data-url="{{ post_data.gif_url }}" title="GIF auf die Arbeitsfläche laden">🎞 GIF</button>
+      {% else %}<span class="tbtn tbtn-off">🎞 kein GIF</span>{% endif %}
+      {% if post_data.video_url %}
+        <a class="tbtn" href="{{ post_data.video_url }}" target="_blank" rel="noopener" title="Video ansehen / herunterladen">🎬 Video</a>
+      {% else %}<span class="tbtn tbtn-off">🎬 kein Video</span>{% endif %}
+    </div>
   </div>
   {% if post_data.image %}
   <div class="post-actions">
@@ -45,9 +57,16 @@
   </div>
   {% endif %}
 </div>
+<style>
+  .post-files{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:6px}
+  .post-files-label{font-size:.7rem;color:#888}
+  .post-files .tbtn{font-size:.72rem;padding:3px 8px}
+  .post-files .tbtn-off{opacity:.4;pointer-events:none}
+</style>
 {% elif post_id %}
 <div class="post-banner"><div class="post-info"><strong>📌 Post #{{ post_id }}</strong><p>Bild wird beim Speichern am Post angehängt.</p></div>
   <button class="tbtn" data-act="copy-from-post" title="Ein bestehendes Bild von einem anderen Post übernehmen – wird als Kopie an diesen Post gespeichert">📥 Bild von anderem Post</button>
+  <a class="tbtn primary" href="/planner/uebersicht/?focus={{ post_id }}" title="Zurück zur Übersicht – dort den Status dieses Posts setzen (erst speichern nicht vergessen)">← Zur Übersicht &amp; Status</a>
 </div>
 {% elif lib_data %}
 <div class="post-banner">
@@ -131,6 +150,10 @@
           <label style="font-size:.72rem;color:#666">Größe</label>
           <input type="number" id="tb-size" class="field" value="19" min="8" step="1" style="width:52px">
           <button class="tbtn primary" data-act="add-textblock" style="margin-left:auto">+ Textblock</button>
+        </div>
+        <div class="swatch-row" style="margin-top:4px">
+          <button class="tbtn" data-act="add-checktext" title="Octovis-Haken + Text als EIN Objekt. Doppelklick zum Ändern, Text bricht an der Breite um, an der Ecke skalieren.">✓ Haken + Text</button>
+          <button class="tbtn" data-act="add-checklist" title="Drei Zeilen mit Haken als EIN Objekt (Dreihaken). Doppelklick: eine Zeile je Haken.">✓✓✓ Dreihaken</button>
         </div>
       </div>
     </section>
@@ -245,6 +268,9 @@
       <div class="group" title="Verlauf">
         <button class="tbtn" data-act="undo" title="Rückgängig (Strg+Z)">↶</button>
         <button class="tbtn" data-act="redo" title="Wiederholen (Strg+Y)">↷</button>
+      </div>
+      <div class="group">
+        <a class="tbtn" href="{{ back_url }}" title="Zurück zur Seite, von der du gekommen bist (erst speichern nicht vergessen)">← Zurück</a>
       </div>
       <span id="status-msg"></span>
     </div>

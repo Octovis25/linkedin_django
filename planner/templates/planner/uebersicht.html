@@ -147,6 +147,18 @@
 {{ edit_map|json_script:"ovEditData" }}
 <script>
 const OV_TODAY = new Date().toISOString().slice(0,10);
+
+// Aus dem Studio zurückgekommen (?focus=<id>): passende Zeile hervorheben.
+(function(){
+  const fid = new URLSearchParams(location.search).get('focus');
+  if(!fid) return;
+  const row = document.querySelector('.ov-row[data-id="'+fid+'"]');
+  if(!row) return;
+  row.scrollIntoView({behavior:'smooth', block:'center'});
+  row.style.transition='background .3s';
+  row.style.background='#FFF3E6';
+  setTimeout(()=>{ row.style.background=''; }, 2500);
+})();
 const OV_EDIT = JSON.parse(document.getElementById('ovEditData').textContent || '{}');
 const OV_TOPICS = [{% for t in topics %}{id:"{{ t.id }}", name:"{{ t.name|escapejs }}"}{% if not forloop.last %},{% endif %}{% endfor %}];
 const OV_STATUS_COLORS = {

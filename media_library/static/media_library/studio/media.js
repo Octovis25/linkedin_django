@@ -175,7 +175,9 @@ function applyAt(o, t) {
   const ease = 1 - Math.pow(1 - p, 3);     // easeOutCubic
 
   o.set({ opacity: b.opacity, left: b.left, top: b.top, scaleX: b.scaleX, scaleY: b.scaleY, angle: b.angle });
-  const tt = t / 1000;   // Sekunden (für Schleifen)
+  // Schleifen-Tempo an den Dauer-Regler koppeln: größere Dauer = langsamer.
+  // dur=1200 ⇒ sp=1 (unverändert); dur=2400 ⇒ halbe Geschwindigkeit.
+  const tt = (t / 1000) * (1200 / Math.max(200, dur));
   switch (type) {
     // — einmalige Effekte (über die Dauer) —
     case 'fadeIn':     o.set({ opacity: b.opacity * ease }); break;
@@ -231,9 +233,10 @@ export function previewAnimation(editor) {
   play(editor, animDuration(editor));
 }
 
-// Für Export: Canvas auf volle Auflösung (Zoom 1) setzen, danach zurück.
+// Für Export: Canvas auf volle Auflösung setzen und Zoom + Verschiebung
+// neutralisieren, sonst wird der verschobene Ausschnitt aufgenommen.
 function toFullRes(editor) {
-  editor.canvas.setZoom(1);
+  editor.canvas.setViewportTransform([1, 0, 0, 1, 0, 0]);
   editor.canvas.setDimensions({ width: editor.width, height: editor.height });
 }
 function restoreFit(editor) {

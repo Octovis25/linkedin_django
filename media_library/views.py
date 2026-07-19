@@ -673,6 +673,10 @@ def _ensure_studio_tables():
         try:
             c.execute("ALTER TABLE studio_templates ADD COLUMN canvas_json LONGTEXT DEFAULT NULL")
         except Exception: pass
+        # Migration: aktiv/passiv – passive Vorlagen erscheinen nicht in der Studio-Auswahl.
+        try:
+            c.execute("ALTER TABLE studio_templates ADD COLUMN active TINYINT DEFAULT 1")
+        except Exception: pass
         try:
             c.execute("""CREATE TABLE IF NOT EXISTS studio_images (
                 id          INT AUTO_INCREMENT PRIMARY KEY,
@@ -692,6 +696,14 @@ def _ensure_studio_tables():
         try:
             c.execute("ALTER TABLE studio_images MODIFY COLUMN canvas_json LONGTEXT")
         except Exception: pass
+        # Post-Medien: Bild (image) existiert schon; GIF + Video als eigene Spalten,
+        # damit an einem Post alle drei Dateien hängen und einzeln abrufbar sind.
+        try:
+            c.execute("ALTER TABLE planner_posts ADD COLUMN gif_nc_path VARCHAR(512) DEFAULT NULL")
+        except Exception: pass
+        try:
+            c.execute("ALTER TABLE planner_posts ADD COLUMN video_nc_path VARCHAR(512) DEFAULT NULL")
+        except Exception: pass
 
 
 # ─────────────────────────────────────────────
@@ -710,16 +722,37 @@ def studio_view(request):
     post_data = None
     if post_id:
         try:
+            from urllib.parse import quote as _q
             with connection.cursor() as c:
-                rows = _safe(c, "SELECT id, title, image, content FROM planner_posts WHERE id=%s", [post_id])
+                rows = _safe(c, """SELECT id, title, image, content,
+                                          COALESCE(gif_nc_path,''), COALESCE(video_nc_path,'')
+                                     FROM planner_posts WHERE id=%s""", [post_id])
                 if rows:
                     r = rows[0]
-                    post_data = {'id': r[0], 'title': r[1] or '', 'image': r[2] or '', 'content': (r[3] or '')[:120]}
+                    post_data = {'id': r[0], 'title': r[1] or '', 'image': r[2] or '', 'content': (r[3] or '')[:120],
+                                 'gif': r[4] or '', 'video': r[5] or ''}
+                    # Abruf-URLs für die drei Dateien am Post (Auswahl im Banner).
+                    post_data['image_url'] = f"/library/studio/api/post-image/{r[0]}/" if post_data['image'] else ''
+                    post_data['gif_url']   = ('/library/studio/nc-image/?p=' + _q(post_data['gif']))   if post_data['gif']   else ''
+                    post_data['video_url'] = ('/library/studio/nc-image/?p=' + _q(post_data['video'])) if post_data['video'] else ''
                 # Look up saved canvas_json for this post
                 canvas_rows = _safe(c, "SELECT canvas_json, template_id FROM studio_images WHERE post_id=%s ORDER BY created_at DESC LIMIT 1", [post_id])
                 if canvas_rows and canvas_rows[0][0] and post_data:
                     post_data['canvas_json'] = canvas_rows[0][0]
                     post_data['template_id'] = canvas_rows[0][1]
+                # Fallback: Design wurde als GIF/Video gespeichert (nicht per post_id
+                # verknüpft) oder die Datei wurde verschoben → über den Dateinamen der
+                # am Post hängenden Datei (Bild/GIF/Video) das bearbeitbare Layout finden.
+                if post_data and not post_data.get('canvas_json'):
+                    cand = post_data.get('image') or post_data.get('video') or post_data.get('gif')
+                    if cand:
+                        _fn = cand.rsplit('/', 1)[-1]
+                        cj = _safe(c, """SELECT canvas_json, template_id FROM studio_images
+                                         WHERE nc_path=%s OR nc_path LIKE %s ORDER BY id DESC LIMIT 1""",
+                                   [cand, '%/' + _fn])
+                        if cj and cj[0][0]:
+                            post_data['canvas_json'] = cj[0][0]
+                            post_data['template_id'] = cj[0][1]
         except Exception as e:
             print("Studio post lookup error:", e)
     # Also support loading from a library item (studio_image_id)
@@ -733,6 +766,14 @@ def studio_view(request):
                     nc_path = rows[0][0]
                     studio_rows = _safe(c, """SELECT canvas_json, template_id FROM studio_images
                                              WHERE nc_path=%s ORDER BY created_at DESC LIMIT 1""", [nc_path])
+                    # Fallback: Datei wurde evtl. verschoben (z. B. von Studio_Work/Output
+                    # nach Planner/Videos). Dann das bearbeitbare Design über den
+                    # Dateinamen wiederfinden, damit „🎨 Studio" das Layout lädt.
+                    if not (studio_rows and studio_rows[0][0]):
+                        _fn = (nc_path or '').rsplit('/', 1)[-1]
+                        if _fn:
+                            studio_rows = _safe(c, """SELECT canvas_json, template_id FROM studio_images
+                                                     WHERE nc_path LIKE %s ORDER BY id DESC LIMIT 1""", ['%/' + _fn])
                     _low = (nc_path or '').lower()
                     lib_data = {'item_id': lib_item_id, 'image_url': f"/library/image/{lib_item_id}/",
                                 'title': rows[0][1] or '', 'nc_path': nc_path,
@@ -826,10 +867,16 @@ def studio_view(request):
         },
     }
 
+    # „Zurück"-Ziel = Seite, von der man kam (Referrer). Nicht auf das Studio
+    # selbst zurückspringen; sonst Fallback auf die Übersicht.
+    back_url = request.META.get('HTTP_REFERER', '') or ''
+    if not back_url or '/library/studio/' in back_url:
+        back_url = '/planner/uebersicht/'
+
     return render(request, 'media_library/studio.html', {
         'post_id': post_id, 'post_data': post_data, 'lib_data': lib_data,
         'folders': folders, 'nc_url': (nc_url_val or '').rstrip('/'),
-        'studio_config': studio_config,
+        'studio_config': studio_config, 'back_url': back_url,
         'brand_extra_colors_json': json.dumps(brand.get('extra_colors', []))})
 
 
@@ -881,7 +928,8 @@ def studio_link_video(request):
 def studio_templates_view(request):
     _ensure_studio_tables()
     with connection.cursor() as c:
-        rows = _safe(c, "SELECT id, title, width, height, colors, created_at FROM studio_templates ORDER BY created_at DESC")
+        rows = _safe(c, "SELECT id, title, width, height, colors, created_at, COALESCE(active,1) FROM studio_templates ORDER BY created_at DESC") \
+            or _safe(c, "SELECT id, title, width, height, colors, created_at FROM studio_templates ORDER BY created_at DESC")
     templates = []
     for r in (rows or []):
         colors = []
@@ -889,9 +937,24 @@ def studio_templates_view(request):
             try: colors = json.loads(r[4])
             except: pass
         templates.append({'id': r[0], 'title': r[1], 'width': r[2], 'height': r[3], 'colors': colors,
+                          'active': bool(r[6]) if len(r) > 6 else True,
                           'url': f"/library/studio/template/image/{r[0]}/"})
     brand = get_brand_colors()
     return render(request, 'media_library/studio_templates.html', {'templates': templates, 'brand': brand})
+
+
+@login_required
+def studio_template_toggle_active(request, tpl_id):
+    """Vorlage aktiv/passiv schalten. Passive erscheinen nicht in der Studio-Auswahl."""
+    if request.method != 'POST':
+        return redirect('media_library:studio_templates')
+    _ensure_studio_tables()
+    with connection.cursor() as c:
+        try:
+            c.execute("UPDATE studio_templates SET active = 1 - COALESCE(active,1) WHERE id=%s", [tpl_id])
+        except Exception:
+            pass
+    return redirect('media_library:studio_templates')
 
 
 @login_required
@@ -1273,6 +1336,7 @@ def studio_save_video(request):
         try: folder_id = int(folder_id)
         except: folder_id = None
     lib_item_id = request.POST.get('lib_item_id') or None   # gesetzt beim „Speichern" einer vorhandenen Ausgabe
+    post_id = request.POST.get('post_id') or None           # gesetzt, wenn aus einem Post gespeichert wird
     old_nc_path = None
     if lib_item_id:
         with connection.cursor() as c:
@@ -1330,6 +1394,14 @@ def studio_save_video(request):
             else:
                 c.execute("""INSERT INTO studio_images (nc_path, title, canvas_json)
                              VALUES (%s, %s, %s)""", [nc_path, title, canvas_json])
+    # An den Post hängen: GIF → gif_nc_path, Video → video_nc_path.
+    if post_id:
+        col = 'gif_nc_path' if ext == '.gif' else 'video_nc_path'
+        try:
+            with connection.cursor() as c:
+                c.execute(f"UPDATE planner_posts SET {col}=%s WHERE id=%s", [nc_path, post_id])
+        except Exception as e:
+            print("save-video post attach:", e)
     return JsonResponse({'ok': True, 'nc_path': nc_path, 'filename': filename, 'lib_id': lib_id})
 
 
@@ -1337,7 +1409,8 @@ def studio_save_video(request):
 def studio_api_templates(request):
     _ensure_studio_tables()
     with connection.cursor() as c:
-        rows = _safe(c, "SELECT id, title, width, height, colors, canvas_json FROM studio_templates ORDER BY created_at DESC") \
+        # Nur aktive Vorlagen in der Studio-Auswahl.
+        rows = _safe(c, "SELECT id, title, width, height, colors, canvas_json FROM studio_templates WHERE COALESCE(active,1)=1 ORDER BY created_at DESC") \
             or _safe(c, "SELECT id, title, width, height, colors FROM studio_templates ORDER BY created_at DESC")
     data = []
     for r in (rows or []):
