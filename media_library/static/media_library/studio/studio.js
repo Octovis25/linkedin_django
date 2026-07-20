@@ -1743,7 +1743,7 @@ function syncFontSizeInput() {
 
 // Umschalt+Klick auf „Speichern" fragt das Format neu ab.
 {
-  const sb = document.querySelector('[data-act="save-as"]');
+  const sb = document.getElementById('save-btn');
   if (sb) sb.addEventListener('click', e => {
     if (e.shiftKey) { e.preventDefault(); e.stopImmediatePropagation(); actions['save-as-new'](); }
   }, true);
