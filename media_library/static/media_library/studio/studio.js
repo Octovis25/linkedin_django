@@ -225,8 +225,12 @@ const actions = {
     else { await io.saveImage(editor); refreshOutput(); }
   },
   download:    async () => {
-    if (media.hasAnimations(editor)) await media.downloadGif(editor);   // animiert → GIF
-    else io.downloadImage(editor);                                       // sonst → PNG
+    // Gleiches Format wie beim Speichern (▾ Format). Noch nichts gewählt:
+    // animiert → GIF, sonst → PNG.
+    const kind = _saveKind || (media.hasAnimations(editor) ? 'gif' : 'image');
+    if (kind === 'gif')        await media.downloadGif(editor);
+    else if (kind === 'video') await media.downloadVideo(editor);
+    else                       io.downloadImage(editor);
   },
   'new':       async () => {
     const ok = await modal('Neu anfangen?', 'Leert den Editor (alle Elemente + Hintergrund). Nicht Gespeichertes geht verloren.', [

@@ -266,7 +266,7 @@ function animDuration(editor) {
 }
 
 // ---- Export als bewegtes Bild (WebM) -------------------------------------
-export async function exportVideo(editor) {
+export async function exportVideo(editor, onBlob) {
   if (!hasAnimations(editor)) { toast('Keine Animationen – nichts zu exportieren', 'err'); return; }
   const canvasEl = editor.canvas.lowerCanvasEl;
   if (!canvasEl.captureStream) { toast('Browser unterstützt keine Video-Aufnahme', 'err'); return; }
@@ -291,9 +291,22 @@ export async function exportVideo(editor) {
   if (editor.gridOn) editor.setGridVisible(true);
 
   const blob = new Blob(chunks, { type: 'video/webm' });
+  if (typeof onBlob === 'function') { onBlob(blob); status('Bereit.'); return; }
   // Kein Auto-Download – nur in „Meine Ausgaben" speichern (mit canvas_json → editierbar).
   status('💾 Video wird gespeichert…');
   await saveAnimation(editor, blob, '.webm');
+}
+
+// Video erzeugen und direkt auf den Rechner herunterladen (statt in „Meine Ausgaben").
+export async function downloadVideo(editor) {
+  await exportVideo(editor, blob => {
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = (document.getElementById('title-input')?.value.trim() || 'studio') + '.webm';
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+    toast('Video heruntergeladen', 'ok');
+  });
 }
 
 // ---- Export als GIF -------------------------------------------------------
