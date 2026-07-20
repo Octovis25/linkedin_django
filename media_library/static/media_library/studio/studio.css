@@ -255,24 +255,24 @@ a.manage-link       { font-size:.75rem; color:var(--octo-petrol,#008591); }
 #upload-grid        { max-height:150px; overflow-y:auto; }
 
 /* ---- Animations-Leiste unter dem Canvas -------------------------------- */
-.anim-bar           { display:flex; flex-direction:column; gap:6px;
-                      margin-top:.5rem; padding:.5rem .6rem; background:#fff;
+.anim-bar           { display:flex; flex-direction:column; gap:3px;
+                      margin-top:.4rem; padding:.35rem .45rem; background:#fff;
                       border:1px solid #e3e3e3; border-radius:8px; }
-.anim-bar-title     { font-size:.78rem; color:var(--octo-petrol,#008591); font-weight:600; }
-.anim-bar .hint     { font-size:.72rem; color:#888; }
-.anim-row           { display:flex; align-items:center; gap:10px; padding:6px;
-                      background:#f6f8f9; border:1px solid #e6e8ea; border-radius:8px; }
-.anim-thumb         { width:48px; height:48px; flex:0 0 auto; object-fit:contain;
-                      background:#fff; border:1px solid #e0e0e0; border-radius:6px; cursor:pointer; }
+.anim-bar-title     { font-size:.72rem; color:var(--octo-petrol,#008591); font-weight:600; }
+.anim-bar .hint     { font-size:.68rem; color:#888; }
+.anim-row           { display:flex; align-items:center; gap:7px; padding:3px 5px;
+                      background:#f6f8f9; border:1px solid #e6e8ea; border-radius:6px; }
+.anim-thumb         { width:32px; height:32px; flex:0 0 auto; object-fit:contain;
+                      background:#fff; border:1px solid #e0e0e0; border-radius:5px; cursor:pointer; }
 .anim-thumb:hover   { border-color:var(--octo-orange,#F56E28); }
-.anim-col           { display:flex; flex-direction:column; gap:4px; flex:1; min-width:0; }
-.anim-ctl           { display:flex; align-items:center; gap:6px; font-size:.72rem; color:#555; }
-.anim-ctl > span    { flex:0 0 66px; }
-.anim-ctl select, .anim-ctl input { flex:1; min-width:0; }
+.anim-col           { display:flex; flex-direction:column; gap:2px; flex:1; min-width:0; }
+.anim-ctl           { display:flex; align-items:center; gap:5px; font-size:.66rem; color:#555; }
+.anim-ctl > span    { flex:0 0 52px; }
+.anim-ctl select, .anim-ctl input { flex:1; min-width:0; font-size:.66rem; padding:1px 4px; height:22px; }
 .anim-bar-head      { display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:2px; }
-.anim-time          { gap:12px; }
+.anim-time          { gap:10px; }
 .anim-time-item     { display:flex; align-items:center; gap:5px; flex:1; min-width:0; }
-.anim-time-item > span { flex:0 0 auto; font-size:.68rem; color:#777; }
+.anim-time-item > span { flex:0 0 auto; font-size:.64rem; color:#777; }
 
 /* ---- Rechteck-Auswahl (eigene Zeichenebene über dem Canvas) ------------- */
 #rect-overlay       { position:absolute; inset:0; z-index:30; display:none; cursor:crosshair; }
