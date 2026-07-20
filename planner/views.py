@@ -997,8 +997,9 @@ def _upload_video_to_cloudinary(post_id):
     local_path = _prepare_temp_video(post_id)
 
     # 2) Signierten Upload an Cloudinary vorbereiten.
-    public_id = f"linkedin_post_{post_id}"
     timestamp = str(int(_time.time()))
+    # Eindeutiger Name je Upload → Cloudinary liefert nie eine alte, gecachte Version.
+    public_id = f"linkedin_post_{post_id}_{timestamp}"
     # Signatur: alle Parameter (außer file/api_key) alphabetisch, mit api_secret gehasht.
     to_sign = f"public_id={public_id}&timestamp={timestamp}{api_secret}"
     signature = _hashlib.sha1(to_sign.encode("utf-8")).hexdigest()
@@ -1063,8 +1064,9 @@ def _upload_image_to_cloudinary(post_id):
     if not img_content:
         raise Exception("Bild konnte nicht von Nextcloud geladen werden.")
 
-    public_id = f"linkedin_post_img_{post_id}"
     timestamp = str(int(_time.time()))
+    # Eindeutiger Name je Upload → Cloudinary liefert nie eine alte, gecachte Version.
+    public_id = f"linkedin_post_img_{post_id}_{timestamp}"
     to_sign = f"public_id={public_id}&timestamp={timestamp}{api_secret}"
     signature = _hashlib.sha1(to_sign.encode("utf-8")).hexdigest()
 
