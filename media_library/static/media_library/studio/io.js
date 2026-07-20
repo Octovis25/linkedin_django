@@ -46,15 +46,13 @@ export function exportPng(editor) {
 
 export async function saveImage(editor) {
   const titleEl = document.getElementById('title-input');
-  const title = titleEl.value.trim();
+  let title = (titleEl?.value || '').trim();
   if (!title) {
-    titleEl.style.border = '2px solid #dc3545';
-    titleEl.focus();
-    status('⚠️ Bitte zuerst einen Titel eingeben!', '#dc3545');
-    setTimeout(() => { titleEl.style.border = ''; }, 2500);
-    return;
+    // Kein Titel? Nicht blockieren – automatisch benennen (Post-Titel oder Zeitstempel).
+    title = (CONFIG.postData?.title || '').trim() || ('Studio_' + Date.now());
+    if (titleEl) titleEl.value = title;
   }
-  titleEl.style.border = '';
+  if (titleEl) titleEl.style.border = '';
   status('💾 Speichert…');
 
   let dataUrl, preview;
@@ -101,12 +99,11 @@ export async function saveImage(editor) {
 // – inkl. canvas_json, damit es später wieder im Editor geöffnet werden kann.
 export async function saveAnimation(editor, blob, ext) {
   const titleEl = document.getElementById('title-input');
-  const title = titleEl?.value.trim();
+  let title = (titleEl?.value || '').trim();
   if (!title) {
-    if (titleEl) { titleEl.style.border = '2px solid #dc3545'; titleEl.focus(); }
-    status('⚠️ Bitte zuerst einen Titel eingeben!', '#dc3545');
-    setTimeout(() => { if (titleEl) titleEl.style.border = ''; }, 2500);
-    return;
+    // Nicht blockieren – automatisch benennen.
+    title = (CONFIG.postData?.title || '').trim() || ('Studio_' + Date.now());
+    if (titleEl) titleEl.value = title;
   }
   let preview = '';
   try { preview = editor.exportDataURL({ multiplier: 0.4 }); } catch (e) { /* egal */ }
