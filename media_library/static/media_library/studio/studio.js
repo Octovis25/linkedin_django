@@ -376,6 +376,12 @@ const actions = {
   'restore-post': () => { if (CONFIG.postData?.canvas_json) io.restoreCanvas(editor, CONFIG.postData.canvas_json); },
   'post-bg':      () => CONFIG.postData?.id && bg.setBackgroundImage(editor, `/library/studio/api/post-image/${CONFIG.postData.id}/`),
   'post-overlay': () => CONFIG.postData?.id && editor.addImageUrl(`/library/studio/api/post-image/${CONFIG.postData.id}/`),
+  'go-back': (btn) => {
+    // Studio läuft in neuem Tab → schließen bringt exakt zurück; sonst zur Herkunftsseite.
+    const url = (btn && btn.getAttribute('data-back')) || '/planner/uebersicht/';
+    try { window.close(); } catch (e) { /* egal */ }
+    setTimeout(() => { window.location.href = url; }, 200);
+  },
   'copy-from-post': () => copyImageFromPost(),
   'open-post-file': (btn) => {
     const url = btn && btn.dataset.url;
