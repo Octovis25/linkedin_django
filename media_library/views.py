@@ -769,28 +769,27 @@ def studio_view(request):
                     post_data['image_url'] = f"/library/studio/api/post-image/{r[0]}/" if post_data['image'] else ''
                     post_data['gif_url']   = ('/library/studio/nc-image/?p=' + _q(post_data['gif']))   if post_data['gif']   else ''
                     post_data['video_url'] = ('/library/studio/nc-image/?p=' + _q(post_data['video'])) if post_data['video'] else ''
-                # Look up saved canvas_json for this post – die NEUESTE mit echtem
-                # Inhalt (nicht eine evtl. leere Zeile), sonst käme nur der Hintergrund.
-                canvas_rows = _safe(c, """SELECT canvas_json, template_id FROM studio_images
-                                          WHERE post_id=%s AND canvas_json IS NOT NULL AND canvas_json <> ''
-                                          ORDER BY id DESC LIMIT 1""", [post_id]) \
-                    or _safe(c, "SELECT canvas_json, template_id FROM studio_images WHERE post_id=%s ORDER BY created_at DESC LIMIT 1", [post_id])
+                # Design laden. Bevorzugt die Zeile, die zur AKTUELL am Post hängenden
+                # Datei (Bild/GIF/Video) gehört – das ist die zuletzt gespeicherte,
+                # vollständige Version. Danach erst die post_id-Zeile. So kommt nicht
+                # eine alte, leere Version (nur Hintergrund).
+                cand_media = ''
+                if post_data:
+                    cand_media = post_data.get('image') or post_data.get('video') or post_data.get('gif') or ''
+                canvas_rows = None
+                if cand_media:
+                    _fn = cand_media.rsplit('/', 1)[-1]
+                    canvas_rows = _safe(c, """SELECT canvas_json, template_id FROM studio_images
+                                              WHERE (nc_path=%s OR nc_path LIKE %s)
+                                                AND canvas_json IS NOT NULL AND canvas_json <> ''
+                                              ORDER BY id DESC LIMIT 1""", [cand_media, '%/' + _fn])
+                if not (canvas_rows and canvas_rows[0][0]):
+                    canvas_rows = _safe(c, """SELECT canvas_json, template_id FROM studio_images
+                                              WHERE post_id=%s AND canvas_json IS NOT NULL AND canvas_json <> ''
+                                              ORDER BY id DESC LIMIT 1""", [post_id])
                 if canvas_rows and canvas_rows[0][0] and post_data:
                     post_data['canvas_json'] = canvas_rows[0][0]
                     post_data['template_id'] = canvas_rows[0][1]
-                # Fallback: Design wurde als GIF/Video gespeichert (nicht per post_id
-                # verknüpft) oder die Datei wurde verschoben → über den Dateinamen der
-                # am Post hängenden Datei (Bild/GIF/Video) das bearbeitbare Layout finden.
-                if post_data and not post_data.get('canvas_json'):
-                    cand = post_data.get('image') or post_data.get('video') or post_data.get('gif')
-                    if cand:
-                        _fn = cand.rsplit('/', 1)[-1]
-                        cj = _safe(c, """SELECT canvas_json, template_id FROM studio_images
-                                         WHERE nc_path=%s OR nc_path LIKE %s ORDER BY id DESC LIMIT 1""",
-                                   [cand, '%/' + _fn])
-                        if cj and cj[0][0]:
-                            post_data['canvas_json'] = cj[0][0]
-                            post_data['template_id'] = cj[0][1]
                 if post_data:
                     _pidrows = _safe(c, "SELECT id, post_id, LENGTH(COALESCE(canvas_json,'')) FROM studio_images WHERE post_id=%s ORDER BY created_at DESC", [post_id]) or []
                     print(f"[STUDIO-OPEN] post_id={post_id!r} loaded_canvasJson_len={len(post_data.get('canvas_json') or '')} "
