@@ -32,7 +32,7 @@
 
 {% if post_data %}
 <div class="post-banner">
-  {% if post_data.image %}<img src="/library/studio/api/post-image/{{ post_data.id }}/" alt="">{% endif %}
+  {% if post_data.image %}<img src="/library/studio/api/post-image/{{ post_data.id }}/?v={% now 'U' %}" alt="">{% endif %}
   <div class="post-info">
     <strong>📌 Post #{{ post_data.id }}: {{ post_data.title|default:"Ohne Titel" }}</strong>
     <p>Bild, GIF und Video werden beim Speichern am Post angehängt.</p>

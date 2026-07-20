@@ -787,6 +787,10 @@ def studio_view(request):
                         if cj and cj[0][0]:
                             post_data['canvas_json'] = cj[0][0]
                             post_data['template_id'] = cj[0][1]
+                if post_data:
+                    _pidrows = _safe(c, "SELECT id, post_id, LENGTH(COALESCE(canvas_json,'')) FROM studio_images WHERE post_id=%s ORDER BY created_at DESC", [post_id]) or []
+                    print(f"[STUDIO-OPEN] post_id={post_id!r} loaded_canvasJson_len={len(post_data.get('canvas_json') or '')} "
+                          f"image={post_data.get('image')!r} rows_for_post={[(r[0], r[2]) for r in _pidrows]}")
         except Exception as e:
             print("Studio post lookup error:", e)
     # Also support loading from a library item (studio_image_id)
@@ -1238,6 +1242,8 @@ def studio_save(request):
     title       = data.get('title', f'Studio_{int(time.time())}')
     post_id     = data.get('post_id', '')
     canvas_json = data.get('canvasJson', '')
+    print(f"[STUDIO-SAVE] post_id={post_id!r} title={title!r} "
+          f"canvasJson_len={len(canvas_json or '')} dataUrl_len={len(data_url or '')}")
     template_id = data.get('templateId') or None
     folder_id   = data.get('folderId') or None
     lib_item_id = data.get('lib_item_id') or None   # gesetzt beim Weiterbearbeiten
