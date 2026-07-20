@@ -221,14 +221,14 @@ def library_image(request, item_id):
                   '.webm': 'video/webm', '.mp4': 'video/mp4', '.gif': 'image/gif'}
         ct = ct_map.get(ext, 'image/jpeg')
         resp = HttpResponse(content, content_type=ct)
-        resp['Cache-Control'] = 'public, max-age=86400'
+        resp['Cache-Control'] = 'no-cache, no-store, must-revalidate'
         return resp
     from posts_posted.nc_storage import download_image_from_nextcloud
     content, ct = download_image_from_nextcloud(nc_path)
     if not content:
         raise Http404
     resp = HttpResponse(content, content_type=ct or 'image/jpeg')
-    resp['Cache-Control'] = 'public, max-age=86400'
+    resp['Cache-Control'] = 'no-cache, no-store, must-revalidate'
     return resp
 
 
@@ -1174,7 +1174,7 @@ def studio_template_image(request, tpl_id):
         if not content:
             raise Http404
     resp = HttpResponse(content, content_type=ct or 'image/png')
-    resp['Cache-Control'] = 'public, max-age=3600'
+    resp['Cache-Control'] = 'no-cache, no-store, must-revalidate'
     return resp
 
 
@@ -1625,7 +1625,8 @@ def studio_nc_image_proxy(request):
     if nc_path.lower().endswith('.svg'):
         ct = 'image/svg+xml'
     resp = HttpResponse(content, content_type=ct or 'image/png')
-    resp['Cache-Control'] = 'public, max-age=3600'
+    # Nicht cachen: geänderte Bilder (gleicher Pfad) müssen sofort frisch erscheinen.
+    resp['Cache-Control'] = 'no-cache, no-store, must-revalidate'
     return resp
 
 

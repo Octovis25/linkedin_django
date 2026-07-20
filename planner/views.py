@@ -581,7 +581,10 @@ def planner_image(request, post_id):
     content, ct = download_image_from_nextcloud(nc_path)
     if not content:
         raise Http404
-    return HttpResponse(content, content_type=ct or 'image/jpeg')
+    resp = HttpResponse(content, content_type=ct or 'image/jpeg')
+    # Nicht cachen: geändertes Post-Bild muss sofort frisch erscheinen.
+    resp['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+    return resp
 
 
 def api_post(request):
