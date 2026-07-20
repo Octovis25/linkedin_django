@@ -1590,15 +1590,24 @@ function renderAnimPanel() {
   const o = editor.active();
   if (!o) { panel.innerHTML = '<p class="no-templates">Wähle ein Element, um es zu animieren.</p>'; return; }
   const cur = o.anim?.type || 'none';
+  const curFx = o.fx || 'none';
+  const fxTypes = media.EFFECTS || ['none'];
+  const fxLabels = media.EFFECT_LABELS || {};
   panel.innerHTML = `
-    <label class="tl-row">Effekt:
+    <label class="tl-row">Bewegung:
       <select id="anim-type" class="field" style="flex:1">
         ${media.ANIM_TYPES.map(t => `<option value="${t}" ${t === cur ? 'selected' : ''}>${media.ANIM_LABELS[t] || t}</option>`).join('')}
+      </select>
+    </label>
+    <label class="tl-row">Effekt:
+      <select id="anim-fx" class="field" style="flex:1">
+        ${fxTypes.map(t => `<option value="${t}" ${t === curFx ? 'selected' : ''}>${fxLabels[t] || t}</option>`).join('')}
       </select>
     </label>
     <div class="tl-row">Dauer <input id="anim-dur" type="range" class="tl-slider" min="300" max="4000" step="100" value="${o.anim?.dur || 1200}"><span id="anim-dur-val">${o.anim?.dur || 1200}ms</span></div>
     <div class="tl-row">Verzög. <input id="anim-delay" type="range" class="tl-slider" min="0" max="3000" step="100" value="${o.anim?.delay || 0}"><span id="anim-delay-val">${o.anim?.delay || 0}ms</span></div>
     <button class="tbtn primary" id="anim-preview" style="width:100%;margin-top:6px">▶ Vorschau</button>
+    <p style="font-size:.66rem;color:#888;margin-top:6px;line-height:1.35">„Bewegung" bewegt das Element selbst. „Effekt" legt Deko (z. B. Netzwerk) darüber – beides ist gespeichert, aber nur in der ▶ Vorschau und im GIF/Video sichtbar, nicht auf dem stillen Bild.</p>
   `;
   const apply = () => {
     const type = document.getElementById('anim-type').value;
@@ -1609,6 +1618,12 @@ function renderAnimPanel() {
     media.setAnim(editor, type, dur, delay);
   };
   panel.querySelector('#anim-type').onchange = apply;
+  panel.querySelector('#anim-fx').onchange = () => {
+    const v = document.getElementById('anim-fx').value;
+    o.fx = (v && v !== 'none') ? v : null;
+    editor.snapshot();
+    if (typeof renderAnimBar === 'function') renderAnimBar();
+  };
   panel.querySelector('#anim-dur').oninput = apply;
   panel.querySelector('#anim-delay').oninput = apply;
   panel.querySelector('#anim-preview').onclick = () => media.previewAnimation(editor);
