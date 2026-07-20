@@ -405,6 +405,40 @@ NC_STUDIO_VIDEOS_FOLDER    = "Marketing & Design/Octotrial_Assets/Studio_Work/Ou
 NC_STUDIO_GIFS_FOLDER      = "Marketing & Design/Octotrial_Assets/Studio_Work/Output/GIFs"
 
 
+def _post_media_to_cleanup(post_id):
+    """Aktuelle Medien-Pfade (Bild/GIF/Video) eines Posts merken – zum späteren
+    Löschen beim Ersetzen. Gepostete Beiträge werden geschont (leere Liste)."""
+    try:
+        with connection.cursor() as c:
+            try:
+                c.execute("""SELECT COALESCE(image,''), COALESCE(gif_nc_path,''),
+                                    COALESCE(video_nc_path,''), COALESCE(status,'')
+                             FROM planner_posts WHERE id=%s""", [post_id])
+            except Exception:
+                c.execute("SELECT COALESCE(image,''),'',COALESCE(video_nc_path,''),COALESCE(status,'') FROM planner_posts WHERE id=%s", [post_id])
+            row = c.fetchone()
+        if not row or (row[3] or '').lower() == 'posted':
+            return []
+        return [p for p in (row[0], row[1], row[2]) if p]
+    except Exception as e:
+        print("post media cleanup read:", e)
+        return []
+
+
+def _cleanup_old_media(paths, keep=None):
+    """Alte Mediendateien in Nextcloud löschen (best effort), außer `keep`."""
+    if not paths:
+        return
+    try:
+        from planner.views import _nc_delete
+    except Exception:
+        return
+    for p in paths:
+        if p and p != keep:
+            try: _nc_delete(p)
+            except Exception: pass
+
+
 def _nc_delete_old_files(nc_folder, safe_prefix):
     """Delete old timestamp-based files for this title prefix from NC.
     Removes files matching pattern: {safe_prefix}_\d+_(preview|snap|obj).* """
@@ -1310,16 +1344,23 @@ def studio_save(request):
                          VALUES (%s,%s,%s,%s)""", [nc_path, title, canvas_json or None, template_id])
             studio_image_id = c.lastrowid
 
-    # Attach to planner post if post_id given → gehört zum Post: in Planner/Images
-    # verschieben, EIN Medium pro Post (alte Medien löschen), Design-Link umbiegen.
+    # Attach to planner post if post_id given. WICHTIG: Das Anhängen muss IMMER
+    # passieren – Verschieben/Aufräumen sind nur „nice to have" und dürfen das
+    # Anhängen nie verhindern.
     if post_id:
+        old_media = _post_media_to_cleanup(post_id)   # vor dem Überschreiben merken
+        new_path = nc_path
         try:
-            from planner.views import _nc_move, _delete_post_media
+            from planner.views import _nc_move
             fname = nc_path.rsplit('/', 1)[-1]
             moved = _nc_move(nc_path, f"Marketing & Design/LinkedIn/Planner/Images/{fname}")
-            new_path = moved or nc_path
+            if moved:
+                new_path = moved
+        except Exception as e:
+            print("Post move (best effort) error:", e)
+        # KRITISCH: am Post anhängen.
+        try:
             with connection.cursor() as c:
-                _delete_post_media(c, post_id, keep=new_path)
                 try:
                     c.execute("UPDATE planner_posts SET image=%s, video_nc_path=NULL, gif_nc_path=NULL WHERE id=%s", [new_path, post_id])
                 except Exception:
@@ -1330,6 +1371,7 @@ def studio_save(request):
             nc_path = new_path
         except Exception as e:
             print("Post attach error:", e)
+        _cleanup_old_media(old_media, keep=nc_path)   # alte Dateien löschen (best effort)
 
     image_url = f"/library/image/{lib_id}/"
     return JsonResponse({'ok': True, 'lib_id': lib_id, 'image_url': image_url, 'nc_path': nc_path})
@@ -1407,16 +1449,21 @@ def studio_save_video(request):
             else:
                 c.execute("""INSERT INTO studio_images (nc_path, title, canvas_json)
                              VALUES (%s, %s, %s)""", [nc_path, title, canvas_json])
-    # An den Post hängen: Bewegtbild (GIF/Video) → video_nc_path. Gehört zum Post:
-    # in Planner/Videos verschieben, EIN Medium pro Post (alte Medien löschen).
+    # An den Post hängen: Bewegtbild (GIF/Video) → video_nc_path. Anhängen passiert
+    # IMMER; Verschieben/Aufräumen nur best effort (dürfen das Anhängen nie stoppen).
     if post_id:
+        old_media = _post_media_to_cleanup(post_id)
+        new_path = nc_path
         try:
-            from planner.views import _nc_move, _delete_post_media
+            from planner.views import _nc_move
             fname = nc_path.rsplit('/', 1)[-1]
             moved = _nc_move(nc_path, f"Marketing & Design/LinkedIn/Planner/Videos/{fname}")
-            new_path = moved or nc_path
+            if moved:
+                new_path = moved
+        except Exception as e:
+            print("save-video move (best effort):", e)
+        try:
             with connection.cursor() as c:
-                _delete_post_media(c, post_id, keep=new_path)
                 try:
                     c.execute("UPDATE planner_posts SET video_nc_path=%s, image=NULL, gif_nc_path=NULL WHERE id=%s", [new_path, post_id])
                 except Exception:
@@ -1427,6 +1474,7 @@ def studio_save_video(request):
             nc_path = new_path
         except Exception as e:
             print("save-video post attach:", e)
+        _cleanup_old_media(old_media, keep=nc_path)
     return JsonResponse({'ok': True, 'nc_path': nc_path, 'filename': filename, 'lib_id': lib_id})
 
 
