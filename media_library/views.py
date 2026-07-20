@@ -1481,6 +1481,16 @@ def studio_save_video(request):
                 if new_path != nc_path:
                     c.execute("UPDATE studio_images SET nc_path=%s WHERE nc_path=%s", [new_path, nc_path])
                     c.execute("UPDATE media_library_items SET nc_path=%s WHERE nc_path=%s", [new_path, nc_path])
+                # WICHTIG: Design unter der post_id-Zeile speichern, damit „🎨 Bild"
+                # beim Öffnen die ZULETZT gespeicherte Version lädt (nicht die alte).
+                if canvas_json:
+                    _pr = _safe(c, "SELECT id FROM studio_images WHERE post_id=%s ORDER BY id DESC LIMIT 1", [post_id])
+                    if _pr:
+                        c.execute("UPDATE studio_images SET canvas_json=%s, nc_path=%s, title=%s WHERE id=%s",
+                                  [canvas_json, new_path, title, _pr[0][0]])
+                    else:
+                        c.execute("INSERT INTO studio_images (nc_path, title, canvas_json, post_id) VALUES (%s,%s,%s,%s)",
+                                  [new_path, title, canvas_json, post_id])
             nc_path = new_path
         except Exception as e:
             print("save-video post attach:", e)
