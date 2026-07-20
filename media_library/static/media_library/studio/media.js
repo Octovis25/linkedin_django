@@ -245,6 +245,10 @@ function restoreFit(editor) {
 }
 
 function animDuration(editor) {
+  // Manueller Längen-Regler hat Vorrang (Sekunden). Leer/0 = automatisch.
+  const el = document.getElementById('video-length');
+  const secs = el ? parseFloat(el.value) : 0;
+  if (secs && secs > 0) return Math.min(secs, 30) * 1000;
   let max = 1500;
   editor.canvas.getObjects().forEach(o => { if (o.anim) max = Math.max(max, (o.anim.delay || 0) + (o.anim.dur || 1200) + 300); });
   return Math.min(max, 8000);
