@@ -1310,11 +1310,24 @@ def studio_save(request):
                          VALUES (%s,%s,%s,%s)""", [nc_path, title, canvas_json or None, template_id])
             studio_image_id = c.lastrowid
 
-    # Attach to planner post if post_id given
+    # Attach to planner post if post_id given → gehört zum Post: in Planner/Images
+    # verschieben, EIN Medium pro Post (alte Medien löschen), Design-Link umbiegen.
     if post_id:
         try:
+            from planner.views import _nc_move, _delete_post_media
+            fname = nc_path.rsplit('/', 1)[-1]
+            moved = _nc_move(nc_path, f"Marketing & Design/LinkedIn/Planner/Images/{fname}")
+            new_path = moved or nc_path
             with connection.cursor() as c:
-                c.execute("UPDATE planner_posts SET image=%s WHERE id=%s", [nc_path, post_id])
+                _delete_post_media(c, post_id, keep=new_path)
+                try:
+                    c.execute("UPDATE planner_posts SET image=%s, video_nc_path=NULL, gif_nc_path=NULL WHERE id=%s", [new_path, post_id])
+                except Exception:
+                    c.execute("UPDATE planner_posts SET image=%s WHERE id=%s", [new_path, post_id])
+                if new_path != nc_path:
+                    c.execute("UPDATE studio_images SET nc_path=%s WHERE nc_path=%s", [new_path, nc_path])
+                    c.execute("UPDATE media_library_items SET nc_path=%s WHERE nc_path=%s", [new_path, nc_path])
+            nc_path = new_path
         except Exception as e:
             print("Post attach error:", e)
 
@@ -1394,12 +1407,24 @@ def studio_save_video(request):
             else:
                 c.execute("""INSERT INTO studio_images (nc_path, title, canvas_json)
                              VALUES (%s, %s, %s)""", [nc_path, title, canvas_json])
-    # An den Post hängen: GIF → gif_nc_path, Video → video_nc_path.
+    # An den Post hängen: Bewegtbild (GIF/Video) → video_nc_path. Gehört zum Post:
+    # in Planner/Videos verschieben, EIN Medium pro Post (alte Medien löschen).
     if post_id:
-        col = 'gif_nc_path' if ext == '.gif' else 'video_nc_path'
         try:
+            from planner.views import _nc_move, _delete_post_media
+            fname = nc_path.rsplit('/', 1)[-1]
+            moved = _nc_move(nc_path, f"Marketing & Design/LinkedIn/Planner/Videos/{fname}")
+            new_path = moved or nc_path
             with connection.cursor() as c:
-                c.execute(f"UPDATE planner_posts SET {col}=%s WHERE id=%s", [nc_path, post_id])
+                _delete_post_media(c, post_id, keep=new_path)
+                try:
+                    c.execute("UPDATE planner_posts SET video_nc_path=%s, image=NULL, gif_nc_path=NULL WHERE id=%s", [new_path, post_id])
+                except Exception:
+                    c.execute("UPDATE planner_posts SET video_nc_path=%s, image=NULL WHERE id=%s", [new_path, post_id])
+                if new_path != nc_path:
+                    c.execute("UPDATE studio_images SET nc_path=%s WHERE nc_path=%s", [new_path, nc_path])
+                    c.execute("UPDATE media_library_items SET nc_path=%s WHERE nc_path=%s", [new_path, nc_path])
+            nc_path = new_path
         except Exception as e:
             print("save-video post attach:", e)
     return JsonResponse({'ok': True, 'nc_path': nc_path, 'filename': filename, 'lib_id': lib_id})

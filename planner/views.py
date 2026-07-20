@@ -653,6 +653,9 @@ def api_post(request):
                 print("Buffer delete on post-delete error:", _be)
                 buffer_deleted = False
                 buffer_error = str(_be)
+            # Zugehörige Mediendateien mitlöschen (Posted-Beiträge werden geschont).
+            try: _delete_post_media(c, pid, keep=None)
+            except Exception as _me: print("media delete on post-delete:", _me)
             c.execute("DELETE FROM planner_posts WHERE id=%s", [pid])
             return JsonResponse({'ok': True, 'buffer_deleted': buffer_deleted,
                                  'buffer_error': buffer_error, 'had_buffer_id': bool(buf_post_id)})
@@ -663,12 +666,15 @@ def api_post(request):
             c.execute("UPDATE planner_posts SET topic_id=%s WHERE id=%s",
                       [data.get('topic_id'), data.get('id')])
             return JsonResponse({'ok': True})
-        elif action == 'delete_image':
-            c.execute("UPDATE planner_posts SET image=NULL WHERE id=%s", [data.get('id')])
-            return JsonResponse({'ok': True})
-        elif action == 'delete_video':
+        elif action in ('delete_image', 'delete_video', 'delete_media'):
+            # Ein Medium pro Post: Datei(en) in Nextcloud löschen (Posted geschont)
+            # und alle drei Medien-Spalten leeren.
             _ensure_media_columns()
-            c.execute("UPDATE planner_posts SET video_nc_path=NULL WHERE id=%s", [data.get('id')])
+            _delete_post_media(c, data.get('id'), keep=None)
+            try:
+                c.execute("UPDATE planner_posts SET image=NULL, gif_nc_path=NULL, video_nc_path=NULL WHERE id=%s", [data.get('id')])
+            except Exception:
+                c.execute("UPDATE planner_posts SET image=NULL, video_nc_path=NULL WHERE id=%s", [data.get('id')])
             return JsonResponse({'ok': True})
         elif action == 'set_video':
             # Link an existing Nextcloud video to this post (no upload).
@@ -678,8 +684,10 @@ def api_post(request):
                 return JsonResponse({'ok': False, 'error': 'video_nc_path fehlt'}, status=400)
             # Studio-Ausgabe → in den Planner/Videos-Ordner verschieben (keine Kopie).
             nc_path = _move_studio_output_to_planner(nc_path, PLANNER_VIDEOS_FOLDER)
+            # Ein Medium pro Post: bisherige Medien (außer der neuen Datei) löschen.
+            _delete_post_media(c, data.get('id'), keep=nc_path)
             c.execute(
-                "UPDATE planner_posts SET video_nc_path=%s, image=NULL WHERE id=%s",
+                "UPDATE planner_posts SET video_nc_path=%s, image=NULL, gif_nc_path=NULL WHERE id=%s",
                 [nc_path, data.get('id')]
             )
             return JsonResponse({'ok': True, 'nc_path': nc_path})
@@ -691,8 +699,10 @@ def api_post(request):
                 return JsonResponse({'ok': False, 'error': 'image_nc_path fehlt'}, status=400)
             # Studio-Ausgabe → in den Planner/Images-Ordner verschieben (keine Kopie).
             nc_path = _move_studio_output_to_planner(nc_path, PLANNER_IMAGES_FOLDER)
+            # Ein Medium pro Post: bisherige Medien (außer der neuen Datei) löschen.
+            _delete_post_media(c, data.get('id'), keep=nc_path)
             c.execute(
-                "UPDATE planner_posts SET image=%s, video_nc_path=NULL WHERE id=%s",
+                "UPDATE planner_posts SET image=%s, video_nc_path=NULL, gif_nc_path=NULL WHERE id=%s",
                 [nc_path, data.get('id')]
             )
             return JsonResponse({'ok': True, 'nc_path': nc_path})
@@ -1270,6 +1280,47 @@ def _move_studio_output_to_planner(nc_path, dest_folder):
     fname = nc_path.rsplit('/', 1)[-1]
     moved = _nc_move(nc_path, f"{dest_folder}/{fname}")
     return moved or nc_path
+
+
+def _nc_delete(nc_path):
+    """Eine Datei in Nextcloud löschen (WebDAV DELETE). True bei Erfolg/nicht vorhanden."""
+    if not nc_path:
+        return False
+    import requests as _req
+    from posts_posted.nc_storage import _get_nc_credentials
+    from urllib.parse import quote as _q2
+    from requests.auth import HTTPBasicAuth as _BA
+    nc_url, username, password = _get_nc_credentials()
+    if not all([nc_url, username, password]):
+        return False
+    url = f"{nc_url}/remote.php/dav/files/{username}/{_q2(nc_path, safe='/')}"
+    try:
+        r = _req.request('DELETE', url, auth=_BA(username, password), timeout=30)
+        return r.status_code in (200, 204, 404)
+    except Exception as e:
+        print("nc delete error:", e)
+        return False
+
+
+def _delete_post_media(c, post_id, keep=None):
+    """Alle am Post hängenden Mediendateien (Bild/GIF/Video) aus Nextcloud löschen,
+    außer `keep`. Bereits gepostete Beiträge werden geschont (Dateien bleiben)."""
+    _ensure_media_columns()
+    try:
+        c.execute("""SELECT COALESCE(image,''), COALESCE(gif_nc_path,''),
+                            COALESCE(video_nc_path,''), COALESCE(status,'')
+                     FROM planner_posts WHERE id=%s""", [post_id])
+    except Exception:
+        c.execute("SELECT COALESCE(image,''), '', COALESCE(video_nc_path,''), COALESCE(status,'') FROM planner_posts WHERE id=%s", [post_id])
+    row = c.fetchone()
+    if not row:
+        return
+    img, gif, vid, status = row[0], row[1], row[2], row[3]
+    if (status or '').lower() == 'posted':
+        return   # veröffentlichte Beiträge schonen
+    for p in (img, gif, vid):
+        if p and p != keep:
+            _nc_delete(p)
 
 
 @login_required
