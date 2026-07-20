@@ -242,7 +242,14 @@ def _set_tags(asset_id, tags_list):
 @login_required
 def assets_view(request):
     _ensure_asset_tables()
-    top_level = [f for f in FOLDER_TREE if "/" not in f]
+    # Kategorien LIVE aus Nextcloud lesen (nicht mehr aus der festen FOLDER_TREE),
+    # damit die Anzeige immer der echten NC-Struktur entspricht.
+    items = _nc_list_folder("")
+    top_level = sorted(
+        [i["name"] for i in items
+         if i.get("is_dir") and not i["name"].startswith(".") and i["name"] != "_data"],
+        key=str.lower,
+    )
     return render(request, "assets/library.html", {"categories": top_level})
 
 

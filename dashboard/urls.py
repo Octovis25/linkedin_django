@@ -5,6 +5,19 @@ from django.conf.urls.static import static
 from django.contrib.auth import views as auth_views
 from core import views as core_views
 
+
+class RememberLoginView(auth_views.LoginView):
+    """Login mit „Angemeldet bleiben": an = 30 Tage, aus = Logout beim Browser-Schließen."""
+    template_name = "core/login.html"
+
+    def form_valid(self, form):
+        response = super().form_valid(form)
+        if self.request.POST.get('remember'):
+            self.request.session.set_expiry(60 * 60 * 24 * 30)   # 30 Tage
+        else:
+            self.request.session.set_expiry(0)                    # bis Browser zu
+        return response
+
 urlpatterns = [
     path("admin/", admin.site.urls),
     path("", core_views.home_view, name='home'),
@@ -20,7 +33,7 @@ urlpatterns = [
     path("users/new/", core_views.user_create, name='user_create'),
     path("users/<int:user_id>/delete/", core_views.user_delete, name='user_delete'),
     path("users/<int:user_id>/toggle-active/", core_views.user_toggle_active, name='user_toggle_active'),
-    path("login/", auth_views.LoginView.as_view(template_name="core/login.html"), name="login"),
+    path("login/", RememberLoginView.as_view(), name="login"),
     path("logout/", core_views.custom_logout, name="logout"),
     path("api/post-category/", core_views.api_post_category, name='api_post_category'),
     path("api/post-comment/", core_views.api_post_comment, name='api_post_comment'),

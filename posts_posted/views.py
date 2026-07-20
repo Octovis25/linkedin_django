@@ -111,14 +111,42 @@ def fill_missing_post_images():
     return filled, checked, errors, dates_filled
 
 
+def promote_scheduled_to_posted():
+    """Setzt Planner-Posts, die laut Buffer bereits gesendet wurden, von
+    'Scheduled' auf 'Posted'.
+
+    Grundlage ist die eindeutige Verknuepfung buffer_posts_posted.planner_post_id.
+    Ein Buffer-Post gilt als gesendet, wenn status='sent' ist oder ein sent_at
+    vorliegt. Nur Posts im Status 'Scheduled' werden angefasst – manuell gesetzte
+    Status bleiben unberuehrt. Gibt die Anzahl umgestellter Posts zurueck.
+    """
+    with connection.cursor() as c:
+        try:
+            c.execute("""
+                UPDATE planner_posts p
+                JOIN buffer_posts_posted b ON b.planner_post_id = p.id
+                SET p.status='Posted', p.in_pipeline=1, p.linkedin_posted=1,
+                    p.post_scheduled_at=NULL
+                WHERE p.status='Scheduled'
+                  AND (LOWER(COALESCE(b.status,'')) = 'sent' OR b.sent_at IS NOT NULL)
+            """)
+            return c.rowcount or 0
+        except Exception as e:
+            print("promote_scheduled_to_posted:", e)
+            return 0
+
+
 @login_required
 @require_POST
 def buffer_fill_images(request):
-    """Button-Aktion: fehlende Overview-Bilder + Daten automatisch aus Buffer befuellen."""
+    """Button-Aktion: fehlende Overview-Bilder + Daten automatisch aus Buffer befuellen.
+    Setzt zusaetzlich gesendete Scheduled-Posts auf 'Posted'."""
     try:
         filled, checked, errors, dates_filled = fill_missing_post_images()
+        promoted = promote_scheduled_to_posted()
         return JsonResponse({'ok': True, 'filled': filled, 'checked': checked,
-                             'errors': errors, 'dates_filled': dates_filled})
+                             'errors': errors, 'dates_filled': dates_filled,
+                             'promoted': promoted})
     except Exception as e:
         return JsonResponse({'ok': False, 'error': str(e)}, status=500)
 

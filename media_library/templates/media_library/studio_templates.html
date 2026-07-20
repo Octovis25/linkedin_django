@@ -5,10 +5,15 @@
   .tpl-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px,1fr)); gap: 1rem; margin-top: 1rem; }
   .tpl-card { background:#fff; border-radius:6px; box-shadow:0 1px 4px rgba(0,0,0,.1); overflow:hidden; }
   .tpl-card img { width:100%; display:block; }
-  .tpl-card-body { padding:.75rem; }
-  .tpl-card-body h3 { font-size:.95rem; margin-bottom:.2rem; }
-  .tpl-card-body small { color:#888; font-size:.8rem; }
-  .tpl-card-actions { display:flex; gap:.5rem; margin-top:.5rem; }
+  .tpl-card-body { padding:.6rem .7rem; }
+  .tpl-card-body h3 { font-size:.82rem; margin-bottom:.15rem; }
+  .tpl-card-body small { color:#888; font-size:.72rem; }
+  .tpl-card-actions { display:flex; gap:.4rem; margin-top:.5rem; align-items:center; }
+  .tpl-card .btn-sm { font-size:.72rem; padding:.25rem .6rem; }
+  .tpl-card.passive { opacity:.55; }
+  .tpl-badge { font-size:.66rem; padding:2px 7px; border-radius:10px; font-weight:500; }
+  .tpl-badge.on  { background:#E1F5EE; color:#0F6E56; }
+  .tpl-badge.off { background:#f1efe8; color:#6c757d; }
   .upload-box { background:#fff; border-radius:6px; box-shadow:0 1px 4px rgba(0,0,0,.1); padding:1.25rem; margin-bottom:1.5rem; max-width:540px; }
   .upload-box h2 { font-size:1rem; margin-bottom:.75rem; }
   .form-row { display:flex; gap:.75rem; }
@@ -131,10 +136,13 @@
 {% if templates %}
 <div class="tpl-grid">
   {% for t in templates %}
-  <div class="tpl-card">
+  <div class="tpl-card{% if not t.active %} passive{% endif %}">
     <img src="/library/studio/template/image/{{ t.id }}/" alt="{{ t.title }}">
     <div class="tpl-card-body">
-      <h3>{{ t.title }}</h3>
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:6px">
+        <h3 style="margin:0">{{ t.title }}</h3>
+        <span class="tpl-badge {% if t.active %}on{% else %}off{% endif %}">{% if t.active %}aktiv{% else %}passiv{% endif %}</span>
+      </div>
       <small>{{ t.width }} × {{ t.height }} px</small>
       {% if t.colors %}
       <div style="display:flex;gap:4px;margin-top:6px;align-items:center">
@@ -164,6 +172,10 @@
       {% endif %}
       <div class="tpl-card-actions" style="margin-top:8px">
         <a href="/library/studio/?template={{ t.id }}" class="btn btn-primary btn-sm">Im Editor öffnen</a>
+        <form method="post" action="/library/studio/template/toggle-active/{{ t.id }}/" style="display:inline">
+          {% csrf_token %}
+          <button class="btn btn-sm" title="{% if t.active %}Auf passiv setzen – erscheint dann nicht mehr in der Studio-Auswahl{% else %}Auf aktiv setzen – erscheint wieder in der Studio-Auswahl{% endif %}">{% if t.active %}⏸ Passiv{% else %}▶ Aktiv{% endif %}</button>
+        </form>
         <form method="post" action="/library/studio/template/delete/{{ t.id }}/" style="display:inline">
           {% csrf_token %}
           <button class="btn btn-danger btn-sm" onclick="return confirm('Template löschen?')">🗑</button>

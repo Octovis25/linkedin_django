@@ -1,0 +1,269 @@
+{% extends "core/base.html" %}
+{% block title %}📋 Overview{% endblock %}
+{% block content %}
+<style>
+  .ov-wrap    { max-width: 1040px; margin: 0 auto; padding: 1rem 1.25rem 3rem; }
+  .ov-head    { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:.5rem; margin-bottom:1rem; }
+  .ov-head h1 { font-size:1.4rem; margin:0; color:var(--octo-petrol,#008591); font-weight:700; }
+  .ov-tools   { display:flex; gap:6px; align-items:center; flex-wrap:wrap; }
+  .ov-tools input[type=text], .ov-tools select {
+                font-size:13px; padding:.4rem .5rem; border:1px solid #d5d5d5; border-radius:6px; background:#fff; }
+  .ov-btn     { font-size:13px; padding:.42rem .7rem; border:1px solid #d5d5d5; border-radius:6px; background:#fff; cursor:pointer; }
+  .ov-btn.primary { background:var(--octo-orange,#F56E28); color:#fff; border-color:var(--octo-orange,#F56E28); }
+  .ov-btn:hover { border-color:var(--octo-orange,#F56E28); }
+
+  table.ov    { width:100%; border-collapse:collapse; font-size:14px; }
+  .ov th      { text-align:left; font-size:11px; color:#888; font-weight:500; padding:6px 8px;
+                border-bottom:1px solid #e2e5e8; cursor:pointer; user-select:none; white-space:nowrap; }
+  .ov th.noSort { cursor:default; }
+  .ov th:hover:not(.noSort) { color:var(--octo-orange,#F56E28); }
+  .ov th .arr { color:#bbb; font-size:10px; }
+  .ov td      { padding:8px; border-bottom:0.5px solid #eef0f2; vertical-align:middle; }
+  .ov tr:hover td { background:#fafbfc; }
+  .ov-thumb   { width:40px; height:40px; border-radius:7px; object-fit:cover; background:#f0f1f3; display:block; }
+  .ov-noimg   { width:40px; height:40px; border-radius:7px; background:#f4f5f7; display:flex; align-items:center;
+                justify-content:center; color:#c3c3c3; font-size:17px; }
+  .ov-title   { font-weight:500; }
+  a.ov-title  { color:var(--octo-petrol,#008591); text-decoration:none; }
+  a.ov-title:hover { color:var(--octo-orange,#F56E28); text-decoration:underline; }
+  .ov-clk     { cursor:pointer; }
+  .ov-clk:hover { color:var(--octo-orange,#F56E28); text-decoration:underline; }
+  .ov-topic   { font-size:11px; padding:2px 8px; border-radius:12px; white-space:nowrap; }
+  .ov-date    { color:#555; white-space:nowrap; }
+  .ov-date.fut{ color:#854F0B; font-weight:500; }
+  .ov-status  { font-size:12px; padding:3px 6px; border-radius:6px; border:1px solid #dcdfe3; background:#fff; cursor:pointer; }
+  .ov-act     { display:flex; gap:4px; }
+  .ov-icon    { border:none; background:none; cursor:pointer; font-size:15px; padding:2px 4px; border-radius:5px; color:#888; }
+  .ov-icon:hover { background:#eef0f2; color:var(--octo-orange,#F56E28); }
+  .ov-icon.del:hover { color:#c0392b; }
+  .ov-add td  { background:#fff7f2; }
+  .ov-add input, .ov-add select { font-size:13px; padding:5px 6px; border:1px solid #e0c4b0; border-radius:6px; width:100%; box-sizing:border-box; }
+  .ov-edit input, .ov-edit select { font-size:13px; padding:4px 6px; border:1px solid #b9c7cc; border-radius:6px; width:100%; box-sizing:border-box; }
+  .ov-count   { font-size:.85rem; color:#888; font-weight:400; }
+  .ov-empty   { text-align:center; color:#bbb; padding:2rem; }
+</style>
+
+<div class="ov-wrap">
+  <div class="ov-head">
+    <h1>📋 Overview <span class="ov-count" id="ovCount">{{ posts|length }} posts</span></h1>
+    <div class="ov-tools">
+      <input type="text" id="ovSearch" placeholder="Search (title, text)…" oninput="ovFilter()">
+      <select id="ovStatus" onchange="ovFilter()">
+        <option value="">All statuses</option>
+        {% for code, label in status_choices %}<option value="{{ code }}">{{ label }}</option>{% endfor %}
+      </select>
+      <select id="ovTopic" onchange="ovFilter()">
+        <option value="">All topics</option>
+        {% for t in topics %}<option value="{{ t.id }}">{{ t.name }}</option>{% endfor %}
+      </select>
+      <button class="ov-btn primary" onclick="ovToggleAdd()"><span id="ovAddLbl">+ New</span></button>
+    </div>
+  </div>
+
+  <table class="ov">
+    <thead>
+      <tr>
+        <th onclick="ovSort('date')" style="width:96px">Date <span class="arr" data-k="date">▾</span></th>
+        <th class="noSort" style="width:48px"></th>
+        <th onclick="ovSort('title')">Title <span class="arr" data-k="title"></span></th>
+        <th onclick="ovSort('topic')" style="width:110px">Topic <span class="arr" data-k="topic"></span></th>
+        <th onclick="ovSort('status')" style="width:130px">Status <span class="arr" data-k="status"></span></th>
+        <th class="noSort" style="width:64px"></th>
+      </tr>
+    </thead>
+    <tbody id="ovBody">
+      <tr class="ov-add" id="ovAddRow" style="display:none">
+        <td><input type="date" id="ovAddDate"></td>
+        <td style="text-align:center;color:#c08a2b;font-size:18px">＋</td>
+        <td><input type="text" id="ovAddTitle" placeholder="Enter a new post…" onkeydown="if(event.key==='Enter')ovCreate()"></td>
+        <td>
+          <select id="ovAddTopic">
+            <option value="">– Topic –</option>
+            {% for t in topics %}<option value="{{ t.id }}">{{ t.name }}</option>{% endfor %}
+          </select>
+        </td>
+        <td>
+          <select id="ovAddStatus">
+            {% for code, label in status_choices %}<option value="{{ code }}" {% if code == 'Planned' %}selected{% endif %}>{{ label }}</option>{% endfor %}
+          </select>
+        </td>
+        <td><button class="ov-btn primary" onclick="ovCreate()">Add</button></td>
+      </tr>
+
+      {% for p in posts %}
+      <tr class="ov-row" data-id="{{ p.id }}"
+          data-title="{{ p.title|lower }} {{ p.content|lower }}"
+          data-status="{{ p.status }}"
+          data-topic="{{ p.topic_id }}"
+          data-date="{{ p.planned_date|date:'Y-m-d'|default:'0000-00-00' }}"
+          data-titlesort="{{ p.title|lower }}"
+          data-topicsort="{{ p.topic_name|lower }}">
+        <td class="c-date">
+          {% if p.planned_date %}
+            <span class="ov-date" data-date="{{ p.planned_date|date:'Y-m-d' }}">{{ p.planned_date|date:'d M Y' }}{% if p.planned_time %}<br><span style="font-size:11px;color:#999">{{ p.planned_time }}</span>{% endif %}</span>
+          {% else %}
+            <span class="ov-date" style="color:#c0392b">no date</span>
+          {% endif %}
+        </td>
+        <td>
+          {% if p.has_video %}
+            <div class="ov-noimg" title="Video">🎬</div>
+          {% elif p.img_url %}
+            <a href="{{ p.img_url }}" target="_blank" rel="noopener" title="Open image">
+              <img class="ov-thumb" src="{{ p.img_url }}" alt="" loading="lazy" onerror="ovImgErr(this)">
+            </a>
+          {% else %}
+            <div class="ov-noimg" title="No graphic yet">🖼</div>
+          {% endif %}
+        </td>
+        <td class="c-title">
+          {% if p.link %}<a class="ov-title" href="{{ p.link }}" target="_blank" rel="noopener" title="Open published post">{{ p.title }} <span style="font-size:11px;color:#999">↗</span></a>
+          {% else %}<a class="ov-title" href="/planner/?edit={{ p.id }}" title="Open post">{{ p.title }}</a>{% endif %}
+        </td>
+        <td class="c-topic">{% if p.topic_name %}<span class="ov-topic" style="background:{{ p.topic_bg }};color:{{ p.topic_fg }}">{{ p.topic_name }}</span>{% endif %}</td>
+        <td class="c-status">
+          <select class="ov-status" data-id="{{ p.id }}" onchange="ovSetStatus(this)"
+                  style="background:{{ p.status_bg }};color:{{ p.status_fg }}">
+            {% for code, label in status_choices %}
+            <option value="{{ code }}" {% if code == p.status %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </td>
+        <td class="c-act">
+          <div class="ov-act">
+            <a class="ov-icon" title="Open in Studio (work on the graphic)" href="/library/studio/?post_id={{ p.id }}" target="_blank" rel="noopener" style="text-decoration:none">🎨</a>
+            <button class="ov-icon" title="Edit" onclick="ovEdit({{ p.id }})">✏</button>
+            <button class="ov-icon del ov-delbtn" title="Delete" onclick="ovDelete({{ p.id }})"
+                    {% if p.status == 'Posted' or p.status == 'Archive' %}style="display:none"{% endif %}>🗑</button>
+          </div>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  <div class="ov-empty" id="ovEmpty" style="display:none">No posts found.</div>
+</div>
+
+{{ edit_map|json_script:"ovEditData" }}
+<script>
+const OV_TODAY = new Date().toISOString().slice(0,10);
+
+// Aus dem Studio zurückgekommen (?focus=<id>): passende Zeile hervorheben.
+(function(){
+  const fid = new URLSearchParams(location.search).get('focus');
+  if(!fid) return;
+  const row = document.querySelector('.ov-row[data-id="'+fid+'"]');
+  if(!row) return;
+  row.scrollIntoView({behavior:'smooth', block:'center'});
+  row.style.transition='background .3s';
+  row.style.background='#FFF3E6';
+  setTimeout(()=>{ row.style.background=''; }, 2500);
+})();
+const OV_EDIT = JSON.parse(document.getElementById('ovEditData').textContent || '{}');
+const OV_TOPICS = [{% for t in topics %}{id:"{{ t.id }}", name:"{{ t.name|escapejs }}"}{% if not forloop.last %},{% endif %}{% endfor %}];
+const OV_STATUS_COLORS = {
+  'Planned':['#E4F3F1','#0E7C86'], 'Draft':['#f5f5f5','#6c757d'], 'Review':['#EEEDFE','#3C3489'],
+  'Ready':['#E1F5EE','#0F6E56'], 'Scheduled':['#FAEEDA','#854F0B'], 'Posted':['#E6F1FB','#185FA5'], 'Archive':['#f5f5f5','#6c757d']
+};
+
+function ovCookie(name){ const m=document.cookie.match('(^|;)\\s*'+name+'\\s*=\\s*([^;]+)'); return m?m.pop():''; }
+function ovPost(body){ return fetch('/planner/api/post/', {method:'POST',
+  headers:{'Content-Type':'application/json','X-CSRFToken':ovCookie('csrftoken')}, body:JSON.stringify(body)}).then(r=>r.json()); }
+
+document.querySelectorAll('.ov-date[data-date]').forEach(el=>{ if(el.dataset.date>=OV_TODAY) el.classList.add('fut'); });
+
+// Kaputte/fehlende Miniatur durch Platzhalter ersetzen (kein Broken-Image-Symbol).
+function ovImgErr(img){
+  const d=document.createElement('div'); d.className='ov-noimg'; d.title='Image not available'; d.textContent='🖼';
+  const a=img.closest('a'); (a||img).replaceWith(d);
+}
+
+function ovFilter(){
+  const q=(document.getElementById('ovSearch').value||'').toLowerCase().trim();
+  const st=document.getElementById('ovStatus').value, tp=document.getElementById('ovTopic').value;
+  let n=0;
+  document.querySelectorAll('.ov-row').forEach(r=>{
+    let ok=true;
+    if(q && !r.dataset.title.includes(q)) ok=false;
+    if(st && r.dataset.status!==st) ok=false;
+    if(tp && r.dataset.topic!==tp) ok=false;
+    r.style.display=ok?'':'none'; if(ok)n++;
+  });
+  document.getElementById('ovCount').textContent=n+' posts';
+  document.getElementById('ovEmpty').style.display=n?'none':'block';
+}
+
+let ovSortKey='date', ovSortDir=-1;
+function ovSort(key){
+  if(ovSortKey===key) ovSortDir*=-1; else { ovSortKey=key; ovSortDir=key==='date'?-1:1; }
+  const body=document.getElementById('ovBody');
+  const rows=[...body.querySelectorAll('.ov-row')];
+  const val=r=> key==='date'?r.dataset.date : key==='title'?r.dataset.titlesort : key==='topic'?r.dataset.topicsort : r.dataset.status;
+  rows.sort((a,b)=> val(a)<val(b)?-1*ovSortDir : val(a)>val(b)?1*ovSortDir : 0);
+  rows.forEach(r=>body.appendChild(r));
+  document.querySelectorAll('.ov th .arr').forEach(a=>a.textContent=a.dataset.k===key?(ovSortDir<0?'▾':'▴'):'');
+}
+
+function ovToggleAdd(){
+  const row=document.getElementById('ovAddRow'); const show=row.style.display==='none';
+  row.style.display=show?'':'none';
+  document.getElementById('ovAddLbl').textContent=show?'Close':'+ New';
+  if(show) document.getElementById('ovAddTitle').focus();
+}
+function ovCreate(){
+  const title=document.getElementById('ovAddTitle').value.trim();
+  if(!title){ alert('Please enter a title.'); return; }
+  ovPost({action:'create', title:title, status:document.getElementById('ovAddStatus').value,
+          planned_date:document.getElementById('ovAddDate').value||null,
+          topic_id:document.getElementById('ovAddTopic').value||null})
+    .then(d=>{ d.ok?location.reload():alert('Error: '+(d.error||'unknown')); }).catch(e=>alert('Error: '+e));
+}
+
+const OV_LOCKED=['Posted','Archive'];
+function ovSetStatus(sel){
+  const c=OV_STATUS_COLORS[sel.value]; if(c){ sel.style.background=c[0]; sel.style.color=c[1]; }
+  // Bereits gepostete/archivierte Posts nicht loeschbar: Papierkorb aus-/einblenden.
+  const del=sel.closest('tr').querySelector('.ov-delbtn');
+  if(del) del.style.display = OV_LOCKED.includes(sel.value) ? 'none' : '';
+  ovPost({action:'set_status', id:sel.dataset.id, status:sel.value})
+    .then(d=>{ if(!d.ok) alert('Could not set status: '+(d.error||'')); else sel.closest('tr').dataset.status=sel.value; })
+    .catch(e=>alert('Error: '+e));
+}
+
+function ovDelete(id){
+  const row=document.querySelector('.ov-row[data-id="'+id+'"]');
+  if(OV_LOCKED.includes(row.dataset.status)){ alert('Published posts cannot be deleted here.'); return; }
+  const title=OV_EDIT[id]?OV_EDIT[id].title:'';
+  if(!confirm('Delete this post?\n\n'+title)) return;
+  ovPost({action:'delete', id:id})
+    .then(d=>{ if(d.ok){ row.remove(); ovFilter(); } else alert('Could not delete: '+(d.error||'')); })
+    .catch(e=>alert('Error: '+e));
+}
+
+function ovEdit(id){
+  const row=document.querySelector('.ov-row[data-id="'+id+'"]');
+  if(row.classList.contains('ov-edit')) return;
+  const d=OV_EDIT[id]||{};
+  row.classList.add('ov-edit');
+  row.querySelector('.c-date').innerHTML='<input type="date" value="'+(d.planned_date||'')+'">';
+  row.querySelector('.c-title').innerHTML='<input type="text" class="e-title" value="'+(d.title||'').replace(/"/g,'&quot;')+'" placeholder="Title">'
+    +'<input type="url" class="e-link" style="margin-top:4px" value="'+(d.link||'').replace(/"/g,'&quot;')+'" placeholder="Post link (URL)">';
+  const topSel='<select><option value="">– Topic –</option>'+OV_TOPICS.map(t=>'<option value="'+t.id+'"'+(String(t.id)===String(d.topic_id)?' selected':'')+'>'+t.name+'</option>').join('')+'</select>';
+  row.querySelector('.c-topic').innerHTML=topSel;
+  row.querySelector('.c-act').innerHTML='<div class="ov-act"><button class="ov-icon" title="Save" onclick="ovSave('+id+')">💾</button><button class="ov-icon" title="Cancel" onclick="location.reload()">✕</button></div>';
+}
+function ovSave(id){
+  const row=document.querySelector('.ov-row[data-id="'+id+'"]');
+  const base=OV_EDIT[id]||{};
+  const payload=Object.assign({}, base, {
+    action:'update', id:id,
+    title:row.querySelector('.c-title .e-title').value.trim(),
+    link:row.querySelector('.c-title .e-link').value.trim()||null,
+    planned_date:row.querySelector('.c-date input').value||null,
+    topic_id:row.querySelector('.c-topic select').value||null,
+  });
+  if(!payload.title){ alert('Title cannot be empty.'); return; }
+  ovPost(payload).then(d=>{ d.ok?location.reload():alert('Could not save: '+(d.error||'')); }).catch(e=>alert('Error: '+e));
+}
+</script>
+{% endblock %}

@@ -11,7 +11,8 @@ function _klassOk(type) {
   return !!(fabric && fabric[name] && typeof fabric[name].fromObject === 'function');
 }
 
-const FABRIC_PROPS = ['srcUrl', 'originalUrl', 'bgRemoved', 'anim', 'shapeKind', 'fx'];
+const FABRIC_PROPS = ['srcUrl', 'originalUrl', 'bgRemoved', 'anim', 'shapeKind', 'fx', 'svgPart',
+                      'tbHead', 'tbBody', 'tbWidth', 'tbSize', 'tbAlign'];
 
 // Baut das canvas_json. Enthält:
 //   fabric        – vollständiger Fabric-State für exakten Reload
@@ -39,9 +40,8 @@ export function buildCanvasJson(editor, previewDataUrl) {
 
 // Vollbild-PNG. Dank Proxy-geladener Bilder nie getaintet.
 export function exportPng(editor) {
-  editor.canvas.discardActiveObject();
-  editor.canvas.requestRenderAll();
-  return editor.canvas.toDataURL({ format: 'png', multiplier: 1 });
+  // exportDataURL blendet das Ausricht-Raster für den Export aus.
+  return editor.exportDataURL({ multiplier: 1 });
 }
 
 export async function saveImage(editor) {
@@ -60,7 +60,7 @@ export async function saveImage(editor) {
   let dataUrl, preview;
   try {
     dataUrl = exportPng(editor);
-    preview = editor.canvas.toDataURL({ format: 'png', multiplier: 0.4 });
+    preview = editor.exportDataURL({ multiplier: 0.4 });
   } catch (e) {
     status('❌ Export fehlgeschlagen (Bild getaintet)', 'red');
     toast('Ein Bild ist cross-origin – über den Proxy laden', 'err');
@@ -109,7 +109,7 @@ export async function saveAnimation(editor, blob, ext) {
     return;
   }
   let preview = '';
-  try { preview = editor.canvas.toDataURL({ format: 'png', multiplier: 0.4 }); } catch (e) { /* egal */ }
+  try { preview = editor.exportDataURL({ multiplier: 0.4 }); } catch (e) { /* egal */ }
   const safe = title.replace(/[^a-zA-Z0-9_.-]/g, '_') + ext;
   const fd = new FormData();
   fd.append('video', blob, safe);
@@ -118,6 +118,7 @@ export async function saveAnimation(editor, blob, ext) {
   const folder = document.getElementById('save-folder')?.value;
   if (folder) fd.append('folder_id', folder);
   if (CONFIG.libData?.item_id) fd.append('lib_item_id', CONFIG.libData.item_id);   // vorhandene Ausgabe überschreiben
+  if (CONFIG.postId) fd.append('post_id', CONFIG.postId);   // GIF/Video an den Post hängen
   try {
     const res = await fetch(URLS.saveVideoFile, {
       method: 'POST',

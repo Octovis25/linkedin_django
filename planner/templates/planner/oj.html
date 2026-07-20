@@ -451,18 +451,25 @@ async function reloadOjNcVideos() {
   const sel = document.getElementById('e-video-nc');
   if (!sel) return;
   const keep = document.getElementById('e-video-nc-path').value;
+  sel.innerHTML = '<option value="">— Video/GIF wählen —</option>';
+  const addGroup = (label, videos) => {
+    if (!videos || !videos.length) return;
+    const og = document.createElement('optgroup'); og.label = label;
+    videos.forEach(v => {
+      const opt = document.createElement('option');
+      opt.value = v.nc_path; opt.textContent = v.filename;
+      if (v.nc_path === keep) opt.selected = true;
+      og.appendChild(opt);
+    });
+    sel.appendChild(og);
+  };
+  try {
+    const s = await fetch('/planner/api/studio-outputs/').then(r => r.json());
+    if (s.ok) addGroup('🎨 Studio-Ausgaben', s.videos);
+  } catch (e) { /* optional */ }
   try {
     const r = await fetch('/planner/api/nc-videos/').then(r => r.json());
-    sel.innerHTML = '<option value="">— aus Nextcloud wählen —</option>';
-    if (r.ok && r.videos) {
-      r.videos.forEach(v => {
-        const opt = document.createElement('option');
-        opt.value = v.nc_path;
-        opt.textContent = v.filename;
-        if (v.nc_path === keep) opt.selected = true;
-        sel.appendChild(opt);
-      });
-    }
+    if (r.ok) addGroup('🎬 Planner-Videos', r.videos);
   } catch (e) { /* Liste optional — PC-Upload bleibt möglich */ }
 }
 
@@ -471,7 +478,7 @@ function onOjVideoNcSelect() {
   const path = sel.value;
   document.getElementById('e-video-input').value = '';  // PC-Auswahl verwerfen
   document.getElementById('e-video-nc-path').value = path;
-  document.getElementById('e-video-current').textContent = path ? ('✓ ' + path.split('/').pop() + ' (Nextcloud)') : '';
+  document.getElementById('e-video-current').textContent = path ? ('✓ ' + path.split('/').pop() + (path.indexOf('/Studio_Work/') !== -1 ? ' (Studio)' : ' (Nextcloud)')) : '';
   document.getElementById('e-video-clear').style.display = path ? 'inline-block' : 'none';
 }
 

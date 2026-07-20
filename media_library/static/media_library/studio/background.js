@@ -1,6 +1,7 @@
 // background.js – Hintergrundbild, Templates, Farbpalette.
 import { loadImage, toast, status } from './util.js';
 import { URLS, CONFIG } from './config.js';
+import { restoreCanvas } from './io.js';
 
 const PALETTE_KEY = 'studio_palette_v2';
 
@@ -122,6 +123,22 @@ export async function loadTemplateList(editor) {
 
 export async function applyTemplate(editor, tpl) {
   status('Template wird geladen…');
+  // Neue Vorlagen tragen ein Layout (Hintergrund + Logo + Textfelder). Dann das
+  // ganze Layout laden, damit man nur noch die Texte ersetzen muss.
+  if (tpl.has_canvas) {
+    try {
+      const res = await fetch(`/library/studio/template/canvas/${tpl.id}/`, { credentials: 'same-origin' });
+      const d = await res.json();
+      if (d.ok && d.canvas_json) {
+        restoreCanvas(editor, d.canvas_json);
+        editor._templateId = tpl.id || null;
+        editor.snapshot();
+        updateBgInfo(editor);
+        status('✅ Vorlage geladen – Texte anpassen', 'green');
+        return;
+      }
+    } catch (e) { console.warn('Template-Layout-Fehler, nutze Hintergrundbild:', e); }
+  }
   try {
     // Canvas-Größe wird NICHT geändert – die bleibt fix und wird nur über
     // "📐 Größe" explizit umgestellt. Das Template füllt die aktuelle Größe.

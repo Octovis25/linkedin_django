@@ -20,6 +20,9 @@ urlpatterns = [
     path('studio/link-video/',            views.studio_link_video,      name='studio_link_video'),
     path('studio/templates/',             views.studio_templates_view,  name='studio_templates'),
     path('studio/template/upload/',       views.studio_template_upload, name='studio_template_upload'),
+    path('studio/template/save-canvas/',  views.studio_template_save_from_canvas, name='studio_template_save_from_canvas'),
+    path('studio/template/canvas/<int:tpl_id>/', views.studio_template_canvas, name='studio_template_canvas'),
+    path('studio/template/toggle-active/<int:tpl_id>/', views.studio_template_toggle_active, name='studio_template_toggle_active'),
     path('studio/template/delete/<int:tpl_id>/', views.studio_template_delete, name='studio_template_delete'),
     path('studio/template/colors/<int:tpl_id>/', views.studio_template_colors, name='studio_template_colors'),
     path('studio/template/image/<int:tpl_id>/',  views.studio_template_image,  name='studio_template_image'),
@@ -29,6 +32,7 @@ urlpatterns = [
     path('studio/api/library/',           views.studio_api_library,     name='studio_api_library'),
     path('studio/api/saved/',             views.studio_api_saved,       name='studio_api_saved'),
     path('studio/api/post-image/<int:post_id>/', views.studio_api_post_image, name='studio_api_post_image'),
+    path('studio/api/posts-with-images/', views.studio_api_posts_with_images, name='studio_api_posts_with_images'),
     path('studio/drawio/save/',                  views.studio_drawio_save,          name='studio_drawio_save'),
     path('studio/brand-colors/save/',            views.studio_brand_colors_save,    name='studio_brand_colors_save'),
     # Video-Vorlagen

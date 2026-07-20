@@ -669,6 +669,14 @@ def _ensure_studio_tables():
         try:
             c.execute("ALTER TABLE studio_templates ADD COLUMN colors VARCHAR(512) DEFAULT NULL")
         except Exception: pass
+        # Migration: Layout der Vorlage (Hintergrund + Logo + Textfelder) speichern.
+        try:
+            c.execute("ALTER TABLE studio_templates ADD COLUMN canvas_json LONGTEXT DEFAULT NULL")
+        except Exception: pass
+        # Migration: aktiv/passiv – passive Vorlagen erscheinen nicht in der Studio-Auswahl.
+        try:
+            c.execute("ALTER TABLE studio_templates ADD COLUMN active TINYINT DEFAULT 1")
+        except Exception: pass
         try:
             c.execute("""CREATE TABLE IF NOT EXISTS studio_images (
                 id          INT AUTO_INCREMENT PRIMARY KEY,
@@ -688,6 +696,14 @@ def _ensure_studio_tables():
         try:
             c.execute("ALTER TABLE studio_images MODIFY COLUMN canvas_json LONGTEXT")
         except Exception: pass
+        # Post-Medien: Bild (image) existiert schon; GIF + Video als eigene Spalten,
+        # damit an einem Post alle drei Dateien hängen und einzeln abrufbar sind.
+        try:
+            c.execute("ALTER TABLE planner_posts ADD COLUMN gif_nc_path VARCHAR(512) DEFAULT NULL")
+        except Exception: pass
+        try:
+            c.execute("ALTER TABLE planner_posts ADD COLUMN video_nc_path VARCHAR(512) DEFAULT NULL")
+        except Exception: pass
 
 
 # ─────────────────────────────────────────────
@@ -706,16 +722,37 @@ def studio_view(request):
     post_data = None
     if post_id:
         try:
+            from urllib.parse import quote as _q
             with connection.cursor() as c:
-                rows = _safe(c, "SELECT id, title, image, content FROM planner_posts WHERE id=%s", [post_id])
+                rows = _safe(c, """SELECT id, title, image, content,
+                                          COALESCE(gif_nc_path,''), COALESCE(video_nc_path,'')
+                                     FROM planner_posts WHERE id=%s""", [post_id])
                 if rows:
                     r = rows[0]
-                    post_data = {'id': r[0], 'title': r[1] or '', 'image': r[2] or '', 'content': (r[3] or '')[:120]}
+                    post_data = {'id': r[0], 'title': r[1] or '', 'image': r[2] or '', 'content': (r[3] or '')[:120],
+                                 'gif': r[4] or '', 'video': r[5] or ''}
+                    # Abruf-URLs für die drei Dateien am Post (Auswahl im Banner).
+                    post_data['image_url'] = f"/library/studio/api/post-image/{r[0]}/" if post_data['image'] else ''
+                    post_data['gif_url']   = ('/library/studio/nc-image/?p=' + _q(post_data['gif']))   if post_data['gif']   else ''
+                    post_data['video_url'] = ('/library/studio/nc-image/?p=' + _q(post_data['video'])) if post_data['video'] else ''
                 # Look up saved canvas_json for this post
                 canvas_rows = _safe(c, "SELECT canvas_json, template_id FROM studio_images WHERE post_id=%s ORDER BY created_at DESC LIMIT 1", [post_id])
                 if canvas_rows and canvas_rows[0][0] and post_data:
                     post_data['canvas_json'] = canvas_rows[0][0]
                     post_data['template_id'] = canvas_rows[0][1]
+                # Fallback: Design wurde als GIF/Video gespeichert (nicht per post_id
+                # verknüpft) oder die Datei wurde verschoben → über den Dateinamen der
+                # am Post hängenden Datei (Bild/GIF/Video) das bearbeitbare Layout finden.
+                if post_data and not post_data.get('canvas_json'):
+                    cand = post_data.get('image') or post_data.get('video') or post_data.get('gif')
+                    if cand:
+                        _fn = cand.rsplit('/', 1)[-1]
+                        cj = _safe(c, """SELECT canvas_json, template_id FROM studio_images
+                                         WHERE nc_path=%s OR nc_path LIKE %s ORDER BY id DESC LIMIT 1""",
+                                   [cand, '%/' + _fn])
+                        if cj and cj[0][0]:
+                            post_data['canvas_json'] = cj[0][0]
+                            post_data['template_id'] = cj[0][1]
         except Exception as e:
             print("Studio post lookup error:", e)
     # Also support loading from a library item (studio_image_id)
@@ -729,6 +766,14 @@ def studio_view(request):
                     nc_path = rows[0][0]
                     studio_rows = _safe(c, """SELECT canvas_json, template_id FROM studio_images
                                              WHERE nc_path=%s ORDER BY created_at DESC LIMIT 1""", [nc_path])
+                    # Fallback: Datei wurde evtl. verschoben (z. B. von Studio_Work/Output
+                    # nach Planner/Videos). Dann das bearbeitbare Design über den
+                    # Dateinamen wiederfinden, damit „🎨 Studio" das Layout lädt.
+                    if not (studio_rows and studio_rows[0][0]):
+                        _fn = (nc_path or '').rsplit('/', 1)[-1]
+                        if _fn:
+                            studio_rows = _safe(c, """SELECT canvas_json, template_id FROM studio_images
+                                                     WHERE nc_path LIKE %s ORDER BY id DESC LIMIT 1""", ['%/' + _fn])
                     _low = (nc_path or '').lower()
                     lib_data = {'item_id': lib_item_id, 'image_url': f"/library/image/{lib_item_id}/",
                                 'title': rows[0][1] or '', 'nc_path': nc_path,
@@ -762,6 +807,20 @@ def studio_view(request):
         except Exception as e:
             print("Studio nc_path open:", e)
 
+    # Vorlage zum Bearbeiten öffnen (?template=<id>) → editierbares Layout laden.
+    tpl_data = None
+    tpl_id_param = request.GET.get('template', '')
+    if tpl_id_param and not post_id and not lib_data:
+        try:
+            with connection.cursor() as c:
+                trows = _safe(c, "SELECT id, title, width, height, canvas_json FROM studio_templates WHERE id=%s", [tpl_id_param])
+            if trows:
+                tr = trows[0]
+                tpl_data = {'id': tr[0], 'title': tr[1] or '', 'width': tr[2] or 1080,
+                            'height': tr[3] or 1080, 'canvas_json': tr[4] or ''}
+        except Exception as e:
+            print("Studio template open:", e)
+
     folders = _all_folders()
     # Pass Nextcloud base URL for draw.io embed
     try:
@@ -776,12 +835,15 @@ def studio_view(request):
         post_data['canvas_json'] = _resolve_nc_refs_in_json(post_data['canvas_json'])
     if lib_data and lib_data.get('canvas_json'):
         lib_data['canvas_json'] = _resolve_nc_refs_in_json(lib_data['canvas_json'])
+    if tpl_data and tpl_data.get('canvas_json'):
+        tpl_data['canvas_json'] = _resolve_nc_refs_in_json(tpl_data['canvas_json'])
 
     # Zentrale Konfiguration fuers Frontend (studio.js liest #studio-config)
     studio_config = {
         'postId': post_id or None,
         'postData': post_data,
         'libData': lib_data,
+        'tplData': tpl_data,
         'ncUrl': (nc_url_val or '').rstrip('/'),
         'brandExtraColors': brand.get('extra_colors', []),
         'urls': {
@@ -800,13 +862,21 @@ def studio_view(request):
             'sharedAssets':  '/library/studio/api/shared-assets/',
             'dbToNc':        '/library/studio/api/db-to-nc/',
             'brandColors':   '/library/studio/brand-colors/save/',
+            'postsWithImages': '/library/studio/api/posts-with-images/',
+            'saveTemplate':  '/library/studio/template/save-canvas/',
         },
     }
+
+    # „Zurück"-Ziel = Seite, von der man kam (Referrer). Nicht auf das Studio
+    # selbst zurückspringen; sonst Fallback auf die Übersicht.
+    back_url = request.META.get('HTTP_REFERER', '') or ''
+    if not back_url or '/library/studio/' in back_url:
+        back_url = '/planner/uebersicht/'
 
     return render(request, 'media_library/studio.html', {
         'post_id': post_id, 'post_data': post_data, 'lib_data': lib_data,
         'folders': folders, 'nc_url': (nc_url_val or '').rstrip('/'),
-        'studio_config': studio_config,
+        'studio_config': studio_config, 'back_url': back_url,
         'brand_extra_colors_json': json.dumps(brand.get('extra_colors', []))})
 
 
@@ -858,7 +928,8 @@ def studio_link_video(request):
 def studio_templates_view(request):
     _ensure_studio_tables()
     with connection.cursor() as c:
-        rows = _safe(c, "SELECT id, title, width, height, colors, created_at FROM studio_templates ORDER BY created_at DESC")
+        rows = _safe(c, "SELECT id, title, width, height, colors, created_at, COALESCE(active,1) FROM studio_templates ORDER BY created_at DESC") \
+            or _safe(c, "SELECT id, title, width, height, colors, created_at FROM studio_templates ORDER BY created_at DESC")
     templates = []
     for r in (rows or []):
         colors = []
@@ -866,9 +937,24 @@ def studio_templates_view(request):
             try: colors = json.loads(r[4])
             except: pass
         templates.append({'id': r[0], 'title': r[1], 'width': r[2], 'height': r[3], 'colors': colors,
+                          'active': bool(r[6]) if len(r) > 6 else True,
                           'url': f"/library/studio/template/image/{r[0]}/"})
     brand = get_brand_colors()
     return render(request, 'media_library/studio_templates.html', {'templates': templates, 'brand': brand})
+
+
+@login_required
+def studio_template_toggle_active(request, tpl_id):
+    """Vorlage aktiv/passiv schalten. Passive erscheinen nicht in der Studio-Auswahl."""
+    if request.method != 'POST':
+        return redirect('media_library:studio_templates')
+    _ensure_studio_tables()
+    with connection.cursor() as c:
+        try:
+            c.execute("UPDATE studio_templates SET active = 1 - COALESCE(active,1) WHERE id=%s", [tpl_id])
+        except Exception:
+            pass
+    return redirect('media_library:studio_templates')
 
 
 @login_required
@@ -933,6 +1019,77 @@ def studio_template_upload(request):
                   [nc_path, title, width, height, colors_json])
     messages.success(request, 'Template gespeichert!')
     return redirect('media_library:studio_templates')
+
+
+@login_required
+def studio_template_save_from_canvas(request):
+    """Aktuelle Studio-Leinwand direkt als Vorlage speichern (kein Datei-Upload).
+    Erwartet JSON: {dataUrl, title, width, height, colors?}."""
+    if request.method != 'POST':
+        return JsonResponse({'ok': False, 'error': 'POST required'}, status=405)
+    _ensure_studio_tables()
+    import time, base64, json as _j
+    try:
+        data = _j.loads(request.body)
+    except Exception:
+        return JsonResponse({'ok': False, 'error': 'Bad JSON'}, status=400)
+    data_url = data.get('dataUrl') or ''
+    title = (data.get('title') or '').strip() or f'Vorlage {time.strftime("%d.%m.%Y %H:%M")}'
+    try:
+        width = int(data.get('width') or 1080)
+        height = int(data.get('height') or 1080)
+    except Exception:
+        width, height = 1080, 1080
+    if ',' not in data_url:
+        return JsonResponse({'ok': False, 'error': 'Kein Bild übermittelt'}, status=400)
+    try:
+        content = base64.b64decode(data_url.split(',', 1)[1])
+    except Exception:
+        return JsonResponse({'ok': False, 'error': 'Bild konnte nicht gelesen werden'}, status=400)
+    filename = f"tpl_{int(time.time())}.png"
+    nc_path = _nc_upload(content, f"{NC_STUDIO_TEMPLATES_FOLDER}/{filename}", 'image/png')
+    if not nc_path:
+        from django.conf import settings as _s
+        local_dir = os.path.join(_s.BASE_DIR, 'media', 'studio', 'templates')
+        os.makedirs(local_dir, exist_ok=True)
+        with open(os.path.join(local_dir, filename), 'wb') as fh:
+            fh.write(content)
+        nc_path = f"__local__/studio/templates/{filename}"
+    cols = data.get('colors') or []
+    colors_json = _j.dumps([c for c in cols if c]) if cols else None
+    canvas_json = data.get('canvasJson') or None   # Hintergrund + Logo + Textfelder
+    tpl_id = data.get('tplId') or None              # gesetzt → bestehende Vorlage aktualisieren
+    with connection.cursor() as c:
+        if tpl_id:
+            # Bestehende Vorlage überschreiben (Layout + Vorschau + Größe/Titel).
+            try:
+                c.execute("""UPDATE studio_templates
+                             SET nc_path=%s, title=%s, width=%s, height=%s, canvas_json=%s
+                             WHERE id=%s""",
+                          [nc_path, title, width, height, canvas_json, tpl_id])
+            except Exception:
+                c.execute("UPDATE studio_templates SET nc_path=%s, title=%s, width=%s, height=%s WHERE id=%s",
+                          [nc_path, title, width, height, tpl_id])
+            return JsonResponse({'ok': True, 'id': tpl_id, 'title': title, 'updated': True})
+        try:
+            c.execute("""INSERT INTO studio_templates (nc_path, title, width, height, colors, canvas_json)
+                         VALUES (%s,%s,%s,%s,%s,%s)""",
+                      [nc_path, title, width, height, colors_json, canvas_json])
+        except Exception:
+            c.execute("INSERT INTO studio_templates (nc_path, title, width, height, colors) VALUES (%s,%s,%s,%s,%s)",
+                      [nc_path, title, width, height, colors_json])
+        new_id = c.lastrowid
+    return JsonResponse({'ok': True, 'id': new_id, 'title': title})
+
+
+@login_required
+def studio_template_canvas(request, tpl_id):
+    """Liefert das gespeicherte Layout (canvas_json) einer Vorlage zum Anwenden."""
+    _ensure_studio_tables()
+    with connection.cursor() as c:
+        rows = _safe(c, "SELECT canvas_json FROM studio_templates WHERE id=%s", [tpl_id])
+    cj = rows[0][0] if rows else None
+    return JsonResponse({'ok': bool(cj), 'canvas_json': cj or ''})
 
 
 @login_required
@@ -1179,6 +1336,7 @@ def studio_save_video(request):
         try: folder_id = int(folder_id)
         except: folder_id = None
     lib_item_id = request.POST.get('lib_item_id') or None   # gesetzt beim „Speichern" einer vorhandenen Ausgabe
+    post_id = request.POST.get('post_id') or None           # gesetzt, wenn aus einem Post gespeichert wird
     old_nc_path = None
     if lib_item_id:
         with connection.cursor() as c:
@@ -1236,6 +1394,14 @@ def studio_save_video(request):
             else:
                 c.execute("""INSERT INTO studio_images (nc_path, title, canvas_json)
                              VALUES (%s, %s, %s)""", [nc_path, title, canvas_json])
+    # An den Post hängen: GIF → gif_nc_path, Video → video_nc_path.
+    if post_id:
+        col = 'gif_nc_path' if ext == '.gif' else 'video_nc_path'
+        try:
+            with connection.cursor() as c:
+                c.execute(f"UPDATE planner_posts SET {col}=%s WHERE id=%s", [nc_path, post_id])
+        except Exception as e:
+            print("save-video post attach:", e)
     return JsonResponse({'ok': True, 'nc_path': nc_path, 'filename': filename, 'lib_id': lib_id})
 
 
@@ -1243,7 +1409,9 @@ def studio_save_video(request):
 def studio_api_templates(request):
     _ensure_studio_tables()
     with connection.cursor() as c:
-        rows = _safe(c, "SELECT id, title, width, height, colors FROM studio_templates ORDER BY created_at DESC")
+        # Nur aktive Vorlagen in der Studio-Auswahl.
+        rows = _safe(c, "SELECT id, title, width, height, colors, canvas_json FROM studio_templates WHERE COALESCE(active,1)=1 ORDER BY created_at DESC") \
+            or _safe(c, "SELECT id, title, width, height, colors FROM studio_templates ORDER BY created_at DESC")
     data = []
     for r in (rows or []):
         colors = []
@@ -1251,8 +1419,10 @@ def studio_api_templates(request):
             try:
                 import json as _j; colors = _j.loads(r[4])
             except Exception: pass
+        has_canvas = bool(len(r) > 5 and r[5])
         data.append({'id': r[0], 'title': r[1] or '', 'width': r[2], 'height': r[3],
-                     'url': f"/library/studio/template/image/{r[0]}/", 'colors': colors})
+                     'url': f"/library/studio/template/image/{r[0]}/", 'colors': colors,
+                     'has_canvas': has_canvas})
     return JsonResponse({'templates': data})
 
 
@@ -1377,6 +1547,10 @@ def studio_nc_image_proxy(request):
     content, ct = download_image_from_nextcloud(nc_path)
     if not content:
         raise Http404
+    # Nextcloud meldet den Typ nicht immer korrekt. Bei SVG ist das fatal:
+    # als image/png ausgeliefert kann der Browser die Datei nicht lesen.
+    if nc_path.lower().endswith('.svg'):
+        ct = 'image/svg+xml'
     resp = HttpResponse(content, content_type=ct or 'image/png')
     resp['Cache-Control'] = 'public, max-age=3600'
     return resp
@@ -1497,6 +1671,24 @@ def studio_api_library(request):
 
     data = [{'id': i['id'], 'title': i['title'], 'url': f"/library/image/{i['id']}/"} for i in items]
     return JsonResponse({'items': data, 'folders': [{'id': f['id'], 'name': f['name']} for f in folders]})
+
+
+@login_required
+def studio_api_posts_with_images(request):
+    """Liste aller Posts, die ein Bild haben – für den Picker „Bild von anderem
+    Post übernehmen". Liefert id, Titel und eine same-origin-Thumbnail-URL."""
+    posts = []
+    with connection.cursor() as c:
+        rows = _safe(c, """SELECT id, COALESCE(title,''), COALESCE(planned_date,'')
+                           FROM planner_posts
+                           WHERE image IS NOT NULL AND image <> '' AND COALESCE(is_oj,0)=0
+                           ORDER BY COALESCE(planned_date,'9999-12-31') DESC, id DESC
+                           LIMIT 300""") or []
+    for r in rows:
+        posts.append({'id': r[0], 'title': (r[1] or '(ohne Titel)'),
+                      'date': str(r[2] or ''),
+                      'thumb': f'/planner/image/{r[0]}/'})
+    return JsonResponse({'ok': True, 'posts': posts})
 
 
 @login_required

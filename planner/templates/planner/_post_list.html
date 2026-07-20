@@ -51,10 +51,21 @@
     {% if p.image %}
     <img src="/planner/image/{{ p.id }}/" style="width:56px;height:56px;border-radius:6px;object-fit:cover;flex-shrink:0;cursor:zoom-in" onclick="peLightbox('/planner/image/{{ p.id }}/')">
     {% elif p.video_nc_path %}
-    <video muted preload="metadata" playsinline
-           data-vthumb="/planner/nc-video-preview/{{ p.video_nc_path|cut:'Marketing & Design/LinkedIn/Planner/Videos/'|urlencode }}/"
-           style="width:56px;height:56px;border-radius:6px;object-fit:cover;flex-shrink:0;background:#000"
-           title="Video"></video>
+      {% if p.video_nc_path|slice:"-4:"|lower == ".gif" %}
+      <img src="/library/studio/nc-image/?p={{ p.video_nc_path|urlencode }}"
+           style="width:56px;height:56px;border-radius:6px;object-fit:cover;flex-shrink:0;cursor:zoom-in"
+           title="GIF" onclick="peLightbox('/library/studio/nc-image/?p={{ p.video_nc_path|urlencode }}')">
+      {% elif "Studio_Work" in p.video_nc_path %}
+      <video muted preload="metadata" playsinline
+             data-vthumb="/library/studio/nc-image/?p={{ p.video_nc_path|urlencode }}"
+             style="width:56px;height:56px;border-radius:6px;object-fit:cover;flex-shrink:0;background:#000"
+             title="Video"></video>
+      {% else %}
+      <video muted preload="metadata" playsinline
+             data-vthumb="/planner/nc-video-preview/{{ p.video_nc_path|cut:'Marketing & Design/LinkedIn/Planner/Videos/'|urlencode }}/"
+             style="width:56px;height:56px;border-radius:6px;object-fit:cover;flex-shrink:0;background:#000"
+             title="Video"></video>
+      {% endif %}
     {% else %}
     <div style="width:56px;height:56px;border-radius:6px;background:{{ p.bg }};flex-shrink:0;display:flex;align-items:center;justify-content:center">
       <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><rect x="3" y="3" width="18" height="18" rx="2" stroke="{{ p.fg }}" stroke-width="1.5"/></svg>
@@ -149,11 +160,17 @@
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" stroke="#aaa" stroke-width="1.5"/><polyline points="17,8 12,3 7,8" stroke="#aaa" stroke-width="1.5"/><line x1="12" y1="3" x2="12" y2="15" stroke="#aaa" stroke-width="1.5"/></svg>
       </div>
       <input type="file" id="pe-img-input" accept="image/*" style="display:none" onchange="pePreviewImg(this)">
+      <select id="pe-img-nc" onchange="peImgNcSelect()"
+        style="font-size:11px;padding:4px 6px;border:0.5px solid #61CEBC;border-radius:4px;background:#fff;color:#008591;max-width:150px;flex-shrink:0"
+        title="Fertiges Bild aus dem Studio wählen">
+        <option value="">📷 aus Studio…</option>
+      </select>
       <button type="button" onclick="peOpenStudio()"
         style="font-size:11px;padding:4px 8px;border:0.5px solid #61CEBC;border-radius:4px;background:#fff;cursor:pointer;color:#008591;white-space:nowrap;flex-shrink:0"
         title="Bild im Studio erstellen/bearbeiten">🎨 Studio</button>
       <input type="text" id="pe-title" placeholder="Title..." onkeydown="if(event.key==='Enter')event.preventDefault()" style="font-size:13px;flex:1;padding:6px 8px;border:0.5px solid #ced4da;border-radius:4px;box-sizing:border-box">
     </div>
+    <input type="hidden" id="pe-img-nc-path" value="">
     <!-- Rich text editor -->
     <div class="pe-editor-wrap"
          ondragover="event.preventDefault();this.style.outline='2px dashed #008080'"
@@ -291,6 +308,8 @@ function peClearPreview() {
   document.getElementById('pe-img-preview').style.display = 'none';
   document.getElementById('pe-img-preview-img').src = '';
   document.getElementById('pe-img-input').value = '';
+  const ncp = document.getElementById('pe-img-nc-path'); if (ncp) ncp.value = '';
+  const ncs = document.getElementById('pe-img-nc'); if (ncs) ncs.value = '';
   const thumb = document.getElementById('pe-thumb');
   thumb.style.borderColor = '#ced4da';
   thumb.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" stroke="#aaa" stroke-width="1.5"/><polyline points="17,8 12,3 7,8" stroke="#aaa" stroke-width="1.5"/><line x1="12" y1="3" x2="12" y2="15" stroke="#aaa" stroke-width="1.5"/></svg>';
@@ -335,6 +354,8 @@ function openCreate() {
   const topicSelect = document.getElementById('pe-topic');
   if (topicSelect && topicSelect.options.length > 0) topicSelect.selectedIndex = 0;
   peClearPreview();
+  document.getElementById('pe-img-nc-path').value = '';
+  peReloadStudioImages();
   peResetVideoUi();
   peReloadNcVideos();
   document.getElementById('post-edit-modal').style.display = 'flex';
@@ -405,22 +426,36 @@ async function peEditVideoInStudio() {
   }
 }
 
+function peVideoPreviewUrl(path) {
+  // Planner/Videos: eigener Range-Proxy (nur Dateiname). Studio-Ausgaben u.a.: NC-Proxy mit vollem Pfad.
+  if (path.indexOf('/LinkedIn/Planner/Videos/') !== -1)
+    return '/planner/nc-video-preview/' + encodeURIComponent(path.split('/').pop()) + '/';
+  return '/library/studio/nc-image/?p=' + encodeURIComponent(path);
+}
+
 async function peReloadNcVideos() {
   const sel = document.getElementById('pe-video-nc');
   if (!sel) return;
   const keep = document.getElementById('pe-video-nc-path').value;
+  sel.innerHTML = '<option value="">— Video/GIF wählen —</option>';
+  const addGroup = (label, videos) => {
+    if (!videos || !videos.length) return;
+    const og = document.createElement('optgroup'); og.label = label;
+    videos.forEach(v => {
+      const opt = document.createElement('option');
+      opt.value = v.nc_path; opt.textContent = v.filename;
+      if (v.nc_path === keep) opt.selected = true;
+      og.appendChild(opt);
+    });
+    sel.appendChild(og);
+  };
+  try {
+    const s = await fetch('/planner/api/studio-outputs/').then(r => r.json());
+    if (s.ok) addGroup('🎨 Studio-Ausgaben', s.videos);
+  } catch (e) { /* optional */ }
   try {
     const r = await fetch('/planner/api/nc-videos/').then(r => r.json());
-    sel.innerHTML = '<option value="">— aus Nextcloud wählen —</option>';
-    if (r.ok && r.videos) {
-      r.videos.forEach(v => {
-        const opt = document.createElement('option');
-        opt.value = v.nc_path;
-        opt.textContent = v.filename;
-        if (v.nc_path === keep) opt.selected = true;
-        sel.appendChild(opt);
-      });
-    }
+    if (r.ok) addGroup('🎬 Planner-Videos', r.videos);
   } catch (e) { /* Liste optional — PC-Upload bleibt möglich */ }
 }
 
@@ -429,9 +464,9 @@ function peVideoNcSelect() {
   const path = sel.value;
   document.getElementById('pe-video-input').value = '';
   document.getElementById('pe-video-nc-path').value = path;
-  document.getElementById('pe-video-current').textContent = path ? ('✓ ' + path.split('/').pop() + ' (Nextcloud)') : '';
+  document.getElementById('pe-video-current').textContent = path ? ('✓ ' + path.split('/').pop() + (path.indexOf('/Studio_Work/') !== -1 ? ' (Studio)' : ' (Nextcloud)')) : '';
   document.getElementById('pe-video-clear').style.display = path ? 'inline-block' : 'none';
-  peShowVideoPreview(path ? ('/planner/nc-video-preview/' + encodeURIComponent(path.split('/').pop()) + '/') : '');
+  peShowVideoPreview(path ? peVideoPreviewUrl(path) : '');
   peUpdateStudioBtn();
 }
 
@@ -480,6 +515,8 @@ function openEdit(id) {
   document.getElementById('pe-link').value = p.link || '';
   document.getElementById('pe-comment').value = p.comment || '';
   document.getElementById('pe-img-input').value = '';
+  document.getElementById('pe-img-nc-path').value = '';
+  peReloadStudioImages();
   if (p.topic_id) document.getElementById('pe-topic').value = p.topic_id;
   if (p.image) {
     peShowPreview(`/planner/image/${p.id}/`);
@@ -515,9 +552,35 @@ function peDropImg(e) {
 function pePreviewImg(input) {
   const file = input.files ? input.files[0] : null;
   if (!file) return;
+  // PC-Bild gewählt → Studio-Auswahl verwerfen
+  document.getElementById('pe-img-nc-path').value = '';
+  const ncs = document.getElementById('pe-img-nc'); if (ncs) ncs.value = '';
   const reader = new FileReader();
   reader.onload = ev => peShowPreview(ev.target.result);
   reader.readAsDataURL(file);
+}
+
+async function peReloadStudioImages() {
+  const sel = document.getElementById('pe-img-nc');
+  if (!sel) return;
+  sel.innerHTML = '<option value="">📷 aus Studio…</option>';
+  try {
+    const r = await fetch('/planner/api/studio-images/').then(r => r.json());
+    if (r.ok && r.images) r.images.forEach(im => {
+      const opt = document.createElement('option');
+      opt.value = im.nc_path; opt.textContent = im.filename;
+      sel.appendChild(opt);
+    });
+  } catch (e) { /* optional — PC-Upload bleibt möglich */ }
+}
+
+function peImgNcSelect() {
+  const sel = document.getElementById('pe-img-nc');
+  const path = sel.value;
+  if (!path) { document.getElementById('pe-img-nc-path').value = ''; return; }
+  document.getElementById('pe-img-input').value = '';   // PC-Auswahl verwerfen
+  document.getElementById('pe-img-nc-path').value = path;
+  peShowPreview('/library/studio/nc-image/?p=' + encodeURIComponent(path));
 }
 
 async function peRemoveImg() {
@@ -554,11 +617,15 @@ async function saveEdit() {
       alert('Fehler beim Speichern: ' + JSON.stringify(res));
       return;
     }
+    // Bild: PC-Upload hat Vorrang, sonst Studio-Auswahl
     const imgInput = document.getElementById('pe-img-input');
+    const imgNcPath = document.getElementById('pe-img-nc-path').value;
     if (imgInput.files && imgInput.files[0]) {
       const form = new FormData();
       form.append('image', imgInput.files[0]);
       await fetch('/planner/api/image/'+id+'/', {method:'POST', headers:{'X-CSRFToken':peCSRF}, body:form});
+    } else if (imgNcPath) {
+      await peApi({action:'set_image', id:parseInt(id), image_nc_path:imgNcPath});
     }
 
     // Video: PC-Upload hat Vorrang, sonst Nextcloud-Auswahl

@@ -5,6 +5,29 @@
 
 <link rel="stylesheet" href="{% static 'media_library/studio/studio.css' %}?v={% now 'U' %}">
 
+<style>
+/* Inline im Template, damit die einheitliche Schriftgröße unabhängig vom
+   Static-Cache/collectstatic sofort greift. Alles auf 11px vereinheitlicht. */
+.studio-sidebar .sidebar-section h3 { font-size:11px !important; }
+.studio-sidebar .tbtn,
+.studio-sidebar .field,
+.studio-sidebar input,
+.studio-sidebar select,
+.studio-sidebar textarea,
+.studio-sidebar label,
+.studio-sidebar .lib-hint,
+.studio-sidebar .retouch-label,
+.studio-sidebar .no-templates,
+.studio-sidebar div[style*="font-size"] { font-size:10px !important; line-height:1.25; }
+.studio-sidebar .tbtn { padding:3px 5px !important; }
+.studio-sidebar .field,
+.studio-sidebar input[type=number],
+.studio-sidebar input[type=text] { padding:2px 4px !important; }
+.studio-sidebar #tb-width { width:46px !important; }
+.studio-sidebar #tb-size  { width:40px !important; }
+.studio-sidebar #font-size { width:46px !important; }
+</style>
+
 <h1 style="margin-bottom:.5rem">🎨 Image Studio</h1>
 
 {% if post_data %}
@@ -12,7 +35,19 @@
   {% if post_data.image %}<img src="/library/studio/api/post-image/{{ post_data.id }}/" alt="">{% endif %}
   <div class="post-info">
     <strong>📌 Post #{{ post_data.id }}: {{ post_data.title|default:"Ohne Titel" }}</strong>
-    <p>Bild wird beim Speichern am Post angehängt.</p>
+    <p>Bild, GIF und Video werden beim Speichern am Post angehängt.</p>
+    <div class="post-files">
+      <span class="post-files-label">Dateien am Post:</span>
+      {% if post_data.image_url %}
+        <button class="tbtn" data-act="open-post-file" data-kind="image" data-url="{{ post_data.image_url }}" title="Bild auf die Arbeitsfläche laden">📷 Bild</button>
+      {% else %}<span class="tbtn tbtn-off">📷 kein Bild</span>{% endif %}
+      {% if post_data.gif_url %}
+        <button class="tbtn" data-act="open-post-file" data-kind="gif" data-url="{{ post_data.gif_url }}" title="GIF auf die Arbeitsfläche laden">🎞 GIF</button>
+      {% else %}<span class="tbtn tbtn-off">🎞 kein GIF</span>{% endif %}
+      {% if post_data.video_url %}
+        <a class="tbtn" href="{{ post_data.video_url }}" target="_blank" rel="noopener" title="Video ansehen / herunterladen">🎬 Video</a>
+      {% else %}<span class="tbtn tbtn-off">🎬 kein Video</span>{% endif %}
+    </div>
   </div>
   {% if post_data.image %}
   <div class="post-actions">
@@ -22,8 +57,17 @@
   </div>
   {% endif %}
 </div>
+<style>
+  .post-files{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:6px}
+  .post-files-label{font-size:.7rem;color:#888}
+  .post-files .tbtn{font-size:.72rem;padding:3px 8px}
+  .post-files .tbtn-off{opacity:.4;pointer-events:none}
+</style>
 {% elif post_id %}
-<div class="post-banner"><div class="post-info"><strong>📌 Post #{{ post_id }}</strong><p>Bild wird beim Speichern am Post angehängt.</p></div></div>
+<div class="post-banner"><div class="post-info"><strong>📌 Post #{{ post_id }}</strong><p>Bild wird beim Speichern am Post angehängt.</p></div>
+  <button class="tbtn" data-act="copy-from-post" title="Ein bestehendes Bild von einem anderen Post übernehmen – wird als Kopie an diesen Post gespeichert">📥 Bild von anderem Post</button>
+  <a class="tbtn primary" href="/planner/uebersicht/?focus={{ post_id }}" title="Zurück zur Übersicht – dort den Status dieses Posts setzen (erst speichern nicht vergessen)">← Zur Übersicht &amp; Status</a>
+</div>
 {% elif lib_data %}
 <div class="post-banner">
   <img src="{{ lib_data.image_url }}" alt="">
@@ -39,12 +83,17 @@
 <div class="studio-wrap">
 
   <!-- ============ LINKE SIDEBAR ============ -->
+  <button class="panel-toggle" id="toggle-left" title="Werkzeugleiste ein-/ausklappen">‹</button>
   <aside class="studio-sidebar">
 
     <section class="sidebar-section">
-      <h3>📐 Templates</h3>
+      <h3>🗂 Templates</h3>
       <div class="section-body">
         <div id="tpl-list" class="tpl-grid"><span class="no-templates">Lädt…</span></div>
+        <div class="swatch-row" style="margin-top:4px">
+          <button class="tbtn primary" data-act="new-template" title="Leere Fläche, um eine neue Vorlage zu bauen (Hintergrund, Logo, Textfelder)">➕ Neue Vorlage</button>
+          <button class="tbtn" data-act="save-template" title="Die aktuelle Vorlage speichern (Hintergrund + Logo + Textfelder)">💾 Vorlage speichern</button>
+        </div>
         <a class="manage-link" href="/library/studio/templates/">+ Verwalten</a>
       </div>
     </section>
@@ -57,6 +106,17 @@
           <button class="tbtn" data-act="clear-bg">🚫 BG weg</button>
           <button class="tbtn danger" data-act="clear-all" title="Alles löschen">🧹 Leeren</button>
         </div>
+        <div style="display:flex;gap:4px;align-items:center;margin-bottom:4px">
+          <label style="font-size:.72rem;color:#666;white-space:nowrap">Hintergrundfarbe</label>
+          <input type="color" id="bg-color" class="field-color" value="#FBF8F0" title="Canvas-Hintergrund einfärben">
+          <button class="tbtn" data-act="bg-creme" title="Octotrial-Creme">Creme</button>
+          <button class="tbtn" data-act="bg-weiss" title="Weiß">Weiß</button>
+          <button class="tbtn" data-act="bg-transparent" title="Transparent (Schachbrett)">Transparent</button>
+        </div>
+        <div class="swatch-row" style="margin-bottom:4px">
+          <button class="tbtn" data-act="set-as-bg" title="Das ausgewählte Bild als Hintergrund festlegen – ideal, um daraus eine Vorlage zu bauen">🖼 Bild als Hintergrund</button>
+          <button class="tbtn" data-act="clear-bg" title="Hintergrundbild entfernen">Hintergrundbild entfernen</button>
+        </div>
         <div id="bg-info" style="font-size:.65rem;color:#888"></div>
       </div>
     </section>
@@ -66,11 +126,9 @@
       <div class="section-body">
         <input type="text" id="text-input" class="field" placeholder="Text eingeben…" style="width:100%;margin-bottom:5px">
         <div style="display:flex;gap:4px;align-items:center;margin-bottom:6px">
-          <select id="font-size" class="field" style="width:60px">
-            <option>16</option><option>20</option><option>24</option><option>28</option>
-            <option selected>32</option><option>40</option><option>48</option><option>64</option><option>80</option>
-          </select>
-          <input type="color" id="text-color" class="field-color" value="#ffffff">
+          <input type="number" id="font-size" class="field" value="32" min="6" max="400" step="1"
+                 title="Schriftgröße in Pixel – frei wählbar" style="width:58px">
+          <input type="color" id="text-color" class="field-color" value="#111111">
           <select id="font-weight" class="field" style="width:70px">
             <option value="normal">Normal</option><option value="bold" selected>Fett</option>
           </select>
@@ -80,6 +138,22 @@
           <button class="tbtn" data-act="text-left" title="Linksbündig">⯇</button>
           <button class="tbtn" data-act="text-center" title="Zentriert">≡</button>
           <button class="tbtn" data-act="text-right" title="Rechtsbündig">⯈</button>
+        </div>
+
+        <div class="lib-hint" style="margin-top:8px">Textblock: Überschrift + Fließtext als <b>ein</b> Objekt</div>
+        <input type="text" id="tb-head" class="field" placeholder="Überschrift…" style="width:100%;margin-bottom:4px">
+        <textarea id="tb-body" class="field" placeholder="Beschreibung…" rows="2"
+                  style="width:100%;margin-bottom:5px;resize:vertical;font-family:inherit"></textarea>
+        <div style="display:flex;gap:4px;align-items:center">
+          <label style="font-size:.72rem;color:#666">Breite</label>
+          <input type="number" id="tb-width" class="field" value="260" min="60" step="10" style="width:64px">
+          <label style="font-size:.72rem;color:#666">Größe</label>
+          <input type="number" id="tb-size" class="field" value="19" min="8" step="1" style="width:52px">
+          <button class="tbtn primary" data-act="add-textblock" style="margin-left:auto">+ Textblock</button>
+        </div>
+        <div class="swatch-row" style="margin-top:4px">
+          <button class="tbtn" data-act="add-checktext" title="Octovis-Haken + Text als EIN Objekt. Doppelklick zum Ändern, Text bricht an der Breite um, an der Ecke skalieren.">✓ Haken + Text</button>
+          <button class="tbtn" data-act="add-checklist" title="Drei Zeilen mit Haken als EIN Objekt (Dreihaken). Doppelklick: eine Zeile je Haken.">✓✓✓ Dreihaken</button>
         </div>
       </div>
     </section>
@@ -95,6 +169,14 @@
           <button class="tbtn" data-shape="filledCircle" title="Gef. Kreis">●</button>
           <button class="tbtn" data-shape="rect"        title="Rechteck">▭</button>
           <button class="tbtn" data-shape="filledRect"  title="Gef. Rechteck">■</button>
+          <button class="tbtn" data-shape="hex"         title="Wabe (Umriss)">⬡</button>
+          <button class="tbtn" data-shape="filledHex"   title="Wabe (gefüllt)">⬢</button>
+        </div>
+        <div class="lib-hint">Mit Text – klicken, tippen, Enter. Doppelklick zum Ändern:</div>
+        <div class="swatch-row">
+          <button class="tbtn" data-badge="circle" title="Kreis mit Nummer/Text – Text direkt eintippen, Doppelklick zum Ändern">① Kreis + Text</button>
+          <button class="tbtn" data-badge="hex" title="Wabe mit Nummer/Text – Text direkt eintippen, Doppelklick zum Ändern">⬢ Wabe + Text</button>
+          <button class="tbtn" data-badge="pill" title="Banner-Pille mit Text – Text direkt eintippen, Doppelklick zum Ändern">▭ Banner + Text</button>
         </div>
       </div>
     </section>
@@ -187,10 +269,8 @@
         <button class="tbtn" data-act="undo" title="Rückgängig (Strg+Z)">↶</button>
         <button class="tbtn" data-act="redo" title="Wiederholen (Strg+Y)">↷</button>
       </div>
-      <div class="group" title="Zoom (für kleine Details)">
-        <button class="tbtn" data-act="zoom-out" title="Verkleinern">🔍−</button>
-        <button class="tbtn" data-act="zoom-reset" title="Zoom zurücksetzen">⤢</button>
-        <button class="tbtn" data-act="zoom-in" title="Vergrößern">🔍+</button>
+      <div class="group">
+        <a class="tbtn" href="{{ back_url }}" title="Zurück zur Seite, von der du gekommen bist (erst speichern nicht vergessen)">← Zurück</a>
       </div>
       <span id="status-msg"></span>
     </div>
@@ -200,6 +280,7 @@
   </main>
 
   <!-- ============ RECHTE SIDEBAR: BIBLIOTHEK ============ -->
+  <button class="panel-toggle" id="toggle-right" title="Bibliothek ein-/ausklappen">›</button>
   <aside class="studio-right">
     <!-- Upload nach Studio_Work/Upload -->
     <section class="sidebar-section">
@@ -207,6 +288,12 @@
       <div class="section-body">
         <button class="tbtn primary" id="upload-btn" style="width:100%">📤 Bild hochladen</button>
         <input type="file" id="upload-input" accept="image/*" multiple style="display:none">
+        <button class="tbtn" id="svg-import-btn" style="width:100%;margin-top:6px" title="SVG-Datei zerlegt einfügen: Bänder, Formen, Icons werden einzelne Objekte">📐 SVG importieren</button>
+        <label style="display:flex;align-items:center;gap:4px;font-size:.72rem;color:#666;margin-top:3px">
+          <input type="checkbox" id="svg-as-group"> als 1 Objekt einfügen
+        </label>
+        <input type="file" id="svg-file-input" accept=".svg,image/svg+xml" hidden>
+        <div class="lib-hint" style="margin-top:4px">SVGs aus Assets/Ausgaben öffnen sich per Klick automatisch zerlegt.</div>
         <div id="upload-status" style="font-size:.7rem;color:#888;margin:4px 0"></div>
         <div id="upload-grid" class="lib-grid"><span class="no-templates">Lädt…</span></div>
       </div>
@@ -244,6 +331,24 @@
 <!-- Fabric.js (Editor-Engine) – lokal ausgeliefert, kein CDN nötig -->
 <script src="{% static 'media_library/studio/vendor/fabric.min.js' %}"></script>
 <!-- Studio-Module -->
+{# Nur studio.js bekam bisher einen Versions-Stempel. Die davon importierten   #}
+{# Module (library.js usw.) holte der Browser aus dem Cache – dann passten     #}
+{# neue und alte Dateien nicht zusammen. Die Import-Map stempelt alle mit.     #}
+<script type="importmap">
+{
+  "imports": {
+    "{% static 'media_library/studio/background.js' %}": "{% static 'media_library/studio/background.js' %}?v={% now 'U' %}",
+    "{% static 'media_library/studio/config.js' %}":     "{% static 'media_library/studio/config.js' %}?v={% now 'U' %}",
+    "{% static 'media_library/studio/cutout.js' %}":     "{% static 'media_library/studio/cutout.js' %}?v={% now 'U' %}",
+    "{% static 'media_library/studio/editor.js' %}":     "{% static 'media_library/studio/editor.js' %}?v={% now 'U' %}",
+    "{% static 'media_library/studio/io.js' %}":         "{% static 'media_library/studio/io.js' %}?v={% now 'U' %}",
+    "{% static 'media_library/studio/library.js' %}":    "{% static 'media_library/studio/library.js' %}?v={% now 'U' %}",
+    "{% static 'media_library/studio/media.js' %}":      "{% static 'media_library/studio/media.js' %}?v={% now 'U' %}",
+    "{% static 'media_library/studio/retouch.js' %}":    "{% static 'media_library/studio/retouch.js' %}?v={% now 'U' %}",
+    "{% static 'media_library/studio/util.js' %}":       "{% static 'media_library/studio/util.js' %}?v={% now 'U' %}"
+  }
+}
+</script>
 <script type="module" src="{% static 'media_library/studio/studio.js' %}?v={% now 'U' %}"></script>
 
 {% endblock %}

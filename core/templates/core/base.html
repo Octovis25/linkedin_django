@@ -84,6 +84,7 @@
     <div class="user-section">
       {% if user.is_authenticated %}
         {% if user.is_superuser %}<a href="/planner/api-connect/">API Connect</a>{% endif %}
+        {% if user.is_superuser %}<a href="https://dashboard.render.com/" target="_blank" rel="noopener" title="Render-Dashboard in neuem Tab öffnen">Render ↗</a>{% endif %}
         {% if user.is_staff %}<a href="/users/">User-Verwaltung</a>{% endif %}
         <span class="user-info">{{ user.get_full_name|default:user.username }}</span>
         <a href="/change-password/">Passwort aendern</a>
@@ -115,6 +116,7 @@
   {% if '/planner/' in request.path %}
   <div class="sub-nav">
     <a href="/planner/" {% if request.path == '/planner/' %}class="active"{% endif %}>Planner</a>
+    <a href="/planner/uebersicht/" {% if '/uebersicht/' in request.path %}class="active"{% endif %}>📋 Overview</a>
     <a href="/planner/draft/" {% if '/draft/' in request.path %}class="active"{% endif %}>Draft</a>
     <a href="/planner/pipeline/" {% if '/pipeline/' in request.path %}class="active"{% endif %}>In Progress</a>
     <a href="/planner/ready/" {% if '/ready/' in request.path %}class="active"{% endif %}>Ready</a>

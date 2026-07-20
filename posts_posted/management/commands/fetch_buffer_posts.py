@@ -141,3 +141,13 @@ class Command(BaseCommand):
         self.stdout.write(self.style.SUCCESS(
             f"Buffer-Posts gespeichert: {written} Posts in buffer_posts_posted."
         ))
+
+        # Gesendete Buffer-Posts -> zugehoerige Scheduled-Posts auf 'Posted' setzen.
+        try:
+            from posts_posted.views import promote_scheduled_to_posted
+            promoted = promote_scheduled_to_posted()
+            self.stdout.write(self.style.SUCCESS(
+                f"Scheduled -> Posted: {promoted} Posts umgestellt."
+            ))
+        except Exception as e:
+            self.stdout.write(self.style.WARNING(f"Status-Abgleich uebersprungen: {e}"))
