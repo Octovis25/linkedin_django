@@ -101,6 +101,15 @@ export async function setBackgroundImage(editor, url, mode = 'cover') {
   updateBgInfo(editor);
 }
 
+// Ganze Fläche mit einer Farbe füllen. Ein (reines) Hintergrundbild wird
+// entfernt, damit die Farbe sichtbar wird. Logo/Text/Formen liegen darüber
+// und bleiben erhalten.
+export function setBackgroundColor(editor, hex) {
+  editor.canvas.setBackgroundImage(null, editor.canvas.renderAll.bind(editor.canvas));
+  editor.canvas.setBackgroundColor(hex, editor.canvas.renderAll.bind(editor.canvas));
+  editor.snapshot();
+}
+
 export function clearBackground(editor) {
   editor.canvas.setBackgroundImage(null, editor.canvas.renderAll.bind(editor.canvas));
   editor.canvas.setBackgroundColor('#1a1a2e', editor.canvas.renderAll.bind(editor.canvas));

@@ -161,6 +161,12 @@ bg.renderPalette(document.getElementById('palette-row'), col => {
   else if (o && o.shapeKind) { o.set(o.fill ? 'fill' : 'stroke', col); editor.canvas.requestRenderAll(); editor.snapshot(); }
 });
 
+// Hintergrundfarbe: Farbwähler live anwenden.
+{
+  const bgc = document.getElementById('bg-color');
+  if (bgc) bgc.oninput = () => bg.setBackgroundColor(editor, bgc.value);
+}
+
 // Eigenes Textfarben-Feld: überschreibt die Palette für Text/Badge-Beschriftung
 {
   const tc = document.getElementById('text-color');
@@ -380,6 +386,13 @@ const actions = {
   'restore-post': () => { if (CONFIG.postData?.canvas_json) io.restoreCanvas(editor, CONFIG.postData.canvas_json); },
   'post-bg':      () => CONFIG.postData?.id && bg.setBackgroundImage(editor, `/library/studio/api/post-image/${CONFIG.postData.id}/`),
   'post-overlay': () => CONFIG.postData?.id && editor.addImageUrl(`/library/studio/api/post-image/${CONFIG.postData.id}/`),
+  'bg-color-apply': () => {
+    // Zuletzt in der Palette gewählte Farbe (z. B. ein Video-Teal) als Hintergrund.
+    const c = currentShapeColor || document.getElementById('bg-color')?.value || '#008591';
+    const bgc = document.getElementById('bg-color'); if (bgc) bgc.value = c;
+    bg.setBackgroundColor(editor, c);
+    status('Hintergrundfarbe gesetzt.', '#198754');
+  },
   'go-back': (btn) => {
     // Studio läuft in neuem Tab → schließen bringt exakt zurück; sonst zur Herkunftsseite.
     const url = (btn && btn.getAttribute('data-back')) || '/planner/uebersicht/';
