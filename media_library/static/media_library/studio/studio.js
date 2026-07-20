@@ -169,6 +169,8 @@ bg.renderPalette(document.getElementById('palette-row'), col => {
     const o = editor.active();
     if (o && o.type === 'textbox') { o.set('fill', tc.value); editor.canvas.requestRenderAll(); editor.snapshot(); }
     else if (isBadge(o)) { o._objects[1].set('fill', tc.value); editor.canvas.requestRenderAll(); editor.snapshot(); }
+    else if (isTextblock(o)) { rebuildTextblock(o, o.tbHead || '', o.tbBody || '', { color: tc.value }); }
+    else if (isChecklist(o)) { rebuildChecklist(o, o.clItems || [], { color: tc.value }); }
   };
 }
 
@@ -892,7 +894,7 @@ function buildTextblock(head, body, opts) {
     left: editor.width / 2, top: editor.height / 2,
     originX: 'center', originY: 'center',
     shapeKind: 'textblock', tbWidth: w, tbSize: size, tbAlign: align,
-    tbHead: head, tbBody: body, tbCheck: check,
+    tbHead: head, tbBody: body, tbCheck: check, tbColor: col,
   });
   return g;
 }
@@ -919,7 +921,8 @@ function isTextblock(o) { return !!(o && o.shapeKind === 'textblock'); }
 
 function rebuildTextblock(g, head, body, over = {}) {
   const c = g.getCenterPoint();
-  const col = g._objects?.[0]?.fill || '#111111';
+  const firstText = (g._objects || []).find(x => x.type === 'textbox');
+  const col = over.color || g.tbColor || (firstText && firstText.fill) || '#111111';
   const ng = buildTextblock(head, body, {
     width: over.width || g.tbWidth || 260,
     size:  over.size  || g.tbSize  || 19,
@@ -1034,7 +1037,7 @@ function rebuildChecklist(g, items, over = {}) {
   const ng = buildCheckList(items, {
     width: over.width || g.clWidth || 300,
     size:  over.size  || g.clSize  || 22,
-    color: g.clColor || '#161616',
+    color: over.color || g.clColor || '#161616',
   });
   if (!ng) return null;
   ng.set({ left: c.x, top: c.y, angle: g.angle, scaleX: g.scaleX, scaleY: g.scaleY, anim: g.anim, fx: g.fx });
