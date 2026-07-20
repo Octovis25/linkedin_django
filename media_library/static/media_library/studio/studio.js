@@ -224,7 +224,10 @@ const actions = {
     else if (kind === 'video') await media.exportVideo(editor);
     else { await io.saveImage(editor); refreshOutput(); }
   },
-  download:    () => io.downloadImage(editor),
+  download:    async () => {
+    if (media.hasAnimations(editor)) await media.downloadGif(editor);   // animiert → GIF
+    else io.downloadImage(editor);                                       // sonst → PNG
+  },
   'new':       async () => {
     const ok = await modal('Neu anfangen?', 'Leert den Editor (alle Elemente + Hintergrund). Nicht Gespeichertes geht verloren.', [
       { label: '🆕 Ja, neuer Editor', value: true },

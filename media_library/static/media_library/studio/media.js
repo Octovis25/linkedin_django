@@ -251,8 +251,17 @@ function animDuration(editor) {
   const el = document.getElementById('video-length');
   const secs = el ? parseFloat(el.value) : 0;
   if (secs && secs > 0) return Math.min(secs, 30) * 1000;
-  let max = 1500;
-  editor.canvas.getObjects().forEach(o => { if (o.anim) max = Math.max(max, (o.anim.delay || 0) + (o.anim.dur || 1200) + 300); });
+  const LOOPS = new Set(['pulse', 'float', 'spin', 'flash', 'wobble', 'shake']);
+  let max = 1500, hasLoop = false;
+  editor.canvas.getObjects().forEach(o => {
+    if (o.anim) {
+      max = Math.max(max, (o.anim.delay || 0) + (o.anim.dur || 1200) + 300);
+      if (LOOPS.has(o.anim.type)) hasLoop = true;
+    }
+    if (o.fx && o.fx !== 'none') hasLoop = true;
+  });
+  // Schleifen-Bewegungen/Effekte: mind. 4 s, sonst nur ein kurzer Hopser.
+  if (hasLoop) max = Math.max(max, 4000);
   return Math.min(max, 8000);
 }
 
@@ -302,7 +311,7 @@ function loadGifLib() {
   return _gifLibPromise;
 }
 
-export async function exportGif(editor) {
+export async function exportGif(editor, onBlob) {
   if (!hasAnimations(editor)) { toast('Keine Animationen – nichts zu exportieren', 'err'); return; }
   status('🎞 GIF wird erzeugt…');
   try {
@@ -332,6 +341,7 @@ export async function exportGif(editor) {
     if (editor.gridOn) editor.setGridVisible(true);
 
     gif.on('finished', async blob => {
+      if (typeof onBlob === 'function') { onBlob(blob); status('Bereit.'); return; }
       // Kein Auto-Download – nur in „Meine Ausgaben" speichern.
       status('💾 GIF wird gespeichert…');
       await saveAnimation(editor, blob, '.gif');
@@ -341,4 +351,16 @@ export async function exportGif(editor) {
     status('❌ GIF-Fehler', 'red');
     toast('GIF-Bibliothek konnte nicht geladen werden', 'err');
   }
+}
+
+// GIF erzeugen und direkt auf den Rechner herunterladen (statt in „Meine Ausgaben").
+export async function downloadGif(editor) {
+  await exportGif(editor, blob => {
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = (document.getElementById('title-input')?.value.trim() || 'studio') + '.gif';
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+    toast('GIF heruntergeladen', 'ok');
+  });
 }
