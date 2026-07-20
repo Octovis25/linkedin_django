@@ -55,6 +55,24 @@ export function renderPalette(container, onPick) {
     picker.click();
   };
   container.appendChild(add);
+
+  // Hellere Teal-Töne speziell für Video/GIF (gleichen die Verdunklung beim
+  // Export aus). Als eigene, markierte Gruppe „🎬 Video".
+  const vlabel = document.createElement('span');
+  vlabel.textContent = '🎬 Video-Teal:';
+  vlabel.title = 'Hellere Teal-Töne für Video/GIF – gleichen die Verdunklung beim Export aus.';
+  vlabel.style.cssText = 'flex-basis:100%;font-size:.66rem;color:#008591;margin:6px 0 2px';
+  container.appendChild(vlabel);
+  ['#0A97A3', '#12A7B4', '#1FB2C0'].forEach(col => {
+    const sw = document.createElement('div');
+    sw.className = 'swatch';
+    sw.style.background = col;
+    sw.style.outline = '2px dotted #12A7B4';
+    sw.style.outlineOffset = '1px';
+    sw.title = 'Video-Teal ' + col + ' – heller, für Video/GIF (gleicht die Verdunklung aus)';
+    sw.onclick = () => onPick(col);
+    container.appendChild(sw);
+  });
 }
 
 // ---- Hintergrund setzen ---------------------------------------------------
