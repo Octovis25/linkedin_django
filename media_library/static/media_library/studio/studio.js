@@ -1639,10 +1639,26 @@ function renderAnimBar() {
   const head = document.createElement('div'); head.className = 'anim-bar-head';
   const title = document.createElement('span');
   title.className = 'anim-bar-title'; title.textContent = '🎬 Animation je Element';
+
+  // Videolänge – gilt fürs ganze GIF/Video (nicht pro Element).
+  const lenWrap = document.createElement('label');
+  lenWrap.style.cssText = 'display:flex;align-items:center;gap:6px;font-size:.75rem;color:#555;margin-left:auto';
+  lenWrap.appendChild(document.createTextNode('🎬 Videolänge'));
+  const lenInp = document.createElement('input');
+  lenInp.type = 'number'; lenInp.id = 'video-length'; lenInp.min = 0; lenInp.max = 30; lenInp.step = 0.5;
+  lenInp.placeholder = 'auto';
+  lenInp.style.cssText = 'width:58px;padding:3px;border:1px solid #ccc;border-radius:4px';
+  lenInp.title = 'Gesamtlänge von GIF/Video in Sekunden. Leer = automatisch.';
+  if (window._videoLen != null) lenInp.value = window._videoLen;
+  lenInp.oninput = () => { window._videoLen = lenInp.value; };
+  lenWrap.appendChild(lenInp);
+  lenWrap.appendChild(document.createTextNode('Sek.'));
+
   const prevTop = document.createElement('button');
   prevTop.className = 'tbtn primary'; prevTop.textContent = '▶ Vorschau';
+  prevTop.style.marginLeft = '10px';
   prevTop.onclick = () => media.previewAnimation(editor);
-  head.appendChild(title); head.appendChild(prevTop);
+  head.appendChild(title); head.appendChild(lenWrap); head.appendChild(prevTop);
   bar.appendChild(head);
 
   objs.forEach((o, idx) => {
