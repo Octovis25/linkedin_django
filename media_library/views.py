@@ -769,8 +769,12 @@ def studio_view(request):
                     post_data['image_url'] = f"/library/studio/api/post-image/{r[0]}/" if post_data['image'] else ''
                     post_data['gif_url']   = ('/library/studio/nc-image/?p=' + _q(post_data['gif']))   if post_data['gif']   else ''
                     post_data['video_url'] = ('/library/studio/nc-image/?p=' + _q(post_data['video'])) if post_data['video'] else ''
-                # Look up saved canvas_json for this post
-                canvas_rows = _safe(c, "SELECT canvas_json, template_id FROM studio_images WHERE post_id=%s ORDER BY created_at DESC LIMIT 1", [post_id])
+                # Look up saved canvas_json for this post – die NEUESTE mit echtem
+                # Inhalt (nicht eine evtl. leere Zeile), sonst käme nur der Hintergrund.
+                canvas_rows = _safe(c, """SELECT canvas_json, template_id FROM studio_images
+                                          WHERE post_id=%s AND canvas_json IS NOT NULL AND canvas_json <> ''
+                                          ORDER BY id DESC LIMIT 1""", [post_id]) \
+                    or _safe(c, "SELECT canvas_json, template_id FROM studio_images WHERE post_id=%s ORDER BY created_at DESC LIMIT 1", [post_id])
                 if canvas_rows and canvas_rows[0][0] and post_data:
                     post_data['canvas_json'] = canvas_rows[0][0]
                     post_data['template_id'] = canvas_rows[0][1]
