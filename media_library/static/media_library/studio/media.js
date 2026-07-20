@@ -69,20 +69,20 @@ function _drawEffects(ctx, editor) {
         ctx.beginPath(); ctx.arc(Math.cos(a) * rx, Math.sin(a) * ry, 4 * z, 0, Math.PI * 2); ctx.fill();
       }
     } else if (o.fx === 'network') {
-      const N = 11, pts = [];
+      const N = 14, pts = [];
       for (let i = 0; i < N; i++) {
-        pts.push([L + _h(i + 1) * W + Math.sin(t / 900 + i) * 8 * z,
-                  T + _h(i * 5 + 2) * H + Math.cos(t / 1100 + i) * 8 * z]);
+        pts.push([L + _h(i + 1) * W + Math.sin(t / 900 + i) * 9 * z,
+                  T + _h(i * 5 + 2) * H + Math.cos(t / 1100 + i) * 9 * z]);
       }
-      const maxd = Math.max(W, H) * 0.5;
-      ctx.lineWidth = 2 * z; ctx.strokeStyle = '#22d3ee';
+      const maxd = Math.max(W, H) * 0.55;
+      ctx.lineWidth = 3 * z; ctx.strokeStyle = '#22d3ee';
       for (let i = 0; i < N; i++) for (let j = i + 1; j < N; j++) {
         const d = Math.hypot(pts[i][0] - pts[j][0], pts[i][1] - pts[j][1]);
-        if (d < maxd) { ctx.globalAlpha = 0.65 * (1 - d / maxd); ctx.beginPath(); ctx.moveTo(pts[i][0], pts[i][1]); ctx.lineTo(pts[j][0], pts[j][1]); ctx.stroke(); }
+        if (d < maxd) { ctx.globalAlpha = Math.min(1, 0.9 * (1 - d / maxd) + 0.15); ctx.beginPath(); ctx.moveTo(pts[i][0], pts[i][1]); ctx.lineTo(pts[j][0], pts[j][1]); ctx.stroke(); }
       }
       ctx.globalAlpha = 1; ctx.fillStyle = '#22d3ee';
-      ctx.shadowColor = '#22d3ee'; ctx.shadowBlur = 8 * z;
-      pts.forEach(p => { ctx.beginPath(); ctx.arc(p[0], p[1], 4.5 * z, 0, Math.PI * 2); ctx.fill(); });
+      ctx.shadowColor = '#22d3ee'; ctx.shadowBlur = 14 * z;
+      pts.forEach(p => { ctx.beginPath(); ctx.arc(p[0], p[1], 6 * z, 0, Math.PI * 2); ctx.fill(); });
       ctx.shadowBlur = 0;
     } else if (o.fx === 'scan') {
       ctx.globalAlpha = 0.12; ctx.strokeStyle = '#22d3ee'; ctx.lineWidth = 1;
