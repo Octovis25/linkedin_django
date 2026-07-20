@@ -330,12 +330,18 @@ export async function exportGif(editor, onBlob) {
   try {
     await loadGifLib();
     const total = animDuration(editor);
-    const fps = 15, frameMs = 1000 / fps;
+    const fps = 12, frameMs = 1000 / fps;
+    // GIFs klein halten (Cloudinary/LinkedIn ~10 MB): max 800 px Kante + etwas
+    // stärkere Kompression. Video (WebM) bleibt für große/lange Clips die bessere Wahl.
+    const scale = Math.min(1, 800 / Math.max(editor.width, editor.height));
+    const gw = Math.round(editor.width * scale), gh = Math.round(editor.height * scale);
     const gif = new window.GIF({
-      workers: 2, quality: 10,
-      width: editor.width, height: editor.height,
+      workers: 2, quality: 15,
+      width: gw, height: gh,
       workerScript: VENDOR + 'gif.worker.js',
     });
+    const _tmp = document.createElement('canvas'); _tmp.width = gw; _tmp.height = gh;
+    const _tctx = _tmp.getContext('2d');
 
     editor.canvas.discardActiveObject();
     editor.setGridVisible(false);   // Raster nicht mit aufnehmen
@@ -346,7 +352,9 @@ export async function exportGif(editor, onBlob) {
       _fxTime = t;
       editor.canvas.getObjects().forEach(o => applyAt(o, t));
       editor.canvas.renderAll();
-      gif.addFrame(editor.canvas.lowerCanvasEl, { copy: true, delay: frameMs });
+      _tctx.clearRect(0, 0, gw, gh);
+      _tctx.drawImage(editor.canvas.lowerCanvasEl, 0, 0, gw, gh);
+      gif.addFrame(_tmp, { copy: true, delay: frameMs });
     }
     _fxOn = false;
     resetAnim(editor);
