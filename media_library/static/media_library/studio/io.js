@@ -11,7 +11,7 @@ function _klassOk(type) {
   return !!(fabric && fabric[name] && typeof fabric[name].fromObject === 'function');
 }
 
-const FABRIC_PROPS = ['srcUrl', 'originalUrl', 'bgRemoved', 'anim', 'shapeKind', 'fx', 'svgPart',
+const FABRIC_PROPS = ['srcUrl', 'originalUrl', 'bgRemoved', 'edited', 'anim', 'shapeKind', 'fx', 'svgPart',
                       'tbHead', 'tbBody', 'tbWidth', 'tbSize', 'tbAlign'];
 
 // Baut das canvas_json. Enthält:
@@ -169,12 +169,13 @@ export function restoreCanvas(editor, canvasJsonStr) {
     }
   });
   // Bildquellen auf Proxy umschreiben + crossOrigin erzwingen.
-  // WICHTIG: Freigestellte/bearbeitete Bilder tragen ihren transparenten Stand
-  // direkt in src (data:/nc://) – die dürfen NICHT durch das Original (srcUrl)
-  // ersetzt werden, sonst ist die Transparenz nach dem Öffnen weg.
+  // WICHTIG: Freigestellte (bgRemoved) UND pixelbearbeitete (edited, z.B. Logo
+  // umgefärbt) Bilder tragen ihren fertigen Stand direkt in src (data:/nc://) –
+  // die dürfen NICHT durch das Original (srcUrl) ersetzt werden, sonst sind
+  // Transparenz bzw. Umfärbung nach dem Öffnen weg.
   fabricState.objects.forEach(o => {
     if (o.type === 'image' && o.src) {
-      o.src = o.bgRemoved ? proxyUrl(o.src) : proxyUrl(o.srcUrl || o.src);
+      o.src = (o.bgRemoved || o.edited) ? proxyUrl(o.src) : proxyUrl(o.srcUrl || o.src);
       o.crossOrigin = 'anonymous';
     }
   });

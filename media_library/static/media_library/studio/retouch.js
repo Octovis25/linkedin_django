@@ -59,6 +59,9 @@ export function replaceElement(obj, imgEl) {
   obj.setElement(imgEl);
   obj.objectCaching = false;   // kein Cache → kein Verschwimmen von Alt/Neu
   obj.dirty = true;
+  // Pixel wurden verändert (Umfärben/Pinsel/Radierer). Der fertige Stand liegt
+  // jetzt in src – beim Speichern/Laden NICHT durch das Original ersetzen.
+  obj.edited = true;
   if (obj.canvas) obj.canvas.requestRenderAll();
 }
 

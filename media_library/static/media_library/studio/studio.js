@@ -440,6 +440,22 @@ async function saveAsTemplate() {
   const title = window.prompt(updateExisting ? 'Name der Vorlage (wird aktualisiert):'
                                              : 'Name der neuen Vorlage:', vorschlag);
   if (title === null) return;                 // abgebrochen
+  // Doppelte Namen vermeiden (nur beim Neuanlegen).
+  if (!updateExisting) {
+    try {
+      const r = await fetch(CONFIG.urls?.apiTemplates || '/library/studio/api/templates/');
+      const dj = await r.json();
+      const clash = (dj.templates || []).some(
+        t => (t.title || '').trim().toLowerCase() === title.trim().toLowerCase());
+      if (clash) {
+        const go = await modal('Name schon vergeben',
+          `Es gibt bereits eine Vorlage „${title.trim()}". Möchtest du trotzdem eine zweite mit demselben Namen anlegen?`,
+          [ { label: 'Abbrechen (anderen Namen wählen)', value: null },
+            { label: 'Trotzdem anlegen',                 value: true } ]);
+        if (!go) return;
+      }
+    } catch (e) { /* Prüfung ist nur Komfort – bei Fehler normal weiter */ }
+  }
   let dataUrl, canvasJson;
   try {
     const preview = editor.exportDataURL({ multiplier: 0.4 });
