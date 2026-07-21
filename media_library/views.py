@@ -416,8 +416,17 @@ NC_APP_ROOTS = (
 
 
 def _within_app_folders(nc_path):
-    """True, wenn der Pfad zu einem App-eigenen Ordner gehört (löschbar)."""
-    return bool(nc_path) and '..' not in nc_path and any(nc_path.startswith(r) for r in NC_APP_ROOTS)
+    """True, wenn der Pfad zu einem App-eigenen Ordner gehört (löschbar).
+
+    Traversal segmentweise prüfen: nur ein eigenständiger Pfadteil ".." ist
+    verboten. Ein Dateiname wie "foo..png" (doppelter Punkt) ist harmlos und
+    darf NICHT als Traversal missverstanden werden.
+    """
+    if not nc_path:
+        return False
+    if any(seg == '..' for seg in nc_path.split('/')):
+        return False
+    return any(nc_path.startswith(r) for r in NC_APP_ROOTS)
 
 
 def _post_media_to_cleanup(post_id):
@@ -2229,9 +2238,10 @@ def studio_upload_delete(request):
     if request.method != 'POST':
         return JsonResponse({'error': 'POST required'}, status=405)
     nc_path = (request.POST.get('nc_path') or '').strip()
-    if not nc_path or not nc_path.startswith(NC_STUDIO_UPLOAD_FOLDER + '/'):
-        return JsonResponse({'error': 'Ungueltiger Pfad'}, status=400)
-    if '..' in nc_path:
+    # Traversal segmentweise pruefen (kein Pfadteil ".."); doppelte Punkte im
+    # Dateinamen sind erlaubt. Zusaetzlich auf den Upload-Ordner beschraenken.
+    if any(seg == '..' for seg in nc_path.split('/')) \
+            or not nc_path.startswith(NC_STUDIO_UPLOAD_FOLDER + '/'):
         return JsonResponse({'error': 'Ungueltiger Pfad'}, status=400)
     _nc_delete(nc_path)
     return JsonResponse({'ok': True})
@@ -2248,7 +2258,6 @@ def studio_output_delete(request):
     # Whitelist-Vergleich nicht an Formalitaeten scheitert.
     nc_path = unquote((request.POST.get('nc_path') or '').strip()).lstrip('/')
     if not _within_app_folders(nc_path):
-        print(f"[OUTPUT-DELETE] ABGELEHNT nc_path={nc_path!r} roots={NC_APP_ROOTS}")
         return JsonResponse({'ok': False, 'error': f'Ungueltiger Pfad: {nc_path}'}, status=400)
     _nc_delete(nc_path)
     # zugehörige Vorschau-Datei ebenfalls entfernen (best effort)
