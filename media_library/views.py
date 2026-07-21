@@ -2229,7 +2229,11 @@ def studio_output_delete(request):
     if request.method != 'POST':
         return JsonResponse({'error': 'POST required'}, status=405)
     nc_path = (request.POST.get('nc_path') or '').strip()
-    allowed = (NC_STUDIO_LIBRARY_FOLDER, NC_STUDIO_GIFS_FOLDER, NC_STUDIO_VIDEOS_FOLDER)
+    allowed = (NC_STUDIO_LIBRARY_FOLDER, NC_STUDIO_GIFS_FOLDER, NC_STUDIO_VIDEOS_FOLDER,
+               # An einen Post verschobene Ausgaben liegen im Planner-Ordner – auch die
+               # müssen sich hier löschen lassen.
+               "Marketing & Design/LinkedIn/Planner/Images",
+               "Marketing & Design/LinkedIn/Planner/Videos")
     if not nc_path or '..' in nc_path or not any(nc_path.startswith(f + '/') for f in allowed):
         return JsonResponse({'error': 'Ungueltiger Pfad'}, status=400)
     _nc_delete(nc_path)
