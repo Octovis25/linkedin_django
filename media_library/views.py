@@ -2243,8 +2243,12 @@ def studio_output_delete(request):
     inklusive Vorschau und DB-Einträgen. Nur innerhalb der Output-Ordner erlaubt."""
     if request.method != 'POST':
         return JsonResponse({'error': 'POST required'}, status=405)
-    nc_path = (request.POST.get('nc_path') or '').strip()
+    from urllib.parse import unquote
+    # Pfad normalisieren: fuehrende Slashes und URL-Kodierung tolerieren, damit der
+    # Whitelist-Vergleich nicht an Formalitaeten scheitert.
+    nc_path = unquote((request.POST.get('nc_path') or '').strip()).lstrip('/')
     if not _within_app_folders(nc_path):
+        print(f"[OUTPUT-DELETE] ABGELEHNT nc_path={nc_path!r} roots={NC_APP_ROOTS}")
         return JsonResponse({'ok': False, 'error': f'Ungueltiger Pfad: {nc_path}'}, status=400)
     _nc_delete(nc_path)
     # zugehörige Vorschau-Datei ebenfalls entfernen (best effort)
