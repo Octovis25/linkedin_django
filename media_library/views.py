@@ -2235,7 +2235,6 @@ def studio_output_delete(request):
         "Marketing & Design/LinkedIn/Planner/",
         "__local__/",
     )
-    print(f"[STUDIO-DELETE] nc_path={nc_path!r}")
     if not nc_path or '..' in nc_path or not any(nc_path.startswith(r) for r in allowed_roots):
         return JsonResponse({'ok': False, 'error': f'Ungueltiger Pfad: {nc_path}'}, status=400)
     _nc_delete(nc_path)

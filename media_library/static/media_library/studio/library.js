@@ -367,7 +367,7 @@ async function loadOutput() {
           if (dd.ok) {
             tile.remove();
             if (!grid.querySelector('.lib-tile')) grid.innerHTML = '<span class="no-templates">Nichts gespeichert.</span>';
-          } else { toast('Löschen fehlgeschlagen', 'err'); del.disabled = false; }
+          } else { toast(dd.error || 'Löschen fehlgeschlagen', 'err'); del.disabled = false; }
         } catch (err) { toast('Fehler beim Löschen', 'err'); del.disabled = false; }
       };
       tile.appendChild(del);
