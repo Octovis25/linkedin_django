@@ -406,11 +406,12 @@ NC_STUDIO_GIFS_FOLDER      = "Marketing & Design/Octotrial_Assets/Studio_Work/Ou
 
 # Zentrale Definition der App-eigenen Speicher-Wurzeln. Nur innerhalb dieser darf
 # gelöscht werden (Schutz vor Pfad-Traversal / Fremdlöschung). Eine Quelle der
-# Wahrheit statt verstreuter Ordner-Listen in einzelnen Views.
+# Wahrheit statt verstreuter Ordner-Listen in einzelnen Views. „Marketing & Design"
+# ist der Marken-Ordner, unter dem ALLE App-Medien liegen (Octotrial_Assets,
+# LinkedIn/Planner, Bilder_Bibliothek …).
 NC_APP_ROOTS = (
-    "Marketing & Design/Octotrial_Assets/",   # Studio_Work (Upload/Output), Studio_Elemente, Assets
-    "Marketing & Design/LinkedIn/",           # Planner-Medien, Studio-Templates
-    "__local__/",                              # lokaler Fallback (kein Nextcloud)
+    "Marketing & Design/",   # gesamter Marken-Ordner (alle App-Medien)
+    "__local__/",            # lokaler Fallback (kein Nextcloud)
 )
 
 
