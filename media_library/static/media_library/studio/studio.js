@@ -414,7 +414,7 @@ const actions = {
     ]);
     if (!ok) return;
     editor.clearAll();
-    _editingTemplateId = null;   // frische Vorlage → beim Speichern neu anlegen
+    setTemplateId(null);   // frische Vorlage → beim Speichern neu anlegen
     const t = document.getElementById('title-input'); if (t) t.value = '';
     status('Vorlage bauen: Hintergrund, Logo, Textfelder – dann „💾 Vorlage speichern".', '#888');
   },
@@ -422,8 +422,23 @@ const actions = {
 
 // Aktuelle Leinwand als wiederverwendbare Vorlage speichern.
 async function saveAsTemplate() {
-  const vorschlag = (document.getElementById('title-input')?.value || '').trim() || 'Neue Vorlage';
-  const title = window.prompt('Name der Vorlage:', vorschlag);
+  // Eine Quelle der Wahrheit für die aktuell geladene Vorlage – egal ob sie über
+  // die Verwaltung (?template=…) oder per Klick auf eine Kachel geöffnet wurde.
+  const boundId = currentTemplateId();
+  let updateExisting = false;
+  if (boundId) {
+    const choice = await modal('Vorlage speichern',
+      'Du hast eine bestehende Vorlage geöffnet. Diese Vorlage aktualisieren – oder als neue Vorlage speichern?',
+      [ { label: '💾 Diese Vorlage aktualisieren', value: 'update' },
+        { label: '➕ Als neue Vorlage speichern',   value: 'new' },
+        { label: 'Abbrechen',                       value: null } ]);
+    if (!choice) return;
+    updateExisting = (choice === 'update');
+  }
+  const vorschlag = (document.getElementById('title-input')?.value || '').trim()
+                    || CONFIG.tplData?.title || 'Neue Vorlage';
+  const title = window.prompt(updateExisting ? 'Name der Vorlage (wird aktualisiert):'
+                                             : 'Name der neuen Vorlage:', vorschlag);
   if (title === null) return;                 // abgebrochen
   let dataUrl, canvasJson;
   try {
@@ -438,11 +453,11 @@ async function saveAsTemplate() {
       headers: { 'Content-Type': 'application/json', 'X-CSRFToken': _cookie('csrftoken') },
       body: JSON.stringify({ dataUrl, canvasJson, title: title.trim(),
                              width: editor.width, height: editor.height,
-                             tplId: _editingTemplateId || undefined }),
+                             tplId: updateExisting ? boundId : undefined }),
     });
     const d = await res.json();
     if (d.ok) {
-      _editingTemplateId = d.id;   // ab jetzt weiter dieselbe Vorlage aktualisieren
+      setTemplateId(d.id);   // ab jetzt weiter dieselbe Vorlage aktualisieren
       toast(d.updated ? 'Vorlage aktualisiert' : 'Vorlage gespeichert', 'ok');
       status(d.updated ? '✅ Vorlage aktualisiert.' : '✅ Als Vorlage gespeichert.', '#198754');
       bg.loadTemplateList(editor);
@@ -1872,8 +1887,12 @@ initLibrary(editor);
 renderSelBar();
 updateRetouchPanel();
 
-// Vorlage zum Bearbeiten geöffnet? Merken, damit „Vorlage speichern" sie AKTUALISIERT.
-let _editingTemplateId = CONFIG.tplData?.id || null;
+// Aktuell geladene Vorlage – EINE Quelle der Wahrheit auf dem Editor-Objekt,
+// egal ob über die Verwaltung (?template=…) oder per Kachel-Klick (applyTemplate)
+// geöffnet. „Vorlage speichern" fragt dann, ob aktualisiert oder neu angelegt wird.
+function currentTemplateId() { return editor._templateId || null; }
+function setTemplateId(id)   { editor._templateId = id || null; }
+if (CONFIG.tplData?.id) setTemplateId(CONFIG.tplData.id);
 
 // Titel vorausfüllen (beim Weiterbearbeiten bleibt der Name erhalten).
 {
