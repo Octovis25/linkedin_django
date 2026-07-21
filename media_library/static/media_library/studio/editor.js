@@ -372,10 +372,20 @@ export class Editor {
     this.canvas.discardActiveObject();
     // Zoom/Verschiebung fürs Bild neutralisieren, sonst wird der sichtbare
     // (verschobene) Ausschnitt exportiert statt der ganzen Arbeitsfläche.
-    const vpt = this.canvas.viewportTransform ? this.canvas.viewportTransform.slice() : null;
+    // WICHTIG: Die Anzeige-Canvas ist zum Einpassen verkleinert
+    // (setDimensions(width*scale) in _applyZoom). Bei Zoom 1 würde toDataURL
+    // sonst nur den kleinen linken oberen Ausschnitt erfassen. Deshalb schalten
+    // wir für den Export auf die volle Design-Auflösung und stellen danach die
+    // Anzeige exakt wieder her.
+    const vpt   = this.canvas.viewportTransform ? this.canvas.viewportTransform.slice() : null;
+    const dispW = this.canvas.getWidth();
+    const dispH = this.canvas.getHeight();
     this.canvas.setViewportTransform([1, 0, 0, 1, 0, 0]);
+    this.canvas.setDimensions({ width: this.width, height: this.height });
     this.canvas.renderAll();
     const url = this.canvas.toDataURL({ format: 'png', multiplier: 1, ...opts });
+    // Anzeige-Zustand (Größe + Zoom/Verschiebung) wiederherstellen
+    this.canvas.setDimensions({ width: dispW, height: dispH });
     if (vpt) this.canvas.setViewportTransform(vpt);
     weg.forEach(l => (l.visible = true));
     this.canvas.requestRenderAll();
