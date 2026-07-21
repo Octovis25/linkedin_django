@@ -404,6 +404,20 @@ NC_STUDIO_LIBRARY_FOLDER   = "Marketing & Design/Octotrial_Assets/Studio_Work/Ou
 NC_STUDIO_VIDEOS_FOLDER    = "Marketing & Design/Octotrial_Assets/Studio_Work/Output/Videos"
 NC_STUDIO_GIFS_FOLDER      = "Marketing & Design/Octotrial_Assets/Studio_Work/Output/GIFs"
 
+# Zentrale Definition der App-eigenen Speicher-Wurzeln. Nur innerhalb dieser darf
+# gelöscht werden (Schutz vor Pfad-Traversal / Fremdlöschung). Eine Quelle der
+# Wahrheit statt verstreuter Ordner-Listen in einzelnen Views.
+NC_APP_ROOTS = (
+    "Marketing & Design/Octotrial_Assets/",   # Studio_Work (Upload/Output), Studio_Elemente, Assets
+    "Marketing & Design/LinkedIn/",           # Planner-Medien, Studio-Templates
+    "__local__/",                              # lokaler Fallback (kein Nextcloud)
+)
+
+
+def _within_app_folders(nc_path):
+    """True, wenn der Pfad zu einem App-eigenen Ordner gehört (löschbar)."""
+    return bool(nc_path) and '..' not in nc_path and any(nc_path.startswith(r) for r in NC_APP_ROOTS)
+
 
 def _post_media_to_cleanup(post_id):
     """Aktuelle Medien-Pfade (Bild/GIF/Video) eines Posts merken – zum späteren
@@ -2229,13 +2243,7 @@ def studio_output_delete(request):
     if request.method != 'POST':
         return JsonResponse({'error': 'POST required'}, status=405)
     nc_path = (request.POST.get('nc_path') or '').strip()
-    # App-eigene Ordner (Studio-Arbeitsbereich, Planner-Medien, lokaler Fallback).
-    allowed_roots = (
-        "Marketing & Design/Octotrial_Assets/Studio_Work/",
-        "Marketing & Design/LinkedIn/Planner/",
-        "__local__/",
-    )
-    if not nc_path or '..' in nc_path or not any(nc_path.startswith(r) for r in allowed_roots):
+    if not _within_app_folders(nc_path):
         return JsonResponse({'ok': False, 'error': f'Ungueltiger Pfad: {nc_path}'}, status=400)
     _nc_delete(nc_path)
     # zugehörige Vorschau-Datei ebenfalls entfernen (best effort)
