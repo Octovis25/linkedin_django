@@ -230,7 +230,21 @@ bg.renderPalette(document.getElementById('palette-row'), col => {
 // Beim Öffnen einer vorhandenen Ausgabe das dort verwendete Format übernehmen.
 let _saveKind = CONFIG.libData?.kind && CONFIG.libData.kind !== 'image'
                 ? CONFIG.libData.kind : null;
+let _speichertGerade = false;
 async function speichereAls(kind) {
+  // Ein zweiter Klick während des Speicherns öffnete einen zweiten
+  // Namensdialog und erzeugte zwei Ausgaben. Der Guard in io.saveImage deckt
+  // nur den Bild-Weg ab, GIF und Video liefen ungebremst.
+  if (_speichertGerade) { toast('Speichert bereits…', 'err'); return; }
+  _speichertGerade = true;
+  try {
+    await _speichereAls(kind);
+  } finally {
+    _speichertGerade = false;
+  }
+}
+
+async function _speichereAls(kind) {
   _saveKind = kind;
   let ok;
   if (kind === 'gif')        ok = await media.exportGif(editor);
@@ -252,7 +266,11 @@ async function speichereAls(kind) {
 
 // ---- Toolbar-Aktionen (data-act) -----------------------------------------
 const actions = {
-  save:        async () => { await io.saveImage(editor); refreshOutput(); },
+  save:        async () => {
+    if (_speichertGerade) { toast('Speichert bereits…', 'err'); return; }
+    _speichertGerade = true;
+    try { await io.saveImage(editor); refreshOutput(); } finally { _speichertGerade = false; }
+  },
   'save-as':   async () => {
     const titleEl = document.getElementById('title-input');
     if (!titleEl || !titleEl.value.trim()) {
@@ -277,6 +295,7 @@ const actions = {
   'save-as-new': async () => { _saveKind = null; await actions['save-as'](); },
   // Vorhandene Ausgabe: nur speichern (gleiches Format, überschreibt).
   'save-existing': async () => {
+    if (_speichertGerade) { toast('Speichert bereits…', 'err'); return; }
     let kind = _saveKind || CONFIG.libData?.kind || 'image';
     // Animationen gesetzt, aber die Datei ist ein PNG? Vorher wurde still ein
     // Standbild gespeichert und die Animationen waren im Ergebnis nicht drin.
@@ -291,9 +310,14 @@ const actions = {
       kind = wahl;
       _saveKind = wahl;
     }
-    if (kind === 'gif') await media.exportGif(editor);
-    else if (kind === 'video') await media.exportVideo(editor);
-    else { await io.saveImage(editor); refreshOutput(); }
+    _speichertGerade = true;
+    try {
+      if (kind === 'gif') await media.exportGif(editor);
+      else if (kind === 'video') await media.exportVideo(editor);
+      else { await io.saveImage(editor); refreshOutput(); }
+    } finally {
+      _speichertGerade = false;
+    }
   },
   download:    async () => {
     // Gleiches Format wie beim Speichern (▾ Format). Noch nichts gewählt:
@@ -314,6 +338,7 @@ const actions = {
     // die alte Datei mit dem neuen, leeren Entwurf überschrieben – und die
     // Warnung eines früheren Ladefehlers wäre weiter erschienen.
     CONFIG.libData = null;
+    io.merkeNamen(null);       // neuer Entwurf → auch der Name wird neu vergeben
     setTemplateId(null);
     editor._ladefehler = false;
     _saveKind = null;

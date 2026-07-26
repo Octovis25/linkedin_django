@@ -4,6 +4,87 @@ import { URLS, POST_ID, CONFIG, getCookie, proxyUrl } from './config.js';
 import { toast, status } from './util.js';
 import { fabric, EXTRA_PROPS } from './editor.js';
 import { beendeVorschauen, vorschauenUebernehmen } from './retouch.js';
+import { vorschlagAusInhalt, vergebeneNamen, eindeutig, entschaerfe, frageNachNamen } from './namen.js';
+
+// Stellt sicher, dass ein eindeutiger Name feststeht, BEVOR gespeichert wird.
+// Der Name ist die Identität des Entwurfs – Bild, GIF und Video desselben
+// Designs teilen ihn sich. Deshalb wird er einmal abgefragt und bleibt dann.
+//
+// Rückgabe: der Name, oder null wenn der Nutzer abgebrochen hat.
+// Merkt sich den Namen für diese Sitzung, auch wenn CONFIG.libData ihn nicht
+// führt. Nötig beim Arbeiten an einem Planner-Post: dort liefert der Server
+// keine libData, sodass jedes Speichern sonst wie ein Erstspeichern aussah –
+// und der Name bei jedem Mal ein _2, _3, _4 … bekam.
+let _festerName = null;
+export function merkeNamen(n) { _festerName = n || null; }
+
+export async function nameSicherstellen(editor) {
+  const feld = document.getElementById('title-input');
+  const eingetippt = (feld?.value || '').trim();
+  // Welcher Name gilt aktuell als „meiner"? Reihenfolge: in dieser Sitzung
+  // vergeben → vom Server geladen → beim Post hinterlegter Titel.
+  const gespeicherterName = (_festerName || CONFIG.libData?.title
+                             || (POST_ID ? CONFIG.postData?.title : '') || '').trim();
+  const schonGespeichert = !!(_festerName || CONFIG.libData?.item_id
+                              || CONFIG.libData?.nc_path || (POST_ID && gespeicherterName));
+
+  // Titelfeld leer, aber es gibt schon einen Namen? Dann diesen behalten,
+  // statt den Entwurf unter einem neuen Namen ein zweites Mal anzulegen.
+  if (schonGespeichert && !eingetippt && gespeicherterName) {
+    const n = entschaerfe(gespeicherterName);
+    if (feld) feld.value = n;
+    _festerName = n;
+    return n;
+  }
+
+  if (schonGespeichert && eingetippt && entschaerfe(eingetippt) === entschaerfe(gespeicherterName)) {
+    const n = entschaerfe(eingetippt);
+    if (feld) feld.value = n;
+    _festerName = n;
+    return n;                                 // unverändert → nichts zu tun
+  }
+
+  status('⏳ Namen prüfen…');
+  const belegt = await vergebeneNamen();
+
+  // Umbenennen einer bestehenden Ausgabe: nur prüfen, nicht neu fragen.
+  if (schonGespeichert && eingetippt) {
+    const sauber = entschaerfe(eingetippt);
+    const eigenKlein = entschaerfe(gespeicherterName).toLowerCase();
+    if (sauber && (!belegt.has(sauber.toLowerCase()) || sauber.toLowerCase() === eigenKlein)) {
+      if (feld) feld.value = sauber;
+      _festerName = sauber;
+      return sauber;
+    }
+    // Kollision beim Umbenennen → nachfragen statt still zu überschreiben.
+    const gewaehlt = await frageNachNamen({
+      vorschlag: eindeutig(sauber, belegt, gespeicherterName), belegt, eigener: gespeicherterName,
+      titel: 'Name schon vergeben',
+      hinweis: `„${sauber}" gehört bereits zu einer anderen Ausgabe. Bitte einen anderen Namen wählen.`,
+    });
+    if (!gewaehlt) { status('Umbenennen abgebrochen – nichts gespeichert', 'red'); return null; }
+    if (feld) feld.value = gewaehlt;
+    _festerName = gewaehlt;
+    return gewaehlt;
+  }
+
+  // Erstes Speichern: nach dem Namen fragen, mit Vorschlag aus dem Inhalt.
+  let vorschlag = entschaerfe(eingetippt) || vorschlagAusInhalt(editor)
+                  || entschaerfe(CONFIG.postData?.title || '');
+  if (!vorschlag) {
+    // Kein Text im Entwurf und kein Post-Titel → durchnummerieren.
+    let n = 1;
+    while (belegt.has(('Entwurf_' + n).toLowerCase())) n++;
+    vorschlag = 'Entwurf_' + n;
+  }
+  vorschlag = eindeutig(vorschlag, belegt, null);
+
+  const gewaehlt = await frageNachNamen({ vorschlag, belegt, eigener: null });
+  if (!gewaehlt) { status('Speichern abgebrochen', 'red'); return null; }
+  if (feld) { feld.value = gewaehlt; feld.style.border = ''; }
+  _festerName = gewaehlt;
+  return gewaehlt;
+}
 
 // Fabric-Objekttypen, die sich sicher wiederherstellen lassen.
 function _klassOk(type) {
@@ -106,14 +187,10 @@ async function _saveImage(editor) {
   // Offene Pinsel-/Markierungsstände in echte Bilder umwandeln, BEVOR das JSON
   // gebaut wird – ein Canvas als Bild-Element überlebt die Serialisierung nicht.
   await vorschauenUebernehmen(editor.canvas);
-  const titleEl = document.getElementById('title-input');
-  let title = (titleEl?.value || '').trim();
-  if (!title) {
-    // Kein Titel? Nicht blockieren – automatisch benennen (Post-Titel oder Zeitstempel).
-    title = (CONFIG.postData?.title || '').trim() || ('Studio_' + Date.now());
-    if (titleEl) titleEl.value = title;
-  }
-  if (titleEl) titleEl.style.border = '';
+  // Eindeutigen Namen festlegen (fragt beim ersten Mal nach, prüft beim
+  // Umbenennen). Ohne Namen wird nicht gespeichert.
+  const title = await nameSicherstellen(editor);
+  if (!title) return false;
   status('💾 Speichert…');
 
   let dataUrl, preview;
@@ -126,11 +203,15 @@ async function _saveImage(editor) {
     return false;
   }
 
+  // Nur weiterbearbeiten, wenn wirklich ein BILD geöffnet ist. Hatte man ein GIF
+  // offen und speichert als PNG, wurde sonst der GIF-Eintrag zum Bild-Eintrag
+  // umgewidmet und die GIF-Datei war über keinen Eintrag mehr erreichbar.
+  const istBildOffen = (CONFIG.libData?.kind || 'image') === 'image';
   const body = {
     dataUrl, title,
     post_id: POST_ID || '',
-    lib_item_id: CONFIG.libData?.item_id || null,   // beim Weiterbearbeiten → gleiches Bild aktualisieren
-    openNcPath: CONFIG.libData?.nc_path || null,    // geöffnete Datei → genau diese überschreiben
+    lib_item_id: istBildOffen ? (CONFIG.libData?.item_id || null) : null,
+    openNcPath: istBildOffen ? (CONFIG.libData?.nc_path || null) : null,
     templateId: editor._templateId || null,
     folderId: document.getElementById('save-folder')?.value || null,
     canvasJson: buildCanvasJson(editor, preview),
@@ -157,7 +238,7 @@ async function _saveImage(editor) {
       // Merken, WAS gerade gespeichert wurde. Ohne das legt jedes weitere
       // Speichern nach einer Titeländerung ein zusätzliches Duplikat an.
       CONFIG.libData = { ...(CONFIG.libData || {}), item_id: d.lib_id ?? CONFIG.libData?.item_id ?? null,
-                         nc_path: d.nc_path ?? CONFIG.libData?.nc_path ?? null, kind: 'image' };
+                         title, nc_path: d.nc_path ?? CONFIG.libData?.nc_path ?? null, kind: 'image' };
       window.dispatchEvent(new CustomEvent('studio:output-changed', { detail: { tab: 'Images' } }));
       if (d.lib_id && !POST_ID) history.replaceState(null, '', '/library/studio/?lib_item=' + d.lib_id);
       // Erfolgreich gespeichert → der Editor gilt wieder als „sauber".
@@ -178,13 +259,10 @@ async function _saveImage(editor) {
 // – inkl. canvas_json, damit es später wieder im Editor geöffnet werden kann.
 export async function saveAnimation(editor, blob, ext) {
   await vorschauenUebernehmen(editor.canvas);
-  const titleEl = document.getElementById('title-input');
-  let title = (titleEl?.value || '').trim();
-  if (!title) {
-    // Nicht blockieren – automatisch benennen.
-    title = (CONFIG.postData?.title || '').trim() || ('Studio_' + Date.now());
-    if (titleEl) titleEl.value = title;
-  }
+  // Denselben Namen wie das Bild verwenden: Bild, GIF und Video eines Entwurfs
+  // heißen gleich und gehören dadurch zusammen.
+  const title = await nameSicherstellen(editor);
+  if (!title) return { ok: false, error: 'abgebrochen' };
   let preview = '';
   try { preview = editor.exportDataURL({ multiplier: 0.4 }); } catch (e) { /* egal */ }
   const safe = title.replace(/[^a-zA-Z0-9_.-]/g, '_') + ext;
@@ -194,7 +272,16 @@ export async function saveAnimation(editor, blob, ext) {
   fd.append('canvas_json', buildCanvasJson(editor, preview));
   const folder = document.getElementById('save-folder')?.value;
   if (folder) fd.append('folder_id', folder);
-  if (CONFIG.libData?.item_id) fd.append('lib_item_id', CONFIG.libData.item_id);   // vorhandene Ausgabe überschreiben
+  // lib_item_id NUR mitschicken, wenn die geöffnete Ausgabe dasselbe Format hat.
+  // Sonst wurde der Bild-Eintrag zum GIF-Eintrag umgewidmet: die PNG-Datei blieb
+  // liegen, war aber über keinen Eintrag mehr erreichbar und öffnete danach ohne
+  // Ebenen. Jetzt bekommt jedes Format seinen Eintrag – zusammengehalten über
+  // den gemeinsamen (eindeutigen) Namen.
+  const offenesFormat = CONFIG.libData?.kind;
+  const diesesFormat = ext === '.gif' ? 'gif' : 'video';
+  if (CONFIG.libData?.item_id && offenesFormat === diesesFormat) {
+    fd.append('lib_item_id', CONFIG.libData.item_id);
+  }
   if (CONFIG.postId) fd.append('post_id', CONFIG.postId);   // GIF/Video an den Post hängen
   try {
     const res = await fetch(URLS.saveVideoFile, {
@@ -204,9 +291,10 @@ export async function saveAnimation(editor, blob, ext) {
     });
     const d = await leseAntwort(res);
     if (d.ok) {
+      status('✅ Gespeichert als „' + title + '"', 'green');
       toast('In „Meine Ausgaben" gespeichert', 'ok');
-      CONFIG.libData = { ...(CONFIG.libData || {}), item_id: d.lib_id ?? CONFIG.libData?.item_id ?? null,
-                         kind: ext === '.gif' ? 'gif' : 'video' };
+      CONFIG.libData = { ...(CONFIG.libData || {}), item_id: d.lib_id ?? null, title,
+                         nc_path: d.nc_path ?? null, kind: ext === '.gif' ? 'gif' : 'video' };
       window.dispatchEvent(new CustomEvent('studio:output-changed',
         { detail: { tab: ext === '.gif' ? 'GIFs' : 'Videos' } }));
     } else {

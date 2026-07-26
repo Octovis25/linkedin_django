@@ -315,8 +315,14 @@ async function loadOutput() {
                  : _outputTab === 'GIFs'   ? (db.anim_images || [])
                  :                            (db.videos || []);
     // Titel → DB-ID (zum Öffnen über den bewährten Weg).
+    // Vergleich normalisiert: Die Ordnerauflistung macht aus dem Dateinamen
+    // „Header_Q3.png" den Titel „Header Q3" (Unterstrich → Leerzeichen), der
+    // Datenbank-Titel heißt aber „Header_Q3". Ohne diese Angleichung fand kein
+    // einziger Name mit Unterstrich mehr seinen Eintrag – die Kachel öffnete
+    // dann über den Dateipfad und verlor den Bezug zur Ausgabe.
+    const norm = s => String(s || '').trim().toLowerCase().replace(/[\s_]+/g, '_');
     const idByTitle = {};
-    dbList.forEach(it => { if (it.title) idByTitle[it.title.trim().toLowerCase()] = it.id; });
+    dbList.forEach(it => { if (it.title) idByTitle[norm(it.title)] = it.id; });
 
     // Hilfsdateien (Vorschau/Snapshot/ausgelagerte Objektbilder) nicht anzeigen.
     const items = (d.items || []).filter(it => !/_preview\.|_snap\.|_obj\d+\./i.test(it.name || ''));
@@ -339,7 +345,10 @@ async function loadOutput() {
       }
       // Öffnen: bevorzugt über die DB-ID (bewährter Weg, stellt Canvas wieder her),
       // sonst über den NC-Pfad.
-      const dbId = idByTitle[(item.title || '').trim().toLowerCase()];
+      // Über den Dateinamen-Stamm suchen (nicht über den aufbereiteten Titel):
+      // der Stamm ist das, was auch in der Datenbank als Name steht.
+      const stamm = String(item.name || '').replace(/\.[^.]+$/, '');
+      const dbId = idByTitle[norm(stamm)] ?? idByTitle[norm(item.title)];
       el.onclick = () => {
         // Nachfragen, bevor ungespeicherte Arbeit durch die Navigation verloren geht.
         if (typeof window.studioDarfVerlassen === 'function' && !window.studioDarfVerlassen()) return;

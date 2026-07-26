@@ -927,6 +927,17 @@ def studio_view(request):
                         if _fn:
                             studio_rows = _safe(c, """SELECT canvas_json, template_id FROM studio_images
                                                      WHERE nc_path LIKE %s ORDER BY id DESC LIMIT 1""", ['%/' + _fn])
+                    # Letzter Fallback: ueber den NAMEN. Ein Design kann als Bild,
+                    # GIF und Video vorliegen - der Entwurf gehoert zu allen dreien.
+                    # Ohne diesen Zweig oeffnete z.B. das PNG nach einem
+                    # GIF-Export ohne Ebenen, weil studio_images auf den
+                    # GIF-Pfad zeigte. Namen sind eindeutig (siehe namen.js),
+                    # deshalb ist die Suche zuverlaessig.
+                    if not (studio_rows and studio_rows[0][0]) and rows[0][1]:
+                        studio_rows = _safe(c, """SELECT canvas_json, template_id FROM studio_images
+                                                 WHERE title=%s AND canvas_json IS NOT NULL
+                                                 AND (post_id IS NULL OR post_id=0)
+                                                 ORDER BY id DESC LIMIT 1""", [rows[0][1]])
                     _low = (nc_path or '').lower()
                     lib_data = {'item_id': lib_item_id, 'image_url': f"/library/image/{lib_item_id}/",
                                 'title': rows[0][1] or '', 'nc_path': nc_path,
@@ -949,6 +960,16 @@ def studio_view(request):
                 if not (si and si[0][0]):
                     # Fallback: nach Dateiname suchen (falls Pfadpräfix minimal abweicht)
                     si = _safe(c, "SELECT canvas_json FROM studio_images WHERE nc_path LIKE %s ORDER BY id DESC LIMIT 1", ['%/' + _fname])
+                if not (si and si[0][0]):
+                    # Letzter Fallback ueber den NAMEN (= Dateiname ohne Endung):
+                    # Bild, GIF und Video eines Designs teilen sich den Namen und
+                    # damit denselben Entwurf.
+                    _name = _fname.rsplit('.', 1)[0]
+                    if _name:
+                        si = _safe(c, """SELECT canvas_json FROM studio_images
+                                        WHERE title=%s AND canvas_json IS NOT NULL
+                                        AND (post_id IS NULL OR post_id=0)
+                                        ORDER BY id DESC LIMIT 1""", [_name])
                 mi = _safe(c, "SELECT id FROM media_library_items WHERE nc_path=%s LIMIT 1", [nc_open])
             _low = _fname.lower()
             lib_data = {'item_id': (mi[0][0] if mi else None),
@@ -1389,12 +1410,22 @@ def _studio_bild_metadaten_schreiben(post_id, lib_item_id, old_nc_path, nc_path,
             c.execute("""INSERT INTO studio_images (nc_path, title, canvas_json, template_id, post_id)
                          VALUES (%s,%s,%s,%s,%s)""", [nc_path, title, canvas_json or None, template_id, post_id])
             return c.lastrowid
-        if lib_item_id and old_nc_path:
+        # Der Entwurf gehoert zum DESIGN, nicht zu einer einzelnen Datei: Bild,
+        # GIF und Video mit demselben (eindeutigen) Namen teilen sich eine Zeile.
+        # Zuerst ueber den Namen suchen, damit ein zuvor als GIF gespeicherter
+        # Entwurf beim Speichern als Bild nicht ein zweites Mal angelegt wird.
+        # post_id ausschliessen: sonst koennte ein gleichnamiges neues Design den
+        # Entwurf eines Planner-Posts ueberschreiben (der Post-Zweig oben returned
+        # frueher, deshalb ist hier nie ein Post gemeint).
+        rows = _safe(c, """SELECT id FROM studio_images WHERE title=%s
+                          AND (post_id IS NULL OR post_id=0)
+                          ORDER BY id DESC LIMIT 1""", [title])
+        if not rows and old_nc_path:
             rows = _safe(c, "SELECT id FROM studio_images WHERE nc_path=%s ORDER BY created_at DESC LIMIT 1", [old_nc_path])
-            if rows:
-                c.execute("""UPDATE studio_images SET nc_path=%s, title=%s, canvas_json=%s, template_id=%s
-                             WHERE id=%s""", [nc_path, title, canvas_json or None, template_id, rows[0][0]])
-                return rows[0][0]
+        if rows:
+            c.execute("""UPDATE studio_images SET nc_path=%s, title=%s, canvas_json=%s, template_id=%s
+                         WHERE id=%s""", [nc_path, title, canvas_json or None, template_id, rows[0][0]])
+            return rows[0][0]
         c.execute("""INSERT INTO studio_images (nc_path, title, canvas_json, template_id)
                      VALUES (%s,%s,%s,%s)""", [nc_path, title, canvas_json or None, template_id])
         return c.lastrowid
@@ -1457,13 +1488,19 @@ def studio_save(request):
     except Exception:
         return JsonResponse({'error': 'Invalid image data'}, status=400)
 
-    # Dateiname: vorhandene Datei EXAKT überschreiben, sonst stabiler Titel-Name.
+    # Dateiname folgt dem Namen. Wurde umbenannt, bekommt die Datei den neuen
+    # Namen - vorher behielt sie stur den alten, sodass Datei und Anzeigename
+    # auseinanderliefen und Bild und GIF desselben Designs verschieden hiessen.
     import re as _re_fn
+    _safe_name = _re_fn.sub(r'[^a-zA-Z0-9_.-]', '', (title or 'studio').replace(' ', '_')) or 'studio'
+    filename = _safe_name + '.png'
+    umbenannt_von = None
     if old_nc_path and old_nc_path.lower().endswith('.png') and '/Output/Images/' in old_nc_path:
-        filename = old_nc_path.rsplit('/', 1)[-1]
-    else:
-        _safe_name = _re_fn.sub(r'[^a-zA-Z0-9_.-]', '', (title or 'studio').replace(' ', '_')) or 'studio'
-        filename = _safe_name + '.png'
+        _alt = old_nc_path.rsplit('/', 1)[-1]
+        if _alt == filename:
+            filename = _alt                      # unveraendert: exakt dieselbe Datei
+        else:
+            umbenannt_von = old_nc_path          # Umbenennung: alte Datei danach weg
     nc_path  = _nc_upload(content, f"{NC_STUDIO_LIBRARY_FOLDER}/{filename}", 'image/png')
     if not nc_path:
         # local fallback
@@ -1546,6 +1583,19 @@ def studio_save(request):
             print("Post attach error:", e)
         _cleanup_old_media(old_media, keep=nc_path)   # alte Dateien löschen (best effort)
 
+    # Umbenannt? Dann die Datei unter dem alten Namen entfernen. Sonst bliebe
+    # sie liegen, wuerde den alten Namen dauerhaft als "vergeben" blockieren und
+    # in "Meine Ausgaben" als Geisterkachel ohne Entwurf erscheinen.
+    if umbenannt_von and umbenannt_von != nc_path:
+        try:
+            from posts_posted.nc_storage import delete_image_from_nextcloud
+            delete_image_from_nextcloud(umbenannt_von)
+            _alt_stamm = umbenannt_von.rsplit('/', 1)[-1].rsplit('.', 1)[0]
+            _alt_ordner = umbenannt_von.rsplit('/', 1)[0]
+            delete_image_from_nextcloud(f"{_alt_ordner}/{_alt_stamm}_preview.png")
+        except Exception as e:
+            print("Umbenennen: alte Datei nicht geloescht:", e)
+
     image_url = f"/library/image/{lib_id}/"
     antwort = {'ok': True, 'lib_id': lib_id, 'image_url': image_url, 'nc_path': nc_path}
     if warnung:
@@ -1599,8 +1649,12 @@ def studio_save_video(request):
     with connection.cursor() as c:
         tag = 'gif' if ext == '.gif' else 'video'
         # Beim „Speichern" einer vorhandenen Ausgabe gezielt dieses Element überschreiben.
+        # Gesucht wird nach Titel UND passendem Format: vorher traf
+        # "(tags='video' OR tags='gif')" auch den Eintrag des jeweils ANDEREN
+        # Bewegtformats und widmete ihn um. Jedes Format bekommt seinen eigenen
+        # Eintrag; zusammengehalten werden sie ueber den (eindeutigen) Namen.
         existing = ([[lib_item_id]] if lib_item_id else
-                    _safe(c, "SELECT id FROM media_library_items WHERE title=%s AND (tags='video' OR tags='gif') LIMIT 1", [title]))
+                    _safe(c, "SELECT id FROM media_library_items WHERE title=%s AND tags=%s LIMIT 1", [title, tag]))
         if existing:
             lib_id = existing[0][0]
             c.execute("UPDATE media_library_items SET nc_path=%s, title=%s, folder_id=%s, tags=%s WHERE id=%s",
@@ -1613,15 +1667,20 @@ def studio_save_video(request):
     canvas_json = request.POST.get('canvas_json', '')
     if canvas_json:
         canvas_json = _optimize_canvas_json(canvas_json, target_folder, title)
-        like_folder = '%/GIFs/%' if ext == '.gif' else '%/Videos/%'
         with connection.cursor() as c:
-            if old_nc_path:
+            # Der Entwurf gehoert zum DESIGN, nicht zu einer einzelnen Datei:
+            # Bild, GIF und Video mit demselben (eindeutigen) Namen teilen sich
+            # eine studio_images-Zeile. Vorher wurde die Zeile beim Formatwechsel
+            # auf den neuen Pfad umgehaengt - die Datei des alten Formats war
+            # danach ueber keinen Entwurf mehr erreichbar und oeffnete flach.
+            existing_si = _safe(c, """SELECT id FROM studio_images
+                                     WHERE title=%s AND (post_id IS NULL OR post_id=0)
+                                     ORDER BY id DESC LIMIT 1""", [title])
+            if not existing_si and old_nc_path:
                 existing_si = _safe(c, "SELECT id FROM studio_images WHERE nc_path=%s ORDER BY id DESC LIMIT 1", [old_nc_path])
-            else:
-                existing_si = _safe(c, "SELECT id FROM studio_images WHERE title=%s AND nc_path LIKE %s LIMIT 1", [title, like_folder])
             if existing_si:
-                c.execute("UPDATE studio_images SET nc_path=%s, canvas_json=%s WHERE id=%s",
-                          [nc_path, canvas_json, existing_si[0][0]])
+                c.execute("UPDATE studio_images SET nc_path=%s, title=%s, canvas_json=%s WHERE id=%s",
+                          [nc_path, title, canvas_json, existing_si[0][0]])
             else:
                 c.execute("""INSERT INTO studio_images (nc_path, title, canvas_json)
                              VALUES (%s, %s, %s)""", [nc_path, title, canvas_json])
