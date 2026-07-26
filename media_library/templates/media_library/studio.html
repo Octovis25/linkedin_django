@@ -382,13 +382,23 @@
     box.style.position = 'fixed';
   }
   window.studioZeigeFehler = zeige;
+  // Bekannte, folgenlose Browser-Meldungen nicht anzeigen. „ResizeObserver loop"
+  // entsteht, wenn eine Größenanpassung den Beobachter erneut auslöst – der
+  // Browser bricht die Schleife selbst ab, es geht nichts verloren. Im Banner
+  // sah das aber aus wie ein echter Fehler.
+  function harmlos(text) {
+    return /ResizeObserver loop/i.test(String(text || ''));
+  }
   window.addEventListener('error', function (e) {
+    if (harmlos(e.message)) return;
     zeige('Das Studio hat einen Fehler gemeldet.', (e.message || 'Unbekannter Fehler') +
       (e.filename ? ' (' + String(e.filename).split('/').pop() + ':' + e.lineno + ')' : ''));
   });
   window.addEventListener('unhandledrejection', function (e) {
     var r = e.reason;
-    zeige('Ein Vorgang ist fehlgeschlagen.', (r && (r.message || r)) || 'Unbekannter Fehler');
+    var txt = (r && (r.message || r)) || 'Unbekannter Fehler';
+    if (harmlos(txt)) return;
+    zeige('Ein Vorgang ist fehlgeschlagen.', txt);
   });
 })();
 </script>

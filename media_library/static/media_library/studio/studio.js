@@ -64,7 +64,19 @@ requestAnimationFrame(fit);
 // (z.B. eingeklappte Leiste) – das rAF allein feuerte manchmal zu früh.
 if (window.ResizeObserver) {
   const _host = document.querySelector('.canvas-host');
-  if (_host) new ResizeObserver(() => fit()).observe(_host);
+  if (_host) {
+    // Über requestAnimationFrame entkoppeln: fit() ändert selbst die
+    // Canvas-Größe und würde den Beobachter sofort erneut auslösen. Der Browser
+    // meldet das als „ResizeObserver loop completed with undelivered
+    // notifications" – harmlos, aber es landete im Fehlerbanner und sah aus
+    // wie ein echter Fehler.
+    let geplant = false;
+    new ResizeObserver(() => {
+      if (geplant) return;
+      geplant = true;
+      requestAnimationFrame(() => { geplant = false; fit(); });
+    }).observe(_host);
+  }
 }
 
 // Zoom-Stand kurz anzeigen (× über der Einpassung).
