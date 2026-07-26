@@ -250,7 +250,9 @@ function animDuration(editor) {
   // Manueller Längen-Regler hat Vorrang (Sekunden). Leer/0 = automatisch.
   const el = document.getElementById('video-length');
   const secs = el ? parseFloat(el.value) : 0;
-  if (secs && secs > 0) return Math.min(secs, 30) * 1000;
+  // Deckel bei 15 s: 30 s × 12 fps = 360 Frames à 2,5 MB Kopie = ~900 MB im
+  // Arbeitsspeicher, bevor die GIF-Kodierung überhaupt startet → Tab-Absturz.
+  if (secs && secs > 0) return Math.min(secs, 15) * 1000;
   const LOOPS = new Set(['pulse', 'float', 'spin', 'flash', 'wobble', 'shake']);
   let max = 1500, hasLoop = false;
   editor.canvas.getObjects().forEach(o => {
@@ -267,34 +269,50 @@ function animDuration(editor) {
 
 // ---- Export als bewegtes Bild (WebM) -------------------------------------
 export async function exportVideo(editor, onBlob) {
-  if (!hasAnimations(editor)) { toast('Keine Animationen – nichts zu exportieren', 'err'); return; }
+  // Rueckgabe true/false: der Aufrufer darf nur bei true "Gespeichert" melden.
+  if (!hasAnimations(editor)) { toast('Keine Animationen – nichts zu exportieren', 'err'); return false; }
   const canvasEl = editor.canvas.lowerCanvasEl;
-  if (!canvasEl.captureStream) { toast('Browser unterstützt keine Video-Aufnahme', 'err'); return; }
+  if (!canvasEl.captureStream) { toast('Browser unterstützt keine Video-Aufnahme', 'err'); return false; }
 
   status('🎬 Nehme Video auf…');
   editor.canvas.discardActiveObject();
-  editor.setGridVisible(false);   // Raster nicht mit aufnehmen
-  toFullRes(editor);
-  const stream = canvasEl.captureStream(30);
-  const mime = MediaRecorder.isTypeSupported('video/webm;codecs=vp9') ? 'video/webm;codecs=vp9' : 'video/webm';
-  const rec = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: 6_000_000 });
   const chunks = [];
-  rec.ondataavailable = e => { if (e.data.size) chunks.push(e.data); };
+  try {
+    editor.setGridVisible(false);   // Raster nicht mit aufnehmen
+    toFullRes(editor);
+    const stream = canvasEl.captureStream(30);
+    const mime = MediaRecorder.isTypeSupported('video/webm;codecs=vp9') ? 'video/webm;codecs=vp9' : 'video/webm';
+    const rec = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: 6_000_000 });
+    rec.ondataavailable = e => { if (e.data.size) chunks.push(e.data); };
 
-  const done = new Promise(res => { rec.onstop = res; });
-  rec.start();
-  await play(editor, animDuration(editor));
-  await new Promise(r => setTimeout(r, 400));   // letzten Frame halten
-  rec.stop();
-  await done;
-  restoreFit(editor);
-  if (editor.gridOn) editor.setGridVisible(true);
+    const done = new Promise(res => { rec.onstop = res; });
+    rec.start();
+    await play(editor, animDuration(editor));
+    await new Promise(r => setTimeout(r, 400));   // letzten Frame halten
+    rec.stop();
+    await done;
+  } catch (e) {
+    console.error('Video-Aufnahme:', e);
+    status('❌ ' + (e.message || 'Video-Aufnahme fehlgeschlagen'), 'red');
+    toast(e.message || 'Video-Aufnahme fehlgeschlagen', 'err');
+    throw e;
+  } finally {
+    // Ohne finally blieb der Canvas nach einem Fehler auf voller Auflösung
+    // stehen und das Raster unsichtbar – der Editor war bis zum Neuladen kaputt.
+    resetAnim(editor);
+    restoreFit(editor);
+    if (editor.gridOn) editor.setGridVisible(true);
+  }
 
   const blob = new Blob(chunks, { type: 'video/webm' });
-  if (typeof onBlob === 'function') { onBlob(blob); status('Bereit.'); return; }
+  if (!blob.size) { status('❌ Video ist leer', 'red'); toast('Video-Aufnahme lieferte keine Daten', 'err'); return false; }
+  if (typeof onBlob === 'function') { onBlob(blob); status('Bereit.'); return true; }
   // Kein Auto-Download – nur in „Meine Ausgaben" speichern (mit canvas_json → editierbar).
   status('💾 Video wird gespeichert…');
-  await saveAnimation(editor, blob, '.webm');
+  const erg = await saveAnimation(editor, blob, '.webm');
+  if (!erg?.ok) return false;
+  status('✅ Video gespeichert!', 'green');
+  return true;
 }
 
 // Video erzeugen und direkt auf den Rechner herunterladen (statt in „Meine Ausgaben").
@@ -325,10 +343,19 @@ function loadGifLib() {
 }
 
 export async function exportGif(editor, onBlob) {
-  if (!hasAnimations(editor)) { toast('Keine Animationen – nichts zu exportieren', 'err'); return; }
+  if (!hasAnimations(editor)) { toast('Keine Animationen – nichts zu exportieren', 'err'); return false; }
   status('🎞 GIF wird erzeugt…');
   try {
-    await loadGifLib();
+    try {
+      await loadGifLib();
+    } catch (e) {
+      // Damit ein zweiter Versuch nach behobenem Problem möglich ist – vorher
+      // blieb die fehlgeschlagene Promise bis zum Neuladen der Seite gecacht.
+      _gifLibPromise = null;
+      throw new Error('GIF-Bibliothek konnte nicht geladen werden (vendor/gif.js)');
+    }
+    if (!window.GIF) { _gifLibPromise = null; throw new Error('GIF-Bibliothek unvollständig'); }
+
     const total = animDuration(editor);
     const fps = 12, frameMs = 1000 / fps;
     // GIFs klein halten (Cloudinary/LinkedIn ~10 MB): max 800 px Kante + etwas
@@ -344,33 +371,62 @@ export async function exportGif(editor, onBlob) {
     const _tctx = _tmp.getContext('2d');
 
     editor.canvas.discardActiveObject();
-    editor.setGridVisible(false);   // Raster nicht mit aufnehmen
-    ensureFxHook(editor);
-    toFullRes(editor);
-    _fxOn = true;
-    for (let t = 0; t <= total; t += frameMs) {
-      _fxTime = t;
-      editor.canvas.getObjects().forEach(o => applyAt(o, t));
-      editor.canvas.renderAll();
-      _tctx.clearRect(0, 0, gw, gh);
-      _tctx.drawImage(editor.canvas.lowerCanvasEl, 0, 0, gw, gh);
-      gif.addFrame(_tmp, { copy: true, delay: frameMs });
+    try {
+      editor.setGridVisible(false);   // Raster nicht mit aufnehmen
+      ensureFxHook(editor);
+      toFullRes(editor);
+      _fxOn = true;
+      const gesamtFrames = Math.floor(total / frameMs) + 1;
+      let n = 0;
+      for (let t = 0; t <= total; t += frameMs) {
+        _fxTime = t;
+        editor.canvas.getObjects().forEach(o => applyAt(o, t));
+        editor.canvas.renderAll();
+        _tctx.clearRect(0, 0, gw, gh);
+        _tctx.drawImage(editor.canvas.lowerCanvasEl, 0, 0, gw, gh);
+        gif.addFrame(_tmp, { copy: true, delay: frameMs });
+        n++;
+        // Alle 12 Frames kurz an den Browser abgeben: sonst friert die Seite
+        // während der gesamten Frame-Schleife komplett ein (kein Repaint,
+        // kein Statustext) – für den Nutzer sah das aus wie ein Absturz.
+        if (n % 12 === 0) {
+          status(`🎞 GIF wird erzeugt… ${Math.round(n / gesamtFrames * 100)} %`);
+          await new Promise(r => setTimeout(r, 0));
+        }
+      }
+    } finally {
+      // MUSS auch im Fehlerfall laufen. Fehlte das, blieb der Canvas auf voller
+      // Auflösung stehen, die Elemente in ihrer animierten Zwischenposition und
+      // die Effekt-Partikel dauerhaft an – ein anschließendes Speichern schrieb
+      // genau diesen kaputten Zustand als Bild fest.
+      _fxOn = false;
+      resetAnim(editor);
+      restoreFit(editor);
+      if (editor.gridOn) editor.setGridVisible(true);
     }
-    _fxOn = false;
-    resetAnim(editor);
-    restoreFit(editor);
-    if (editor.gridOn) editor.setGridVisible(true);
 
-    gif.on('finished', async blob => {
-      if (typeof onBlob === 'function') { onBlob(blob); status('Bereit.'); return; }
-      // Kein Auto-Download – nur in „Meine Ausgaben" speichern.
-      status('💾 GIF wird gespeichert…');
-      await saveAnimation(editor, blob, '.gif');
+    // Auf das FERTIGE GIF warten. Vorher meldete das Studio „Gespeichert.",
+    // während die Kodierung noch lief – wer den Tab schloss, verlor alles.
+    status('🎞 GIF wird komprimiert…');
+    const blob = await new Promise((resolve, reject) => {
+      const abbruch = setTimeout(() => reject(new Error('GIF-Erzeugung dauert zu lange (Worker-Datei erreichbar?)')), 180000);
+      gif.on('finished', b => { clearTimeout(abbruch); resolve(b); });
+      gif.on('abort', () => { clearTimeout(abbruch); reject(new Error('GIF-Erzeugung abgebrochen')); });
+      gif.render();
     });
-    gif.render();
+
+    if (typeof onBlob === 'function') { onBlob(blob); status('Bereit.'); return true; }
+    // Kein Auto-Download – nur in „Meine Ausgaben" speichern.
+    status('💾 GIF wird gespeichert…');
+    const erg = await saveAnimation(editor, blob, '.gif');
+    if (!erg?.ok) return false;
+    status('✅ GIF gespeichert!', 'green');
+    return true;
   } catch (e) {
-    status('❌ GIF-Fehler', 'red');
-    toast('GIF-Bibliothek konnte nicht geladen werden', 'err');
+    console.error('GIF-Export:', e);
+    status('❌ ' + (e.message || 'GIF-Fehler'), 'red');
+    toast(e.message || 'GIF-Export fehlgeschlagen', 'err');
+    throw e;   // der Aufrufer darf danach kein „Gespeichert." melden
   }
 }
 

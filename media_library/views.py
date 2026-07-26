@@ -477,7 +477,11 @@ def _nc_delete_old_files(nc_folder, safe_prefix):
         from xml.etree import ElementTree
         auth = HTTPBasicAuth(username, password)
         base = f"{nc_url.rstrip('/')}/remote.php/dav/files/{username}"
-        pattern = _re.compile(rf'^{_re.escape(safe_prefix)}_\d+_(preview|snap|obj)')
+        # \d+ direkt nach dem Praefix traf auch fremde Titel: fuer "Header"
+        # matchte "Header_2_preview.png" - also die Datei der Ausgabe "Header 2".
+        # Deren Vorschau wurde bei jedem Speichern von "Header" mitgeloescht.
+        # Der Zeitstempel hat immer mindestens 10 Stellen, ein Titelzusatz nie.
+        pattern = _re.compile(rf'^{_re.escape(safe_prefix)}_\d{{10,}}_(preview|snap|obj|fab)')
         for folder in [nc_folder, f"{nc_folder}/_data"]:
             url = f"{base}/{quote(folder, safe='/')}"
             try:
@@ -567,6 +571,73 @@ def _optimize_canvas_json(canvas_json_str, nc_folder, title_prefix):
                 except Exception:
                     pass
 
+        # Die eigentlichen Bilddaten liegen im v2-Format NICHT in state['objects']
+        # (das ist nur eine flache Metadatenliste mit Proxy-URLs), sondern in
+        # state['fabric']['objects'][i]['src']. Ohne diese Schleife lief die
+        # ganze Auslagerung ins Leere: jedes freigestellte oder umgefaerbte Bild
+        # blieb als mehrere MB base64 im canvas_json stehen. Das sprengte bei
+        # groesseren Entwuerfen das Paketlimit der Datenbank - und genau dann
+        # griffen die stillen except-Zweige beim Speichern.
+        import hashlib as _hl
+
+        def _fab_auslagern(src, marke):
+            """Laedt ein data:-Bild nach Nextcloud und gibt die nc://-Referenz zurueck.
+
+            Der Dateiname enthaelt einen Inhalts-Hash statt nur Titel+Position.
+            Mit reinem Titel+Index haetten zwei gleichnamige Entwuerfe (oder
+            dasselbe Layout nach einer Umsortierung) per WebDAV-PUT auf denselben
+            Pfad geschrieben - ein aelterer Entwurf haette danach stillschweigend
+            ein fremdes Bild angezeigt.
+
+            Bewusst wird hier NICHT aufgeraeumt: alte Dateien zu loeschen waere
+            nur sicher, wenn man alle noch existierenden Entwuerfe kennt. Ein
+            unveraendertes Bild schickt der Client als Proxy-URL zurueck (nicht
+            als data:) und laedt es daher nicht neu hoch - ein Loeschlauf wuerde
+            dessen Datei entfernen und die Referenz ins Leere zeigen lassen.
+            Gleicher Inhalt ergibt denselben Hash, also entstehen beim
+            wiederholten Speichern desselben Bildes auch keine Dubletten.
+            """
+            try:
+                ext = 'png' if 'png' in src.split(';')[0] else 'jpg'
+                img_bytes = base64.b64decode(src.split(',', 1)[1])
+                kurz = _hl.sha1(img_bytes).hexdigest()[:10]
+                nc = _nc_upload(img_bytes, f"{data_folder}/{safe}_{marke}_{kurz}.{ext}", f"image/{ext}")
+                return f"nc://{nc}" if nc else None
+            except Exception:
+                return None
+
+        def _fab_durchlaufen(objekte, pfad='fab'):
+            """Laeuft rekursiv durch die Objektliste - auch in Gruppen hinein.
+
+            Ohne den Abstieg blieb ein freigestelltes Bild, das mit einem Textfeld
+            gruppiert wurde, als mehrere MB base64 im canvas_json stehen.
+            """
+            for i, obj in enumerate(objekte or []):
+                if not isinstance(obj, dict):
+                    continue
+                src = obj.get('src', '')
+                if isinstance(src, str) and src.startswith('data:image'):
+                    # Nur auslagern, wenn der Client dieses src beim Laden auch
+                    # wirklich benutzt (siehe restoreCanvas in io.js: unbearbeitete
+                    # Bilder werden ueber srcUrl geladen). Sonst entstuenden
+                    # Dateien, die nie jemand abruft.
+                    if obj.get('edited') or obj.get('bgRemoved') or not obj.get('srcUrl'):
+                        ref = _fab_auslagern(src, f'{pfad}{i}')
+                        if ref:
+                            obj['src'] = ref
+                if obj.get('objects'):
+                    _fab_durchlaufen(obj['objects'], f'{pfad}{i}g')
+
+        fab = state.get('fabric') or {}
+        _fab_durchlaufen(fab.get('objects'))
+        bgi = fab.get('backgroundImage')
+        if isinstance(bgi, dict):
+            src = bgi.get('src', '')
+            if isinstance(src, str) and src.startswith('data:image'):
+                ref = _fab_auslagern(src, 'fabbg')
+                if ref:
+                    bgi['src'] = ref
+
         return _json.dumps(state)
     except Exception:
         return canvas_json_str
@@ -606,6 +677,24 @@ def _resolve_nc_refs_in_json(canvas_json_str):
             state['previewDataUrl'] = _proxy(state.get('previewDataUrl', ''))
         for obj in state.get('objects', []):
             obj['imgSrc'] = _proxy(obj.get('imgSrc', ''))
+        # Gegenstueck zur Auslagerung in _optimize_canvas_json: die ausgelagerten
+        # nc://-Referenzen stecken im fabric-Zweig. Ohne diese Zeilen kaeme dort
+        # ein nicht aufloesbares "nc://..." im Browser an - das Bild fehlte.
+        # Rekursiv, damit auch Bilder innerhalb von Gruppen erfasst werden.
+        def _proxy_durchlaufen(objekte):
+            for obj in (objekte or []):
+                if not isinstance(obj, dict):
+                    continue
+                if isinstance(obj.get('src'), str):
+                    obj['src'] = _proxy(obj['src'])
+                if obj.get('objects'):
+                    _proxy_durchlaufen(obj['objects'])
+
+        fab = state.get('fabric') or {}
+        _proxy_durchlaufen(fab.get('objects'))
+        bgi = fab.get('backgroundImage')
+        if isinstance(bgi, dict) and isinstance(bgi.get('src'), str):
+            bgi['src'] = _proxy(bgi['src'])
         return _json.dumps(state)
     except Exception:
         return canvas_json_str
@@ -769,11 +858,14 @@ def _ensure_studio_tables():
 # ─────────────────────────────────────────────
 
 @login_required
-@login_required
 def studio_flowcharts_view(request):
     return render(request, 'media_library/flowcharts.html')
 
 
+# @login_required stand versehentlich doppelt auf studio_flowcharts_view und
+# fehlte hier komplett. studio_view rendert Post-Titel, Bibliotheksdaten und das
+# komplette canvas_json direkt ins HTML - das war ohne Anmeldung abrufbar.
+@login_required
 def studio_view(request):
     _ensure_studio_tables()
     post_id = request.GET.get('post_id', '')
@@ -1119,6 +1211,22 @@ def studio_template_save_from_canvas(request):
     cols = data.get('colors') or []
     colors_json = _j.dumps([c for c in cols if c]) if cols else None
     canvas_json = data.get('canvasJson') or None   # Hintergrund + Logo + Textfelder
+    # Eingebettete base64-Bilder nach Nextcloud auslagern. Fuer Vorlagen lief das
+    # bisher gar nicht - ein Layout mit zwei freigestellten Bildern kam schnell
+    # auf zweistellige Megabyte und scheiterte am Paketlimit der Datenbank.
+    if canvas_json:
+        try:
+            canvas_json = _optimize_canvas_json(canvas_json, NC_STUDIO_TEMPLATES_FOLDER, title)
+        except Exception:
+            pass
+
+    # Unterscheidet "Spalte canvas_json fehlt noch" (dafuer war der Fallback
+    # gedacht) von allen anderen Fehlern.
+    def _fehlende_spalte(exc):
+        t = str(exc).lower()
+        return 'canvas_json' in t and ('unknown column' in t or 'no such column' in t
+                                       or 'does not exist' in t)
+
     tpl_id = data.get('tplId') or None              # gesetzt → bestehende Vorlage aktualisieren
     with connection.cursor() as c:
         if tpl_id:
@@ -1128,7 +1236,15 @@ def studio_template_save_from_canvas(request):
                              SET nc_path=%s, title=%s, width=%s, height=%s, canvas_json=%s
                              WHERE id=%s""",
                           [nc_path, title, width, height, canvas_json, tpl_id])
-            except Exception:
+            except Exception as e:
+                # Frueher fing dieser Zweig JEDEN Fehler ab und meldete danach
+                # Erfolg - obwohl das Layout gar nicht geschrieben wurde. Die
+                # Vorlage zeigte dann eine neue Vorschau ueber dem ALTEN Layout,
+                # und niemand konnte den Fehler bemerken.
+                if not _fehlende_spalte(e):
+                    return JsonResponse(
+                        {'ok': False, 'error': f'Vorlage konnte nicht gespeichert werden: {e}'},
+                        status=500)
                 c.execute("UPDATE studio_templates SET nc_path=%s, title=%s, width=%s, height=%s WHERE id=%s",
                           [nc_path, title, width, height, tpl_id])
             return JsonResponse({'ok': True, 'id': tpl_id, 'title': title, 'updated': True})
@@ -1136,7 +1252,13 @@ def studio_template_save_from_canvas(request):
             c.execute("""INSERT INTO studio_templates (nc_path, title, width, height, colors, canvas_json)
                          VALUES (%s,%s,%s,%s,%s,%s)""",
                       [nc_path, title, width, height, colors_json, canvas_json])
-        except Exception:
+        except Exception as e:
+            # Ohne canvas_json waere die neue Vorlage nur ein flaches Bild -
+            # alle Textfelder und Ebenen waeren verloren, trotz Erfolgsmeldung.
+            if not _fehlende_spalte(e):
+                return JsonResponse(
+                    {'ok': False, 'error': f'Vorlage konnte nicht angelegt werden: {e}'},
+                    status=500)
             c.execute("INSERT INTO studio_templates (nc_path, title, width, height, colors) VALUES (%s,%s,%s,%s,%s)",
                       [nc_path, title, width, height, colors_json])
         new_id = c.lastrowid
@@ -1249,6 +1371,35 @@ def _extract_canvas_tags(canvas_json_str):
     return ','.join(sorted(tags)[:30])  # max 30 Tags
 
 
+def _studio_bild_metadaten_schreiben(post_id, lib_item_id, old_nc_path, nc_path,
+                                     title, canvas_json, template_id):
+    """Legt den studio_images-Eintrag an bzw. aktualisiert ihn. Gibt die ID zurueck.
+
+    Ausgelagert, damit der Aufrufer den Vorgang bei einem Fehler ein zweites Mal
+    ohne canvas_json versuchen kann - statt einen 500er zu werfen, obwohl Datei
+    und Bibliothekseintrag bereits geschrieben sind.
+    """
+    with connection.cursor() as c:
+        if post_id:
+            rows = _safe(c, "SELECT id FROM studio_images WHERE post_id=%s ORDER BY created_at DESC LIMIT 1", [post_id])
+            if rows:
+                c.execute("""UPDATE studio_images SET nc_path=%s, title=%s, canvas_json=%s, template_id=%s
+                             WHERE id=%s""", [nc_path, title, canvas_json or None, template_id, rows[0][0]])
+                return rows[0][0]
+            c.execute("""INSERT INTO studio_images (nc_path, title, canvas_json, template_id, post_id)
+                         VALUES (%s,%s,%s,%s,%s)""", [nc_path, title, canvas_json or None, template_id, post_id])
+            return c.lastrowid
+        if lib_item_id and old_nc_path:
+            rows = _safe(c, "SELECT id FROM studio_images WHERE nc_path=%s ORDER BY created_at DESC LIMIT 1", [old_nc_path])
+            if rows:
+                c.execute("""UPDATE studio_images SET nc_path=%s, title=%s, canvas_json=%s, template_id=%s
+                             WHERE id=%s""", [nc_path, title, canvas_json or None, template_id, rows[0][0]])
+                return rows[0][0]
+        c.execute("""INSERT INTO studio_images (nc_path, title, canvas_json, template_id)
+                     VALUES (%s,%s,%s,%s)""", [nc_path, title, canvas_json or None, template_id])
+        return c.lastrowid
+
+
 @login_required
 def studio_save(request):
     """Save finished studio canvas as PNG → Nextcloud Studio/Bibliothek."""
@@ -1344,32 +1495,27 @@ def studio_save(request):
         canvas_json = _optimize_canvas_json(canvas_json, NC_STUDIO_LIBRARY_FOLDER, title)
 
     # Save studio metadata (upsert per post_id if given)
+    # Diese Statements liefen frueher ungeschuetzt. Schlug hier etwas fehl (etwa
+    # weil canvas_json das Paketlimit sprengt), gab Django einen 500 zurueck -
+    # obwohl PNG und Bibliothekseintrag bereits geschrieben waren. Die Ausgabe
+    # tauchte danach als flaches Bild ohne Ebenen auf, und der Nutzer sah nur
+    # eine unverstaendliche Fehlermeldung. Jetzt: zweiter Versuch ohne
+    # canvas_json plus klare Warnung im Ergebnis.
     studio_image_id = None
-    with connection.cursor() as c:
-        if post_id:
-            rows = _safe(c, "SELECT id FROM studio_images WHERE post_id=%s ORDER BY created_at DESC LIMIT 1", [post_id])
-            if rows:
-                studio_image_id = rows[0][0]
-                c.execute("""UPDATE studio_images SET nc_path=%s, title=%s, canvas_json=%s, template_id=%s
-                             WHERE id=%s""", [nc_path, title, canvas_json or None, template_id, studio_image_id])
-            else:
-                c.execute("""INSERT INTO studio_images (nc_path, title, canvas_json, template_id, post_id)
-                             VALUES (%s,%s,%s,%s,%s)""", [nc_path, title, canvas_json or None, template_id, post_id])
-                studio_image_id = c.lastrowid
-        elif lib_item_id and old_nc_path:
-            rows = _safe(c, "SELECT id FROM studio_images WHERE nc_path=%s ORDER BY created_at DESC LIMIT 1", [old_nc_path])
-            if rows:
-                studio_image_id = rows[0][0]
-                c.execute("""UPDATE studio_images SET nc_path=%s, title=%s, canvas_json=%s, template_id=%s
-                             WHERE id=%s""", [nc_path, title, canvas_json or None, template_id, studio_image_id])
-            else:
-                c.execute("""INSERT INTO studio_images (nc_path, title, canvas_json, template_id)
-                             VALUES (%s,%s,%s,%s)""", [nc_path, title, canvas_json or None, template_id])
-                studio_image_id = c.lastrowid
-        else:
-            c.execute("""INSERT INTO studio_images (nc_path, title, canvas_json, template_id)
-                         VALUES (%s,%s,%s,%s)""", [nc_path, title, canvas_json or None, template_id])
-            studio_image_id = c.lastrowid
+    warnung = None
+    try:
+        studio_image_id = _studio_bild_metadaten_schreiben(
+            post_id, lib_item_id, old_nc_path, nc_path, title, canvas_json, template_id)
+    except Exception as e:
+        try:
+            studio_image_id = _studio_bild_metadaten_schreiben(
+                post_id, lib_item_id, old_nc_path, nc_path, title, None, template_id)
+            warnung = ('Das Bild wurde gespeichert, aber der bearbeitbare Entwurf nicht '
+                       f'({e}). Beim erneuten Oeffnen sind die Ebenen nicht mehr einzeln '
+                       'anpassbar.')
+        except Exception as e2:
+            return JsonResponse({'ok': False,
+                                 'error': f'Bild gespeichert, Entwurf nicht: {e2}'}, status=500)
 
     # Attach to planner post if post_id given. WICHTIG: Das Anhängen muss IMMER
     # passieren – Verschieben/Aufräumen sind nur „nice to have" und dürfen das
@@ -1401,7 +1547,10 @@ def studio_save(request):
         _cleanup_old_media(old_media, keep=nc_path)   # alte Dateien löschen (best effort)
 
     image_url = f"/library/image/{lib_id}/"
-    return JsonResponse({'ok': True, 'lib_id': lib_id, 'image_url': image_url, 'nc_path': nc_path})
+    antwort = {'ok': True, 'lib_id': lib_id, 'image_url': image_url, 'nc_path': nc_path}
+    if warnung:
+        antwort['warning'] = warnung
+    return JsonResponse(antwort)
 
 
 @login_required
@@ -2222,6 +2371,17 @@ def studio_upload(request):
 
     filename = f.name.replace(' ', '_')
     content = f.read()
+    # Namenskollisionen vermeiden. Ein Upload mit gleichem Namen ueberschrieb die
+    # vorhandene Datei per WebDAV-PUT - und weil gespeicherte Entwuerfe nur den
+    # Pfad merken, zeigte ein alter Entwurf danach stillschweigend das NEUE Bild
+    # an der Stelle des alten. Ein kurzer Inhalts-Hash macht den Namen eindeutig,
+    # ohne bei identischem Inhalt Dubletten anzulegen.
+    import hashlib as _hl
+    _stamm, _punkt, _ext = filename.rpartition('.')
+    if not _stamm:
+        _stamm, _ext = filename, ''
+    _kurz = _hl.sha1(content).hexdigest()[:8]
+    filename = f"{_stamm}_{_kurz}{('.' + _ext) if _ext else ''}"
     nc_path = _nc_upload(content, f"{NC_STUDIO_UPLOAD_FOLDER}/{filename}",
                          f.content_type or 'image/png')
     if not nc_path:

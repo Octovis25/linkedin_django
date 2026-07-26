@@ -26,15 +26,25 @@ export function modal(title, text, buttons) {
     box.innerHTML = `<h4>${title}</h4>${text ? `<div style="font-size:.82rem;color:#555;margin-bottom:14px">${text}</div>` : ''}`;
     const btnWrap = document.createElement('div');
     btnWrap.className = 'modal-btns';
+    // Schließen über Button, Hintergrund-Klick ODER Escape. Ohne Escape-Ausweg
+    // blieb ein Dialog, der aus irgendeinem Grund unsichtbar war, für immer
+    // offen – und der darauf wartende Speichervorgang hing endlos.
+    const zu = (wert) => {
+      document.removeEventListener('keydown', esc);
+      if (bg.parentNode) bg.parentNode.removeChild(bg);
+      resolve(wert);
+    };
+    const esc = e => { if (e.key === 'Escape') { e.preventDefault(); zu(null); } };
     (buttons || [{ label: 'OK', value: true }]).forEach(b => {
       const el = document.createElement('button');
       el.textContent = b.label;
-      el.onclick = () => { document.body.removeChild(bg); resolve(b.value); };
+      el.onclick = () => zu(b.value);
       btnWrap.appendChild(el);
     });
     box.appendChild(btnWrap);
     bg.appendChild(box);
-    bg.addEventListener('click', e => { if (e.target === bg) { document.body.removeChild(bg); resolve(null); } });
+    bg.addEventListener('click', e => { if (e.target === bg) zu(null); });
+    document.addEventListener('keydown', esc);
     document.body.appendChild(bg);
   });
 }
@@ -43,12 +53,30 @@ export function modal(title, text, buttons) {
 // Gibt Promise<HTMLImageElement> zurück.
 export function loadImage(url) {
   return new Promise((resolve, reject) => {
+    if (!url) { reject(new Error('Keine Bild-Adresse angegeben')); return; }
     const img = new Image();
-    img.crossOrigin = 'anonymous';
+    const ziel = proxyUrl(url);
+    if (!ziel) { reject(new Error('Bild-Adresse konnte nicht aufgelöst werden')); return; }
+    // Bei data:/blob: kein crossOrigin setzen – manche Browser brechen das Laden
+    // dann komplett ab, statt das Bild einfach anzuzeigen.
+    if (!/^(data:|blob:)/i.test(String(ziel))) img.crossOrigin = 'anonymous';
     img.onload = () => resolve(img);
-    img.onerror = e => reject(e);
-    img.src = proxyUrl(url);
+    // Aussagekräftige Meldung statt eines nackten Event-Objekts – vorher stand
+    // im Fehlertext nur „[object Event]".
+    img.onerror = () => reject(new Error('Bild konnte nicht geladen werden: ' + String(ziel).slice(0, 120)));
+    img.src = ziel;
   });
+}
+
+// Entfernt ein Element sicher aus dem Dokument.
+// Ein rohes el.remove() wirft, wenn der Browser gerade ein blur-Ereignis
+// desselben Elements abarbeitet („The node to be removed is no longer a child
+// of this node") – das passierte beim Öffnen eines zweiten Inline-Editors,
+// während der erste noch offen war.
+export function wegDamit(el) {
+  if (!el) return;
+  try { el.remove(); }
+  catch (e) { try { el.parentNode && el.parentNode.removeChild(el); } catch (_) { /* schon weg */ } }
 }
 
 export function debounce(fn, ms) {

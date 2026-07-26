@@ -2,7 +2,8 @@
 // Django-Backend an (studio_save). Reload rekonstruiert exakt den Fabric-State.
 import { URLS, POST_ID, CONFIG, getCookie, proxyUrl } from './config.js';
 import { toast, status } from './util.js';
-import { fabric } from './editor.js';
+import { fabric, EXTRA_PROPS } from './editor.js';
+import { beendeVorschauen, vorschauenUebernehmen } from './retouch.js';
 
 // Fabric-Objekttypen, die sich sicher wiederherstellen lassen.
 function _klassOk(type) {
@@ -11,8 +12,39 @@ function _klassOk(type) {
   return !!(fabric && fabric[name] && typeof fabric[name].fromObject === 'function');
 }
 
-const FABRIC_PROPS = ['srcUrl', 'originalUrl', 'bgRemoved', 'edited', 'anim', 'shapeKind', 'fx', 'svgPart',
-                      'tbHead', 'tbBody', 'tbWidth', 'tbSize', 'tbAlign'];
+// Gleiche Liste wie Undo/Redo – früher standen hier zwei Listen, die
+// auseinandergelaufen sind (siehe editor.js).
+const FABRIC_PROPS = EXTRA_PROPS;
+
+// Läuft gerade ein Speichervorgang? Verhindert, dass ein zweiter Klick auf
+// „Speichern" ein zweites Bibliotheks-Element und eine zweite Datei anlegt.
+let _saving = false;
+export function istAmSpeichern() { return _saving; }
+
+// Prüft, ob der Editor gerade eine Datei lädt. Speichern/Exportieren in diesem
+// Moment würde einen halb gefüllten Canvas über das Original schreiben.
+function ladeGuard(editor) {
+  if (editor._locked) {
+    status('⏳ Wird noch geladen – bitte einen Moment warten', 'red');
+    toast('Der Entwurf lädt noch', 'err');
+    return true;
+  }
+  return false;
+}
+
+// Einheitliche Antwortauswertung: ohne res.ok-Prüfung liefert ein 500er eine
+// HTML-Fehlerseite, an der res.json() scheitert – der Nutzer sah dann
+// „SyntaxError: Unexpected token '<'" statt einer verständlichen Meldung.
+async function leseAntwort(res) {
+  if (!res.ok) {
+    if (res.status === 413) throw new Error('Datei zu groß für den Server (413)');
+    if (res.status === 403) throw new Error('Nicht angemeldet oder Sitzung abgelaufen (403)');
+    throw new Error(`Server-Fehler ${res.status}`);
+  }
+  const txt = await res.text();
+  try { return JSON.parse(txt); }
+  catch { throw new Error('Unerwartete Server-Antwort'); }
+}
 
 // Baut das canvas_json. Enthält:
 //   fabric        – vollständiger Fabric-State für exakten Reload
@@ -40,11 +72,40 @@ export function buildCanvasJson(editor, previewDataUrl) {
 
 // Vollbild-PNG. Dank Proxy-geladener Bilder nie getaintet.
 export function exportPng(editor) {
+  // Rote Markierungs-Vorschau zurücknehmen – die gehört nie ins Ergebnis.
+  beendeVorschauen(editor.canvas);
   // exportDataURL blendet das Ausricht-Raster für den Export aus.
   return editor.exportDataURL({ multiplier: 1 });
 }
 
+// Gibt true zurück, wenn wirklich gespeichert wurde – sonst false. Der Aufrufer
+// darf nur dann eine Erfolgsmeldung anzeigen. Vorher schrieb er unbedingt
+// „Gespeichert.", auch wenn hier abgebrochen wurde.
 export async function saveImage(editor) {
+  if (ladeGuard(editor)) return false;
+  // Der Entwurf konnte beim Öffnen nicht vollständig geladen werden. Jetzt über
+  // dieselbe Datei zu speichern würde das Original endgültig zerstören.
+  if (editor._ladefehler && (CONFIG.libData?.item_id || CONFIG.libData?.nc_path)) {
+    const weiter = window.confirm(
+      'Achtung: Dieser Entwurf wurde beim Öffnen nicht vollständig geladen ' +
+      '(fehlende oder beschädigte Bilder).\n\n' +
+      'Wenn du jetzt speicherst, wird die vorhandene Datei mit dem unvollständigen ' +
+      'Stand überschrieben.\n\nTrotzdem speichern?');
+    if (!weiter) { status('Speichern abgebrochen', 'red'); return false; }
+  }
+  if (_saving) { toast('Speichert bereits…', 'err'); return false; }
+  _saving = true;
+  try {
+    return await _saveImage(editor);
+  } finally {
+    _saving = false;
+  }
+}
+
+async function _saveImage(editor) {
+  // Offene Pinsel-/Markierungsstände in echte Bilder umwandeln, BEVOR das JSON
+  // gebaut wird – ein Canvas als Bild-Element überlebt die Serialisierung nicht.
+  await vorschauenUebernehmen(editor.canvas);
   const titleEl = document.getElementById('title-input');
   let title = (titleEl?.value || '').trim();
   if (!title) {
@@ -57,12 +118,12 @@ export async function saveImage(editor) {
 
   let dataUrl, preview;
   try {
-    dataUrl = exportPng(editor);
+    dataUrl = exportPng(editor);          // nimmt Markierungs-Vorschauen zurück
     preview = editor.exportDataURL({ multiplier: 0.4 });
   } catch (e) {
     status('❌ Export fehlgeschlagen (Bild getaintet)', 'red');
     toast('Ein Bild ist cross-origin – über den Proxy laden', 'err');
-    return;
+    return false;
   }
 
   const body = {
@@ -81,23 +142,42 @@ export async function saveImage(editor) {
       headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCookie('csrftoken') },
       body: JSON.stringify(body),
     });
-    const d = await res.json();
+    const d = await leseAntwort(res);
     if (d.ok) {
-      status('✅ Bild gespeichert!', 'green');
-      toast('Gespeichert', 'ok');
+      if (d.warning) {
+        // Das Bild liegt, aber der bearbeitbare Entwurf konnte nicht mitgespeichert
+        // werden. Das muss der Nutzer wissen, bevor er die Seite schließt.
+        status('⚠️ ' + d.warning, 'red');
+        toast('Bild gespeichert – Entwurf nicht (Details oben)', 'err');
+        window.alert('Achtung:\n\n' + d.warning);
+      } else {
+        status('✅ Bild gespeichert!', 'green');
+        toast('Gespeichert', 'ok');
+      }
+      // Merken, WAS gerade gespeichert wurde. Ohne das legt jedes weitere
+      // Speichern nach einer Titeländerung ein zusätzliches Duplikat an.
+      CONFIG.libData = { ...(CONFIG.libData || {}), item_id: d.lib_id ?? CONFIG.libData?.item_id ?? null,
+                         nc_path: d.nc_path ?? CONFIG.libData?.nc_path ?? null, kind: 'image' };
       window.dispatchEvent(new CustomEvent('studio:output-changed', { detail: { tab: 'Images' } }));
       if (d.lib_id && !POST_ID) history.replaceState(null, '', '/library/studio/?lib_item=' + d.lib_id);
-    } else {
-      status('❌ ' + (d.error || 'Fehler'), 'red');
+      // Erfolgreich gespeichert → der Editor gilt wieder als „sauber".
+      editor._ladefehler = false;
+      return true;
     }
+    status('❌ ' + (d.error || 'Fehler'), 'red');
+    toast(d.error || 'Speichern fehlgeschlagen', 'err');
+    return false;
   } catch (e) {
-    status('❌ ' + e, 'red');
+    status('❌ ' + (e.message || e), 'red');
+    toast(e.message || 'Speichern fehlgeschlagen', 'err');
+    return false;
   }
 }
 
 // Speichert ein exportiertes bewegtes Bild (WebM/GIF) in „Meine Ausgaben"
 // – inkl. canvas_json, damit es später wieder im Editor geöffnet werden kann.
 export async function saveAnimation(editor, blob, ext) {
+  await vorschauenUebernehmen(editor.canvas);
   const titleEl = document.getElementById('title-input');
   let title = (titleEl?.value || '').trim();
   if (!title) {
@@ -122,34 +202,67 @@ export async function saveAnimation(editor, blob, ext) {
       headers: { 'X-CSRFToken': getCookie('csrftoken') },
       body: fd,
     });
-    const d = await res.json();
+    const d = await leseAntwort(res);
     if (d.ok) {
       toast('In „Meine Ausgaben" gespeichert', 'ok');
+      CONFIG.libData = { ...(CONFIG.libData || {}), item_id: d.lib_id ?? CONFIG.libData?.item_id ?? null,
+                         kind: ext === '.gif' ? 'gif' : 'video' };
       window.dispatchEvent(new CustomEvent('studio:output-changed',
         { detail: { tab: ext === '.gif' ? 'GIFs' : 'Videos' } }));
     } else {
-      toast('Speichern in Ausgaben fehlgeschlagen', 'err');
+      toast(d.error || 'Speichern in Ausgaben fehlgeschlagen', 'err');
     }
     return d;
   } catch (e) {
-    toast('Fehler beim Speichern in Ausgaben', 'err');
+    status('❌ ' + (e.message || e), 'red');
+    toast(e.message || 'Fehler beim Speichern in Ausgaben', 'err');
+    return { ok: false, error: String(e.message || e) };
   }
 }
 
 export function downloadImage(editor) {
-  const a = document.createElement('a');
-  a.href = exportPng(editor);
-  a.download = (document.getElementById('title-input')?.value.trim() || 'studio') + '.png';
-  a.click();
+  if (ladeGuard(editor)) return;
+  try {
+    const a = document.createElement('a');
+    a.href = exportPng(editor);
+    a.download = (document.getElementById('title-input')?.value.trim() || 'studio') + '.png';
+    a.click();
+  } catch (e) {
+    status('❌ Herunterladen fehlgeschlagen', 'red');
+    toast('Ein Bild ist cross-origin – über den Proxy laden', 'err');
+  }
 }
 
 // ---- Laden ---------------------------------------------------------------
 // Stellt einen gespeicherten Canvas wieder her. Bild-URLs werden über den
 // Proxy geladen (crossOrigin), damit späteres Freistellen/Export klappt.
-export function restoreCanvas(editor, canvasJsonStr) {
+// opts.frisch = true: die Historie wird auf den geladenen Zustand zurückgesetzt.
+// Das ist NUR beim Öffnen der Seite richtig. Beim Anwenden einer Vorlage mitten
+// in der Arbeit muss die Historie erhalten bleiben, sonst wäre alles Vorherige
+// per Strg+Z nicht mehr erreichbar.
+export function restoreCanvas(editor, canvasJsonStr, opts = {}) {
+  // Ab sofort ein Promise: Aufrufer können auf das FERTIGE Laden warten. Vorher
+  // lief z.B. „Vorlage speichern" direkt nach dem Öffnen auf einem noch leeren
+  // Canvas – und überschrieb damit die Vorlage mit einem leeren Bild.
   let state;
-  try { state = JSON.parse(canvasJsonStr); } catch (e) { console.warn('canvas_json parse', e); return; }
+  try {
+    state = JSON.parse(canvasJsonStr);
+  } catch (e) {
+    console.warn('canvas_json parse', e);
+    // Nicht stillschweigend weitermachen: sonst hält der Nutzer den leeren
+    // Editor für seine Datei, baut neu und überschreibt das reparable Original.
+    editor._ladefehler = true;
+    status('❌ Gespeicherte Daten unlesbar – bitte nicht überschreiben', 'red');
+    toast('Entwurf konnte nicht gelesen werden', 'err');
+    return Promise.resolve(false);
+  }
 
+  // Ein neuer Ladevorgang macht einen noch laufenden ungültig (Doppelklick auf
+  // zwei Vorlagen mischte sonst beide Layouts auf der Fläche).
+  const token = ++editor._loadToken;
+
+  editor._locked = true;   // VOR setSize: dessen snapshot() schrieb sonst den
+                           // leeren Canvas als ältesten Undo-Schritt.
   if (state.width && state.height) editor.setSize(state.width, state.height);
 
   const fabricState = state.fabric || state;   // v2 hat .fabric, sonst direkt
@@ -184,21 +297,48 @@ export function restoreCanvas(editor, canvasJsonStr) {
     fabricState.backgroundImage.crossOrigin = 'anonymous';
   }
 
-  editor._locked = true;
-  let done = false;
-  const finish = () => {
-    if (done) return; done = true;
-    editor._locked = false;
-    editor.canvas.requestRenderAll();
-    editor.snapshot();
-  };
-  try {
-    editor.canvas.loadFromJSON(fabricState, finish);
-  } catch (e) {
-    console.warn('restoreCanvas Fehler:', e);
-    finish();
-  }
-  // Sicherheitsnetz: falls ein fehlendes Bild den Callback blockiert,
-  // nach 4s trotzdem freigeben, damit der Editor nie „hängt".
-  setTimeout(finish, 4000);
+  return new Promise(resolve => {
+    let done = false;
+    let timer = null;
+    const finish = (vollstaendig) => {
+      if (done) return; done = true;
+      clearTimeout(timer);
+      // Überholter Ladevorgang: Ergebnis verwerfen, damit der neuere gewinnt.
+      if (token !== editor._loadToken) { resolve(false); return; }
+      editor._locked = false;
+      editor._ladefehler = !vollstaendig;
+      // Raster ist nicht Teil des gespeicherten Zustands – neu aufbauen,
+      // sonst zeigt der Raster-Knopf „an", während nichts zu sehen ist.
+      editor._grid = [];
+      if (editor.gridOn) editor._buildGrid();
+      editor.canvas.requestRenderAll();
+      if (opts.frisch) {
+        // Beim Öffnen: Historie auf den GELADENEN Zustand setzen. Vorher stand
+        // der leere Canvas als ältester Schritt darin – ein versehentliches
+        // Strg+Z löschte damit die ganze Datei.
+        editor.resetHistory();
+      } else {
+        // Mitten in der Arbeit (z.B. Vorlage anwenden): anhängen, damit man den
+        // Schritt rückgängig machen kann.
+        editor.snapshot();
+      }
+      resolve(vollstaendig);
+    };
+    try {
+      editor.canvas.loadFromJSON(fabricState, () => finish(true));
+    } catch (e) {
+      console.warn('restoreCanvas Fehler:', e);
+      status('❌ Entwurf konnte nicht vollständig geladen werden', 'red');
+      finish(false);
+    }
+    // Sicherheitsnetz: falls ein fehlendes Bild den Callback blockiert, nach
+    // 20s trotzdem freigeben. Großzügiger als früher (4s), weil bei langsamer
+    // Verbindung sonst mitten im Laden entsperrt und ein halber Zustand als
+    // Undo-Basis festgeschrieben wurde.
+    timer = setTimeout(() => {
+      console.warn('restoreCanvas: Zeitüberschreitung beim Laden');
+      status('⚠️ Nicht alle Bilder konnten geladen werden', 'red');
+      finish(false);
+    }, 20000);
+  });
 }

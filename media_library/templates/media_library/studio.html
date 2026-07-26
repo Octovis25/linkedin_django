@@ -103,11 +103,14 @@
       <div class="section-body">
         <div class="swatch-row" style="margin-bottom:4px">
           <button class="tbtn" data-act="canvas-size">📐 Größe</button>
-          <button class="tbtn" data-act="clear-bg">🚫 BG weg</button>
           <button class="tbtn danger" data-act="clear-all" title="Alles löschen">🧹 Leeren</button>
         </div>
+        {# Hintergrundfarbe gab es doppelt: hier und in der Sektion „Farbe".      #}
+        {# Beide hiessen id="bg-color", also fand das JS immer nur diesen ersten  #}
+        {# – der zweite war tot und sein Handler ueberschrieb diesen hier.        #}
+        {# Jetzt: EINE Stelle fuer alles rund um den Hintergrund.                 #}
         <div style="display:flex;gap:4px;align-items:center;margin-bottom:4px">
-          <label style="font-size:.72rem;color:#666;white-space:nowrap">Hintergrundfarbe</label>
+          <label style="font-size:.72rem;color:#666;white-space:nowrap">Farbe</label>
           <input type="color" id="bg-color" class="field-color" value="#FBF8F0" title="Canvas-Hintergrund einfärben">
           <button class="tbtn" data-act="bg-creme" title="Octotrial-Creme">Creme</button>
           <button class="tbtn" data-act="bg-weiss" title="Weiß">Weiß</button>
@@ -115,7 +118,7 @@
         </div>
         <div class="swatch-row" style="margin-bottom:4px">
           <button class="tbtn" data-act="set-as-bg" title="Das ausgewählte Bild als Hintergrund festlegen – ideal, um daraus eine Vorlage zu bauen">🖼 Bild als Hintergrund</button>
-          <button class="tbtn" data-act="clear-bg" title="Hintergrundbild entfernen">Hintergrundbild entfernen</button>
+          <button class="tbtn" data-act="clear-bg" title="Entfernt das Hintergrundbild – die Hintergrundfarbe bleibt">🚫 Hintergrundbild entfernen</button>
         </div>
         <div id="bg-info" style="font-size:.65rem;color:#888"></div>
       </div>
@@ -186,10 +189,13 @@
       <div class="section-body">
         <div style="font-size:.68rem;color:#888;margin-bottom:4px">Gilt für ausgewählten Text/Form und neue Formen:</div>
         <div id="palette-row" class="swatch-row"></div>
-        <div class="tl-row" style="margin-top:8px;gap:6px">🖌 Hintergrundfarbe
-          <input type="color" id="bg-color" class="field-color" value="#008591"
-                 title="Füllt die ganze Fläche mit dieser Farbe. Ein reines Farb-Hintergrundbild wird ersetzt.">
-          <button class="tbtn" id="bg-color-apply" data-act="bg-color-apply" title="Aktuelle Palettenfarbe als Hintergrund setzen">setzen</button>
+        {# Der zweite Hintergrund-Farbwaehler stand frueher hier und hatte        #}
+        {# dieselbe id wie der in der Sektion „Canvas" – er war dadurch tot.      #}
+        {# Geblieben ist die eine sinnvolle Abkuerzung: zuletzt gewaehlte         #}
+        {# Palettenfarbe als Hintergrund uebernehmen.                            #}
+        <div class="tl-row" style="margin-top:8px;gap:6px">
+          <button class="tbtn" id="bg-color-apply" data-act="bg-color-apply" style="width:100%"
+                  title="Übernimmt die zuletzt in der Palette gewählte Farbe als Canvas-Hintergrund">🖌 Palettenfarbe als Hintergrund</button>
         </div>
       </div>
     </section>
@@ -199,31 +205,54 @@
       <div class="section-body">
         <div id="retouch-hint" class="no-templates">Wähle ein Bild.</div>
         <div id="retouch-body" style="display:none">
-          <div class="retouch-label">Ganzer Hintergrund:</div>
-          <button class="tbtn" data-act="cutout" style="width:100%;margin-bottom:10px" title="Erkannten Hintergrund rundum entfernen (inkl. Schachbrettmuster)">✂ Hintergrund automatisch entfernen</button>
+          <div class="retouch-label">Automatisch:</div>
+          <div class="swatch-row" style="margin-bottom:10px">
+            <button class="tbtn" data-act="cutout" style="width:100%" title="Erkannten Hintergrund rundum entfernen">✂ Hintergrund automatisch entfernen</button>
+            <button class="tbtn" data-act="checker-remove" style="width:100%;margin-top:4px" title="Nur das eingebackene Karo-/Schachbrettmuster entfernen – weiße Bildinhalte bleiben">🧩 Nur Karomuster entfernen</button>
+          </div>
 
-          <!-- Pipette: Farbe anklicken -->
-          <div class="retouch-label">Farbe anklicken (Pipette):</div>
+          <!-- Anklicken: Pipette (überall) und Fläche (zusammenhängend) -->
+          <div class="retouch-label">Anklicken:</div>
           <div class="swatch-row" style="margin-bottom:6px">
-            <button class="tbtn" data-tool="pick" title="Farbe anklicken → wird ÜBERALL transparent (auch das Schachbrett-Muster)">💧 transparent</button>
-            <button class="tbtn" data-tool="swap" title="Farbe anklicken → nur diese Farbe wird umgefärbt">🎨 umfärben</button>
-          </div>
-          <div class="tl-row" style="margin-bottom:10px">
-            🎨 Umfärben-Farbe
-            <input type="color" id="recolor-color" class="field-color" value="#F56E28" title="Farbe für „umfärben“ – auch aus der Palette oben wählbar">
+            <button class="tbtn" data-tool="pick" title="Farbe anklicken → diese Farbe wird im GANZEN Bild transparent">💧 Farbe überall weg</button>
+            <button class="tbtn" data-tool="fill" title="In eine Fläche klicken → nur diese zusammenhängende Fläche wird transparent">🫧 Fläche weg</button>
+            <button class="tbtn" data-tool="swap" title="In eine Fläche klicken → diese Fläche bekommt die unten gewählte Farbe">🎨 Fläche umfärben</button>
           </div>
 
-          <!-- Rechteck-Bereich -->
-          <div class="retouch-label">Rechteck-Bereich ziehen, dann:</div>
-          <div class="swatch-row" style="margin-bottom:4px">
-            <button class="tbtn" data-tool="rect" title="Rechteck über die Fläche ziehen">🔲 Rechteck wählen</button>
-          </div>
-          <div id="mark-apply-row" class="swatch-row" style="display:none;margin-bottom:4px">
-            <button class="tbtn danger" data-mark="remove" title="Bereich transparent machen">🗑 Löschen</button>
-            <button class="tbtn primary" data-mark="recolor" title="Bereich in die oben gewählte 🎨 Farbe umfärben">🎨 Umfärben</button>
+          <!-- Pinsel: von Hand über das Bild wischen -->
+          <div class="retouch-label">Mit dem Pinsel wischen:</div>
+          <div class="swatch-row" style="margin-bottom:6px">
+            <button class="tbtn" data-tool="erase" title="Über das Bild wischen → wird transparent">🧽 Radieren</button>
+            <button class="tbtn" data-tool="restore" title="Über das Bild wischen → das Original kommt an dieser Stelle zurück">↩ Zurückholen</button>
+            <button class="tbtn" data-tool="paint" title="Über das Bild malen → in der unten gewählten Farbe (nur dort, wo Bild ist)">🖌 Malen</button>
           </div>
 
-          <button class="tbtn" data-tool="off" title="Werkzeug beenden" style="width:100%;margin-top:10px">✋ Fertig / Werkzeug aus</button>
+          <!-- Bereich markieren, dann am Stück anwenden -->
+          <div class="retouch-label">Bereich wählen, dann anwenden:</div>
+          <div class="swatch-row" style="margin-bottom:6px">
+            <button class="tbtn" data-tool="rect" title="Rechteck über die Fläche ziehen">🔲 Rechteck ziehen</button>
+            <button class="tbtn" data-tool="mark" title="Fläche frei rot übermalen – gut für unregelmäßige Formen">✍ Frei markieren</button>
+          </div>
+          <div id="mark-apply-row" class="swatch-row" style="display:none;margin-bottom:6px">
+            <button class="tbtn danger" data-mark="remove" title="Markierten Bereich transparent machen">🗑 Löschen</button>
+            <button class="tbtn primary" data-mark="recolor" title="Markierten Bereich in die unten gewählte 🎨 Farbe umfärben">🎨 Umfärben</button>
+          </div>
+
+          <!-- Pinselgröße: nur bei den Wisch-/Markier-Werkzeugen sichtbar -->
+          <div id="brush-row" class="tl-row" style="display:none;margin-bottom:6px;gap:6px">
+            <span style="white-space:nowrap">Pinsel</span>
+            <input type="range" id="brush-slider" class="tl-slider" min="3" max="120" step="1" value="20"
+                   title="Pinselgröße in Bildpunkten" style="flex:1">
+            <span id="brush-val" style="font-size:.7rem;color:#666;min-width:3.2em;text-align:right">20 px</span>
+          </div>
+
+          <!-- Farbe: nur bei den umfärbenden Werkzeugen sichtbar -->
+          <div id="recolor-color-row" class="tl-row" style="display:none;margin-bottom:6px;gap:6px">
+            <span style="white-space:nowrap">🎨 Farbe</span>
+            <input type="color" id="recolor-color" class="field-color" value="#F56E28" title="Farbe zum Umfärben und Malen – auch aus der Palette oben wählbar">
+          </div>
+
+          <button class="tbtn" data-tool="off" title="Werkzeug beenden" style="width:100%;margin-top:4px">✋ Fertig / Werkzeug aus</button>
           <div id="tool-status" style="font-size:.65rem;color:#888;margin-top:6px;min-height:1em"></div>
         </div>
       </div>
@@ -326,26 +355,85 @@
 
 </div>
 
+<!-- Sichtbare Fehlermeldung. Vorher endete JEDER JavaScript-Fehler in einer
+     stummen, unbedienbaren Seite: alle Knöpfe da, nichts reagiert. Jetzt sagt
+     das Studio, was schiefgelaufen ist – das ist die Grundlage jeder Diagnose. -->
+<script>
+(function () {
+  var box = null, festgehalten = false;
+  // wichtig=true: diese Meldung erklärt die Ursache. Nachfolgende Folgefehler
+  // dürfen sie nicht mit technischem Rauschen überschreiben.
+  function zeige(titel, text, wichtig) {
+    if (festgehalten && !wichtig) return;
+    if (wichtig) festgehalten = true;
+    if (!box) {
+      box = document.createElement('div');
+      box.id = 'studio-fehler';
+      box.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:99999;background:#b3261e;' +
+        'color:#fff;padding:10px 14px;font:13px/1.45 system-ui,sans-serif;box-shadow:0 2px 8px rgba(0,0,0,.3)';
+      (document.body || document.documentElement).appendChild(box);
+    }
+    box.innerHTML = '<strong>' + titel + '</strong><br>' +
+      '<span style="opacity:.9">' + String(text).replace(/[<>&]/g, '') + '</span>' +
+      '<br><span style="opacity:.75;font-size:12px">Tipp: Seite neu laden (Strg+F5). ' +
+      'Bleibt der Fehler, diese Meldung weitergeben.</span>' +
+      '<button style="position:absolute;top:6px;right:8px;background:none;border:0;color:#fff;' +
+      'font-size:18px;cursor:pointer" onclick="this.parentNode.remove()">×</button>';
+    box.style.position = 'fixed';
+  }
+  window.studioZeigeFehler = zeige;
+  window.addEventListener('error', function (e) {
+    zeige('Das Studio hat einen Fehler gemeldet.', (e.message || 'Unbekannter Fehler') +
+      (e.filename ? ' (' + String(e.filename).split('/').pop() + ':' + e.lineno + ')' : ''));
+  });
+  window.addEventListener('unhandledrejection', function (e) {
+    var r = e.reason;
+    zeige('Ein Vorgang ist fehlgeschlagen.', (r && (r.message || r)) || 'Unbekannter Fehler');
+  });
+})();
+</script>
+
 <!-- Pfad zu lokalen Vendor-Skripten (für dynamisch geladene wie gif.js) -->
 <script>window.STUDIO_VENDOR = "{% static 'media_library/studio/vendor/' %}";</script>
 <!-- Fabric.js (Editor-Engine) – lokal ausgeliefert, kein CDN nötig -->
 <script src="{% static 'media_library/studio/vendor/fabric.min.js' %}"></script>
+<script>
+// Ohne Fabric ist das Studio komplett funktionslos. Bisher stand darüber nur
+// eine Zeile in der Browser-Konsole – auf der Seite passierte einfach nichts.
+if (!window.fabric && window.studioZeigeFehler) {
+  window.studioZeigeFehler('Editor-Engine konnte nicht geladen werden.',
+    'fabric.min.js fehlt oder wurde blockiert. Auf dem Server prüfen: ' +
+    'staticfiles/media_library/studio/vendor/fabric.min.js (ggf. collectstatic ausführen).',
+    true);
+}
+</script>
 <!-- Studio-Module -->
-{# Nur studio.js bekam bisher einen Versions-Stempel. Die davon importierten   #}
-{# Module (library.js usw.) holte der Browser aus dem Cache – dann passten     #}
-{# neue und alte Dateien nicht zusammen. Die Import-Map stempelt alle mit.     #}
+{# Nur studio.js bekam ursprünglich einen Versions-Stempel. Die davon           #}
+{# importierten Module (library.js usw.) holte der Browser aus dem Cache –      #}
+{# dann passten neue und alte Dateien nicht zusammen ("initLibrary is not a     #}
+{# function"). Die Import-Map stempelt alle mit.                                #}
+{#                                                                              #}
+{# WICHTIG – die SCHLÜSSEL müssen die UNGEHASHTEN Pfade sein:                   #}
+{# studio.js importiert relativ ("./editor.js"). Der Browser löst das gegen die #}
+{# URL von studio.js auf und sucht IMMER "…/studio/editor.js" – auch wenn       #}
+{# studio.js selbst gehasht geladen wurde. Standen hier als Schlüssel die       #}
+{# {% static %}-Pfade, passten sie in Produktion (WhiteNoise                    #}
+{# CompressedManifestStaticFilesStorage → editor.a1b2c3.js) auf nichts, und die #}
+{# ganze Map lief ins Leere: die Module kamen ungestempelt aus dem Cache.       #}
+{# Schlüssel = get_static_prefix (nie gehasht), Wert = {% static %} (gehasht).  #}
+{# (get_static_prefix kommt aus demselben Tag-Set wie static, oben geladen.)    #}
 <script type="importmap">
 {
   "imports": {
-    "{% static 'media_library/studio/background.js' %}": "{% static 'media_library/studio/background.js' %}?v={% now 'U' %}",
-    "{% static 'media_library/studio/config.js' %}":     "{% static 'media_library/studio/config.js' %}?v={% now 'U' %}",
-    "{% static 'media_library/studio/cutout.js' %}":     "{% static 'media_library/studio/cutout.js' %}?v={% now 'U' %}",
-    "{% static 'media_library/studio/editor.js' %}":     "{% static 'media_library/studio/editor.js' %}?v={% now 'U' %}",
-    "{% static 'media_library/studio/io.js' %}":         "{% static 'media_library/studio/io.js' %}?v={% now 'U' %}",
-    "{% static 'media_library/studio/library.js' %}":    "{% static 'media_library/studio/library.js' %}?v={% now 'U' %}",
-    "{% static 'media_library/studio/media.js' %}":      "{% static 'media_library/studio/media.js' %}?v={% now 'U' %}",
-    "{% static 'media_library/studio/retouch.js' %}":    "{% static 'media_library/studio/retouch.js' %}?v={% now 'U' %}",
-    "{% static 'media_library/studio/util.js' %}":       "{% static 'media_library/studio/util.js' %}?v={% now 'U' %}"
+    "{% get_static_prefix %}media_library/studio/background.js": "{% static 'media_library/studio/background.js' %}?v={% now 'U' %}",
+    "{% get_static_prefix %}media_library/studio/config.js":     "{% static 'media_library/studio/config.js' %}?v={% now 'U' %}",
+    "{% get_static_prefix %}media_library/studio/cutout.js":     "{% static 'media_library/studio/cutout.js' %}?v={% now 'U' %}",
+    "{% get_static_prefix %}media_library/studio/editor.js":     "{% static 'media_library/studio/editor.js' %}?v={% now 'U' %}",
+    "{% get_static_prefix %}media_library/studio/io.js":         "{% static 'media_library/studio/io.js' %}?v={% now 'U' %}",
+    "{% get_static_prefix %}media_library/studio/library.js":    "{% static 'media_library/studio/library.js' %}?v={% now 'U' %}",
+    "{% get_static_prefix %}media_library/studio/media.js":      "{% static 'media_library/studio/media.js' %}?v={% now 'U' %}",
+    "{% get_static_prefix %}media_library/studio/retouch.js":    "{% static 'media_library/studio/retouch.js' %}?v={% now 'U' %}",
+    "{% get_static_prefix %}media_library/studio/util.js":       "{% static 'media_library/studio/util.js' %}?v={% now 'U' %}"
   }
 }
 </script>

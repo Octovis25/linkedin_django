@@ -1,7 +1,7 @@
 // studio.js – Einstiegspunkt. Verdrahtet DOM ↔ Module.
 import { CONFIG } from './config.js';
 import { Editor, fabric } from './editor.js';
-import { toast, status, modal } from './util.js';
+import { toast, status, modal, wegDamit } from './util.js';
 import * as bg from './background.js';
 import * as io from './io.js';
 // Namensraum-Import: Fehlt ein Export (z. B. weil der Browser eine alte
@@ -12,7 +12,33 @@ import * as media from './media.js';
 import { removeBackground, floodFillTransparent, recolorRegion, recolorSimilarAll, removeColorGlobal, hasCheckerboardBorder, removeCheckerboard } from './cutout.js';
 import * as retouch from './retouch.js';
 
+// Kapselt einen Initialisierungsschritt. Ohne das brach EIN Fehler irgendwo in
+// der langen Startsequenz alles Folgende ab – inklusive der Knopf-Verdrahtung.
+// Ergebnis war eine Seite, auf der schlicht nichts mehr reagierte.
+function boot(name, fn) {
+  try { return fn(); }
+  catch (e) {
+    console.error('[studio] Init-Schritt „' + name + '" fehlgeschlagen:', e);
+    if (window.studioZeigeFehler) {
+      window.studioZeigeFehler('Ein Teil des Studios konnte nicht starten: ' + name,
+                               e.message || String(e));
+    }
+    return null;
+  }
+}
+
+// localStorage wirft in manchen Browser-/Datenschutzeinstellungen schon beim
+// bloßen Zugriff (Privatmodus, blockierte Cookies, eingebettete Seite). Das
+// legte früher die gesamte Seite still.
+const ls = {
+  get(k) { try { return localStorage.getItem(k); } catch { return null; } },
+  set(k, v) { try { localStorage.setItem(k, v); } catch { /* egal */ } },
+};
+
 const canvasEl = document.getElementById('main-canvas');
+if (!canvasEl && window.studioZeigeFehler) {
+  window.studioZeigeFehler('Zeichenfläche fehlt.', 'Das Element #main-canvas ist nicht im Seiten-Gerüst.');
+}
 const editor = new Editor(canvasEl);
 window._studioEditor = editor;   // für Debugging in der Konsole
 
@@ -20,13 +46,26 @@ window._studioEditor = editor;   // für Debugging in der Konsole
 function fit() {
   const host = document.querySelector('.canvas-host');
   if (!host) return;
-  const w = host.clientWidth - 16;
-  const h = host.clientHeight - 16;
+  // Untergrenze: Ist der Host gerade unsichtbar (clientWidth 0), kämen negative
+  // Maße heraus – der Browser macht daraus eine Milliarden-Pixel-Bitmap und der
+  // Tab stürzt ab.
+  const w = Math.max(120, host.clientWidth - 16);
+  const h = Math.max(120, host.clientHeight - 16);
   editor._lastFit = { w, h };
   editor.fitTo(w, h);
+  // Fabric merkt sich die Canvas-Position. Verschiebt sich der Canvas (Leiste
+  // auf/zu, Scrollen), trafen Klicks mit Pipette/Rechteck sonst danebem.
+  editor.canvas.calcOffset();
 }
 window.addEventListener('resize', fit);
+window.addEventListener('scroll', () => editor.canvas.calcOffset(), { passive: true });
 requestAnimationFrame(fit);
+// Reagiert auch dann, wenn sich die Größe ohne Fensteränderung ändert
+// (z.B. eingeklappte Leiste) – das rAF allein feuerte manchmal zu früh.
+if (window.ResizeObserver) {
+  const _host = document.querySelector('.canvas-host');
+  if (_host) new ResizeObserver(() => fit()).observe(_host);
+}
 
 // Zoom-Stand kurz anzeigen (× über der Einpassung).
 function zeigeZoom(z) {
@@ -41,13 +80,23 @@ document.querySelectorAll('.sidebar-section h3').forEach(h => {
 });
 
 // ---- Canvas-Hintergrundfarbe ('' = transparent) --------------------------
+// EIN Weg für die Hintergrundfarbe. Früher gab es zwei Farbwähler mit derselben
+// id: einer setzte nur die Farbe, der andere löschte zusätzlich das
+// Hintergrundbild – für den Nutzer nicht unterscheidbar, und das Bild
+// verschwand unerwartet. Jetzt bleibt das Bild liegen; wenn es die Farbe
+// verdeckt, weist das Studio darauf hin.
 function setCanvasFarbe(farbe) {
   editor.canvas.backgroundColor = farbe || '';
   editor.canvas.requestRenderAll();
   editor.snapshot();
   const pick = document.getElementById('bg-color');
   if (pick && farbe) pick.value = farbe;
-  status(farbe ? `Hintergrund: ${farbe}` : 'Hintergrund transparent.', '#198754');
+  if (farbe && editor.canvas.backgroundImage) {
+    status(`Hintergrund: ${farbe} – wird noch vom Hintergrundbild verdeckt ` +
+           '(„🚫 Hintergrundbild entfernen")', '#B26A00');
+  } else {
+    status(farbe ? `Hintergrund: ${farbe}` : 'Hintergrund transparent.', '#198754');
+  }
 }
 {
   const pick = document.getElementById('bg-color');
@@ -79,7 +128,7 @@ function askSize(w0, h0) {
     document.body.appendChild(back);
     const wi = back.querySelector('#cs-w'), hi = back.querySelector('#cs-h');
     wi.focus(); wi.select();
-    const ende = val => { back.remove(); resolve(val); };
+    const ende = val => { wegDamit(back); resolve(val); };
     back.querySelector('#cs-ok').onclick = () => {
       const w = Math.round(+wi.value), h = Math.round(+hi.value);
       ende(w >= 50 && h >= 50 ? [w, h] : null);
@@ -103,7 +152,7 @@ function askSize(w0, h0) {
     const panel = document.querySelector(panelSel);
     if (!btn || !panel || !wrap) return;
     const key = 'studio-' + hideCls;
-    if (localStorage.getItem(key) === '1') wrap.classList.add(hideCls);
+    if (ls.get(key) === '1') wrap.classList.add(hideCls);
 
     const paint = () => {
       const aus = wrap.classList.contains(hideCls);
@@ -117,7 +166,7 @@ function askSize(w0, h0) {
       e.preventDefault();
       wrap.classList.toggle(hideCls);
       wrap.classList.remove(peekCls);
-      localStorage.setItem(key, wrap.classList.contains(hideCls) ? '1' : '0');
+      ls.set(key, wrap.classList.contains(hideCls) ? '1' : '0');
       paint();
       setTimeout(() => window.dispatchEvent(new Event('resize')), 200);
     };
@@ -161,11 +210,7 @@ bg.renderPalette(document.getElementById('palette-row'), col => {
   else if (o && o.shapeKind) { o.set(o.fill ? 'fill' : 'stroke', col); editor.canvas.requestRenderAll(); editor.snapshot(); }
 });
 
-// Hintergrundfarbe: Farbwähler live anwenden.
-{
-  const bgc = document.getElementById('bg-color');
-  if (bgc) bgc.oninput = () => bg.setBackgroundColor(editor, bgc.value);
-}
+// (Der zweite Hintergrund-Farbwähler ist entfallen – siehe setCanvasFarbe.)
 
 // Eigenes Textfarben-Feld: überschreibt die Palette für Text/Badge-Beschriftung
 {
@@ -182,20 +227,27 @@ bg.renderPalette(document.getElementById('palette-row'), col => {
 
 // Gemerktes Speicher-Format (image|gif|video). Nach der ersten Wahl wird nicht
 // mehr gefragt – der Knopf speichert still im gleichen Format.
-let _saveKind = null;
+// Beim Öffnen einer vorhandenen Ausgabe das dort verwendete Format übernehmen.
+let _saveKind = CONFIG.libData?.kind && CONFIG.libData.kind !== 'image'
+                ? CONFIG.libData.kind : null;
 async function speichereAls(kind) {
   _saveKind = kind;
-  if (kind === 'gif')        await media.exportGif(editor);
-  else if (kind === 'video') await media.exportVideo(editor);
-  else { await io.saveImage(editor); refreshOutput(); }
+  let ok;
+  if (kind === 'gif')        ok = await media.exportGif(editor);
+  else if (kind === 'video') ok = await media.exportVideo(editor);
+  else { ok = await io.saveImage(editor); refreshOutput(); }
+  // Nichts gespeichert (lädt noch, abgebrochen, Fehler)? Dann auch keine
+  // Erfolgsmeldung – die überschrieb vorher sofort die eigentliche Begründung.
+  if (!ok) return;
   // Knopf umbenennen, damit klar ist: ab jetzt wird direkt gespeichert.
-  const btn = document.querySelector('[data-act="save-as"]');
+  // Beide möglichen Zustände suchen: sobald eine Ausgabe geöffnet ist, heißt
+  // das Attribut „save-existing" – der alte Selektor griff dann ins Leere.
+  const btn = document.querySelector('[data-act="save-as"], [data-act="save-existing"]');
   if (btn) {
     const lbl = kind === 'gif' ? '💾 GIF speichern' : kind === 'video' ? '💾 Video speichern' : '💾 Speichern';
     btn.textContent = lbl;
     btn.title = 'Speichert im gleichen Format. Für ein anderes Format Umschalt+Klick.';
   }
-  status('Gespeichert.', '#198754');
 }
 
 // ---- Toolbar-Aktionen (data-act) -----------------------------------------
@@ -225,7 +277,20 @@ const actions = {
   'save-as-new': async () => { _saveKind = null; await actions['save-as'](); },
   // Vorhandene Ausgabe: nur speichern (gleiches Format, überschreibt).
   'save-existing': async () => {
-    const kind = CONFIG.libData?.kind;
+    let kind = _saveKind || CONFIG.libData?.kind || 'image';
+    // Animationen gesetzt, aber die Datei ist ein PNG? Vorher wurde still ein
+    // Standbild gespeichert und die Animationen waren im Ergebnis nicht drin.
+    if (kind === 'image' && media.hasAnimations(editor)) {
+      const wahl = await modal('Animationen erkannt',
+        'Dieses Element hat Animationen, die geöffnete Datei ist aber ein Bild. Wie speichern?',
+        [ { label: '🖼 Als Bild (ohne Animation)', value: 'image' },
+          { label: '🎞 Als GIF',                   value: 'gif' },
+          { label: '🎬 Als Video',                 value: 'video' },
+          { label: 'Abbrechen',                    value: null } ]);
+      if (!wahl) return;
+      kind = wahl;
+      _saveKind = wahl;
+    }
     if (kind === 'gif') await media.exportGif(editor);
     else if (kind === 'video') await media.exportVideo(editor);
     else { await io.saveImage(editor); refreshOutput(); }
@@ -245,8 +310,21 @@ const actions = {
     ]);
     if (!ok) return;
     editor.clearAll();
+    // Bindung an die zuvor geöffnete Ausgabe lösen: sonst hätte „Speichern"
+    // die alte Datei mit dem neuen, leeren Entwurf überschrieben – und die
+    // Warnung eines früheren Ladefehlers wäre weiter erschienen.
+    CONFIG.libData = null;
+    setTemplateId(null);
+    editor._ladefehler = false;
+    _saveKind = null;
+    editor.resetHistory();
+    {
+      const b = document.querySelector('[data-act="save-existing"]');
+      if (b) { b.textContent = '💾 Speichern als…'; b.dataset.act = 'save-as'; b.title = 'Format wählen und speichern'; }
+    }
     const t = document.getElementById('title-input'); if (t) t.value = '';
     if (location.search) history.replaceState(null, '', '/library/studio/');
+    window.dispatchEvent(new CustomEvent('studio:geladen'));   // Stand gilt als sauber
     status('Neuer, leerer Editor.', '#888');
   },
   undo:        () => editor.undo(),
@@ -313,13 +391,15 @@ const actions = {
     status('Dreihaken eingefügt – Doppelklick: eine Zeile je Haken. An der Ecke skalieren.', '#198754');
   },
   'add-text':  () => {
+    // Alle Felder optional lesen: fehlt eines im Gerüst, soll trotzdem Text
+    // eingefügt werden statt die Aktion mit einem TypeError abzubrechen.
     const inp = document.getElementById('text-input');
-    editor.addText(inp.value.trim() || 'Text', {
-      fontSize: Math.max(6, +document.getElementById('font-size').value || 32),
-      fontWeight: document.getElementById('font-weight').value,
+    editor.addText((inp?.value || '').trim() || 'Text', {
+      fontSize: Math.max(6, +(document.getElementById('font-size')?.value) || 32),
+      fontWeight: document.getElementById('font-weight')?.value || 'bold',
       color: document.getElementById('text-color')?.value || currentTextColor,
     });
-    inp.value = '';
+    if (inp) inp.value = '';
   },
   'canvas-size': async () => {
     const choice = await modal('Canvas-Größe', 'Format wählen', [
@@ -378,20 +458,26 @@ const actions = {
     status('🧩 Entferne Schachbrettmuster…');
     try {
       const out = await removeCheckerboard(o._element);
+      if (!out) { status('Kein Schachbrettmuster gefunden – Bild unverändert', '#888'); return; }
       o.bgRemoved = true; o._work = null;
       retouch.replaceElement(o, out); editor.snapshot();
       status('✅ Muster entfernt', 'green');
-    } catch (e) { status('❌ Fehler', 'red'); }
+    } catch (e) { status('❌ ' + (e.message || 'Fehler'), 'red'); }
   },
-  'restore-post': () => { if (CONFIG.postData?.canvas_json) io.restoreCanvas(editor, CONFIG.postData.canvas_json); },
+  'restore-post': async () => {
+    if (!CONFIG.postData?.canvas_json) return;
+    if (!window.studioDarfVerlassen || window.studioDarfVerlassen()) {
+      status('⏳ Entwurf wird geladen…');
+      await io.restoreCanvas(editor, CONFIG.postData.canvas_json);
+      status('Bereit.', '#888');
+    }
+  },
   'post-bg':      () => CONFIG.postData?.id && bg.setBackgroundImage(editor, `/library/studio/api/post-image/${CONFIG.postData.id}/`),
   'post-overlay': () => CONFIG.postData?.id && editor.addImageUrl(`/library/studio/api/post-image/${CONFIG.postData.id}/`),
   'bg-color-apply': () => {
     // Zuletzt in der Palette gewählte Farbe (z. B. ein Video-Teal) als Hintergrund.
     const c = currentShapeColor || document.getElementById('bg-color')?.value || '#008591';
-    const bgc = document.getElementById('bg-color'); if (bgc) bgc.value = c;
-    bg.setBackgroundColor(editor, c);
-    status('Hintergrundfarbe gesetzt.', '#198754');
+    setCanvasFarbe(c);   // hält den Farbwähler in der Canvas-Sektion mit aktuell
   },
   'go-back': (btn) => {
     // Studio läuft in neuem Tab → schließen bringt exakt zurück; sonst zur Herkunftsseite.
@@ -422,6 +508,20 @@ const actions = {
 
 // Aktuelle Leinwand als wiederverwendbare Vorlage speichern.
 async function saveAsTemplate() {
+  // Lädt der Editor noch? Dann wäre die Fläche halb leer – und ein „Vorlage
+  // aktualisieren" hätte die bestehende Vorlage mit dem leeren Stand
+  // überschrieben. Das war unwiederbringlich.
+  if (editor._locked) {
+    status('⏳ Wird noch geladen – bitte einen Moment warten', 'red');
+    toast('Die Vorlage lädt noch', 'err');
+    return;
+  }
+  if (editor._ladefehler) {
+    const weiter = window.confirm(
+      'Achtung: Der aktuelle Inhalt wurde beim Öffnen nicht vollständig geladen.\n\n' +
+      'Beim Speichern würde dieser unvollständige Stand die Vorlage ersetzen.\n\nTrotzdem speichern?');
+    if (!weiter) return;
+  }
   // Eine Quelle der Wahrheit für die aktuell geladene Vorlage – egal ob sie über
   // die Verwaltung (?template=…) oder per Klick auf eine Kachel geöffnet wurde.
   const boundId = currentTemplateId();
@@ -456,12 +556,23 @@ async function saveAsTemplate() {
       }
     } catch (e) { /* Prüfung ist nur Komfort – bei Fehler normal weiter */ }
   }
+  // Offene Pinsel-/Markierungsstände in echte Bilder umwandeln – ein Canvas als
+  // Bild-Element überlebt die Serialisierung ins canvas_json nicht.
+  await retouch.vorschauenUebernehmen(editor.canvas);
   let dataUrl, canvasJson;
   try {
+    retouch.beendeVorschauen(editor.canvas);               // rote Markierung nie mitspeichern
     const preview = editor.exportDataURL({ multiplier: 0.4 });
     dataUrl = editor.exportDataURL({ multiplier: 1 });     // Vorschau-PNG (ohne Raster)
     canvasJson = io.buildCanvasJson(editor, preview);      // Layout: Hintergrund + Logo + Textfelder
-  } catch (e) { toast('Export fehlgeschlagen', 'err'); return; }
+  } catch (e) { toast('Export fehlgeschlagen', 'err'); status('❌ Export fehlgeschlagen', 'red'); return; }
+  // Leere Fläche ist fast immer ein Versehen (z.B. zu früh geklickt) und würde
+  // eine funktionierende Vorlage durch nichts ersetzen.
+  if (updateExisting && !editor.realObjects().length && !editor.canvas.backgroundImage) {
+    const weiter = window.confirm('Die Arbeitsfläche ist leer.\n\n' +
+      'Die bestehende Vorlage würde durch eine leere Vorlage ersetzt.\n\nWirklich fortfahren?');
+    if (!weiter) { status('Abgebrochen', 'red'); return; }
+  }
   status('💾 Vorlage wird gespeichert…');
   try {
     const res = await fetch(CONFIG.urls?.saveTemplate || '/library/studio/template/save-canvas/', {
@@ -471,14 +582,25 @@ async function saveAsTemplate() {
                              width: editor.width, height: editor.height,
                              tplId: updateExisting ? boundId : undefined }),
     });
+    if (!res.ok) {
+      // Ohne diese Prüfung scheiterte res.json() an der HTML-Fehlerseite und der
+      // Nutzer sah „SyntaxError: Unexpected token '<'".
+      const grund = res.status === 413 ? 'Vorlage zu groß für den Server'
+                  : res.status === 403 ? 'Sitzung abgelaufen – bitte neu anmelden'
+                  : 'Server-Fehler ' + res.status;
+      toast(grund, 'err'); status('❌ ' + grund, 'red'); return;
+    }
     const d = await res.json();
     if (d.ok) {
       setTemplateId(d.id);   // ab jetzt weiter dieselbe Vorlage aktualisieren
       toast(d.updated ? 'Vorlage aktualisiert' : 'Vorlage gespeichert', 'ok');
       status(d.updated ? '✅ Vorlage aktualisiert.' : '✅ Als Vorlage gespeichert.', '#198754');
+      // Stand als gespeichert markieren – sonst fragte das Studio auch direkt
+      // nach dem Speichern einer Vorlage noch nach ungespeicherten Änderungen.
+      window.dispatchEvent(new CustomEvent('studio:vorlage-gespeichert'));
       bg.loadTemplateList(editor);
     } else { toast('Fehler: ' + (d.error || ''), 'err'); status('❌ ' + (d.error || 'Fehler'), 'red'); }
-  } catch (e) { toast('Speichern fehlgeschlagen', 'err'); status('❌ ' + e, 'red'); }
+  } catch (e) { toast('Speichern fehlgeschlagen', 'err'); status('❌ ' + (e.message || e), 'red'); }
 }
 function _cookie(name) {
   const m = document.cookie.match('(^|;)\\s*' + name + '\\s*=\\s*([^;]+)');
@@ -516,14 +638,14 @@ async function copyImageFromPost() {
       card.style.cssText = 'cursor:pointer;border:1px solid #e2e5e8;border-radius:8px;padding:5px;text-align:center';
       card.innerHTML = `<img src="${p.thumb}" loading="lazy" style="width:100%;height:90px;object-fit:cover;border-radius:6px;background:#f0f1f3">`
         + `<div style="font-size:11px;color:#555;margin-top:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(p.title)}</div>`;
-      card.onclick = () => { ov.remove(); ladeBildVonPost(p); };
+      card.onclick = () => { wegDamit(ov); ladeBildVonPost(p); };
       grid.appendChild(card);
     });
   };
   render('');
   box.querySelector('#cfp-q').addEventListener('input', e => render(e.target.value.toLowerCase().trim()));
-  box.querySelector('#cfp-x').onclick = () => ov.remove();
-  ov.addEventListener('click', e => { if (e.target === ov) ov.remove(); });
+  box.querySelector('#cfp-x').onclick = () => wegDamit(ov);
+  ov.addEventListener('click', e => { if (e.target === ov) wegDamit(ov); });
 }
 async function ladeBildVonPost(p) {
   try {
@@ -534,9 +656,27 @@ async function ladeBildVonPost(p) {
 
 document.addEventListener('click', e => {
   const btn = e.target.closest('[data-act]');
-  if (btn && actions[btn.dataset.act]) { e.preventDefault(); actions[btn.dataset.act](btn); }
+  if (btn && actions[btn.dataset.act]) {
+    e.preventDefault();
+    // Die meisten Aktionen sind async. Ohne dieses catch blieb bei einem Fehler
+    // nur „💾 Speichert…" stehen – für den Nutzer sah das aus wie ein Hänger.
+    try {
+      Promise.resolve(actions[btn.dataset.act](btn)).catch(err => {
+        console.error('[studio] Aktion „' + btn.dataset.act + '" fehlgeschlagen:', err);
+        status('❌ ' + (err?.message || err), 'red');
+        toast(err?.message || 'Aktion fehlgeschlagen', 'err');
+      });
+    } catch (err) {
+      console.error('[studio] Aktion „' + btn.dataset.act + '" fehlgeschlagen:', err);
+      status('❌ ' + (err?.message || err), 'red');
+    }
+  }
   const shape = e.target.closest('[data-shape]');
-  if (shape) { e.preventDefault(); editor.addShape(shape.dataset.shape, currentShapeColor); }
+  if (shape) {
+    e.preventDefault();
+    try { editor.addShape(shape.dataset.shape, currentShapeColor); }
+    catch (err) { console.error(err); toast('Form konnte nicht eingefügt werden', 'err'); }
+  }
 });
 
 // Textausrichtung des aktiven Textfelds setzen.
@@ -568,10 +708,38 @@ async function doCutout() {
 // ==== Freistellen & Korrektur-Werkzeuge ====================================
 let _tol = 50;
 let _brush = 20;
-let _tool = 'off';       // 'off' | 'fill' | 'recolor' | 'paint' | 'mark' | 'rect' | 'erase' | 'restore'
+let _tool = 'off';       // 'off' | 'fill' | 'swap' | 'pick' | 'paint' | 'mark' | 'rect' | 'erase' | 'restore'
 let _toolTarget = null;
 let _painting = false;
 let _suppressClear = false;
+
+// Gibt das aktuelle Werkzeug-Ziel frei. Wichtig nach dem Laden einer Datei oder
+// nach Undo: die alten Objekte sind dann nicht mehr auf dem Canvas, halten aber
+// über _work/_mask/_origImg mehrere Vollbild-Canvas im Speicher fest.
+function freeToolTarget() {
+  const o = _toolTarget;
+  _toolTarget = null;
+  _painting = false;
+  if (!o) return;
+  o._work = null; o._mask = null; o._origImg = null; o._origPromise = null; o._prevCv = null;
+}
+
+// Gibt die Arbeitsfläche wieder frei: Objekte anklickbar, Auswahl möglich,
+// normaler Mauszeiger. Bleibt einer dieser Schalter hängen, wirkt das Studio
+// komplett eingefroren, obwohl technisch alles läuft.
+function werkzeugFlagsZuruecksetzen() {
+  editor.canvas.skipTargetFind = false;
+  editor.canvas.selection = true;
+  editor.canvas.defaultCursor = 'default';
+  const ov = document.getElementById('rect-overlay');
+  if (ov) ov.style.display = 'none';
+  document.querySelectorAll('#retouch-body [data-tool]').forEach(b => b.classList.remove('primary'));
+  ['brush-row', 'recolor-color-row', 'mark-apply-row'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.style.display = 'none';
+  });
+  editor.canvas.requestRenderAll();
+}
 
 // Zielbild bestimmen: aktives Bild, sonst das oberste Bild auf dem Canvas.
 function targetImage() {
@@ -582,13 +750,31 @@ function targetImage() {
 }
 
 function setTool(tool) {
+  // Zeigt _toolTarget noch auf ein Objekt, das inzwischen ersetzt wurde
+  // (Vorlage geladen, Strg+Z)? Dann ist es verwaist: Werkzeuge taten anschließend
+  // still gar nichts mehr. Aufräumen und neu bestimmen.
+  if (_toolTarget && _toolTarget.canvas !== editor.canvas) freeToolTarget();
+
   const o = targetImage();
-  if (tool !== 'off' && !o) { toast('Kein Bild vorhanden – erst ein Bild einfügen', 'err'); return; }
+  if (tool !== 'off' && !o) {
+    // WICHTIG: erst die Arbeitsfläche entsperren, dann abbrechen. Vorher kehrte
+    // die Funktion hier zurück, während skipTargetFind/selection vom vorherigen
+    // Zieh-Werkzeug noch gesetzt waren – dann ließ sich gar nichts mehr
+    // anklicken, und jeder Rettungsversuch über einen anderen Werkzeug-Knopf
+    // lief in genau dieses return.
+    werkzeugFlagsZuruecksetzen();
+    _tool = 'off';
+    toast('Kein Bild vorhanden – erst ein Bild einfügen', 'err');
+    return;
+  }
   // Beim Verlassen des Markier-Modus offene (nicht angewendete) Markierung verwerfen.
   if ((_tool === 'mark' || _tool === 'rect') && _toolTarget && retouch.hasMask(_toolTarget)) {
     retouch.clearMask(_toolTarget);
-    retouch.commitWork(_toolTarget).then(() => editor.canvas.requestRenderAll());
+    retouch.commitWork(_toolTarget).then(() => editor.canvas.requestRenderAll())
+      .catch(e => console.warn('commitWork beim Werkzeugwechsel:', e));
   }
+  // Rote Markierungs-Vorschau beenden, sonst bleibt sie im Bild stehen.
+  retouch.beendeVorschauen(editor.canvas);
   if (typeof clearSelRect === 'function') clearSelRect();
   _tool = tool;
   _toolTarget = tool === 'off' ? null : o;
@@ -608,7 +794,6 @@ function setTool(tool) {
     fill: 'In eine Fläche klicken → wird transparent (durchsichtig)',
     pick: 'Hintergrundfarbe anklicken → diese Farbe wird ÜBERALL transparent',
     swap: 'In eine Farbfläche klicken → dieser Bereich bekommt die gewählte Farbe',
-    recolor: 'Bereich anklicken → wird in die gewählte Farbe umgefärbt',
     paint: 'Über das Bild malen → in gewählter Farbe (nur wo Bild ist)',
     mark: 'Fläche grob rot übermalen, dann unten „umfärben" oder „entfernen"',
     rect: 'Rechteck über die Fläche ziehen, dann unten „umfärben" oder „entfernen"',
@@ -619,9 +804,16 @@ function setTool(tool) {
   setToolStatus(hints[tool] || '');
   const isMark = (tool === 'mark' || tool === 'rect');
   const colorRow = document.getElementById('recolor-color-row');
-  if (colorRow) colorRow.style.display = (tool === 'recolor' || tool === 'paint' || tool === 'swap' || isMark) ? 'flex' : 'none';
+  if (colorRow) colorRow.style.display = (tool === 'paint' || tool === 'swap' || isMark) ? 'flex' : 'none';
   const markRow = document.getElementById('mark-apply-row');
   if (markRow) markRow.style.display = isMark ? 'flex' : 'none';
+  // Pinselgröße nur bei den Werkzeugen zeigen, die sie auch benutzen.
+  const brushRow = document.getElementById('brush-row');
+  if (brushRow) brushRow.style.display = ['paint', 'erase', 'restore', 'mark'].includes(tool) ? 'flex' : 'none';
+  // Aktives Werkzeug hervorheben – vorher war nicht erkennbar, welches an ist.
+  document.querySelectorAll('#retouch-body [data-tool]').forEach(b => {
+    b.classList.toggle('primary', b.dataset.tool === tool && tool !== 'off');
+  });
   // Rechteck-Zeichenebene nur beim Rechteck-Werkzeug aktiv (Style direkt gesetzt,
   // unabhängig von der CSS – cache-fest).
   const ov = document.getElementById('rect-overlay');
@@ -673,27 +865,36 @@ async function doSwapAt(o, px, py) {
   } catch (e) { console.error('Farbtausch:', e); setToolStatus('❌ Fehler'); }
 }
 
-async function doRecolorAt(o, px, py) {
-  const hex = document.getElementById('recolor-color')?.value || '#ffffff';
-  try {
-    const out = await recolorRegion(o._element, px, py, hex, _tol);
-    o._work = null;
-    retouch.replaceElement(o, out); editor.snapshot();
-    setToolStatus('🎨 Umgefärbt – weiter klicken oder Werkzeug aus');
-  } catch (e) { setToolStatus('❌ Fehler'); }
-}
+// doRecolorAt ist entfallen: die Funktion war bis auf die Toleranz identisch
+// mit doSwapAt (beide recolorRegion). Zwei Knöpfe für dieselbe Sache.
 
-async function paintAt(o, px, py) {
+// Ein Pinselschritt. `endgueltig` nur beim Loslassen der Maustaste:
+// Vorher wurde bei JEDER Mausbewegung ein Vollauflösungs-PNG kodiert
+// (bei einem 12-Megapixel-Bild ~200 ms pro Tick, 60 Ticks pro Strich). Die
+// Aufrufe stapelten sich, der Browser stand minutenlang, und weil sie in
+// beliebiger Reihenfolge zurückkamen, verschwanden Striche wieder.
+// Während des Ziehens zeigen wir jetzt direkt die Arbeits-Canvas (kostenlos).
+async function paintAt(o, px, py, endgueltig = false) {
   if (_tool === 'mark') {
     retouch.markAt(o, px, py, _brush);
     retouch.renderMaskPreview(o);
     editor.canvas.requestRenderAll();
     return;
   }
-  const origImg = _tool === 'restore' ? await retouch.getOriginal(o) : null;
+  let origImg = null;
+  if (_tool === 'restore') {
+    try {
+      origImg = await retouch.getOriginal(o);
+    } catch (e) {
+      setToolStatus('❌ Originalbild nicht verfügbar – „Wiederherstellen" geht hier nicht');
+      _painting = false;
+      return;
+    }
+  }
   const color = _tool === 'paint' ? (document.getElementById('recolor-color')?.value || '#ffffff') : null;
   retouch.brushAt(o, px, py, _brush, _tool, origImg, color);
-  await retouch.commitWork(o);
+  if (endgueltig) await retouch.commitWork(o);   // teuer: nur einmal am Strichende
+  else retouch.showWork(o);                      // billig: Arbeits-Canvas anzeigen
   editor.canvas.requestRenderAll();
 }
 
@@ -793,7 +994,6 @@ editor.canvas.on('mouse:down', async (opt) => {
   if (_tool === 'off' || !_toolTarget) return;
   const { px, py } = imgPixel(_toolTarget, opt.e);
   if (_tool === 'fill') { await doFillAt(_toolTarget, px, py); return; }
-  if (_tool === 'recolor') { await doRecolorAt(_toolTarget, px, py); return; }
   if (_tool === 'swap') { await doSwapAt(_toolTarget, px, py); return; }
   if (_tool === 'pick') { await doPickAt(_toolTarget, px, py); return; }
   if (_tool === 'rect') {
@@ -832,8 +1032,20 @@ editor.canvas.on('mouse:move', async (opt) => {
   }
   await paintAt(_toolTarget, px, py);
 });
-editor.canvas.on('mouse:up', () => {
-  if (_painting) { _painting = false; }
+editor.canvas.on('mouse:up', async () => {
+  if (!_painting) return;
+  _painting = false;
+  // Strich abgeschlossen: jetzt EINMAL den echten Bildstand erzeugen und eine
+  // Undo-Stufe setzen – nicht 60-mal während des Ziehens.
+  if (_toolTarget && ['paint', 'erase', 'restore'].includes(_tool)) {
+    try {
+      await retouch.commitWork(_toolTarget);
+      editor.snapshot();
+    } catch (e) {
+      console.error('commitWork:', e);
+      setToolStatus('❌ Änderung konnte nicht übernommen werden');
+    }
+  }
 });
 
 // Korrektur-Panel je nach Auswahl aktualisieren.
@@ -1000,7 +1212,7 @@ function rebuildTextblock(g, head, body, over = {}) {
 
 function startTextblockEdit(g) {
   if (!isTextblock(g)) return;
-  document.getElementById('tb-edit')?.remove();
+  wegDamit(document.getElementById('tb-edit'));
   const cEl = editor.canvas.upperCanvasEl;
   const r = cEl.getBoundingClientRect();
   const k = r.width / editor.canvas.getWidth();
@@ -1041,7 +1253,7 @@ function startTextblockEdit(g) {
     const h = hi.value.trim(), b = bi.value.trim();
     const sz = Math.max(8, +si.value || g.tbSize || 19);
     const wd = Math.max(60, +wi.value || g.tbWidth || 260);
-    box.remove();
+    wegDamit(box);
     const geaendert = h !== (g.tbHead || '') || b !== (g.tbBody || '')
       || sz !== (g.tbSize || 19) || wd !== (g.tbWidth || 260);
     if (save && geaendert) rebuildTextblock(g, h, b, { size: sz, width: wd });
@@ -1110,7 +1322,7 @@ function rebuildChecklist(g, items, over = {}) {
 
 function startChecklistEdit(g) {
   if (!isChecklist(g)) return;
-  document.getElementById('tb-edit')?.remove();
+  wegDamit(document.getElementById('tb-edit'));
   const p = g.getCenterPoint();
   const cEl = editor.canvas.upperCanvasEl, r = cEl.getBoundingClientRect();
   const k = r.width / editor.canvas.getWidth();
@@ -1142,7 +1354,7 @@ function startChecklistEdit(g) {
     const items = bi.value.split('\n').map(s => s.trim()).filter(Boolean);
     const sz = Math.max(8, +si.value || g.clSize || 22);
     const wd = Math.max(60, +wi.value || g.clWidth || 300);
-    box.remove();
+    wegDamit(box);
     if (save && items.length) rebuildChecklist(g, items, { size: sz, width: wd });
     status('Bereit.');
   };
@@ -1346,7 +1558,7 @@ function rebuildBadge(g, txt) {
 
 function startBadgeEdit(g) {
   if (!isBadge(g)) return;
-  document.getElementById('badge-edit')?.remove();
+  wegDamit(document.getElementById('badge-edit'));
   const cur = g._objects?.[1]?.text || '';
   const cEl = editor.canvas.upperCanvasEl;
   const r = cEl.getBoundingClientRect();
@@ -1373,7 +1585,7 @@ function startBadgeEdit(g) {
   const finish = save => {
     if (done) return; done = true;
     const v = inp.value.trim();
-    inp.remove();
+    wegDamit(inp);
     if (save && v && v !== cur) rebuildBadge(g, v);
     status('Bereit.');
   };
@@ -1427,9 +1639,29 @@ document.addEventListener('click', e => {
   const mb = e.target.closest('#retouch-body [data-mark]');
   if (mb) { e.preventDefault(); applyMark(mb.dataset.mark); }
 });
+// Escape beendet das aktive Werkzeug – der schnelle Weg zurück, wenn sich die
+// Arbeitsfläche „festgefahren" anfühlt.
+document.addEventListener('keydown', e => {
+  if (e.key !== 'Escape' || _tool === 'off') return;
+  const tag = (e.target.tagName || '').toLowerCase();
+  if (tag === 'input' || tag === 'textarea' || e.target.isContentEditable) return;
+  if (document.querySelector('.studio-modal-bg')) return;   // Dialog hat Vorrang
+  e.preventDefault();
+  setTool('off');
+  setToolStatus('Werkzeug beendet (Esc).');
+});
+
 {
   const brushS = document.getElementById('brush-slider');
-  if (brushS) brushS.oninput = () => { _brush = +brushS.value; document.getElementById('brush-val').textContent = _brush; };
+  const brushV = document.getElementById('brush-val');
+  if (brushS) {
+    _brush = +brushS.value || _brush;
+    if (brushV) brushV.textContent = _brush + ' px';
+    brushS.oninput = () => {
+      _brush = +brushS.value;
+      if (brushV) brushV.textContent = _brush + ' px';   // ohne Guard warf das hier
+    };
+  }
 }
 
 // ---- Element-Leiste: IMMER sichtbar, Buttons inaktiv wenn nichts gewählt ---
@@ -1437,6 +1669,8 @@ let _keepRatio = true;
 
 function renderSelBar() {
   const bar = document.getElementById('sel-bar');
+  if (!bar) return;   // ohne diesen Guard riss ein fehlendes Element die ganze
+                      // Startsequenz ab (Datei laden, Titel, „Bereit."-Status)
   const objs = editor.activeAll();
   const hasSel = objs.length > 0;
   const isImg = objs.length === 1 && objs[0].type === 'image';
@@ -1503,12 +1737,20 @@ function mitAuswahl(fn) {
   if (!list.length) return 0;
   const war = editor.active();
   const mehrere = war && war.type === 'activeSelection';
-  if (mehrere) editor.canvas.discardActiveObject();
-  fn(list);
-  list.forEach(o => o.setCoords());
-  if (mehrere) {
-    const sel = new fabric.ActiveSelection(list, { canvas: editor.canvas });
-    editor.canvas.setActiveObject(sel);
+  // Das kurzzeitige Ab- und Wiederanwählen löste drei komplette Neuaufbauten
+  // der Auswahlleiste aus – dabei wurde das Eingabefeld gelöscht, in dessen
+  // eigenem Handler wir gerade standen (Wert sprang zurück). Hier unterdrückt.
+  _suppressClear = true;
+  try {
+    if (mehrere) editor.canvas.discardActiveObject();
+    fn(list);
+    list.forEach(o => { o.setCoords(); o.__thumb = null; });
+    if (mehrere) {
+      const sel = new fabric.ActiveSelection(list, { canvas: editor.canvas });
+      editor.canvas.setActiveObject(sel);
+    }
+  } finally {
+    _suppressClear = false;
   }
   editor.canvas.requestRenderAll();
   editor.snapshot();
@@ -1641,50 +1883,11 @@ function renderLayers() {
 }
 
 // ---- Animations-Panel -----------------------------------------------------
-function renderAnimPanel() {
-  const panel = document.getElementById('anim-panel');
-  if (!panel) return;
-  const o = editor.active();
-  if (!o) { panel.innerHTML = '<p class="no-templates">Wähle ein Element, um es zu animieren.</p>'; return; }
-  const cur = o.anim?.type || 'none';
-  const curFx = o.fx || 'none';
-  const fxTypes = media.EFFECTS || ['none'];
-  const fxLabels = media.EFFECT_LABELS || {};
-  panel.innerHTML = `
-    <label class="tl-row">Bewegung:
-      <select id="anim-type" class="field" style="flex:1">
-        ${media.ANIM_TYPES.map(t => `<option value="${t}" ${t === cur ? 'selected' : ''}>${media.ANIM_LABELS[t] || t}</option>`).join('')}
-      </select>
-    </label>
-    <label class="tl-row">Effekt:
-      <select id="anim-fx" class="field" style="flex:1">
-        ${fxTypes.map(t => `<option value="${t}" ${t === curFx ? 'selected' : ''}>${fxLabels[t] || t}</option>`).join('')}
-      </select>
-    </label>
-    <div class="tl-row">Dauer <input id="anim-dur" type="range" class="tl-slider" min="300" max="4000" step="100" value="${o.anim?.dur || 1200}"><span id="anim-dur-val">${o.anim?.dur || 1200}ms</span></div>
-    <div class="tl-row">Verzög. <input id="anim-delay" type="range" class="tl-slider" min="0" max="3000" step="100" value="${o.anim?.delay || 0}"><span id="anim-delay-val">${o.anim?.delay || 0}ms</span></div>
-    <button class="tbtn primary" id="anim-preview" style="width:100%;margin-top:6px">▶ Vorschau</button>
-    <p style="font-size:.66rem;color:#888;margin-top:6px;line-height:1.35">„Bewegung" bewegt das Element selbst. „Effekt" legt Deko (z. B. Netzwerk) darüber – beides ist gespeichert, aber nur in der ▶ Vorschau und im GIF/Video sichtbar, nicht auf dem stillen Bild.</p>
-  `;
-  const apply = () => {
-    const type = document.getElementById('anim-type').value;
-    const dur = +document.getElementById('anim-dur').value;
-    const delay = +document.getElementById('anim-delay').value;
-    document.getElementById('anim-dur-val').textContent = dur + 'ms';
-    document.getElementById('anim-delay-val').textContent = delay + 'ms';
-    media.setAnim(editor, type, dur, delay);
-  };
-  panel.querySelector('#anim-type').onchange = apply;
-  panel.querySelector('#anim-fx').onchange = () => {
-    const v = document.getElementById('anim-fx').value;
-    o.fx = (v && v !== 'none') ? v : null;
-    editor.snapshot();
-    if (typeof renderAnimBar === 'function') renderAnimBar();
-  };
-  panel.querySelector('#anim-dur').oninput = apply;
-  panel.querySelector('#anim-delay').oninput = apply;
-  panel.querySelector('#anim-preview').onclick = () => media.previewAnimation(editor);
-}
+// Das frühere Seitenleisten-Panel „Animation" (#anim-panel) ist entfallen:
+// Die Leiste unter dem Canvas (renderAnimBar) bietet dasselbe – Bewegung,
+// Effekt, Tempo, Start – und das für jedes Element auf einen Blick.
+// Der Container #anim-panel existierte im Gerüst ohnehin nie, das Panel war
+// also toter Doppel-Code.
 
 // ---- Animations-Leiste unter dem Canvas (pro Element ein Effekt) ----------
 function renderAnimBar() {
@@ -1702,7 +1905,7 @@ function renderAnimBar() {
   lenWrap.style.cssText = 'display:flex;align-items:center;gap:6px;font-size:.75rem;color:#555;margin-left:auto';
   lenWrap.appendChild(document.createTextNode('🎬 Videolänge'));
   const lenInp = document.createElement('input');
-  lenInp.type = 'number'; lenInp.id = 'video-length'; lenInp.min = 0; lenInp.max = 30; lenInp.step = 0.5;
+  lenInp.type = 'number'; lenInp.id = 'video-length'; lenInp.min = 0; lenInp.max = 15; lenInp.step = 0.5;
   lenInp.placeholder = 'auto';
   lenInp.style.cssText = 'width:58px;padding:3px;border:1px solid #ccc;border-radius:4px';
   lenInp.title = 'Gesamtlänge von GIF/Video in Sekunden. Leer = automatisch.';
@@ -1725,9 +1928,15 @@ function renderAnimBar() {
     const th = document.createElement('img'); th.className = 'anim-thumb';
     th.title = layerLabel(o, idx + 1) + ' – auswählen';
     th.onclick = () => editor.selectObj(o);
+    // Vorschaubild aus dem Cache. Ohne Cache wurde bei JEDEM Klick und jedem
+    // Verschieben jedes Element neu als PNG gerastert – bei 25 Elementen
+    // sekundenlange Hänger pro Mausklick.
     try {
-      const dim = Math.max(o.getScaledWidth?.() || o.width || 1, o.getScaledHeight?.() || o.height || 1);
-      th.src = o.toDataURL({ format: 'png', multiplier: Math.min(1, 90 / Math.max(dim, 1)) });
+      if (!o.__thumb) {
+        const dim = Math.max(o.getScaledWidth?.() || o.width || 1, o.getScaledHeight?.() || o.height || 1);
+        o.__thumb = o.toDataURL({ format: 'png', multiplier: Math.min(1, 64 / Math.max(dim, 1)) });
+      }
+      th.src = o.__thumb;
     } catch (e) { th.style.background = '#dfe3e6'; }
 
     // Regler-Spalte (untereinander)
@@ -1744,7 +1953,7 @@ function renderAnimBar() {
     sel.onchange = () => {
       const t = sel.value;
       o.anim = (t && t !== 'none') ? { type: t, dur: o.anim?.dur || 1200, delay: o.anim?.delay || 0 } : null;
-      editor.snapshot(); renderAnimPanel();
+      editor.snapshot();
     };
     selRow.appendChild(sel);
 
@@ -1840,9 +2049,14 @@ function syncFontSizeInput() {
 // ---- Selektion-Events koppeln --------------------------------------------
 ['selection:created', 'selection:updated', 'selection:cleared'].forEach(ev =>
   editor.canvas.on(ev, () => {
-    if (ev === 'selection:cleared' && _tool !== 'off' && !_suppressClear
+    // _suppressClear schützt vor Umbauten, die selbst kurz die Auswahl
+    // aufheben (z.B. Breite/Höhe bei Mehrfachauswahl setzen). Ohne den Schutz
+    // schaltete sich das aktive Werkzeug beim Tippen in ein Zahlenfeld ab.
+    if (_suppressClear) return;
+    if (ev === 'selection:cleared' && _tool !== 'off'
         && !['rect', 'mark', 'paint', 'erase', 'restore'].includes(_tool)) setTool('off');
-    renderSelBar(); renderAnimPanel(); updateRetouchPanel(); renderLayers(); renderAnimBar();
+    renderSelBar(); updateRetouchPanel();
+    planeUiAufbau();                      // Ebenen + Animationsleiste gebündelt
     if (ev !== 'selection:cleared') syncFontSizeInput();
   }));
 
@@ -1866,14 +2080,41 @@ function syncFontSizeInput() {
     }
   }));
 
+// Vorschaubild eines Elements verwerfen, sobald es verändert wurde – nur dann
+// muss es neu gerastert werden.
+editor.canvas.on('object:modified', e => { if (e?.target) e.target.__thumb = null; });
+
 // ---- Undo/Redo-Buttons aktiv/inaktiv --------------------------------------
+// Die Neuaufbauten von Ebenen- und Animationsleiste werden gebündelt: Ein
+// einzelner Klick löste vorher mehrere komplette Neuaufbauten hintereinander
+// aus (Auswahl geleert → gesetzt → Snapshot).
+let _uiTimer = null;
+function planeUiAufbau() {
+  if (_uiTimer) return;
+  _uiTimer = requestAnimationFrame(() => {
+    _uiTimer = null;
+    try { renderLayers(); renderAnimBar(); }
+    catch (e) { console.error('[studio] UI-Aufbau:', e); }
+  });
+}
+
 editor.onChange(() => {
   const u = document.querySelector('[data-act="undo"]');
   const r = document.querySelector('[data-act="redo"]');
   if (u) u.disabled = !editor.canUndo();
   if (r) r.disabled = !editor.canRedo();
   bg.updateBgInfo(editor);
-  renderLayers(); renderAnimBar();
+  // Sicherheitsnetz: Ist das Zielbild des aktiven Werkzeugs verschwunden
+  // (Leeren, Strg+Z, Vorlage geladen), war die Arbeitsfläche danach gesperrt –
+  // nichts ließ sich mehr anklicken, und das Werkzeug malte unsichtbar auf ein
+  // totes Objekt weiter.
+  if (_tool !== 'off' && (!_toolTarget || _toolTarget.canvas !== editor.canvas)) {
+    freeToolTarget();
+    _tool = 'off';
+    werkzeugFlagsZuruecksetzen();
+    setToolStatus('Werkzeug beendet – das bearbeitete Bild ist nicht mehr da.');
+  }
+  planeUiAufbau();
 });
 
 // ---- Auto-Integration: eingebackenes Rautenmuster beim Einfügen entfernen --
@@ -1884,24 +2125,38 @@ editor.addImageUrl = async (url, opts) => {
     if (!opts?.silent && img && img._element && hasCheckerboardBorder(img._element)) {
       status('✨ Muster erkannt – entferne nur das Schachbrett…');
       const cleaned = await removeCheckerboard(img._element);   // nur Muster weg, Weiß bleibt
-      img.bgRemoved = true; img._work = null;
-      retouch.replaceElement(img, cleaned); editor.snapshot();
-      status('✅ Muster entfernt', 'green');
+      // null = es wurde nichts gefunden. Früher kam hier das unveränderte Bild
+      // zurück und wurde trotzdem als „bearbeitet" übernommen – ein 2-MB-JPEG
+      // wurde so zu ~25 MB base64 in jedem Undo-Schritt und im Entwurf.
+      if (cleaned) {
+        img.bgRemoved = true; img._work = null;
+        retouch.replaceElement(img, cleaned); editor.snapshot();
+        status('✅ Muster entfernt', 'green');
+      } else {
+        status('Bereit.', '#888');
+      }
     }
-  } catch (e) { /* still */ }
+  } catch (e) { console.warn('Muster-Erkennung:', e); status('Bereit.', '#888'); }
   return img;
 };
 
 // ---- Init -----------------------------------------------------------------
-bg.loadTemplateList(editor);
+// Jeder Schritt einzeln gekapselt: Ein Fehler in der Vorlagenliste darf nicht
+// mehr dazu führen, dass Bibliothek, Titel und das Laden der Datei ausfallen.
+boot('Vorlagenliste', () => bg.loadTemplateList(editor));
 // Bibliothek erkennt SVGs selbst und schickt sie durch den Import statt sie
 // als flaches Bild einzusetzen.
-if (typeof lib.setSvgHandler === 'function') {
-  lib.setSvgHandler((text, asGroup) => importSvgText(text, asGroup));
-}
-initLibrary(editor);
-renderSelBar();
-updateRetouchPanel();
+boot('SVG-Handler', () => {
+  if (typeof lib.setSvgHandler === 'function') {
+    lib.setSvgHandler((text, asGroup) => importSvgText(text, asGroup));
+  }
+});
+boot('Bibliothek', () => {
+  if (typeof initLibrary !== 'function') throw new Error('initLibrary fehlt (alte library.js im Browser-Cache? Strg+F5)');
+  initLibrary(editor);
+});
+boot('Auswahlleiste', () => renderSelBar());
+boot('Korrektur-Panel', () => updateRetouchPanel());
 
 // Aktuell geladene Vorlage – EINE Quelle der Wahrheit auf dem Editor-Objekt,
 // egal ob über die Verwaltung (?template=…) oder per Kachel-Klick (applyTemplate)
@@ -1923,29 +2178,104 @@ if (CONFIG.libData?.item_id || CONFIG.libData?.nc_path) {
   if (b) { b.textContent = '💾 Speichern'; b.dataset.act = 'save-existing'; b.title = 'Vorhandene Ausgabe im gleichen Format überschreiben'; }
 }
 
-(function restoreInitial() {
+(async function restoreInitial() {
   try {
-    const post = CONFIG.postData, lib = CONFIG.libData, tpl = CONFIG.tplData;
-    // Vorlage bearbeiten: Größe der Vorlage setzen und Layout laden.
+    const post = CONFIG.postData, libD = CONFIG.libData, tpl = CONFIG.tplData;
+    // frisch=true: die Historie beginnt beim GELADENEN Zustand. Ohne das wäre
+    // der leere Canvas von vor dem Laden der älteste Undo-Schritt – ein
+    // versehentliches Strg+Z hätte alles gelöscht.
     if (tpl?.canvas_json) {
       if (tpl.width && tpl.height) { editor.setSize(tpl.width, tpl.height); fit(); }
-      io.restoreCanvas(editor, tpl.canvas_json);
-      status('Vorlage wird bearbeitet – „💾 Vorlage speichern" aktualisiert sie.', '#0E7C86');
+      status('⏳ Vorlage wird geladen…');
+      if (await io.restoreCanvas(editor, tpl.canvas_json, { frisch: true })) {
+        status('Vorlage wird bearbeitet – „💾 Vorlage speichern" aktualisiert sie.', '#0E7C86');
+      }
       return;
     }
-    if (post?.canvas_json) { io.restoreCanvas(editor, post.canvas_json); return; }
-    if (lib?.canvas_json)  { io.restoreCanvas(editor, lib.canvas_json); return; }
-    if (lib?.image_url)    { editor.addImageUrl(lib.image_url, { silent: true, fill: true }); }
-  } catch (e) { console.warn('restoreInitial:', e); editor._locked = false; }
+    // Nur bei vollständigem Laden „Bereit." melden. Vorher überschrieb diese
+    // Meldung sofort jede rote Warnung („nicht alle Bilder geladen", „Daten
+    // unlesbar") – der Nutzer hielt den halbleeren Editor für seine Datei.
+    if (post?.canvas_json) {
+      status('⏳ Entwurf wird geladen…');
+      if (await io.restoreCanvas(editor, post.canvas_json, { frisch: true })) status('Bereit.', '#888');
+      return;
+    }
+    if (libD?.canvas_json) {
+      status('⏳ Entwurf wird geladen…');
+      if (await io.restoreCanvas(editor, libD.canvas_json, { frisch: true })) status('Bereit.', '#888');
+      return;
+    }
+    if (libD?.image_url) {
+      // Schlägt das Laden fehl (Datei in Nextcloud gelöscht), blieb der Editor
+      // früher stumm leer – und der nächste „Speichern"-Klick überschrieb den
+      // Eintrag mit einem leeren Bild.
+      try {
+        await editor.addImageUrl(libD.image_url, { silent: true, fill: true });
+        editor.resetHistory();
+        status('Bereit.', '#888');
+      } catch (e) {
+        editor._ladefehler = true;
+        status('❌ Bild konnte nicht geladen werden – Datei fehlt evtl. in Nextcloud', 'red');
+        toast('Bild nicht gefunden', 'err');
+      }
+    } else {
+      status('Bereit.', '#888');
+    }
+  } catch (e) {
+    console.warn('restoreInitial:', e);
+    editor._locked = false;
+    editor._ladefehler = true;
+    status('❌ Entwurf konnte nicht geladen werden', 'red');
+  } finally {
+    // Der Stand direkt nach dem Öffnen gilt als „gespeichert".
+    window.dispatchEvent(new CustomEvent('studio:geladen'));
+  }
 })();
 
 // Sicherstellen, dass Elemente normal anklickbar/auswählbar sind (kein Werkzeug/
 // keine Zeichenebene blockiert die Auswahl nach dem Laden).
-_tool = 'off';
-editor.canvas.skipTargetFind = false;
-editor.canvas.selection = true;
-{ const ov = document.getElementById('rect-overlay'); if (ov) ov.style.display = 'none'; }
-editor.canvas.getObjects().forEach(o => { if (!o._snap) { o.selectable = true; o.evented = true; } });
-editor.canvas.requestRenderAll();
+boot('Auswahl freigeben', () => {
+  _tool = 'off';
+  editor.canvas.skipTargetFind = false;
+  editor.canvas.selection = true;
+  const ov = document.getElementById('rect-overlay'); if (ov) ov.style.display = 'none';
+  editor.canvas.getObjects().forEach(o => { if (!o._snap) { o.selectable = true; o.evented = true; } });
+  editor.canvas.requestRenderAll();
+});
+// Kein status('Bereit.') mehr an dieser Stelle: restoreInitial läuft async
+// weiter, und „Bereit." überschrieb dann sofort das „⏳ wird geladen…" –
+// obwohl Speichern in dem Moment noch abgelehnt wurde. Die Meldung setzt
+// jetzt restoreInitial selbst, wenn wirklich alles da ist.
 
-status('Bereit.', '#888');
+// ---- Schutz vor versehentlichem Verlassen --------------------------------
+// Ein Klick auf eine Kachel in der rechten Leiste navigierte sofort weg und
+// verwarf alles Ungespeicherte – ohne jede Rückfrage.
+// editor._rev zählt jede Änderung monoton hoch. Die Länge der Historie taugt
+// dafür nicht: die ist gedeckelt und steht ab ~30 Schritten still – danach hätte
+// die Rückfrage nie mehr ausgelöst.
+let _gespeichertStand = editor._rev;
+function ungespeicherteAenderungen() {
+  return editor._rev > 0 && editor._rev !== _gespeichertStand;
+}
+function alsGespeichertMerken() { _gespeichertStand = editor._rev; }
+window.addEventListener('studio:output-changed', alsGespeichertMerken);
+// Nach dem Laden einer Datei/Vorlage ist der Stand „wie gespeichert" – sonst
+// fragte das Studio direkt nach dem Öffnen nach ungespeicherten Änderungen.
+window.addEventListener('studio:geladen', alsGespeichertMerken);
+// Auch das Speichern einer Vorlage macht den Stand sauber.
+window.addEventListener('studio:vorlage-gespeichert', alsGespeichertMerken);
+window.addEventListener('beforeunload', e => {
+  if (!ungespeicherteAenderungen()) return;
+  e.preventDefault();
+  e.returnValue = '';   // Browser zeigt seine Standard-Rückfrage
+});
+// Für Navigation innerhalb der Seite (Kachel-Klicks in library.js).
+window.studioDarfVerlassen = function () {
+  if (!ungespeicherteAenderungen()) return true;
+  return window.confirm('Es gibt ungespeicherte Änderungen.\n\n' +
+                        'Wirklich verlassen? Die Änderungen gehen verloren.');
+};
+
+// „Bereit." setzt ausschließlich restoreInitial – und nur, wenn wirklich alles
+// geladen ist. Diese Zeile überschrieb sonst rote Ladefehler-Meldungen
+// (auch bei einem Parse-Fehler, wo _locked nie gesetzt wird).

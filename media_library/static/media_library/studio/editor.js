@@ -11,11 +11,27 @@ if (!fabric) console.error('Fabric.js nicht geladen!');
 if (fabric) fabric.Object.prototype.objectCaching = false;
 
 // Eigenschaften, die in den Snapshot/das Canvas-JSON serialisiert werden.
-const EXTRA_PROPS = ['srcUrl', 'originalUrl', 'bgRemoved', 'anim', 'shapeKind', 'fx', 'svgPart',
-                     'tbHead', 'tbBody', 'tbWidth', 'tbSize', 'tbAlign'];
+// EINE Quelle der Wahrheit: io.js importiert diese Liste, damit Undo/Redo und
+// Speichern nie unterschiedliche Eigenschaften mitnehmen. Fehlt hier ein Eintrag,
+// geht die betreffende Bearbeitung beim Undo ODER beim Wiederöffnen verloren.
+export const EXTRA_PROPS = [
+  'srcUrl', 'originalUrl', 'bgRemoved', 'edited', 'anim', 'shapeKind', 'fx', 'svgPart',
+  'tbHead', 'tbBody', 'tbWidth', 'tbSize', 'tbAlign', 'tbCheck', 'tbColor',
+  'clItems', 'clWidth', 'clSize', 'clColor',
+];
+
+// Obergrenze für die Undo-Historie in Bytes. Freigestellte/retuschierte Bilder
+// liegen als base64-data:-URL im JSON – ohne Budget wächst die Historie in den
+// Gigabyte-Bereich und der Browser-Tab stürzt ab.
+const MAX_HISTORY_BYTES = 80e6;
 
 export class Editor {
   constructor(canvasEl) {
+    // Klare Ursache statt „Cannot read properties of undefined (reading 'Canvas')".
+    if (!fabric) {
+      throw new Error('Editor-Engine fehlt: vendor/fabric.min.js wurde nicht geladen. '
+                    + 'Auf dem Server prüfen (ggf. collectstatic ausführen).');
+    }
     this.canvas = new fabric.Canvas(canvasEl, {
       backgroundColor: '',        // transparent → Schachbrett scheint durch
       preserveObjectStacking: true,
@@ -29,7 +45,12 @@ export class Editor {
     this._history = [];
     this._redo = [];
     this._locked = false;       // verhindert History-Aufzeichnung beim Restore
-    this._maxHistory = 60;
+    this._maxHistory = 30;
+    this._loadToken = 0;        // erkennt überholte Ladevorgänge (Doppelklick auf Vorlagen)
+    // Zählt JEDE Zustandsänderung, monoton steigend. Dient als „Stand" für die
+    // Rückfrage beim Verlassen. Die Länge der Historie taugt dafür nicht: die
+    // ist gedeckelt und bleibt ab einem gewissen Punkt konstant.
+    this._rev = 0;
 
     this._snapLines = [];       // aktive Snapping-Hilfslinien
     this.snapTol = 8;           // Pixel-Toleranz fürs Einrasten
@@ -61,7 +82,12 @@ export class Editor {
   // bleibt intern full-res (z.B. 1080²), nur die dargestellte Größe schrumpft –
   // inkl. Fabric-Container, daher keine Scrollbalken mehr.
   fitTo(maxW, maxH) {
-    this._baseScale = Math.min(maxW / this.width, maxH / this.height, 1);
+    // Schutz: Ist der Host-Container gerade unsichtbar/0 breit (CSS noch nicht
+    // geladen, Sidebar zugeklappt), kämen hier 0 oder negative Werte an. Eine
+    // negative Canvas-Breite wird vom Browser zu ~4,3 Mrd. Pixeln → Tab-Crash.
+    const w = Math.max(1, Number(maxW) || 1);
+    const h = Math.max(1, Number(maxH) || 1);
+    this._baseScale = Math.max(0.05, Math.min(w / this.width, h / this.height, 1));
     this._userZoom = this._userZoom || 1;
     this._applyZoom();
   }
@@ -70,8 +96,8 @@ export class Editor {
     const scale = (this._baseScale || 1) * (this._userZoom || 1);
     this.canvas.setZoom(scale);
     this.canvas.setDimensions({
-      width:  Math.round(this.width  * scale),
-      height: Math.round(this.height * scale),
+      width:  Math.max(1, Math.round(this.width  * scale)),
+      height: Math.max(1, Math.round(this.height * scale)),
     });
     this.canvas.requestRenderAll();
   }
@@ -94,8 +120,9 @@ export class Editor {
     this.canvas.getObjects().slice().forEach(o => this.canvas.remove(o));
     this.canvas.discardActiveObject();
     this.canvas.setBackgroundImage(null, () => {});
-    this.canvas.setBackgroundColor('#1a1a2e', () => {});
+    this.canvas.setBackgroundColor('', () => {});   // transparent (Schachbrett), nicht dunkelblau
     this._templateId = null;
+    this._ladefehler = false;   // frische Fläche: die alte Ladewarnung gilt nicht mehr
     if (this.gridOn) this._buildGrid();   // Raster wieder anlegen
     this.canvas.requestRenderAll();
     this.snapshot();
@@ -425,18 +452,66 @@ export class Editor {
   _bindEvents() {
     const record = () => { if (!this._locked) this.snapshot(); };
     this.canvas.on('object:modified', record);
+    // Texteingaben feuern KEIN object:modified. Ohne diese beiden Zeilen landet
+    // getippter Text nie in der Historie und ein Strg+Z verwirft ihn ersatzlos.
+    this.canvas.on('editing:exited', record);
+    this.canvas.on('text:changed', () => {
+      clearTimeout(this._textTimer);
+      this._textTimer = setTimeout(record, 500);
+    });
     // add/remove werden explizit in den add*-Methoden per snapshot() erfasst
   }
 
   snapshot() {
     if (this._locked) return;
-    const json = JSON.stringify(this.canvas.toJSON(EXTRA_PROPS));
+    let json;
+    try {
+      json = JSON.stringify(this.canvas.toJSON(EXTRA_PROPS));
+    } catch (e) {
+      console.warn('snapshot fehlgeschlagen', e);
+      // Trotzdem als Änderung zählen – sonst gilt der Entwurf fälschlich als
+      // gespeichert und die Rückfrage beim Verlassen bliebe aus.
+      this._rev++;
+      return;                     // lieber keine History-Stufe als ein toter Editor
+    }
     // Duplikate vermeiden
     if (this._history.length && this._history[this._history.length - 1] === json) return;
     this._history.push(json);
-    if (this._history.length > this._maxHistory) this._history.shift();
+    // Redo ZUERST verwerfen: sonst zählte sein Speicher gegen das Budget und
+    // riss die Historie auf zwei Einträge herunter – für Daten, die eine Zeile
+    // später ohnehin weggeworfen werden.
     this._redo = [];
+    // Nach Anzahl UND nach Speicherverbrauch begrenzen. Der zweite Teil ist der
+    // wichtige: ein einziges freigestelltes 3000er-Bild kann 13 MB pro Stufe sein.
+    while (this._history.length > this._maxHistory ||
+           (this._bytes() > MAX_HISTORY_BYTES && this._history.length > 2)) {
+      this._history.shift();
+    }
+    this._rev++;
     this._emitChange();
+  }
+
+  // Tatsächlicher Speicherverbrauch der Historie. Bewusst gemessen statt
+  // mitgezählt: ein mitgeführter Zähler driftete bei Undo/Redo nach oben
+  // (pop/push korrigierten ihn nicht) und warf irgendwann brauchbare
+  // Undo-Stufen weg, bis nur noch zwei übrig waren.
+  _bytes() {
+    let n = 0;
+    for (const j of this._history) n += j.length;
+    for (const j of this._redo) n += j.length;
+    return n;
+  }
+
+  // Setzt die Historie auf genau einen Zustand zurück (nach dem Laden einer
+  // Datei/Vorlage). Sonst stünde als ältester Undo-Schritt der LEERE Canvas von
+  // vor dem Laden – ein versehentliches Strg+Z hätte alles gelöscht.
+  resetHistory() {
+    this._history = [];
+    this._redo = [];
+    const wasLocked = this._locked;
+    this._locked = false;
+    this.snapshot();
+    this._locked = wasLocked;
   }
 
   undo() {
@@ -453,14 +528,27 @@ export class Editor {
 
   _restore(json) {
     this._locked = true;
-    this.canvas.loadFromJSON(json, () => {
-      // Raster ist nicht Teil der Historie – nach dem Laden neu aufbauen.
-      this._grid = [];
+    // Ohne Notausstieg bleibt _locked für immer true, wenn ein Bild im JSON nie
+    // lädt (z.B. gelöschte Nextcloud-Datei) – ab da zeichnet snapshot() nichts
+    // mehr auf und Undo/Redo sind für den Rest der Sitzung tot.
+    let done = false;
+    const finish = () => {
+      if (done) return; done = true;
+      clearTimeout(timer);
+      this._grid = [];                        // Raster ist nicht Teil der Historie
       if (this.gridOn) this._buildGrid();
       this.canvas.requestRenderAll();
       this._locked = false;
+      this._rev++;              // Undo/Redo ist ebenfalls eine Änderung
       this._emitChange();
-    });
+    };
+    const timer = setTimeout(finish, 8000);
+    try {
+      this.canvas.loadFromJSON(json, finish);
+    } catch (e) {
+      console.warn('_restore Fehler:', e);
+      finish();
+    }
   }
 
   _emitChange() {

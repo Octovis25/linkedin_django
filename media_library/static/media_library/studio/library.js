@@ -341,6 +341,8 @@ async function loadOutput() {
       // sonst über den NC-Pfad.
       const dbId = idByTitle[(item.title || '').trim().toLowerCase()];
       el.onclick = () => {
+        // Nachfragen, bevor ungespeicherte Arbeit durch die Navigation verloren geht.
+        if (typeof window.studioDarfVerlassen === 'function' && !window.studioDarfVerlassen()) return;
         location.href = dbId
           ? '/library/studio/?lib_item=' + dbId
           : '/library/studio/?nc_path=' + encodeURIComponent(item.nc_path);

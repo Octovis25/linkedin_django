@@ -53,7 +53,12 @@ export function removeBackground(imgEl, { tol = 50, islandMaxPct = 0.6 } = {}) {
         const i = (y * W + x) * 4; r += d[i]; g += d[i + 1]; b += d[i + 2]; n++;
       }
   };
-  sample(0, 0); sample(W - 8, 0); sample(0, H - 8); sample(W - 8, H - 8);
+  // Math.max(0,…): bei Bildern schmaler als 8 px startete die Schleife bei
+  // negativem x, las undefined und rechnete mit NaN – „Freigestellt" wurde
+  // gemeldet, entfernt wurde nichts.
+  sample(0, 0); sample(Math.max(0, W - 8), 0);
+  sample(0, Math.max(0, H - 8)); sample(Math.max(0, W - 8), Math.max(0, H - 8));
+  if (!n) return Promise.reject(new Error('Bild zu klein zum Freistellen'));
   r = Math.round(r / n); g = Math.round(g / n); b = Math.round(b / n);
   const tol2 = tol * tol;
   // Weißschutz: helle, farbneutrale Pixel (Weiß/hellgrau) gelten NIE als
@@ -75,20 +80,31 @@ export function removeBackground(imgEl, { tol = 50, islandMaxPct = 0.6 } = {}) {
   const clear = (idx) => { d[idx * 4 + 3] = 0; };
 
   // Ein zusammenhängendes Gebiet ab startIdx sammeln (nur near-Pixel).
+  // Der Stack ist eine vorallokierte Int32Array statt eines JS-Arrays, und
+  // `done` wird beim PUSHEN gesetzt statt beim Pop. Vorher landete jedes Pixel
+  // bis zu viermal im Stack – bei einem 24-Megapixel-Foto waren das zehn
+  // Millionen Einträge (~80 MB) und der Tab fror sekundenlang ein oder stürzte ab.
+  const stack = new Int32Array(total);
   function collect(startIdx) {
     const region = [];
-    const stack = [startIdx];
-    while (stack.length) {
-      const idx = stack.pop();
-      if (done[idx]) continue;
-      if (!near(idx * 4)) { continue; }
-      done[idx] = 1;
+    let sp = 0;
+    if (done[startIdx] || !near(startIdx * 4)) return region;
+    done[startIdx] = 1;
+    stack[sp++] = startIdx;
+    while (sp > 0) {
+      const idx = stack[--sp];
       region.push(idx);
       const x = idx % W, y = (idx / W) | 0;
-      if (x > 0)     stack.push(idx - 1);
-      if (x < W - 1) stack.push(idx + 1);
-      if (y > 0)     stack.push(idx - W);
-      if (y < H - 1) stack.push(idx + W);
+      const pruefe = (nb) => {
+        if (done[nb]) return;
+        if (!near(nb * 4)) { done[nb] = 1; return; }   // geprüft und verworfen
+        done[nb] = 1;
+        stack[sp++] = nb;
+      };
+      if (x > 0)     pruefe(idx - 1);
+      if (x < W - 1) pruefe(idx + 1);
+      if (y > 0)     pruefe(idx - W);
+      if (y < H - 1) pruefe(idx + W);
     }
     return region;
   }
@@ -172,8 +188,12 @@ export function removeCheckerboard(imgEl) {
   }
   let peak = -1, peakVal = 0;
   for (let b = 150; b <= 234; b++) if (hist[b] > peakVal) { peakVal = hist[b]; peak = b; }
-  if (peak < 0 || peakVal < N * 0.01) {   // kein deutliches Karo-Grau → nichts tun
-    return loadImage(c.toDataURL('image/png'));
+  if (peak < 0 || peakVal < N * 0.01) {
+    // Kein deutliches Karo-Grau → nichts tun. WICHTIG: null zurückgeben statt
+    // das unveränderte Bild. Vorher kam hier ein verlustfreies PNG des ganzen
+    // Fotos zurück, das der Aufrufer als „bearbeitet" übernahm – aus einem
+    // 2-MB-JPEG wurden 25 MB base64 in jedem Undo-Schritt und im Entwurf.
+    return Promise.resolve(null);
   }
 
   const isGray  = (i) => neutral(i) && Math.abs(bright(i) - peak) <= 10;   // exakter Karo-Grauton
@@ -200,7 +220,9 @@ export function removeCheckerboard(imgEl) {
       }
     }
   }
-  for (let idx = 0; idx < N; idx++) if (remove[idx]) d[idx * 4 + 3] = 0;
+  let entfernt = 0;
+  for (let idx = 0; idx < N; idx++) if (remove[idx]) { d[idx * 4 + 3] = 0; entfernt++; }
+  if (!entfernt) return Promise.resolve(null);   // nichts geändert → Original behalten
   ctx.putImageData(imgData, 0, 0);
   return loadImage(c.toDataURL('image/png'));
 }
@@ -212,27 +234,38 @@ export function hasCheckerboardBorder(imgEl) {
   try {
     const W = imgEl.naturalWidth || imgEl.width;
     const H = imgEl.naturalHeight || imgEl.height;
+    if (W < 4 || H < 4) return false;
     const c = document.createElement('canvas');
     c.width = W; c.height = H;
     const ctx = c.getContext('2d');
     ctx.drawImage(imgEl, 0, 0, W, H);
-    const d = ctx.getImageData(0, 0, W, H).data;
+    // Nur die vier Randstreifen holen statt des ganzen Bildes. Vorher wurden für
+    // 400 Randpixel bei einem 24-Megapixel-Bild 96 MB ImageData kopiert – und das
+    // bei JEDEM Einfügen eines Bildes.
+    const oben  = ctx.getImageData(0, 0, W, 1).data;
+    const unten = ctx.getImageData(0, H - 1, W, 1).data;
+    const links = ctx.getImageData(0, 0, 1, H).data;
+    const rechts = ctx.getImageData(W - 1, 0, 1, H).data;
     let light = 0, tot = 0;
     const shades = {};
-    const check = (x, y) => {
-      const p = (y * W + x) * 4;
-      if (d[p + 3] < 250) return;                 // schon transparent
-      const max = Math.max(d[p], d[p + 1], d[p + 2]);
-      const min = Math.min(d[p], d[p + 1], d[p + 2]);
+    const check = (streifen, i) => {
+      const p = i * 4;
+      if (streifen[p + 3] < 250) return;           // schon transparent
+      const max = Math.max(streifen[p], streifen[p + 1], streifen[p + 2]);
+      const min = Math.min(streifen[p], streifen[p + 1], streifen[p + 2]);
       tot++;
       if (max >= 180 && (max - min) <= 25) {       // hell + grau
         light++;
         shades[Math.round(max / 10) * 10] = (shades[Math.round(max / 10) * 10] || 0) + 1;
       }
     };
-    const step = Math.max(1, Math.floor(W / 100));
-    for (let x = 0; x < W; x += step) { check(x, 0); check(x, H - 1); }
-    for (let y = 0; y < H; y += step) { check(0, y); check(W - 1, y); }
+    // Eigene Schrittweite je Achse: vorher wurde die Breite auch für die
+    // senkrechten Kanten benutzt – bei einem 4000×200-Banner wurden dort nur
+    // 5 Pixel geprüft, das Ergebnis war reines Rauschen.
+    const stepX = Math.max(1, Math.floor(W / 100));
+    const stepY = Math.max(1, Math.floor(H / 100));
+    for (let x = 0; x < W; x += stepX) { check(oben, x); check(unten, x); }
+    for (let y = 0; y < H; y += stepY) { check(links, y); check(rechts, y); }
     if (tot === 0) return false;
     const lightFrac = light / tot;
     const distinctShades = Object.values(shades).filter(v => v > tot * 0.05).length;

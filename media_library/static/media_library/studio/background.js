@@ -51,7 +51,11 @@ export function renderPalette(container, onPick) {
     picker.type = 'color';
     picker.style.position = 'fixed'; picker.style.opacity = '0';
     document.body.appendChild(picker);
-    picker.onchange = () => { addCustomColor(picker.value); renderPalette(container, onPick); onPick(picker.value); document.body.removeChild(picker); };
+    // Aufräumen auch beim Abbrechen: 'change' feuert dann nicht, und der
+    // unsichtbare Input blieb samt Closure für immer im Dokument hängen.
+    const weg = () => { if (picker.parentNode) picker.parentNode.removeChild(picker); };
+    picker.onchange = () => { addCustomColor(picker.value); renderPalette(container, onPick); onPick(picker.value); weg(); };
+    setTimeout(weg, 120000);
     picker.click();
   };
   container.appendChild(add);
@@ -112,7 +116,9 @@ export function setBackgroundColor(editor, hex) {
 
 export function clearBackground(editor) {
   editor.canvas.setBackgroundImage(null, editor.canvas.renderAll.bind(editor.canvas));
-  editor.canvas.setBackgroundColor('#1a1a2e', editor.canvas.renderAll.bind(editor.canvas));
+  // '' = transparent (Schachbrett). Vorher wurde hier dunkelblau gesetzt – die
+  // Fläche sah nach „🚫 BG weg" kaputt aus und das Blau landete im Export.
+  editor.canvas.setBackgroundColor('', editor.canvas.renderAll.bind(editor.canvas));
   editor.snapshot();
   updateBgInfo(editor);
 }
@@ -130,8 +136,10 @@ export function updateBgInfo(editor) {
 // ---- Templates ------------------------------------------------------------
 export async function loadTemplateList(editor) {
   const listEl = document.getElementById('tpl-list');
+  if (!listEl) return;   // fehlte der Guard, warf auch der catch-Zweig erneut
   try {
     const res = await fetch(URLS.apiTemplates);
+    if (!res.ok) throw new Error('Server-Fehler ' + res.status);
     const data = await res.json();
     listEl.innerHTML = '';
     (data.templates || []).forEach(t => {
@@ -149,19 +157,26 @@ export async function loadTemplateList(editor) {
 }
 
 export async function applyTemplate(editor, tpl) {
-  status('Template wird geladen…');
+  // Ungespeicherte Arbeit nicht kommentarlos wegwerfen.
+  if (typeof window.studioDarfVerlassen === 'function' && !window.studioDarfVerlassen()) return;
+  if (editor._locked) { status('⏳ Es lädt noch etwas – kurz warten', 'red'); return; }
+  status('⏳ Vorlage wird geladen…');
   // Neue Vorlagen tragen ein Layout (Hintergrund + Logo + Textfelder). Dann das
   // ganze Layout laden, damit man nur noch die Texte ersetzen muss.
   if (tpl.has_canvas) {
     try {
       const res = await fetch(`/library/studio/template/canvas/${tpl.id}/`, { credentials: 'same-origin' });
+      if (!res.ok) throw new Error('Server-Fehler ' + res.status);
       const d = await res.json();
       if (d.ok && d.canvas_json) {
-        restoreCanvas(editor, d.canvas_json);
+        // await: ohne das lief der Rest hier auf einem noch LEEREN Canvas –
+        // die Erfolgsmeldung und die Elementzahl waren schlicht falsch, und der
+        // snapshot() verpuffte, weil der Editor noch gesperrt war.
+        const vollstaendig = await restoreCanvas(editor, d.canvas_json);
         editor._templateId = tpl.id || null;
-        editor.snapshot();
         updateBgInfo(editor);
-        status('✅ Vorlage geladen – Texte anpassen', 'green');
+        status(vollstaendig ? '✅ Vorlage geladen – Texte anpassen'
+                            : '⚠️ Vorlage nur teilweise geladen', vollstaendig ? 'green' : 'red');
         return;
       }
     } catch (e) { console.warn('Template-Layout-Fehler, nutze Hintergrundbild:', e); }

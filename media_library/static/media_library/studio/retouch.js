@@ -20,11 +20,29 @@ export function getWork(obj) {
 }
 
 // Lädt das Originalbild (für Wiederherstellen) – gecacht am Objekt.
-export async function getOriginal(obj) {
-  if (obj._origImg) return obj._origImg;
+// Gecacht wird die PROMISE, nicht erst das Ergebnis: sonst startete jeder
+// Mausbewegungs-Tick einen weiteren Download derselben Datei (40+ parallel).
+export function getOriginal(obj) {
+  if (obj._origImg) return Promise.resolve(obj._origImg);
+  if (obj._origPromise) return obj._origPromise;
   const url = obj.originalUrl || obj.srcUrl;
-  obj._origImg = await loadImage(proxyUrl(url));
-  return obj._origImg;
+  if (!url) return Promise.reject(new Error('Kein Originalbild hinterlegt'));
+  obj._origPromise = loadImage(proxyUrl(url))
+    .then(img => { obj._origImg = img; return img; })
+    .catch(e => { obj._origPromise = null; throw e; });   // erneuter Versuch möglich
+  return obj._origPromise;
+}
+
+// Zeigt die Arbeits-Canvas direkt im fabric-Bild an – ohne PNG-Kodierung.
+// Für die Live-Anzeige während des Malens. Der teure commitWork() läuft erst
+// beim Loslassen der Maustaste.
+export function showWork(obj) {
+  if (!obj._work) return;
+  obj.setElement(obj._work.canvas);
+  obj.objectCaching = false;
+  obj.dirty = true;
+  obj.edited = true;
+  if (obj.canvas) obj.canvas.requestRenderAll();
 }
 
 // Pinsel-Aktion an Bildkoordinate (px,py).
@@ -56,6 +74,7 @@ export function brushAt(obj, px, py, radius, mode, origImg, color) {
 // Tauscht das Bild eines fabric-Objekts sauber aus: setElement + Cache
 // invalidieren (dirty), sonst mischt Fabric altes und neues Bild ("verschmilzt").
 export function replaceElement(obj, imgEl) {
+  obj._maskPreview = false;
   obj.setElement(imgEl);
   obj.objectCaching = false;   // kein Cache → kein Verschwimmen von Alt/Neu
   obj.dirty = true;
@@ -65,10 +84,15 @@ export function replaceElement(obj, imgEl) {
   if (obj.canvas) obj.canvas.requestRenderAll();
 }
 
-// Überträgt die Arbeits-Canvas zurück ins fabric-Bild.
+// Überträgt die Arbeits-Canvas zurück ins fabric-Bild (echtes Bild, damit der
+// Stand exportiert und gespeichert werden kann).
+// Generationszähler: Kommen zwei Aufrufe verschränkt zurück, darf der ältere
+// den neueren nicht überschreiben – sonst „springen" Pinselstriche zurück.
 export function commitWork(obj) {
   if (!obj._work) return Promise.resolve();
+  const gen = (obj._commitGen = (obj._commitGen || 0) + 1);
   return loadImage(obj._work.canvas.toDataURL('image/png')).then(img => {
+    if (gen !== obj._commitGen) return;   // ein neuerer Stand ist bereits da
     replaceElement(obj, img);
   });
 }
@@ -123,10 +147,12 @@ export function markAt(obj, px, py, radius) {
   const { ctx } = getMask(obj);
   ctx.fillStyle = '#ffffff';
   ctx.beginPath(); ctx.arc(px, py, radius, 0, Math.PI * 2); ctx.fill();
+  obj._maskDirty = true;
 }
 
 export function clearMask(obj) {
   if (obj._mask) obj._mask.ctx.clearRect(0, 0, obj._mask.W, obj._mask.H);
+  obj._maskDirty = false;
 }
 
 // Rechteck-Markierung: setzt die Maske auf ein Rechteck (ersetzt vorherige).
@@ -136,31 +162,73 @@ export function markRect(obj, x0, y0, x1, y1) {
   const x = Math.min(x0, x1), y = Math.min(y0, y1);
   ctx.fillStyle = '#ffffff';
   ctx.fillRect(x, y, Math.abs(x1 - x0), Math.abs(y1 - y0));
+  obj._maskDirty = (Math.abs(x1 - x0) > 0 && Math.abs(y1 - y0) > 0);
 }
+// Früher wurde hier bei JEDEM Werkzeugwechsel die komplette Maske gescannt
+// (bei einem 24-Megapixel-Bild ~300 ms Ruckler pro Klick). Jetzt reicht ein Flag.
 export function hasMask(obj) {
-  if (!obj._mask) return false;
-  const d = obj._mask.ctx.getImageData(0, 0, obj._mask.W, obj._mask.H).data;
-  for (let i = 3; i < d.length; i += 4) if (d[i] > 0) return true;
-  return false;
+  return !!(obj._mask && obj._maskDirty);
 }
 
 // Live-Vorschau: Arbeitsbild + rote Markierung → nur als Anzeige ins Element.
 export function renderMaskPreview(obj) {
   const { canvas: work, W, H } = getWork(obj);
   const mask = getMask(obj);
-  const tmp = document.createElement('canvas'); tmp.width = W; tmp.height = H;
-  const tctx = tmp.getContext('2d');
+  // Die beiden Hilfs-Canvas einmal am Objekt behalten. Vorher entstanden pro
+  // Mausbewegung zwei neue Vollbild-Canvas (bei 12 MP je 48 MB) – der Browser
+  // kam mit dem Aufräumen nicht hinterher.
+  if (!obj._prevCv || obj._prevCv.tmp.width !== W || obj._prevCv.tmp.height !== H) {
+    const tmp = document.createElement('canvas'); tmp.width = W; tmp.height = H;
+    const rc  = document.createElement('canvas'); rc.width  = W; rc.height  = H;
+    obj._prevCv = { tmp, tctx: tmp.getContext('2d'), rc, rctx: rc.getContext('2d') };
+  }
+  const { tmp, tctx, rc, rctx } = obj._prevCv;
+  tctx.clearRect(0, 0, W, H);
+  tctx.globalAlpha = 1;
   tctx.drawImage(work, 0, 0);
   // rote Fläche nur wo Maske gesetzt ist
-  const rc = document.createElement('canvas'); rc.width = W; rc.height = H;
-  const rctx = rc.getContext('2d');
+  rctx.clearRect(0, 0, W, H);
+  rctx.globalCompositeOperation = 'source-over';
   rctx.fillStyle = '#ff3b30'; rctx.fillRect(0, 0, W, H);
   rctx.globalCompositeOperation = 'destination-in';
   rctx.drawImage(mask.canvas, 0, 0);
   tctx.globalAlpha = 0.5;
   tctx.drawImage(rc, 0, 0);
   obj.setElement(tmp);
+  obj._maskPreview = true;   // markiert: das ist NUR Anzeige, kein echter Stand
   obj.dirty = true;
+}
+
+// Nimmt alle roten Markierungs-Vorschauen zurück. MUSS vor jedem Export laufen –
+// sonst landete die rote 50%-Fläche im gespeicherten PNG und im Entwurf.
+// Synchrone Notvariante: setzt nur die Anzeige zurück (Canvas als Element).
+// Für den Export reicht das, weil toDataURL die Anzeige rastert.
+export function beendeVorschauen(fabricCanvas) {
+  if (!fabricCanvas) return;
+  fabricCanvas.getObjects().forEach(o => {
+    if (o._maskPreview) {
+      o._maskPreview = false;
+      if (o._work) { o.setElement(o._work.canvas); o.dirty = true; }
+    }
+  });
+  fabricCanvas.requestRenderAll();
+}
+
+// Vor dem SPEICHERN aufrufen: macht aus allen Arbeits-Canvas wieder echte
+// Bilder. Ein <canvas> als Element eines fabric.Image lässt sich nicht
+// zuverlässig serialisieren – je nach Fabric-Version käme im canvas_json ein
+// riesiges base64-Bild oder gar kein src an (Bild beim Öffnen verloren).
+export async function vorschauenUebernehmen(fabricCanvas) {
+  if (!fabricCanvas) return;
+  const offen = fabricCanvas.getObjects().filter(
+    o => o.type === 'image' && o._work &&
+         (o._maskPreview || (o._element && o._element.tagName === 'CANVAS')));
+  for (const o of offen) {
+    o._maskPreview = false;
+    try { await commitWork(o); }
+    catch (e) { console.warn('Arbeitsstand konnte nicht übernommen werden:', e); }
+  }
+  fabricCanvas.requestRenderAll();
 }
 
 // Markierung anwenden. mode: 'recolor' (Farbe) | 'remove' (transparent).
