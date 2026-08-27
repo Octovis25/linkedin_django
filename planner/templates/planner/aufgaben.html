@@ -1,5 +1,5 @@
 {% extends "core/base.html" %}
-{% block title %}🤖 Claude Aufgaben{% endblock %}
+{% block title %}🤖 Claude tasks{% endblock %}
 {% block content %}
 <style>
   .aufgaben-wrap { max-width: 900px; margin: 0 auto; padding: 1rem; }
@@ -27,12 +27,12 @@
 
 <div class="aufgaben-wrap">
   <div class="aufgaben-header">
-    <h2>🤖 Claude Aufgaben</h2>
-    <span style="font-size:.75rem;color:#888">Aufgaben für Claude hinterlegen — werden in der nächsten Cowork-Session abgearbeitet</span>
+    <h2>🤖 Claude tasks</h2>
+    <span style="font-size:.75rem;color:#888">Leave tasks for Claude — they’ll be handled in the next Cowork session</span>
   </div>
 
   <div class="aufgabe-form">
-    <textarea id="aufgabe-text" placeholder="Was soll Claude tun? z.B. 'Schreibe einen LinkedIn-Post über klinische Studien' oder 'Stelle das Bild frei'"></textarea>
+    <textarea id="aufgabe-text" placeholder="What should Claude do? e.g. 'Write a LinkedIn post about clinical trials' or 'Cut out the image background'"></textarea>
     <div style="display:flex;flex-direction:column;gap:4px">
       <select id="aufgabe-typ">
         <option value="text">✍️ Text schreiben</option>
@@ -86,9 +86,9 @@ async function loadAufgaben() {
           </div>
         </div>
         <div class="aufgabe-actions">
-          ${a.status === 'offen' ? `<button title="Als erledigt markieren" onclick="updateStatus(${a.id},'erledigt')">✅</button>` : ''}
-          ${a.status === 'erledigt' ? `<button title="Wieder öffnen" onclick="updateStatus(${a.id},'offen')">🔄</button>` : ''}
-          <button title="Löschen" onclick="deleteAufgabe(${a.id})">🗑</button>
+          ${a.status === 'offen' ? `<button title="Mark as done" onclick="updateStatus(${a.id},'erledigt')">✅</button>` : ''}
+          ${a.status === 'erledigt' ? `<button title="Reopen" onclick="updateStatus(${a.id},'offen')">🔄</button>` : ''}
+          <button title="Delete" onclick="deleteAufgabe(${a.id})">🗑</button>
         </div>
       </div>
     </div>`;
@@ -113,7 +113,7 @@ async function createAufgabe() {
 }
 
 async function deleteAufgabe(id) {
-  if (!confirm('Aufgabe löschen?')) return;
+  if (!confirm('Delete this task?')) return;
   await fetch('/planner/aufgaben/api/', {
     method: 'POST',
     headers: {'Content-Type':'application/json', 'X-CSRFToken': getCookie('csrftoken')},

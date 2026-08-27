@@ -28,11 +28,11 @@
     {% if allow_create %}
     <a href="/planner/?new=1"
        style="font-size:13px;padding:4px 10px;border:0.5px solid #008080;border-radius:4px;background:#008080;color:#fff;cursor:pointer;white-space:nowrap;text-decoration:none;display:inline-block"
-       title="Neuen Post anlegen (im Planner)">＋ Neuer Post</a>
+       title="Create a new post (in the Planner)">＋ New post</a>
     {% endif %}
     <a href="https://publish.buffer.com/" target="_blank" rel="noopener"
        style="font-size:13px;padding:4px 10px;border:0.5px solid #2c4bff;border-radius:4px;background:#fff;color:#2c4bff;text-decoration:none;white-space:nowrap"
-       title="Buffer öffnen, um Videos vorübergehend manuell zu planen">🎬 Buffer öffnen</a>
+       title="Open Buffer to schedule videos manually for now">🎬 Open Buffer</a>
     <form method="get" style="display:flex;gap:8px;margin:0">
       <select name="topic" onchange="this.form.submit()" style="font-size:13px;padding:4px 8px;border:0.5px solid #ced4da;border-radius:4px">
         <option value="">All topics</option>
@@ -76,14 +76,14 @@
         <span style="font-size:11px;padding:1px 8px;border-radius:99px;background:{{ p.bg }};color:{{ p.fg }}">{{ p.topic_name }}</span>
         {% if p.planned_date %}<span style="font-size:11px;color:#6c757d">📅 {{ p.planned_date|date:"d.m.Y" }}{% if p.planned_time %} 🕐 {{ p.planned_time|time:"H:i" }}{% endif %}</span>{% endif %}
         {% if p.linkedin_posted %}<span style="font-size:11px;padding:1px 7px;border-radius:99px;background:#0077B5;color:#fff;font-weight:600">in ✓</span>
-        {% elif p.post_scheduled_at_fmt %}<span style="font-size:11px;padding:1px 7px;border-radius:99px;background:#e8f4fb;color:#0077B5;font-weight:600;border:1px solid #0077B5" title="LinkedIn geplant">in 📅 {{ p.post_scheduled_at_fmt }}</span>{% endif %}
+        {% elif p.post_scheduled_at_fmt %}<span style="font-size:11px;padding:1px 7px;border-radius:99px;background:#e8f4fb;color:#0077B5;font-weight:600;border:1px solid #0077B5" title="LinkedIn scheduled">in 📅 {{ p.post_scheduled_at_fmt }}</span>{% endif %}
       </div>
       <p style="font-size:13px;color:#212529;margin:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ p.title|default:p.content|striptags|truncatechars:80 }}</p>
       {% if p.link %}<p style="font-size:12px;margin:3px 0 0"><a href="{{ p.link }}" target="_blank" rel="noopener" style="color:#008080;text-decoration:none;word-break:break-all" title="{{ p.link }}">🔗 {{ p.link|truncatechars:60 }}</a></p>{% endif %}
       {% if p.comment %}<p style="font-size:12px;color:#6c757d;margin:3px 0 0;font-style:italic">{{ p.comment|truncatechars:60 }}</p>{% endif %}
       <p style="font-size:11px;color:#adb5bd;margin:4px 0 0;display:flex;gap:12px;flex-wrap:wrap">
         {% if p.created_at %}<span title="Erstellt">📝 {{ p.created_at|date:"d.m.Y H:i" }}</span>{% endif %}
-        {% if p.updated_at %}<span title="Zuletzt geändert">✏️ {{ p.updated_at|date:"d.m.Y H:i" }}</span>{% endif %}
+        {% if p.updated_at %}<span title="Last modified">✏️ {{ p.updated_at|date:"d.m.Y H:i" }}</span>{% endif %}
       </p>
     </div>
     <div style="display:flex;gap:6px;flex-shrink:0;align-items:center">
@@ -113,7 +113,7 @@
       <button type="button"
         onclick="liCancelPost({{ p.id }})"
         style="font-size:12px;padding:3px 8px;border:0.5px solid #0077B5;border-radius:4px;background:#fff;cursor:pointer;color:#0077B5;white-space:nowrap"
-        title="LinkedIn-Scheduling abbrechen">in ✕</button>
+        title="Cancel LinkedIn scheduling">in ✕</button>
       {% endif %}
       {% endif %}
       <button type="button"
@@ -142,11 +142,11 @@
       </select>
     </div>
     <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap">
-      <label style="font-size:12px;color:#6c757d;white-space:nowrap">📅 Datum</label>
+      <label style="font-size:12px;color:#6c757d;white-space:nowrap">📅 Date</label>
       <input type="date" id="pe-date" style="font-size:13px;flex:1;min-width:130px;padding:6px 8px;border:0.5px solid #ced4da;border-radius:4px">
-      <label style="font-size:12px;color:#6c757d;white-space:nowrap">🕐 Uhrzeit</label>
+      <label style="font-size:12px;color:#6c757d;white-space:nowrap">🕐 Time</label>
       <input type="time" id="pe-time" step="60" style="font-size:13px;width:100px;padding:6px 8px;border:0.5px solid #ced4da;border-radius:4px">
-      <button type="button" onclick="document.getElementById('pe-date').value='';document.getElementById('pe-time').value=''" title="Datum & Uhrzeit löschen"
+      <button type="button" onclick="document.getElementById('pe-date').value='';document.getElementById('pe-time').value=''" title="Clear date & time"
         style="font-size:13px;padding:3px 8px;border:0.5px solid #ced4da;border-radius:4px;background:#fff;cursor:pointer;color:#888;line-height:1;flex-shrink:0">✕</button>
     </div>
     <!-- Upload zone + Title -->
@@ -162,12 +162,12 @@
       <input type="file" id="pe-img-input" accept="image/*" style="display:none" onchange="pePreviewImg(this)">
       <select id="pe-img-nc" onchange="peImgNcSelect()"
         style="font-size:11px;padding:4px 6px;border:0.5px solid #61CEBC;border-radius:4px;background:#fff;color:#008591;max-width:150px;flex-shrink:0"
-        title="Fertiges Bild aus dem Studio wählen">
+        title="Choose a finished image from the Studio">
         <option value="">📷 aus Studio…</option>
       </select>
       <button type="button" onclick="peOpenStudio()"
         style="font-size:11px;padding:4px 8px;border:0.5px solid #61CEBC;border-radius:4px;background:#fff;cursor:pointer;color:#008591;white-space:nowrap;flex-shrink:0"
-        title="Bild im Studio erstellen/bearbeiten">🎨 Studio</button>
+        title="Create/edit an image in the Studio">🎨 Studio</button>
       <input type="text" id="pe-title" placeholder="Title..." onkeydown="if(event.key==='Enter')event.preventDefault()" style="font-size:13px;flex:1;padding:6px 8px;border:0.5px solid #ced4da;border-radius:4px;box-sizing:border-box">
     </div>
     <input type="hidden" id="pe-img-nc-path" value="">
@@ -213,7 +213,7 @@
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
         <select id="pe-video-nc" onchange="peVideoNcSelect()"
           style="font-size:12px;padding:4px 8px;border:0.5px solid #ced4da;border-radius:4px;flex:1;min-width:180px">
-          <option value="">— aus Nextcloud wählen —</option>
+          <option value="">— choose from Nextcloud —</option>
         </select>
         <button type="button" onclick="peReloadNcVideos()"
           style="font-size:11px;padding:4px 8px;border:0.5px solid #ced4da;border-radius:4px;background:#fff;cursor:pointer;color:#008591" title="Liste neu laden">↻</button>
@@ -407,7 +407,7 @@ function peUpdateStudioBtn() {
 async function peEditVideoInStudio() {
   const ncPath = document.getElementById('pe-video-nc-path').value;
   if (!ncPath) {
-    alert('Bitte zuerst ein Nextcloud-Video wählen (PC-Videos erst speichern).');
+    alert('Please choose a Nextcloud video first (save PC videos first).');
     return;
   }
   try {
@@ -419,10 +419,10 @@ async function peEditVideoInStudio() {
     if (r.ok && r.studio_url) {
       window.open(r.studio_url, '_blank');
     } else {
-      alert('Studio konnte nicht geöffnet werden: ' + (r.error || 'Unbekannt'));
+      alert('Could not open the Studio: ' + (r.error || 'Unknown'));
     }
   } catch (e) {
-    alert('Netzwerkfehler: ' + e.message);
+    alert('Network error: ' + e.message);
   }
 }
 
@@ -437,7 +437,7 @@ async function peReloadNcVideos() {
   const sel = document.getElementById('pe-video-nc');
   if (!sel) return;
   const keep = document.getElementById('pe-video-nc-path').value;
-  sel.innerHTML = '<option value="">— Video/GIF wählen —</option>';
+  sel.innerHTML = '<option value="">— choose video/GIF —</option>';
   const addGroup = (label, videos) => {
     if (!videos || !videos.length) return;
     const og = document.createElement('optgroup'); og.label = label;
@@ -484,7 +484,7 @@ function peOpenStudio() {
   if (id) {
     window.open('/library/studio/?post_id=' + id, '_blank');
   } else {
-    alert('Bitte erst den Post speichern, bevor du das Studio öffnest.');
+    alert('Please save the post before opening the Studio.');
   }
 }
 
@@ -614,7 +614,7 @@ async function saveEdit() {
       return;
     }
     if (!res || !res.ok) {
-      alert('Fehler beim Speichern: ' + JSON.stringify(res));
+      alert('Error while saving: ' + JSON.stringify(res));
       return;
     }
     // Bild: PC-Upload hat Vorrang, sonst Studio-Auswahl
@@ -641,7 +641,7 @@ async function saveEdit() {
 
     location.reload();
   } catch(e) {
-    alert('Netzwerk- oder Serverfehler: ' + e.message);
+    alert('Network or server error: ' + e.message);
   }
 }
 
@@ -756,7 +756,7 @@ async function liCopyTextAndOpenBuffer() {
 }
 
 async function liCancelPost(id) {
-  if (!confirm('LinkedIn-Scheduling für diesen Post wirklich abbrechen?')) return;
+  if (!confirm('Really cancel LinkedIn scheduling for this post?')) return;
   const r = await peApi({action: 'cancel_linkedin', id});
   if (r && r.had_buffer_id && !r.buffer_deleted) {
     alert('Hinweis: In Buffer konnte der Post nicht geloescht werden.\nGrund: ' + (r.buffer_error || 'unbekannt'));
@@ -806,18 +806,18 @@ async function liDoPost() {
     res.style.display = 'block';
     if (data.ok) {
       res.style.background = '#E1F5EE'; res.style.color = '#0F6E56';
-      res.textContent = data.scheduled ? '📅 Post für LinkedIn geplant!' : '✓ Post veröffentlicht!';
+      res.textContent = data.scheduled ? '📅 Post scheduled for LinkedIn!' : '✓ Post published!';
       setTimeout(() => { liClosePost(); location.reload(); }, 1800);
     } else {
       res.style.background = '#FCEBEB'; res.style.color = '#791F1F';
-      res.textContent = 'Fehler: ' + (data.error || 'Unbekannt');
+      res.textContent = 'Error: ' + (data.error || 'Unknown');
     }
   } catch(e) {
     res.style.display = 'block';
     res.style.background = '#FCEBEB'; res.style.color = '#791F1F';
-    res.textContent = 'Netzwerkfehler: ' + e.message;
+    res.textContent = 'Network error: ' + e.message;
   }
-  btn.disabled = false; btn.textContent = 'Jetzt posten';
+  btn.disabled = false; btn.textContent = 'Post now';
 }
 
 const _liModalBg = document.getElementById('li-modal-bg');
@@ -840,7 +840,7 @@ if (_liModalBg) _liModalBg.addEventListener('click', function(e) {
     </div>
     <div style="margin-bottom:10px;display:flex;gap:8px">
       <select id="li-target" style="font-size:13px;padding:5px 8px;border:0.5px solid #ced4da;border-radius:4px;flex:1">
-        {% if tab != 'scheduled' %}<option value="person">Persönliches Profil</option>{% endif %}
+        {% if tab != 'scheduled' %}<option value="person">Personal profile</option>{% endif %}
         {% if li_org %}<option value="org">{{ li_org }} (Seite)</option>{% endif %}
       </select>
     </div>
@@ -848,10 +848,10 @@ if (_liModalBg) _liModalBg.addEventListener('click', function(e) {
     <div style="text-align:right;font-size:11px;color:#aaa;margin-bottom:8px"><span id="li-char-count">0</span> Zeichen</div>
     <div id="li-include-img-row" style="display:none;align-items:center;gap:8px;margin-bottom:8px;font-size:13px">
       <input type="checkbox" id="li-include-img" checked style="cursor:pointer">
-      <label for="li-include-img" style="cursor:pointer;color:#444">Bild mitposten</label>
+      <label for="li-include-img" style="cursor:pointer;color:#444">Post image too</label>
     </div>
     <div id="li-link-info" style="display:none;align-items:center;gap:8px;margin-bottom:8px;font-size:13px;padding:6px 10px;background:#eef2ff;border:0.5px solid #2c4bff;border-radius:6px">
-      <span style="color:#2c4bff">🔗 Link wird gepostet (LinkedIn zeigt die Vorschau):</span>
+      <span style="color:#2c4bff">🔗 Link will be posted (LinkedIn shows the preview):</span>
       <span id="li-link-url" style="font-size:12px;color:#2c4bff;word-break:break-all"></span>
     </div>
     <div id="li-video-info" style="display:none;flex-direction:column;gap:8px;margin-bottom:8px;font-size:13px;padding:6px 10px;background:#f0fbf8;border:0.5px solid #61CEBC;border-radius:6px">
@@ -871,11 +871,11 @@ if (_liModalBg) _liModalBg.addEventListener('click', function(e) {
     <div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap">
       <button type="button" onclick="liCopyTextAndOpenBuffer()"
         style="font-size:13px;padding:5px 12px;border:0.5px solid #2c4bff;border-radius:4px;background:#fff;cursor:pointer;color:#2c4bff">
-        Text kopieren & Buffer öffnen
+        Copy text & open Buffer
       </button>
       <div style="display:flex;justify-content:flex-end;gap:8px">
-        <button onclick="liClosePost()" style="font-size:13px;padding:5px 14px;border:0.5px solid #ced4da;border-radius:4px;background:#fff;cursor:pointer">Abbrechen</button>
-        <button id="li-submit-btn" onclick="liDoPost()" style="font-size:13px;padding:5px 16px;background:#0077B5;color:#fff;border:none;border-radius:4px;cursor:pointer;font-weight:600">Jetzt posten</button>
+        <button onclick="liClosePost()" style="font-size:13px;padding:5px 14px;border:0.5px solid #ced4da;border-radius:4px;background:#fff;cursor:pointer">Cancel</button>
+        <button id="li-submit-btn" onclick="liDoPost()" style="font-size:13px;padding:5px 16px;background:#0077B5;color:#fff;border:none;border-radius:4px;cursor:pointer;font-weight:600">Post now</button>
       </div>
     </div>
   </div>

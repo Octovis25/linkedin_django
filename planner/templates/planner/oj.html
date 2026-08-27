@@ -66,7 +66,7 @@
 
 <!-- ── Top bar ── -->
 <div class="oj-topbar">
-  <span class="oj-page-title">👤 OJ — Persönliche Posts <span class="oj-tag">OJ</span></span>
+  <span class="oj-page-title">👤 OJ — Personal posts <span class="oj-tag">OJ</span></span>
   <button type="button" class="btn-new-oj" onclick="openOjModal()">+ New OJ Post</button>
 </div>
 
@@ -106,7 +106,7 @@
           onclick="event.stopPropagation();liOjOpenPost({{ p.id }})"
           style="background:#0077B5;color:#fff;border-color:#0077B5;font-weight:700">in</button>
         {% endif %}
-        <button type="button" class="pa-btn del" title="Löschen"
+        <button type="button" class="pa-btn del" title="Delete"
           onclick="event.stopPropagation();ojDelete({{ p.id }})">🗑</button>
       </td>
     </tr>
@@ -217,7 +217,7 @@
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
         <select id="e-video-nc" onchange="onOjVideoNcSelect()"
           style="font-size:12px;padding:4px 8px;border:0.5px solid #ced4da;border-radius:4px;flex:1;min-width:180px">
-          <option value="">— aus Nextcloud wählen —</option>
+          <option value="">— choose from Nextcloud —</option>
         </select>
         <button type="button" onclick="reloadOjNcVideos()"
           style="font-size:11px;padding:4px 8px;border:0.5px solid #ced4da;border-radius:4px;background:#fff;cursor:pointer;color:#008591" title="Liste neu laden">↻</button>
@@ -451,7 +451,7 @@ async function reloadOjNcVideos() {
   const sel = document.getElementById('e-video-nc');
   if (!sel) return;
   const keep = document.getElementById('e-video-nc-path').value;
-  sel.innerHTML = '<option value="">— Video/GIF wählen —</option>';
+  sel.innerHTML = '<option value="">— choose video/GIF —</option>';
   const addGroup = (label, videos) => {
     if (!videos || !videos.length) return;
     const og = document.createElement('optgroup'); og.label = label;
@@ -534,14 +534,14 @@ async function updateOjPost() {
 /* ── Delete from edit modal ── */
 async function ojDeleteFromEdit() {
   const id = document.getElementById('e-id').value;
-  if (!id || !confirm('Post wirklich löschen?')) return;
+  if (!id || !confirm('Really delete this post?')) return;
   await api('/planner/api/post/', {action:'delete', id});
   location.reload();
 }
 
 /* ── Delete from list ── */
 async function ojDelete(id) {
-  if (!confirm('Post wirklich löschen?')) return;
+  if (!confirm('Really delete this post?')) return;
   const res = await api('/planner/api/post/', {action:'delete', id});
   if (res.ok) {
     const row = document.getElementById('prow-'+id);
@@ -618,7 +618,7 @@ async function liOjDoPost() {
     if (data.ok) {
       res.style.display = 'block';
       res.style.background = '#E1F5EE'; res.style.color = '#0F6E56';
-      res.textContent = data.scheduled ? '📅 Post für LinkedIn geplant!' : '✓ Auf LinkedIn veröffentlicht!';
+      res.textContent = data.scheduled ? '📅 Post scheduled for LinkedIn!' : '✓ Published on LinkedIn!';
       setTimeout(() => { liOjClose(); location.reload(); }, 1800);
     } else {
       res.style.display = 'block';
@@ -647,7 +647,7 @@ document.getElementById('li-oj-modal-bg').addEventListener('click', function(e) 
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem">
       <span style="font-size:15px;font-weight:600;display:flex;align-items:center;gap:7px">
         <span style="background:#0077B5;color:#fff;font-weight:700;font-size:13px;padding:2px 7px;border-radius:3px">in</span>
-        OJ Post auf LinkedIn <span class="oj-tag">Persönliches Profil</span>
+        OJ post on LinkedIn <span class="oj-tag">Personal profile</span>
       </span>
       <button onclick="liOjClose()" style="border:none;background:none;font-size:20px;cursor:pointer;color:#888;line-height:1">×</button>
     </div>
@@ -659,7 +659,7 @@ document.getElementById('li-oj-modal-bg').addEventListener('click', function(e) 
     </div>
     <div id="li-oj-sched-row" style="display:none;align-items:center;gap:8px;margin-bottom:12px;font-size:13px">
       <input type="checkbox" id="li-oj-sched-check" checked style="cursor:pointer">
-      <label for="li-oj-sched-check" style="cursor:pointer;color:#444">📅 Auf LinkedIn planen für <strong id="li-oj-sched-time"></strong></label>
+      <label for="li-oj-sched-check" style="cursor:pointer;color:#444">📅 Schedule on LinkedIn for <strong id="li-oj-sched-time"></strong></label>
     </div>
     <div id="li-oj-result" style="display:none;padding:8px 12px;border-radius:6px;font-size:13px;margin-bottom:10px"></div>
     <div style="display:flex;justify-content:flex-end;gap:8px">

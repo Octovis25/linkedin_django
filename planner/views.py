@@ -193,9 +193,20 @@ def planner_view(request):
                 'ideas': [{'id': r[0], 'text': r[1]} for r in ideas],
             })
 
+        # Posts ohne Topic (damit ueberall Angelegtes im Planner sichtbar bleibt)
+        unc = _q(c, """SELECT id, title, content, status, planned_date, image, COALESCE(comment,'') as comment,
+                              COALESCE(link,'') as link, planned_time
+                       FROM planner_posts
+                       WHERE topic_id IS NULL
+                       ORDER BY COALESCE(planned_date,'9999-12-31'), created_at""")
+        uncategorized = [{'id': r[0], 'title': r[1] or '', 'content': r[2] or '',
+                          'status': r[3], 'planned_date': r[4], 'image': r[5] or '',
+                          'comment': r[6] or '', 'link': r[7] or '', 'planned_time': r[8]} for r in unc]
+
     return render(request, 'planner/planner.html', {
         'topics_data': topics_data,
         'topics': topics,
+        'uncategorized': uncategorized,
         'statuses': ['Draft', 'Review', 'Ready', 'Scheduled', 'Posted', 'Archive'],
         'tab': 'planner',
     })
@@ -240,6 +251,7 @@ def draft_view(request):
         'posts_json': _posts_to_json(posts_list),
         'li_connected': bool(li_token),
         'li_org': li_token.get('org_name', '') if li_token else '',
+        'allow_create': True,
     })
 
 
@@ -308,7 +320,7 @@ def ready_view(request):
         })
 
     _attach_video_paths(posts_list)
-    return render(request, 'planner/ready.html', {'posts': posts_list, 'topics': topics, 'topic_filter': topic_filter, 'statuses': ['Draft', 'Review', 'Ready', 'Scheduled', 'Posted', 'Archive'], 'tab': 'ready', 'page_title': '🚀 Ready to post', 'posts_json': _posts_to_json(posts_list)})
+    return render(request, 'planner/ready.html', {'posts': posts_list, 'topics': topics, 'topic_filter': topic_filter, 'statuses': ['Draft', 'Review', 'Ready', 'Scheduled', 'Posted', 'Archive'], 'tab': 'ready', 'page_title': '🚀 Ready to post', 'posts_json': _posts_to_json(posts_list), 'allow_create': True})
 
 
 @login_required
@@ -361,7 +373,7 @@ def scheduled_view(request):
         })
     li_token = _li_get_superuser_token()
     _attach_video_paths(posts_list)
-    return render(request, 'planner/scheduled.html', {'posts': posts_list, 'topics': topics, 'topic_filter': topic_filter, 'statuses': ['Draft', 'Review', 'Ready', 'Scheduled', 'Posted', 'Archive'], 'tab': 'scheduled', 'page_title': '📅 Scheduled', 'posts_json': _posts_to_json(posts_list), 'li_connected': bool(li_token), 'li_org': li_token.get('org_name','') if li_token else ''})
+    return render(request, 'planner/scheduled.html', {'posts': posts_list, 'topics': topics, 'topic_filter': topic_filter, 'statuses': ['Draft', 'Review', 'Ready', 'Scheduled', 'Posted', 'Archive'], 'tab': 'scheduled', 'page_title': '📅 Scheduled', 'posts_json': _posts_to_json(posts_list), 'li_connected': bool(li_token), 'li_org': li_token.get('org_name','') if li_token else '', 'allow_create': True})
 
 
 @login_required
@@ -394,7 +406,7 @@ def archive_view(request):
         })
 
     _attach_video_paths(posts_list)
-    return render(request, 'planner/archive.html', {'posts': posts_list, 'topics': topics, 'topic_filter': topic_filter, 'statuses': ['Draft', 'Review', 'Ready', 'Scheduled', 'Posted', 'Archive'], 'tab': 'archive', 'page_title': '📦 Archive', 'posts_json': _posts_to_json(posts_list)})
+    return render(request, 'planner/archive.html', {'posts': posts_list, 'topics': topics, 'topic_filter': topic_filter, 'statuses': ['Draft', 'Review', 'Ready', 'Scheduled', 'Posted', 'Archive'], 'tab': 'archive', 'page_title': '📦 Archive', 'posts_json': _posts_to_json(posts_list), 'allow_create': True})
 
 
 @login_required
@@ -434,6 +446,7 @@ def all_view(request):
         'statuses': ['Draft', 'Review', 'Ready', 'Scheduled', 'Posted', 'Archive'],
         'tab': 'all',
         'posts_json': _posts_to_json(posts_list),
+        'allow_create': True,
     })
 
 
