@@ -171,6 +171,10 @@
 .ptable tbody tr:hover td{background:#f6fffd}
 .pt-title{color:#008080;cursor:pointer;font-weight:500}
 .pt-title:hover{text-decoration:underline}
+.pt-thumb{width:34px;height:34px;border-radius:6px;object-fit:cover;flex-shrink:0;background:#f1f1f1;cursor:zoom-in;display:block}
+.pt-thumb-ph{display:flex;align-items:center;justify-content:center;cursor:default}
+.pt-status{font-size:11px;font-weight:500;padding:3px 6px;border-radius:6px;border:0.5px solid #dcdfe3;cursor:pointer;max-width:100%}
+.pt-status:focus{outline:none}
 .cat-pill{font-size:11px;padding:2px 10px;border-radius:99px;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:inline-block;max-width:100%}
 .pt-act{cursor:pointer;border:0.5px solid #e6e6e6;border-radius:6px;background:#fff;color:#888;padding:3px 7px;font-size:12px}
 .pt-act:hover{border-color:#008080;color:#008080}
@@ -199,6 +203,7 @@
   <span class="fl">Status</span>
   <select id="f-status" class="pl-sel" onchange="applyFilters()">
     <option value="all">All statuses</option>
+    <option value="planned">Planned</option>
     <option value="draft">Draft</option>
     <option value="review">Review</option>
     <option value="ready">Ready</option>
@@ -253,6 +258,7 @@
     <table class="ptable">
       <thead>
         <tr>
+          <th style="width:46px"></th>
           <th>Title</th>
           <th style="width:130px">Topic</th>
           <th style="width:92px">Status</th>
@@ -263,13 +269,14 @@
       <tbody id="pt-body">
         {% for t in topics_data %}{% for p in t.posts %}
         <tr data-topic="{{ t.id }}" data-status="{{ p.status|lower }}" id="prow-{{ p.id }}">
+          {% include 'planner/_planner_thumb.html' with p=p accent=t.accent %}
           <td class="pt-title" style="border-left:3px solid {{ t.accent }}"
               title="{{ p.title|default:p.content|striptags|truncatechars:120 }}"
               onclick="openEditModal({{ p.id }},'{{ p.title|escapejs }}','{{ p.content|escapejs }}','{{ p.status }}','{{ p.planned_date|date:"Y-m-d" }}','{{ p.comment|escapejs }}','{{ p.image|escapejs }}','{{ p.link|escapejs }}','{{ p.planned_time|time:"H:i" }}')">
             {{ p.title|default:p.content|striptags|truncatechars:80 }}
           </td>
           <td><span class="cat-pill" style="background:{{ t.accent }}">{{ t.name }}</span></td>
-          <td><span class="sbadge s-{{ p.status }}">{{ p.status }}</span></td>
+          <td><select class="pt-status" data-id="{{ p.id }}" onchange="setStatusInline(this,{{ p.id }})" onclick="event.stopPropagation()" style="background:{{ p.status_bg }};color:{{ p.status_fg }}">{% for s in status_list %}<option value="{{ s.code }}" {% if s.code == p.status %}selected{% endif %}>{{ s.code }}</option>{% endfor %}</select></td>
           <td style="color:#6c757d">{% if p.planned_date %}{{ p.planned_date|date:"d.m.Y" }}{% else %}—{% endif %}</td>
           <td style="text-align:right;white-space:nowrap">
             <button class="pt-act" title="Edit"
@@ -280,13 +287,14 @@
         {% endfor %}{% endfor %}
         {% for p in uncategorized %}
         <tr data-topic="none" data-status="{{ p.status|lower }}" id="prow-{{ p.id }}">
+          {% include 'planner/_planner_thumb.html' with p=p accent='#888780' %}
           <td class="pt-title" style="border-left:3px solid #888780"
               title="{{ p.title|default:p.content|striptags|truncatechars:120 }}"
               onclick="openEditModal({{ p.id }},'{{ p.title|escapejs }}','{{ p.content|escapejs }}','{{ p.status }}','{{ p.planned_date|date:"Y-m-d" }}','{{ p.comment|escapejs }}','{{ p.image|escapejs }}','{{ p.link|escapejs }}','{{ p.planned_time|time:"H:i" }}')">
             {{ p.title|default:p.content|striptags|truncatechars:80 }}
           </td>
           <td><span class="cat-pill" style="background:#888780">Uncategorized</span></td>
-          <td><span class="sbadge s-{{ p.status }}">{{ p.status }}</span></td>
+          <td><select class="pt-status" data-id="{{ p.id }}" onchange="setStatusInline(this,{{ p.id }})" onclick="event.stopPropagation()" style="background:{{ p.status_bg }};color:{{ p.status_fg }}">{% for s in status_list %}<option value="{{ s.code }}" {% if s.code == p.status %}selected{% endif %}>{{ s.code }}</option>{% endfor %}</select></td>
           <td style="color:#6c757d">{% if p.planned_date %}{{ p.planned_date|date:"d.m.Y" }}{% else %}—{% endif %}</td>
           <td style="text-align:right;white-space:nowrap">
             <button class="pt-act" title="Edit"
@@ -295,7 +303,7 @@
           </td>
         </tr>
         {% endfor %}
-        <tr id="pt-empty" style="display:none"><td colspan="5" style="padding:18px;text-align:center;color:#aaa">No posts for this selection.</td></tr>
+        <tr id="pt-empty" style="display:none"><td colspan="6" style="padding:18px;text-align:center;color:#aaa">No posts for this selection.</td></tr>
       </tbody>
     </table>
   </div>
@@ -654,6 +662,33 @@ async function saveIdeaModal() {
 
 document.addEventListener('DOMContentLoaded', applyFilters);
 
+/* Status-Farbpalette: Inline-Statuswechsel direkt in der Tabelle */
+const STATUS_STYLE = {'Planned':['#E4F3F1','#0E7C86'],'Draft':['#f5f5f5','#6c757d'],'Review':['#EEEDFE','#3C3489'],'Ready':['#E1F5EE','#0F6E56'],'Scheduled':['#FAEEDA','#854F0B'],'Posted':['#E6F1FB','#185FA5'],'Archive':['#f5f5f5','#6c757d']};
+async function setStatusInline(sel, id) {
+  const st = sel.value;
+  const c = STATUS_STYLE[st] || ['#f5f5f5','#6c757d'];
+  sel.style.background = c[0]; sel.style.color = c[1];
+  const tr = document.getElementById('prow-' + id);
+  if (tr) tr.dataset.status = st.toLowerCase();
+  const res = await api('/planner/api/post/', {action: 'set_status', id: id, status: st});
+  if (!res || !res.ok) { alert('Could not set status.'); }
+  applyFilters();
+}
+
+/* Video-/GIF-Thumbnails in der Tabelle: Frame bei ~2s als Standbild laden */
+function initVideoThumbs() {
+  document.querySelectorAll('video[data-vthumb]').forEach(v => {
+    if (v.dataset.vthumbInit) return;
+    v.dataset.vthumbInit = '1';
+    v.src = v.dataset.vthumb;
+    v.addEventListener('loadedmetadata', () => {
+      const t = Math.min(2, (v.duration || 3) / 2);
+      try { v.currentTime = t; } catch (e) {}
+    }, { once: true });
+  });
+}
+document.addEventListener('DOMContentLoaded', initVideoThumbs);
+
 /* ── Search ── */
 function doSearch(val) {
   const pane = document.getElementById('search-pane');
@@ -755,11 +790,11 @@ async function deletePostFromEdit() {
 function closeModal(id) {
   document.getElementById(id).classList.remove('open');
   // Aus der Übersicht geöffnet? Beim Schließen des Editors dorthin zurück.
-  if (id === 'edit-modal' && window.OV_RETURN) { window.location.href = '/planner/uebersicht/'; }
+  if (id === 'edit-modal' && window.OV_RETURN) { window.location.href = '/planner/'; }
 }
 document.addEventListener('DOMContentLoaded', () => {
   document.querySelectorAll('.modal-bg').forEach(bg => {
-    bg.addEventListener('click', e => { if (e.target === bg) { const wasEdit = bg.id === 'edit-modal'; bg.classList.remove('open'); if (wasEdit && window.OV_RETURN) window.location.href = '/planner/uebersicht/'; } });
+    bg.addEventListener('click', e => { if (e.target === bg) { const wasEdit = bg.id === 'edit-modal'; bg.classList.remove('open'); if (wasEdit && window.OV_RETURN) window.location.href = '/planner/'; } });
   });
 });
 
@@ -805,7 +840,7 @@ function openPostModal(topicId) {
 
 // Nach einer Aktion zurück zur Übersicht, falls von dort gekommen – sonst neu laden.
 function ovBack() {
-  if (window.OV_RETURN) window.location.href = '/planner/uebersicht/';
+  if (window.OV_RETURN) window.location.href = '/planner/';
   else location.reload();
 }
 

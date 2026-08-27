@@ -203,11 +203,34 @@ def planner_view(request):
                           'status': r[3], 'planned_date': r[4], 'image': r[5] or '',
                           'comment': r[6] or '', 'link': r[7] or '', 'planned_time': r[8]} for r in unc]
 
+    # Status-Farbpalette (aus Overview uebernommen; 'Planned' = Planungsstufe vor Draft)
+    STATUS_STYLE = {
+        'Planned': ('#E4F3F1', '#0E7C86'), 'Draft': ('#f5f5f5', '#6c757d'),
+        'Review': ('#EEEDFE', '#3C3489'), 'Ready': ('#E1F5EE', '#0F6E56'),
+        'Scheduled': ('#FAEEDA', '#854F0B'), 'Posted': ('#E6F1FB', '#185FA5'),
+        'Archive': ('#f5f5f5', '#6c757d'),
+    }
+    STATUS_ORDER = ['Planned', 'Draft', 'Review', 'Ready', 'Scheduled', 'Posted', 'Archive']
+
+    # Video-/Bild-Pfade + Status-Farben an alle Posts haengen (fuer Tabelle)
+    flat = []
+    for t in topics_data:
+        flat.extend(t['posts'])
+    flat.extend(uncategorized)
+    _attach_video_paths(flat)
+    for p in flat:
+        sb, sf = STATUS_STYLE.get(p.get('status'), ('#f5f5f5', '#6c757d'))
+        p['status_bg'] = sb
+        p['status_fg'] = sf
+
+    status_list = [{'code': s, 'bg': STATUS_STYLE[s][0], 'fg': STATUS_STYLE[s][1]} for s in STATUS_ORDER]
+
     return render(request, 'planner/planner.html', {
         'topics_data': topics_data,
         'topics': topics,
         'uncategorized': uncategorized,
-        'statuses': ['Draft', 'Review', 'Ready', 'Scheduled', 'Posted', 'Archive'],
+        'statuses': STATUS_ORDER,
+        'status_list': status_list,
         'tab': 'planner',
     })
 
