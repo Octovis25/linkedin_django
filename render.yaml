@@ -5,6 +5,8 @@ services:
     buildCommand: pip install -r requirements.txt && python manage.py collectstatic --no-input
     startCommand: gunicorn dashboard.wsgi:application
     envVars:
+      - key: PYTHON_VERSION
+        value: "3.12.10"
       - key: DJANGO_DEBUG
         value: "False"
       - key: DJANGO_SECRET_KEY
@@ -39,6 +41,8 @@ services:
     buildCommand: pip install -r requirements.txt
     startCommand: python manage.py fetch_buffer_posts
     envVars:
+      - key: PYTHON_VERSION
+        value: "3.12.10"
       - key: DJANGO_SECRET_KEY
         sync: false
       - key: MYSQL_HOST
