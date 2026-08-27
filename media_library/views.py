@@ -783,10 +783,15 @@ def _ensure_brand_colors_table():
 
 
 def get_brand_colors():
-    """Gibt die aktuellen Brand-Farben als Dict zurück (inkl. extra_colors Liste)."""
-    _ensure_brand_colors_table()
+    """Gibt die aktuellen Brand-Farben als Dict zurück (inkl. extra_colors Liste).
+
+    Robust gegen DB-Ausfaelle: Der ganze Zugriff (inkl. Tabellen-Setup) laeuft im
+    try. Bei einem DB-Problem werden Default-Farben zurueckgegeben, damit ein
+    Datenbank-Aussetzer nicht ueber diesen Context-Processor JEDE Seite auf 500 wirft.
+    """
     defaults = {'c1':'#ffffff','c2':'#F56E28','c3':'#008591','c4':'#61CEBC','c5':'#005F68','c6':'#161616','extra_colors':[]}
     try:
+        _ensure_brand_colors_table()
         with connection.cursor() as c:
             c.execute("SELECT c1,c2,c3,c4,c5,c6,extra_colors FROM brand_colors LIMIT 1")
             row = c.fetchone()
