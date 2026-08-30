@@ -1,0 +1,28 @@
+<form class="mt-filter" method="get">
+  <div class="form-group">
+    <label for="von">Von</label>
+    <input type="date" name="von" id="von" value="{{ von }}">
+  </div>
+  <div class="form-group">
+    <label for="bis">Bis</label>
+    <input type="date" name="bis" id="bis" value="{{ bis }}">
+  </div>
+  {% if zeige_limit %}
+  <div class="form-group">
+    <label for="limit">Zeilen</label>
+    <input type="number" name="limit" id="limit" value="{{ limit }}" min="10" max="1000" step="10">
+  </div>
+  {% endif %}
+  {% if zeige_nur %}
+  <div class="form-group">
+    <label for="nur">Zeigen</label>
+    <select name="nur" id="nur">
+      <option value="alle" {% if nur == 'alle' %}selected{% endif %}>alle</option>
+      <option value="menschen" {% if nur == 'menschen' %}selected{% endif %}>nur Menschen</option>
+      <option value="bots" {% if nur == 'bots' %}selected{% endif %}>nur Bots</option>
+    </select>
+  </div>
+  {% endif %}
+  <button type="submit" class="btn btn-primary">Anzeigen</button>
+</form>
+{% if hinweis %}<div class="alert alert-info">{{ hinweis }}</div>{% endif %}

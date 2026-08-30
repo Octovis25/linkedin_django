@@ -44,6 +44,7 @@ INSTALLED_APPS = [
     "db_admin",
     "media_library",
     "assets",
+    "matomo",
 ]
 
 MIDDLEWARE = [
@@ -68,6 +69,7 @@ TEMPLATES = [{
         "django.template.context_processors.request",
         "django.contrib.auth.context_processors.auth",
         "django.contrib.messages.context_processors.messages",
+        "core.context.live_adresse",
         "media_library.context_processors.brand_colors",
     ]}
 }]
@@ -121,3 +123,20 @@ CSRF_TRUSTED_ORIGINS = [
     "https://linkedin-django-wd7a.onrender.com",
     "https://*.onrender.com",
 ]
+
+# ── Matomo (Web-Statistik) ──────────────────────────────────────────────
+# Matomo laeuft als WordPress-Plugin auf octotrial.com. Der Token hat die Form
+# "<wp-benutzer>:<anwendungspasswort>" und gehoert NUR in die .env bzw. auf
+# Render unter Environment - niemals ins Repository.
+# Basis-Adresse der WordPress-Seite. Der Client haengt /wp-json/matomo/v1/ an
+# und meldet sich per Anwendungspasswort (HTTP Basic) an.
+MATOMO_URL = os.getenv("MATOMO_URL", "https://octotrial.com")
+MATOMO_SITE_ID = os.getenv("MATOMO_SITE_ID", "1")
+MATOMO_TOKEN = os.getenv("MATOMO_TOKEN", "")
+MATOMO_CACHE_SECONDS = int(os.getenv("MATOMO_CACHE_SECONDS", "900"))  # Live-Ansicht 15 min
+# Adresse der Live-Instanz für den Link im Kopfbereich. Render setzt
+# RENDER_EXTERNAL_URL von selbst; lokal kommt DASHBOARD_URL aus der .env.
+LIVE_URL = os.getenv("RENDER_EXTERNAL_URL") or os.getenv("DASHBOARD_URL", "")
+
+MATOMO_SPRACHE = "de"   # Sprache der Spaltentitel, die Matomo mitliefert
+MATOMO_TIMEOUT = 30

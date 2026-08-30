@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+{% block title %}Web-Statistik – Besucher{% endblock %}
+
+{% block content %}
+{% include "matomo/_stil.html" %}
+<style>
+  .mt-bot { color: var(--octo-orange); font-weight: 600; }
+  .mt-kachel.bot { border-left-color: var(--octo-orange); }
+  .mt-kachel.bot .zahl { color: var(--octo-orange); }
+  td.mt-zahl, th.mt-zahl { text-align: right; }
+</style>
+
+<h1>Besucher</h1>
+<p class="mt-leise">
+  Wer octotrial.com besucht – Menschen und Bots getrennt ausgewiesen.
+</p>
+
+{% if fehler %}<div class="alert alert-error">{{ fehler }}</div>{% endif %}
+
+{% include "matomo/_zeitraum.html" with zeige_nur=1 %}
+
+<div class="mt-kacheln">
+  <div class="mt-kachel"><div class="bez">Besuche gesamt</div><div class="zahl">{{ gesamt }}</div></div>
+  <div class="mt-kachel"><div class="bez">Menschen</div><div class="zahl">{{ menschen }}</div></div>
+  <div class="mt-kachel bot"><div class="bez">Bots</div><div class="zahl">{{ bots }}</div></div>
+  <div class="mt-kachel bot"><div class="bez">Anteil Bots</div><div class="zahl">{{ anteil_bots }} %</div></div>
+  <div class="mt-kachel"><div class="bez">Seiten (Menschen)</div><div class="zahl">{{ seiten_menschen }}</div></div>
+  <div class="mt-kachel"><div class="bez">Ø Dauer (Menschen)</div><div class="zahl">{{ dauer_schnitt }}s</div></div>
+</div>
+
+<p class="mt-leise">
+  {{ tage }} Tag{{ tage|pluralize:"e" }} ausgewertet.
+  {% if nur == "menschen" %}<strong>Die Tabellen zeigen nur Menschen</strong>
+    ({{ angezeigt }} Besuche) – die Kacheln oben immer das Gesamtbild.
+  {% elif nur == "bots" %}<strong>Die Tabellen zeigen nur Bots</strong>
+    ({{ angezeigt }} Besuche) – die Kacheln oben immer das Gesamtbild.
+  {% endif %}
+  Als <span class="mt-bot">Bot</span> gilt ein Besuch mit <strong>0 Sekunden Verweildauer
+  und höchstens einem Seitenaufruf</strong> – aber nur, wenn sich derselbe Besucher
+  <strong>bei keinem seiner Besuche</strong> menschlich verhalten hat. Wer einmal länger
+  liest, gilt auch bei seinen kurzen Stippvisiten als Mensch.
+  {% if gerettet %}In diesem Zeitraum wurden dadurch {{ gerettet }} kurze Besuche
+  als Mensch eingestuft.{% endif %}
+  {% if direkte %}{{ direkte }} Besuche kamen ohne verweisende Seite — siehe die
+  Tabelle „Direkte Zugriffe im Detail“.{% endif %}
+  Ein Indiz, kein Beweis: Ein Besucher, der einmalig sofort wegklickt, landet trotzdem
+  bei den Bots – ein gut getarnter Scraper dagegen nicht. Einzelne Besuche siehst du im Reiter <a href="{% url 'matomo:protokoll' %}?von={{ von }}&amp;bis={{ bis }}">Protokoll</a>.
+</p>
+
+{% if abgeschnitten %}
+<div class="alert alert-info">
+  Es wurden sehr viele Besuche gefunden; die Auswertung ist auf die neuesten begrenzt.
+  Wähle einen kürzeren Zeitraum für exakte Zahlen.
+</div>
+{% endif %}
+
+{% for t in tabellen %}
+<div class="card">
+  <h2>{{ t.titel }}</h2>
+  {% if t.hinweis %}<p class="mt-leise">{{ t.hinweis }}</p>{% endif %}
+  {% if t.zeilen %}
+  <div class="mt-tabelle" style="margin-top:0.75rem">
+    <table class="mt-sortierbar">
+      <thead>
+        <tr>{% for s in t.spalten %}<th{% if forloop.counter > t.spalten|length|add:"-3" %} class="mt-zahl"{% endif %}>{{ s }}</th>{% endfor %}</tr>
+      </thead>
+      <tbody>
+        {% for zeile in t.zeilen %}
+        <tr>{% for wert in zeile %}<td{% if forloop.counter > t.spalten|length|add:"-3" %} class="mt-zahl"{% endif %}>{{ wert }}</td>{% endfor %}</tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <p class="mt-leise" style="margin-top:0.75rem">Für diesen Zeitraum keine Daten.</p>
+  {% endif %}
+</div>
+{% endfor %}
+
+{% include "matomo/_sortierung.html" %}
+{% endblock %}

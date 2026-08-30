@@ -1,0 +1,158 @@
+{% comment %}
+Zwei Bequemlichkeiten für jede Tabelle mit der Klasse "mt-sortierbar":
+
+1. Klick auf eine Spaltenüberschrift sortiert, erneuter Klick dreht um.
+2. Unter der Überschrift steht je Textspalte eine Auswahlliste mit allen
+   vorkommenden Werten. Mehrere Auswahlen wirken zusammen (UND).
+
+Alles im Browser, ohne Nachladen und ohne fremde Bibliothek.
+{% endcomment %}
+<style>
+  table.mt-sortierbar th.mt-kopf { cursor: pointer; user-select: none; white-space: nowrap; }
+  table.mt-sortierbar th.mt-kopf:hover { color: var(--octo-white); text-decoration: underline; }
+  table.mt-sortierbar th.mt-kopf[data-richtung="auf"]::after { content: " ▲"; }
+  table.mt-sortierbar th.mt-kopf[data-richtung="ab"]::after  { content: " ▼"; }
+  table.mt-sortierbar tr.mt-filterzeile th {
+    background: var(--octo-light-gray); padding: 0.35rem 0.5rem; text-transform: none;
+  }
+  table.mt-sortierbar tr.mt-filterzeile select {
+    width: 100%; min-width: 90px; padding: 0.2rem 0.3rem; font-size: 0.82rem;
+    border: 1px solid #d8d4c8; border-radius: 4px; background: var(--octo-white);
+  }
+  table.mt-sortierbar tr.mt-filterzeile select.mt-aktiv {
+    border-color: var(--octo-orange); font-weight: 600; color: var(--octo-orange);
+  }
+  .mt-trefferzeile { font-size: 0.82rem; color: #666; padding: 0.4rem 0.1rem 0; }
+  .mt-trefferzeile button {
+    margin-left: 0.5rem; padding: 0.1rem 0.5rem; font-size: 0.78rem;
+    border: 1px solid #d8d4c8; border-radius: 4px; background: #fff; cursor: pointer;
+  }
+</style>
+<script>
+(function () {
+  var sammler = new Intl.Collator('de', { numeric: true, sensitivity: 'base' });
+
+  function alsZahl(text) {
+    var roh = text.replace(/\s/g, '').replace(/%$/, '').replace(/\./g, '').replace(',', '.');
+    if (roh === '' || !/^-?\d+(\.\d+)?$/.test(roh)) return null;
+    return parseFloat(roh);
+  }
+
+  function text(zelle) { return zelle ? zelle.textContent.trim() : ''; }
+
+  function aufbereiten(tabelle) {
+    var kopf = tabelle.tHead && tabelle.tHead.rows[0];
+    var koerper = tabelle.tBodies[0];
+    if (!kopf || !koerper || koerper.rows.length === 0) return;
+
+    var zeilen = Array.prototype.slice.call(koerper.rows);
+    var anzahlSpalten = kopf.cells.length;
+
+    // ── Sortierung ──
+    Array.prototype.forEach.call(kopf.cells, function (zelle, index) {
+      zelle.classList.add('mt-kopf');
+      zelle.setAttribute('role', 'button');
+      zelle.setAttribute('tabindex', '0');
+      zelle.title = 'Nach dieser Spalte sortieren';
+
+      function umschalten() {
+        var richtung = zelle.getAttribute('data-richtung') === 'auf' ? 'ab' : 'auf';
+        Array.prototype.forEach.call(kopf.cells, function (z) { z.removeAttribute('data-richtung'); });
+        zelle.setAttribute('data-richtung', richtung);
+        var faktor = richtung === 'ab' ? -1 : 1;
+        zeilen.sort(function (a, b) {
+          var x = text(a.cells[index]), y = text(b.cells[index]);
+          var zx = alsZahl(x), zy = alsZahl(y);
+          if (zx !== null && zy !== null) return (zx - zy) * faktor;
+          if (zx !== null) return -1 * faktor;
+          if (zy !== null) return 1 * faktor;
+          return sammler.compare(x, y) * faktor;
+        });
+        zeilen.forEach(function (z) { koerper.appendChild(z); });
+      }
+      zelle.addEventListener('click', umschalten);
+      zelle.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); umschalten(); }
+      });
+    });
+
+    // ── Auswahllisten je Spalte ──
+    var filterzeile = document.createElement('tr');
+    filterzeile.className = 'mt-filterzeile';
+    var listen = [];
+
+    for (var i = 0; i < anzahlSpalten; i++) {
+      var zelle = document.createElement('th');
+      var werte = {}, anzahl = 0, nurZahlen = true;
+
+      zeilen.forEach(function (z) {
+        var w = text(z.cells[i]);
+        if (w === '') return;
+        if (alsZahl(w) === null) nurZahlen = false;
+        if (!(w in werte)) { werte[w] = true; anzahl++; }
+      });
+
+      // Zahlenspalten und Spalten ohne echte Auswahl bekommen keine Liste
+      if (nurZahlen || anzahl < 2 || anzahl > 200) {
+        listen.push(null);
+        filterzeile.appendChild(zelle);
+        continue;
+      }
+
+      var liste = document.createElement('select');
+      liste.setAttribute('aria-label', 'Filter für ' + text(kopf.cells[i]));
+      var leer = document.createElement('option');
+      leer.value = ''; leer.textContent = 'alle (' + anzahl + ')';
+      liste.appendChild(leer);
+
+      Object.keys(werte).sort(sammler.compare).forEach(function (w) {
+        var o = document.createElement('option');
+        o.value = w; o.textContent = w.length > 40 ? w.slice(0, 38) + '…' : w;
+        liste.appendChild(o);
+      });
+
+      liste.addEventListener('change', filtern);
+      zelle.appendChild(liste);
+      listen.push(liste);
+      filterzeile.appendChild(zelle);
+    }
+
+    if (!listen.some(function (l) { return l; })) return;
+    tabelle.tHead.appendChild(filterzeile);
+
+    var treffer = document.createElement('div');
+    treffer.className = 'mt-trefferzeile';
+    var knopf = document.createElement('button');
+    knopf.type = 'button';
+    knopf.textContent = 'Filter zurücksetzen';
+    knopf.addEventListener('click', function () {
+      listen.forEach(function (l) { if (l) l.value = ''; });
+      filtern();
+    });
+    var zaehltext = document.createElement('span');
+    treffer.appendChild(zaehltext);
+    treffer.appendChild(knopf);
+    tabelle.parentNode.insertBefore(treffer, tabelle.nextSibling);
+
+    function filtern() {
+      var sichtbar = 0;
+      zeilen.forEach(function (z) {
+        var passt = listen.every(function (liste, i) {
+          return !liste || !liste.value || text(z.cells[i]) === liste.value;
+        });
+        z.hidden = !passt;
+        if (passt) sichtbar++;
+      });
+      listen.forEach(function (l) { if (l) l.classList.toggle('mt-aktiv', !!l.value); });
+      var gefiltert = listen.some(function (l) { return l && l.value; });
+      zaehltext.textContent = gefiltert
+        ? sichtbar + ' von ' + zeilen.length + ' Zeilen'
+        : zeilen.length + ' Zeilen';
+      knopf.hidden = !gefiltert;
+    }
+    filtern();
+  }
+
+  document.querySelectorAll('table.mt-sortierbar').forEach(aufbereiten);
+})();
+</script>

@@ -65,6 +65,17 @@
 
     .user-section a:hover { color: var(--octo-orange); }
 
+    .user-section a.live-link {
+      border: 1px solid var(--octo-petrol);
+      border-radius: 5px;
+      padding: 0.15rem 0.6rem;
+      font-size: 0.85rem;
+    }
+    .user-section a.live-link:hover {
+      border-color: var(--octo-orange);
+      background: var(--octo-light-gray);
+    }
+
     /* ── NAVIGATION ── */
     nav {
       display: flex;
@@ -230,6 +241,10 @@
     </a>
 
     <div class="user-section">
+      {% if live_url %}
+        <a href="{{ live_url }}" target="_blank" rel="noopener" class="live-link"
+           title="Die öffentlich erreichbare Fassung dieses Portals">Live-Portal ↗</a>
+      {% endif %}
       {% if user.is_authenticated %}
         {% if user.is_superuser %}
           <a href="/users/">User-Verwaltung</a>
@@ -251,6 +266,7 @@
     <a href="/library/studio/" {% if '/library/' in request.path %}class="active"{% endif %}>Image Studio</a>
     <a href="/assets/" {% if '/assets/' in request.path %}class="active"{% endif %}>Assets</a>
     <a href="/statistics/" {% if '/statistics/' in request.path %}class="active"{% endif %}>Statistics</a>
+    <a href="/webstats/" {% if '/webstats/' in request.path %}class="active"{% endif %}>Web-Statistik</a>
     {% if user.is_superuser %}
     <a href="/db-admin/" {% if '/db-admin/' in request.path %}class="active"{% endif %}>DB Verwaltung</a>
     {% endif %}
@@ -271,6 +287,17 @@
     <a href="/planner/scheduled/" {% if '/scheduled/' in request.path %}class="active"{% endif %}>Scheduled</a>
     <a href="/planner/archive/" {% if '/archive/' in request.path %}class="active"{% endif %}>Archive</a>
     <a href="/planner/all/" {% if '/all/' in request.path %}class="active"{% endif %}>All</a>
+  </div>
+  {% endif %}
+  {% if '/webstats/' in request.path %}
+  <div class="sub-nav">
+    <a href="/webstats/" {% if request.path == '/webstats/' %}class="active"{% endif %}>Übersicht</a>
+    <a href="/webstats/besucher/" {% if '/besucher' in request.path %}class="active"{% endif %}>Besucher</a>
+    <a href="/webstats/seiten/" {% if '/seiten' in request.path %}class="active"{% endif %}>Seiten</a>
+    <a href="/webstats/suchbegriffe/" {% if '/suchbegriffe' in request.path %}class="active"{% endif %}>Suchbegriffe</a>
+    <a href="/webstats/ki/" {% if '/webstats/ki/' in request.path %}class="active"{% endif %}>KI</a>
+    <a href="/webstats/protokoll/" {% if '/protokoll' in request.path %}class="active"{% endif %}>Protokoll</a>
+    <a href="/webstats/archiv/" {% if '/archiv' in request.path %}class="active"{% endif %}>Archiv</a>
   </div>
   {% endif %}
   {% if '/statistics/' in request.path %}

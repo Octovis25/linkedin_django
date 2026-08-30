@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+{% block title %}Web-Statistik – Protokoll{% endblock %}
+
+{% block content %}
+{% include "matomo/_stil.html" %}
+<style>
+  tr.mt-verdacht td { background: #fff6ed; }
+  .mt-marke { display:inline-block; padding:1px 8px; border-radius:10px;
+              background:var(--octo-orange); color:#fff; font-size:0.72rem; font-weight:600; }
+  .mt-marke.mensch { background:var(--octo-petrol); }
+  .mt-kachel.bot { border-left-color: var(--octo-orange); }
+  .mt-kachel.bot .zahl { color: var(--octo-orange); }
+</style>
+
+<h1>Besuchsprotokoll</h1>
+<p class="mt-leise">Jeder Besuch einzeln, mit Kennzeichnung als Mensch oder Bot. Ein <strong>*</strong> heißt: kurzer Besuch, aber derselbe Besucher war schon einmal länger da.</p>
+
+{% if fehler %}<div class="alert alert-error">{{ fehler }}</div>{% endif %}
+
+{% include "matomo/_zeitraum.html" with zeige_nur=1 %}
+
+<div class="mt-kacheln">
+  <div class="mt-kachel"><div class="bez">Besuche gesamt</div><div class="zahl">{{ gesamt }}</div></div>
+  <div class="mt-kachel"><div class="bez">Menschen</div><div class="zahl">{{ menschen }}</div></div>
+  <div class="mt-kachel bot"><div class="bez">Bots</div><div class="zahl">{{ bots }}</div></div>
+</div>
+
+{% if abgeschnitten %}
+<div class="alert alert-info">Sehr viele Besuche – nur die neuesten sind aufgeführt.
+Wähle einen kürzeren Zeitraum.</div>
+{% endif %}
+
+{% if besuche %}
+<div class="card">
+  <div class="mt-tabelle">
+    <table class="mt-sortierbar">
+      <thead>
+        <tr>
+          <th></th><th>Zeitpunkt</th><th>Dauer</th><th>Seiten</th><th>Herkunft</th>
+          <th>Land</th><th>Gerät</th><th>Browser</th><th>System</th><th>Erste Seite</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for b in besuche %}
+        <tr {% if b.ist_bot %}class="mt-verdacht"{% endif %}>
+          <td>{% if b.ist_bot %}<span class="mt-marke">Bot</span>
+              {% else %}<span class="mt-marke mensch">Mensch</span>
+              {% if b.nachtraeglich_mensch %}<span class="mt-leise" title="kurzer Besuch, aber derselbe Besucher war schon länger da">*</span>{% endif %}
+              {% endif %}</td>
+          <td>{{ b.zeit }}</td>
+          <td>{{ b.dauer }}</td>
+          <td>{{ b.aktionen }}</td>
+          <td>{{ b.herkunft }}</td>
+          <td>{{ b.land }}{% if b.stadt != "unbekannt" %} <span class="mt-leise">({{ b.stadt }})</span>{% endif %}</td>
+          <td>{{ b.geraet }}</td>
+          <td>{{ b.browser }}</td>
+          <td>{{ b.system }}</td>
+          <td>{{ b.erste_seite }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% elif not fehler %}
+<p class="mt-leise">Für diesen Zeitraum und diese Auswahl sind keine Besuche protokolliert.</p>
+{% endif %}
+{% include "matomo/_sortierung.html" %}
+{% endblock %}

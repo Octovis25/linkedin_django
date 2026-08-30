@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block title %}Web-Statistik – {{ seitentitel }}{% endblock %}
+
+{% block content %}
+{% include "matomo/_stil.html" %}
+
+<h1>{{ seitentitel }}</h1>
+<p class="mt-leise">{{ untertitel }}</p>
+
+{% if fehler %}<div class="alert alert-error">{{ fehler }}</div>{% endif %}
+
+{% include "matomo/_zeitraum.html" %}
+
+<p class="mt-leise">
+  {{ tage }} Tag{{ tage|pluralize:"e" }} zusammengerechnet.
+  Durchschnitts- und Prozentwerte lässt Matomo hier weg — sie über mehrere Tage
+  zu addieren wäre falsch. Für einen einzelnen Tag setz Von und Bis gleich.
+</p>
+
+{% for b in bloecke %}
+<div class="card">
+  <h2>{{ b.titel }}</h2>
+  {% if b.hinweis %}<p class="mt-leise">{{ b.hinweis }}</p>{% endif %}
+
+  {% if b.fehler %}
+    <div class="alert alert-error" style="margin-top:0.75rem">{{ b.fehler }}</div>
+  {% elif b.zeilen %}
+    <div class="mt-tabelle" style="margin-top:0.75rem">
+      <table class="mt-sortierbar">
+        <thead><tr>{% for s in b.spalten %}<th>{{ s }}</th>{% endfor %}</tr></thead>
+        <tbody>
+          {% for zeile in b.zeilen %}
+            <tr>{% for wert in zeile %}<td>{{ wert }}</td>{% endfor %}</tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% else %}
+    <p class="mt-leise" style="margin-top:0.75rem">Für diesen Zeitraum keine Daten.</p>
+  {% endif %}
+</div>
+{% endfor %}
+{% include "matomo/_sortierung.html" %}
+{% endblock %}

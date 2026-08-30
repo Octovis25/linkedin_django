@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block title %}Web-Statistik – {{ titel|default:aktion }}{% endblock %}
+
+{% block content %}
+{% include "matomo/_stil.html" %}
+
+<h1>{{ titel|default:modul }}{% if not titel %}.{{ aktion }}{% endif %}</h1>
+<p class="mt-leise">
+  {% if aus_archiv %}Aus dem nächtlichen Archiv{% else %}Live von Matomo{% endif %} ·
+  {{ modul }}.{{ aktion }} · {{ von }} bis {{ bis }} ·
+  {{ zeilen|length }} Zeile{{ zeilen|length|pluralize:"n" }}
+</p>
+
+{% if fehler %}
+<div class="alert alert-error" style="margin-top:1rem"><strong>Fehler:</strong> {{ fehler }}</div>
+{% endif %}
+
+<div class="card" style="margin-top:1rem">
+  {% if not aus_archiv %}{% include "matomo/_zeitraum.html" with zeige_limit=1 %}{% endif %}
+
+  {% if zeilen %}
+  <div class="mt-tabelle">
+    <table class="mt-sortierbar">
+      <thead><tr>{% for s in spalten %}<th>{{ s }}</th>{% endfor %}</tr></thead>
+      <tbody>
+        {% for zeile in zeilen %}
+          <tr>{% for wert in zeile %}<td>{{ wert }}</td>{% endfor %}</tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% elif not fehler %}
+  <p class="mt-leise">Für diesen Zeitraum liefert Matomo keine Daten.</p>
+  {% endif %}
+</div>
+
+<p><a href="{% url 'matomo:uebersicht' %}?periode={{ periode }}&amp;datum={{ datum }}">← zurück zur Übersicht</a></p>
+{% include "matomo/_sortierung.html" %}
+{% endblock %}

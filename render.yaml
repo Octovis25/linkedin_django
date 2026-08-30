@@ -33,6 +33,12 @@ services:
         sync: false
       - key: MYSQL_PASSWORD
         sync: false
+      - key: MATOMO_URL
+        value: "https://octotrial.com"
+      - key: MATOMO_SITE_ID
+        value: "1"
+      - key: MATOMO_TOKEN
+        sync: false
 
   - type: cron
     name: buffer-posts-daily
@@ -52,4 +58,30 @@ services:
       - key: MYSQL_USER
         sync: false
       - key: MYSQL_PASSWORD
+        sync: false
+
+  - type: cron
+    name: matomo-sync-daily
+    runtime: python
+    schedule: "30 3 * * *"          # 5:30 deutsche Sommerzeit
+    buildCommand: pip install -r requirements.txt
+    startCommand: python manage.py matomo_sync --tage 3
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.12.10"
+      - key: DJANGO_SECRET_KEY
+        sync: false
+      - key: MYSQL_HOST
+        sync: false
+      - key: MYSQL_DATABASE
+        sync: false
+      - key: MYSQL_USER
+        sync: false
+      - key: MYSQL_PASSWORD
+        sync: false
+      - key: MATOMO_URL
+        value: "https://octotrial.com"
+      - key: MATOMO_SITE_ID
+        value: "1"
+      - key: MATOMO_TOKEN
         sync: false
