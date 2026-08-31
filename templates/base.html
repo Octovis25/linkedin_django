@@ -266,7 +266,7 @@
     <a href="/library/studio/" {% if '/library/' in request.path %}class="active"{% endif %}>Image Studio</a>
     <a href="/assets/" {% if '/assets/' in request.path %}class="active"{% endif %}>Assets</a>
     <a href="/statistics/" {% if '/statistics/' in request.path %}class="active"{% endif %}>Statistics</a>
-    <a href="/webstats/" {% if '/webstats/' in request.path %}class="active"{% endif %}>Web-Statistik</a>
+    <a href="/webstats/" {% if '/webstats/' in request.path %}class="active"{% endif %}>Web Analytics</a>
     {% if user.is_superuser %}
     <a href="/db-admin/" {% if '/db-admin/' in request.path %}class="active"{% endif %}>DB Verwaltung</a>
     {% endif %}
@@ -291,13 +291,14 @@
   {% endif %}
   {% if '/webstats/' in request.path %}
   <div class="sub-nav">
-    <a href="/webstats/" {% if request.path == '/webstats/' %}class="active"{% endif %}>Übersicht</a>
-    <a href="/webstats/besucher/" {% if '/besucher' in request.path %}class="active"{% endif %}>Besucher</a>
-    <a href="/webstats/seiten/" {% if '/seiten' in request.path %}class="active"{% endif %}>Seiten</a>
-    <a href="/webstats/suchbegriffe/" {% if '/suchbegriffe' in request.path %}class="active"{% endif %}>Suchbegriffe</a>
-    <a href="/webstats/ki/" {% if '/webstats/ki/' in request.path %}class="active"{% endif %}>KI</a>
-    <a href="/webstats/protokoll/" {% if '/protokoll' in request.path %}class="active"{% endif %}>Protokoll</a>
-    <a href="/webstats/archiv/" {% if '/archiv' in request.path %}class="active"{% endif %}>Archiv</a>
+    <a href="/webstats/" {% if request.path == '/webstats/' %}class="active"{% endif %}>Overview</a>
+    <a href="/webstats/besucher/" {% if '/besucher' in request.path %}class="active"{% endif %}>Visitors</a>
+    <a href="/webstats/seiten/" {% if '/seiten' in request.path %}class="active"{% endif %}>Pages</a>
+    <a href="/webstats/ziele/" {% if '/ziele' in request.path %}class="active"{% endif %}>Goals</a>
+    <a href="/webstats/suchbegriffe/" {% if '/suchbegriffe' in request.path %}class="active"{% endif %}>Search terms</a>
+    <a href="/webstats/ki/" {% if '/webstats/ki/' in request.path %}class="active"{% endif %}>AI</a>
+    <a href="/webstats/protokoll/" {% if '/protokoll' in request.path %}class="active"{% endif %}>Log</a>
+    <a href="/webstats/archiv/" {% if '/archiv' in request.path %}class="active"{% endif %}>Archive</a>
   </div>
   {% endif %}
   {% if '/statistics/' in request.path %}

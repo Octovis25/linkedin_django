@@ -1,23 +1,23 @@
 {% extends "base.html" %}
-{% block title %}Web-Statistik – Übersicht{% endblock %}
+{% block title %}Web Analytics – Overview{% endblock %}
 
 {% block content %}
 {% include "matomo/_stil.html" %}
 
-<h1>Web-Statistik (Matomo)</h1>
+<h1>Web Analytics (Matomo)</h1>
 <p class="mt-leise">
-  Live von octotrial.com geholt, {{ tage }} Tag{{ tage|pluralize:"e" }}.
+  Live from octotrial.com, {{ tage }} day{{ tage|pluralize }}.
   {% if letzter_lauf %}
-    Letzter nächtlicher Abgleich: {{ letzter_lauf.gestartet|date:"d.m.Y H:i" }}
-    ({{ letzter_lauf.berichte_ok }} Berichte{% if letzter_lauf.berichte_fehler %}, {{ letzter_lauf.berichte_fehler }} Fehler{% endif %}).
+    Last nightly sync: {{ letzter_lauf.gestartet|date:"d.m.Y H:i" }}
+    ({{ letzter_lauf.berichte_ok }} reports{% if letzter_lauf.berichte_fehler %}, {{ letzter_lauf.berichte_fehler }} errors{% endif %}).
   {% else %}
-    Noch kein nächtlicher Abgleich gelaufen.
+    No nightly sync has run yet.
   {% endif %}
 </p>
 
 {% if fehler %}
 <div class="alert alert-error" style="margin-top:1rem">
-  <strong>Matomo antwortet nicht:</strong> {{ fehler }}
+  <strong>Matomo is not responding:</strong> {{ fehler }}
 </div>
 {% endif %}
 
@@ -25,32 +25,32 @@
   {% include "matomo/_zeitraum.html" %}
 
   <div class="mt-kacheln">
-    <div class="mt-kachel"><div class="bez">Besuche gesamt</div><div class="zahl">{{ gesamt }}</div></div>
-    <div class="mt-kachel"><div class="bez">Menschen</div><div class="zahl">{{ menschen }}</div></div>
+    <div class="mt-kachel"><div class="bez">Total visits</div><div class="zahl">{{ gesamt }}</div></div>
+    <div class="mt-kachel"><div class="bez">Humans</div><div class="zahl">{{ menschen }}</div></div>
     <div class="mt-kachel" style="border-left-color:var(--octo-orange)"><div class="bez">Bots</div><div class="zahl" style="color:var(--octo-orange)">{{ bots }}</div></div>
-    <div class="mt-kachel"><div class="bez">Seiten (Menschen)</div><div class="zahl">{{ seiten_menschen }}</div></div>
-    <div class="mt-kachel"><div class="bez">Ø Dauer (Menschen)</div><div class="zahl">{{ dauer_schnitt }}s</div></div>
+    <div class="mt-kachel"><div class="bez">Pages (humans)</div><div class="zahl">{{ seiten_menschen }}</div></div>
+    <div class="mt-kachel"><div class="bez">Avg. time (humans)</div><div class="zahl">{{ dauer_schnitt }}s</div></div>
   </div>
   </div>
 
   {% if sparkline %}
-  <h2>Besuche im Zeitraum</h2>
+  <h2>Visits in this range</h2>
   <svg viewBox="0 0 {{ sparkline.breite }} {{ sparkline.hoehe }}" width="100%" height="150"
        preserveAspectRatio="none" role="img"
-       aria-label="Besuche je Tag, Höchstwert {{ sparkline.hoch }}">
+       aria-label="Visits per day, peak {{ sparkline.hoch }}">
     <polygon points="{{ sparkline.flaeche }}" fill="var(--octo-turquoise)" opacity=".3"/>
     <polyline points="{{ sparkline.punkte }}" fill="none" stroke="var(--octo-petrol)"
               stroke-width="2" stroke-linejoin="round" vector-effect="non-scaling-stroke"/>
   </svg>
-  <p class="mt-leise">{{ sparkline.erster }} bis {{ sparkline.letzter }} · Höchstwert {{ sparkline.hoch }} Besuche</p>
+  <p class="mt-leise">{{ sparkline.erster }} to {{ sparkline.letzter }} · peak {{ sparkline.hoch }} visits</p>
   {% endif %}
 </div>
 
 <div class="card">
-  <h2>Alle Berichte, die Matomo liefert{% if anzahl_berichte %} ({{ anzahl_berichte }}){% endif %}</h2>
+  <h2>Every report Matomo offers{% if anzahl_berichte %} ({{ anzahl_berichte }}){% endif %}</h2>
   <p class="mt-leise">
-    Diese Liste kommt bei jedem Aufruf frisch von Matomo. Schaltest du dort ein
-    Plugin dazu, erscheinen dessen Berichte hier von selbst.
+    This list is fetched from Matomo on every load. Enable a plugin there and its
+    reports show up here on their own.
   </p>
   {% for kategorie, berichte in kategorien.items %}
     <div class="mt-kat">{{ kategorie }}</div>
@@ -60,7 +60,7 @@
       {% endfor %}
     </div>
   {% empty %}
-    <p class="mt-leise">Keine Berichtsliste erhalten – siehe Meldung oben.</p>
+    <p class="mt-leise">No report list received – see the message above.</p>
   {% endfor %}
 </div>
 {% endblock %}

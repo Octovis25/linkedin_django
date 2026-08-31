@@ -1,0 +1,236 @@
+{% load matomo_extras %}
+{% comment %}
+Zwei Linien über die Zeit: Besuche von Menschen und von Bots je Tag.
+Gezeichnet wird im Browser, damit sich eine Linie ausblenden lässt und die
+Achse sich danach neu einstellt. Erwartet "verlauf" aus views._verlauf.
+{% endcomment %}
+<style>
+  .mt-verlauf { width:100%; height:auto; display:block; }
+  .mt-verlauf .hilfslinie { stroke:#ece9e0; stroke-width:1; }
+  .mt-verlauf .achse { stroke:#d8d4c8; stroke-width:1; }
+  .mt-verlauf .wochenlinie { stroke:#f0ede4; stroke-width:1; }
+  .mt-verlauf .achsentext { font-size:10px; fill:#8a8a8a; }
+  .mt-verlauf .endbeschriftung { font-size:11px; font-weight:700; }
+  .mt-verlauf .spitzenwert { font-size:10px; font-weight:700; }
+  .mt-verlauf .fadenkreuz { stroke:#b9b4a6; stroke-width:1; stroke-dasharray:3 3; }
+  .mt-schalter { display:flex; gap:0.6rem; align-items:center; flex-wrap:wrap;
+                 margin:0.25rem 0 0.6rem; }
+  .mt-schalter button { display:inline-flex; gap:0.4rem; align-items:center;
+      background:#fff; border:1px solid #d8d4c8; border-radius:16px;
+      padding:0.2rem 0.7rem; font:inherit; font-size:0.85rem; cursor:pointer; color:#333; }
+  .mt-schalter button:hover { border-color:#b9b4a6; }
+  .mt-schalter button .strich { width:1.1rem; height:0; border-top:2px solid; border-radius:2px; }
+  .mt-schalter button[aria-pressed="false"] { color:#999; background:#f7f5ef; }
+  .mt-schalter button[aria-pressed="false"] .strich { border-top-style:dotted; opacity:.5; }
+  .mt-schalter button[aria-pressed="false"] .zahl { text-decoration:line-through; }
+  .mt-schalter .hinweis { font-size:0.78rem; color:#888; }
+  .mt-sprechblase { position:absolute; pointer-events:none; background:#fff;
+      border:1px solid #d8d4c8; border-radius:6px; padding:0.35rem 0.6rem;
+      font-size:0.8rem; box-shadow:0 2px 6px rgba(0,0,0,.12); white-space:nowrap; z-index:5; }
+  .mt-sprechblase b { display:block; margin-bottom:0.15rem; color:#222; }
+  .mt-sprechblase .zeile { display:flex; gap:0.4rem; align-items:center; }
+  .mt-sprechblase .punkt { width:0.55rem; height:0.55rem; border-radius:50%; }
+</style>
+
+<div class="mt-schalter">
+  {% for r in verlauf.reihen %}
+  <button type="button" data-reihe="{{ r.feld }}" aria-pressed="true"
+          title="Show or hide {{ r.name }}">
+    <span class="strich" style="border-color:{{ r.farbe }}"></span>
+    {{ r.name }} <strong class="zahl">{{ r.summe }}</strong>
+  </button>
+  {% endfor %}
+  <span class="hinweis">click to hide or show</span>
+</div>
+
+<div class="mt-verlaufrahmen" style="position:relative">
+  <svg class="mt-verlauf" viewBox="0 0 920 220" role="img"
+       aria-label="Visits per day: lines for humans and bots"></svg>
+</div>
+
+<script>
+(function () {
+  var rahmen = document.currentScript.previousElementSibling;
+  var schalter = rahmen.previousElementSibling;
+  var svg = rahmen.querySelector('svg');
+  var NS = 'http://www.w3.org/2000/svg';
+
+  var daten = {{ verlauf.daten|safe_json }};
+  var reihen = {{ verlauf.reihen|safe_json }};
+  var sichtbar = {};
+  reihen.forEach(function (r) { sichtbar[r.feld] = true; });
+
+  var B = 920, H = 220, links = 34, rechts = 62, oben = 24, unten = 24;   // oben Platz für die Zahl an der höchsten Spitze
+  var zeichenbreite = B - links - rechts, zeichenhoehe = H - oben - unten;
+  var grundlinie = oben + zeichenhoehe;
+  var blase = null;
+
+  function el(name, attr, text) {
+    var k = document.createElementNS(NS, name);
+    for (var a in attr) k.setAttribute(a, attr[a]);
+    if (text !== undefined) k.textContent = text;
+    return k;
+  }
+
+  function x(i) { return links + i * zeichenbreite / (daten.length - 1); }
+
+  function hoechstwert() {
+    var h = 1;
+    daten.forEach(function (d) {
+      reihen.forEach(function (r) {
+        if (sichtbar[r.feld] && d[r.feld] > h) h = d[r.feld];
+      });
+    });
+    return h;
+  }
+
+  function spitzen(r) {
+    var werte = daten.map(function (d) { return d[r.feld]; });
+    var hoch = Math.max.apply(null, werte);
+    if (hoch < 1) return [];
+
+    var kandidaten = [];
+    werte.forEach(function (w, i) {
+      var links_ = i === 0 ? -1 : werte[i - 1];
+      var rechts_ = i === werte.length - 1 ? -1 : werte[i + 1];
+      // örtliches Hoch, und mindestens die Hälfte des Gesamthochs wert
+      if (w > 0 && w >= links_ && w >= rechts_ && w >= hoch * 0.5) {
+        kandidaten.push(i);
+      }
+    });
+
+    kandidaten.sort(function (a, b) { return werte[b] - werte[a]; });
+    var abstand = Math.max(2, Math.round(daten.length / 12));
+    var gewaehlt = [];
+    kandidaten.forEach(function (i) {
+      if (gewaehlt.length >= 6) return;
+      var zuNah = gewaehlt.some(function (j) { return Math.abs(i - j) < abstand; });
+      if (!zuNah) gewaehlt.push(i);
+    });
+    return gewaehlt;
+  }
+
+  function zeichne() {
+    while (svg.firstChild) svg.removeChild(svg.firstChild);
+    var hoch = hoechstwert();
+    var y = function (wert) { return oben + zeichenhoehe - (wert / hoch) * zeichenhoehe; };
+
+    var schritt = Math.max(1, Math.ceil(hoch / 4));
+    for (var w = 0; w <= hoch; w += schritt) {
+      svg.appendChild(el('line', { class: 'hilfslinie', x1: links, y1: y(w).toFixed(1),
+                                   x2: links + zeichenbreite, y2: y(w).toFixed(1) }));
+      svg.appendChild(el('text', { class: 'achsentext', x: links - 6,
+                                   y: (y(w) + 3).toFixed(1), 'text-anchor': 'end' }, w));
+    }
+    svg.appendChild(el('line', { class: 'achse', x1: links, y1: grundlinie,
+                                 x2: links + zeichenbreite, y2: grundlinie }));
+
+    // Jeder Montag bekommt eine Marke, dazu immer der erste und letzte Tag.
+    // Bei sehr kurzen Zeiträumen wird jeder Tag beschriftet.
+    daten.forEach(function (d, i) {
+      var rand = (i === 0 || i === daten.length - 1);
+      var woche = d.istMontag || d.ersterImMonat;
+      if (!(daten.length <= 10 || rand || woche)) return;
+
+      if (woche && !rand) {
+        svg.appendChild(el('line', { class: 'wochenlinie', x1: x(i).toFixed(1), y1: oben - 2,
+                                     x2: x(i).toFixed(1), y2: grundlinie }));
+      }
+      svg.appendChild(el('line', { class: 'achse', x1: x(i).toFixed(1), y1: grundlinie,
+                                   x2: x(i).toFixed(1), y2: grundlinie + 4 }));
+      svg.appendChild(el('text', { class: 'achsentext', x: x(i).toFixed(1),
+                                   y: grundlinie + 15, 'text-anchor': 'middle' }, d.kurz));
+    });
+
+    reihen.forEach(function (r) {
+      if (!sichtbar[r.feld]) return;
+      var punkte = daten.map(function (d, i) { return x(i).toFixed(1) + ',' + y(d[r.feld]).toFixed(1); });
+      svg.appendChild(el('polygon', {
+        points: links + ',' + grundlinie + ' ' + punkte.join(' ') + ' ' + (links + zeichenbreite) + ',' + grundlinie,
+        fill: r.farbe, opacity: 0.06 }));
+      svg.appendChild(el('polyline', { points: punkte.join(' '), fill: 'none',
+        stroke: r.farbe, 'stroke-width': 1.6, 'stroke-opacity': 0.72,
+        'stroke-linejoin': 'round', 'stroke-linecap': 'round' }));
+      if (daten.length <= 14) {
+        daten.forEach(function (d, i) {
+          svg.appendChild(el('circle', { cx: x(i).toFixed(1), cy: y(d[r.feld]).toFixed(1),
+            r: 3.5, fill: r.farbe, 'fill-opacity': 0.8, stroke: '#fff', 'stroke-width': 2 }));
+        });
+      }
+      // Werte an den Spitzen beschriften - aber nur an den auffälligen, sonst
+      // steht auf jedem Punkt eine Zahl und man liest gar nichts mehr.
+      spitzen(r).forEach(function (i) {
+        svg.appendChild(el('text', {
+          class: 'spitzenwert', x: x(i).toFixed(1), y: (y(daten[i][r.feld]) - 7).toFixed(1),
+          'text-anchor': 'middle', fill: r.farbe }, daten[i][r.feld]));
+      });
+
+      var letzter = daten[daten.length - 1];
+      svg.appendChild(el('text', { class: 'endbeschriftung', x: links + zeichenbreite + 8,
+        y: (y(letzter[r.feld]) + 4).toFixed(1), fill: r.farbe }, r.name));
+    });
+
+    svg.appendChild(el('line', { class: 'fadenkreuz', x1: 0, y1: 0, x2: 0, y2: 0,
+                                 style: 'display:none' }));
+  }
+
+  function zeige(e) {
+    var kreuz = svg.querySelector('.fadenkreuz');
+    var kasten = svg.getBoundingClientRect();
+    var faktor = B / kasten.width;
+    var mausX = (e.clientX - kasten.left) * faktor;
+    var index = 0, abstand = Infinity;
+    daten.forEach(function (d, i) {
+      var a = Math.abs(x(i) - mausX);
+      if (a < abstand) { abstand = a; index = i; }
+    });
+    kreuz.setAttribute('x1', x(index)); kreuz.setAttribute('x2', x(index));
+    kreuz.setAttribute('y1', oben - 4); kreuz.setAttribute('y2', grundlinie);
+    kreuz.style.display = '';
+
+    if (!blase) {
+      blase = document.createElement('div');
+      blase.className = 'mt-sprechblase';
+      rahmen.appendChild(blase);
+    }
+    var d = daten[index];
+    var teile = ['<b>' + d.lang + '</b>'];
+    reihen.forEach(function (r) {
+      if (!sichtbar[r.feld]) return;
+      teile.push('<span class="zeile"><span class="punkt" style="background:' + r.farbe
+                 + '"></span>' + d[r.feld] + ' ' + r.name + '</span>');
+    });
+    blase.innerHTML = teile.join('');
+    var px = x(index) / faktor;
+    blase.style.left = Math.min(Math.max(px - 60, 0), Math.max(0, kasten.width - 160)) + 'px';
+    blase.style.top = '4px';
+  }
+
+  function verstecke() {
+    var kreuz = svg.querySelector('.fadenkreuz');
+    if (kreuz) kreuz.style.display = 'none';
+    if (blase) { blase.remove(); blase = null; }
+  }
+
+  schalter.querySelectorAll('button[data-reihe]').forEach(function (knopf) {
+    knopf.addEventListener('click', function () {
+      var feld = knopf.getAttribute('data-reihe');
+      // Die letzte sichtbare Linie bleibt an - ein leeres Diagramm hilft niemandem.
+      var noch = reihen.filter(function (r) { return sichtbar[r.feld]; }).length;
+      if (sichtbar[feld] && noch < 2) return;
+      sichtbar[feld] = !sichtbar[feld];
+      knopf.setAttribute('aria-pressed', sichtbar[feld] ? 'true' : 'false');
+      verstecke();
+      zeichne();
+    });
+  });
+
+  svg.addEventListener('mousemove', zeige);
+  svg.addEventListener('mouseleave', verstecke);
+  svg.addEventListener('touchmove', function (e) {
+    if (e.touches.length) zeige(e.touches[0]);
+  }, { passive: true });
+
+  zeichne();
+})();
+</script>

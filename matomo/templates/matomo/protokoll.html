@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Web-Statistik – Protokoll{% endblock %}
+{% block title %}Web Analytics – Log{% endblock %}
 
 {% block content %}
 {% include "matomo/_stil.html" %}
@@ -12,22 +12,28 @@
   .mt-kachel.bot .zahl { color: var(--octo-orange); }
 </style>
 
-<h1>Besuchsprotokoll</h1>
-<p class="mt-leise">Jeder Besuch einzeln, mit Kennzeichnung als Mensch oder Bot. Ein <strong>*</strong> heißt: kurzer Besuch, aber derselbe Besucher war schon einmal länger da.</p>
+<h1>Visit log</h1>
+<p class="mt-leise">Every visit individually, marked as human or bot. An <strong>*</strong> means: a short visit, but the same visitor stayed longer at least once.</p>
 
 {% if fehler %}<div class="alert alert-error">{{ fehler }}</div>{% endif %}
 
-{% include "matomo/_zeitraum.html" with zeige_nur=1 %}
+{% include "matomo/_zeitraum.html" with zeige_nur=1 mitnehmen_tag=tag mitnehmen_stunde=stunde %}
+{% if tag or stunde %}
+<div class="alert alert-info">
+  Restricted to <strong>{{ tag }}{% if tag and stunde %}, {% endif %}{{ stunde_text }}</strong>.
+  <a href="?von={{ von }}&amp;bis={{ bis }}&amp;nur={{ nur }}">Remove restriction</a>
+  <input type="hidden">
+</div>
+{% endif %}
 
 <div class="mt-kacheln">
-  <div class="mt-kachel"><div class="bez">Besuche gesamt</div><div class="zahl">{{ gesamt }}</div></div>
-  <div class="mt-kachel"><div class="bez">Menschen</div><div class="zahl">{{ menschen }}</div></div>
+  <div class="mt-kachel"><div class="bez">Total visits</div><div class="zahl">{{ gesamt }}</div></div>
+  <div class="mt-kachel"><div class="bez">Humans</div><div class="zahl">{{ menschen }}</div></div>
   <div class="mt-kachel bot"><div class="bez">Bots</div><div class="zahl">{{ bots }}</div></div>
 </div>
 
 {% if abgeschnitten %}
-<div class="alert alert-info">Sehr viele Besuche – nur die neuesten sind aufgeführt.
-Wähle einen kürzeren Zeitraum.</div>
+<div class="alert alert-info">Very many visits – only the most recent are listed. Choose a shorter range.</div>
 {% endif %}
 
 {% if besuche %}
@@ -36,16 +42,16 @@ Wähle einen kürzeren Zeitraum.</div>
     <table class="mt-sortierbar">
       <thead>
         <tr>
-          <th></th><th>Zeitpunkt</th><th>Dauer</th><th>Seiten</th><th>Herkunft</th>
-          <th>Land</th><th>Gerät</th><th>Browser</th><th>System</th><th>Erste Seite</th>
+          <th></th><th>When</th><th>Time on site</th><th>Pages</th><th>Referrer</th>
+          <th>Country</th><th>Device</th><th>Browser</th><th>System</th><th>Entry page</th>
         </tr>
       </thead>
       <tbody>
         {% for b in besuche %}
         <tr {% if b.ist_bot %}class="mt-verdacht"{% endif %}>
           <td>{% if b.ist_bot %}<span class="mt-marke">Bot</span>
-              {% else %}<span class="mt-marke mensch">Mensch</span>
-              {% if b.nachtraeglich_mensch %}<span class="mt-leise" title="kurzer Besuch, aber derselbe Besucher war schon länger da">*</span>{% endif %}
+              {% else %}<span class="mt-marke mensch">Human</span>
+              {% if b.nachtraeglich_mensch %}<span class="mt-leise" title="short visit, but the same visitor stayed longer before">*</span>{% endif %}
               {% endif %}</td>
           <td>{{ b.zeit }}</td>
           <td>{{ b.dauer }}</td>
@@ -63,7 +69,7 @@ Wähle einen kürzeren Zeitraum.</div>
   </div>
 </div>
 {% elif not fehler %}
-<p class="mt-leise">Für diesen Zeitraum und diese Auswahl sind keine Besuche protokolliert.</p>
+<p class="mt-leise">No visits logged for this range and selection.</p>
 {% endif %}
 {% include "matomo/_sortierung.html" %}
 {% endblock %}

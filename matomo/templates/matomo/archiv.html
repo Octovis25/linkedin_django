@@ -1,19 +1,18 @@
 {% extends "base.html" %}
-{% block title %}Web-Statistik – Archiv{% endblock %}
+{% block title %}Web Analytics – Archive{% endblock %}
 
 {% block content %}
 {% include "matomo/_stil.html" %}
 
-<h1>Archiv</h1>
+<h1>Archive</h1>
 <p class="mt-leise">
-  Was der nächtliche Abgleich in der Django-Datenbank abgelegt hat –
-  {{ gesamt }} gespeicherte Berichte insgesamt.
+  What the nightly sync stored in the Django database – {{ gesamt }} reports in total.
 </p>
 
 <div class="card" style="margin-top:1rem">
   <form class="mt-filter" method="get">
     <div class="form-group">
-      <label for="periode">Zeitraum</label>
+      <label for="periode">Period</label>
       <select name="periode" id="periode">
         {% for wert, bez in perioden %}
           <option value="{{ wert }}" {% if wert == periode %}selected{% endif %}>{{ bez }}</option>
@@ -21,24 +20,24 @@
       </select>
     </div>
     <div class="form-group">
-      <label for="kategorie">Kategorie</label>
+      <label for="kategorie">Category</label>
       <select name="kategorie" id="kategorie">
-        <option value="">alle</option>
+        <option value="">all</option>
         {% for k in kategorien %}
           <option value="{{ k }}" {% if k == kategorie %}selected{% endif %}>{{ k }}</option>
         {% endfor %}
       </select>
     </div>
     <div class="form-group">
-      <label for="datum">Datum</label>
+      <label for="datum">Date</label>
       <input type="date" name="datum" id="datum" value="{{ datum }}">
     </div>
-    <button type="submit" class="btn btn-primary">Filtern</button>
+    <button type="submit" class="btn btn-primary">Filter</button>
   </form>
 
   <div class="mt-tabelle">
     <table class="mt-sortierbar">
-      <thead><tr><th>Datum</th><th>Kategorie</th><th>Bericht</th><th>Zeilen</th><th>geholt</th></tr></thead>
+      <thead><tr><th>Date</th><th>Category</th><th>Report</th><th>Rows</th><th>Fetched</th></tr></thead>
       <tbody>
       {% for e in eintraege %}
         <tr>
@@ -49,7 +48,7 @@
           <td class="mt-leise">{{ e.abgerufen_am|date:"d.m. H:i" }}</td>
         </tr>
       {% empty %}
-        <tr><td colspan="5" class="mt-leise">Noch nichts gespeichert. Einmal <code>python manage.py matomo_sync</code> laufen lassen.</td></tr>
+        <tr><td colspan="5" class="mt-leise">Nothing stored yet. Run <code>python manage.py matomo_sync</code> once.</td></tr>
       {% endfor %}
       </tbody>
     </table>
@@ -57,9 +56,9 @@
 </div>
 
 <div class="card">
-  <h2>Letzte Abgleiche</h2>
+  <h2>Recent syncs</h2>
   <table class="mt-sortierbar">
-    <thead><tr><th>Start</th><th>Zeitraum</th><th>OK</th><th>Fehler</th><th>Ende</th></tr></thead>
+    <thead><tr><th>Started</th><th>Range</th><th>OK</th><th>Errors</th><th>Finished</th></tr></thead>
     <tbody>
     {% for l in laeufe %}
       <tr>
@@ -67,10 +66,10 @@
         <td>{{ l.datum_von }} – {{ l.datum_bis }}</td>
         <td>{{ l.berichte_ok }}</td>
         <td>{{ l.berichte_fehler }}</td>
-        <td>{% if l.beendet %}{{ l.beendet|date:"H:i" }}{% else %}<em>läuft</em>{% endif %}</td>
+        <td>{% if l.beendet %}{{ l.beendet|date:"H:i" }}{% else %}<em>running</em>{% endif %}</td>
       </tr>
     {% empty %}
-      <tr><td colspan="5" class="mt-leise">Noch kein Lauf protokolliert.</td></tr>
+      <tr><td colspan="5" class="mt-leise">No sync recorded yet.</td></tr>
     {% endfor %}
     </tbody>
   </table>

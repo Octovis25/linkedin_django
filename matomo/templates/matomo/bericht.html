@@ -1,18 +1,18 @@
 {% extends "base.html" %}
-{% block title %}Web-Statistik – {{ titel|default:aktion }}{% endblock %}
+{% block title %}Web Analytics – {{ titel|default:aktion }}{% endblock %}
 
 {% block content %}
 {% include "matomo/_stil.html" %}
 
 <h1>{{ titel|default:modul }}{% if not titel %}.{{ aktion }}{% endif %}</h1>
 <p class="mt-leise">
-  {% if aus_archiv %}Aus dem nächtlichen Archiv{% else %}Live von Matomo{% endif %} ·
+  {% if aus_archiv %}From the nightly archive{% else %}Live from Matomo{% endif %} ·
   {{ modul }}.{{ aktion }} · {{ von }} bis {{ bis }} ·
-  {{ zeilen|length }} Zeile{{ zeilen|length|pluralize:"n" }}
+  {{ zeilen|length }} row{{ zeilen|length|pluralize }}
 </p>
 
 {% if fehler %}
-<div class="alert alert-error" style="margin-top:1rem"><strong>Fehler:</strong> {{ fehler }}</div>
+<div class="alert alert-error" style="margin-top:1rem"><strong>Error:</strong> {{ fehler }}</div>
 {% endif %}
 
 <div class="card" style="margin-top:1rem">
@@ -30,10 +30,10 @@
     </table>
   </div>
   {% elif not fehler %}
-  <p class="mt-leise">Für diesen Zeitraum liefert Matomo keine Daten.</p>
+  <p class="mt-leise">Matomo returns no data for this range.</p>
   {% endif %}
 </div>
 
-<p><a href="{% url 'matomo:uebersicht' %}?periode={{ periode }}&amp;datum={{ datum }}">← zurück zur Übersicht</a></p>
+<p><a href="{% url 'matomo:uebersicht' %}?periode={{ periode }}&amp;datum={{ datum }}">← back to the overview</a></p>
 {% include "matomo/_sortierung.html" %}
 {% endblock %}

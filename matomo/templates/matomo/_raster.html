@@ -1,0 +1,33 @@
+{% comment %}
+Ein Wochenraster (7 Tage x 24 Stunden). Erwartet im Kontext:
+  r        - ein Raster aus views._stundenraster (art, nur, zeilen, summe)
+  von, bis - der gewählte Zeitraum, für die Verlinkung ins Protokoll
+{% endcomment %}
+<div class="mt-rasterkarte">
+  <div class="mt-rastertitel {{ r.art }}">
+    {% if r.art == "menschen" %}Humans{% else %}Bots{% endif %}
+    <span class="mt-leise">— {{ r.summe }} visits</span>
+  </div>
+  <div class="mt-raster">
+    <div class="mt-rasterkopf">
+      <span></span>
+      {% for i in "012345678901234567890123" %}<span>{% if forloop.counter0|divisibleby:3 %}{{ forloop.counter0 }}{% endif %}</span>{% endfor %}
+      <span class="mt-summenkopf">Total</span>
+    </div>
+    {% for zeile in r.zeilen %}
+    <div class="mt-rasterzeile">
+      <span class="mt-tag">{{ zeile.kurz }}</span>
+      {% for f in zeile.felder %}
+        {% if f.anzahl %}
+          <a class="mt-feld {{ r.art }}" style="opacity:{{ f.deckkraft }}"
+             href="{% url 'matomo:protokoll' %}?von={{ von }}&amp;bis={{ bis }}&amp;nur={{ r.nur }}&amp;tag={{ zeile.tag }}&amp;stunde={{ f.stunde }}"
+             title="{{ zeile.tag }} {{ f.stunde_text }} — {{ f.anzahl }} visit{{ f.anzahl|pluralize }}"></a>
+        {% else %}
+          <span class="mt-feld leer" title="{{ zeile.tag }} {{ f.stunde_text }} — no visits"></span>
+        {% endif %}
+      {% endfor %}
+      <span class="mt-summe {{ r.art }}" title="{{ zeile.tag }}: {{ zeile.summe }} visits">{{ zeile.summe }}</span>
+    </div>
+    {% endfor %}
+  </div>
+</div>

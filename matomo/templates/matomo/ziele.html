@@ -1,0 +1,122 @@
+{% extends "base.html" %}
+{% block title %}Web Analytics – Goals{% endblock %}
+
+{% block content %}
+{% include "matomo/_stil.html" %}
+<style>
+  .mt-balken { background:var(--octo-light-gray); border-radius:3px; height:8px;
+               position:relative; min-width:70px; }
+  .mt-balken span { position:absolute; left:0; top:0; bottom:0; background:#0093A1;
+                    border-radius:3px; }
+  .mt-ohne td { color:#999; }
+  .mt-delta { font-size:0.75rem; font-weight:600; }
+  .mt-delta.hoch { color:#2e7d32; } .mt-delta.runter { color:#c62828; }
+  .mt-regeln { background:#fff8ef; border:1px solid #f3d9bf; border-radius:8px;
+               padding:0.8rem 1rem; font-size:0.88rem; margin-top:1.25rem; }
+</style>
+
+<h1>Goals</h1>
+<p class="mt-leise">What visitors actually did — not just that they were here.</p>
+
+{% if fehler %}<div class="alert alert-error">{{ fehler }}</div>{% endif %}
+
+{% include "matomo/_zeitraum.html" %}
+
+<div class="mt-kacheln">
+  <div class="mt-kachel"><div class="bez">Visits with a goal</div><div class="zahl">{{ erfolgreiche }}</div></div>
+  <div class="mt-kachel"><div class="bez">Conversion rate</div><div class="zahl">{{ quote }} %</div></div>
+  <div class="mt-kachel"><div class="bez">Goals reached</div><div class="zahl">{{ gesamt }}</div>
+    <div class="mt-delta">across {{ mit_treffern }} of {{ ziele|length }} goals</div></div>
+  <div class="mt-kachel">
+    <div class="bez">Human visits</div><div class="zahl">{{ besuche }}</div>
+    {% if unterschied > 0 %}<div class="mt-delta hoch">+{{ unterschied }} vs. previous period</div>
+    {% elif unterschied < 0 %}<div class="mt-delta runter">{{ unterschied }} vs. previous period</div>
+    {% else %}<div class="mt-delta">unchanged vs. previous period</div>{% endif %}
+  </div>
+</div>
+
+<p class="mt-leise">
+  {{ tage }} day{{ tage|pluralize }} · previous period {{ vor_von }} to {{ vor_bis }}
+  ({{ vorbesuche }} human visits). Bots are excluded throughout — they never fill in forms.
+  One visit can reach several goals, so “goals reached” is higher than “visits with a goal”.
+</p>
+
+<div class="card">
+  <h2>The individual goals</h2>
+  <p class="mt-leise">
+    “Rate” is the share of human visits in which the goal was reached.
+    “Change” compares with the previous period of the same length.
+  </p>
+  <div class="mt-tabelle" style="margin-top:0.75rem">
+    <table class="mt-sortierbar">
+      <thead>
+        <tr>
+          <th>Goal</th><th>Condition</th>
+          <th class="mt-zahl">Reached</th><th class="mt-zahl">Rate</th>
+          <th class="mt-zahl">Change</th><th>Share</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for z in ziele %}
+        <tr {% if not z.anzahl %}class="mt-ohne"{% endif %}>
+          <td><strong>{{ z.name }}</strong></td>
+          <td class="mt-leise">{{ z.bedingung }}</td>
+          <td class="mt-zahl">{{ z.anzahl }}</td>
+          <td class="mt-zahl">{{ z.quote }} %</td>
+          <td class="mt-zahl">
+            {% if z.unterschied > 0 %}<span class="mt-delta hoch">+{{ z.unterschied }}</span>
+            {% elif z.unterschied < 0 %}<span class="mt-delta runter">{{ z.unterschied }}</span>
+            {% else %}<span class="mt-leise">0</span>{% endif %}
+          </td>
+          <td><div class="mt-balken"><span style="width:{{ z.anteil }}%"></span></div></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+
+<div class="card">
+  <h2>Where the successful visits came from</h2>
+  <p class="mt-leise">
+    The question behind the question: which channel brings not just visitors, but
+    visitors who do something?
+  </p>
+  <div class="mt-tabelle" style="margin-top:0.75rem">
+    <table class="mt-sortierbar">
+      <thead><tr>{% for s in herkunft.spalten %}<th{% if not forloop.first %} class="mt-zahl"{% endif %}>{{ s }}</th>{% endfor %}</tr></thead>
+      <tbody>
+        {% for zeile in herkunft.zeilen %}
+        <tr>{% for wert in zeile %}<td{% if not forloop.first %} class="mt-zahl"{% endif %}>{{ wert }}</td>{% endfor %}</tr>
+        {% empty %}<tr><td colspan="4" class="mt-leise">No data for this range.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<div class="card">
+  <h2>Which entry page led to it</h2>
+  <div class="mt-tabelle" style="margin-top:0.75rem">
+    <table class="mt-sortierbar">
+      <thead><tr>{% for s in einstieg.spalten %}<th{% if not forloop.first %} class="mt-zahl"{% endif %}>{{ s }}</th>{% endfor %}</tr></thead>
+      <tbody>
+        {% for zeile in einstieg.zeilen %}
+        <tr>{% for wert in zeile %}<td{% if not forloop.first %} class="mt-zahl"{% endif %}>{{ wert }}</td>{% endfor %}</tr>
+        {% empty %}<tr><td colspan="4" class="mt-leise">No data for this range.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<div class="mt-regeln">
+  <strong>No setup in Matomo needed.</strong> These goals are derived from the visit
+  log Matomo already records, so they work retroactively for every visit ever
+  tracked. The rules live in <code>MATOMO_ZIELE</code> in the Django settings —
+  change a pattern there and the numbers change with it, including for the past.
+  A goal counts once per visit, no matter how often it was triggered.
+</div>
+{% include "matomo/_sortierung.html" %}
+{% endblock %}

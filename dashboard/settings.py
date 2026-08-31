@@ -138,5 +138,15 @@ MATOMO_CACHE_SECONDS = int(os.getenv("MATOMO_CACHE_SECONDS", "900"))  # Live-Ans
 # RENDER_EXTERNAL_URL von selbst; lokal kommt DASHBOARD_URL aus der .env.
 LIVE_URL = os.getenv("RENDER_EXTERNAL_URL") or os.getenv("DASHBOARD_URL", "")
 
-MATOMO_SPRACHE = "de"   # Sprache der Spaltentitel, die Matomo mitliefert
+# Ziele für den Goals-Reiter. Sie werden aus Matomos Besuchsprotokoll
+# abgeleitet - in Matomo selbst muss nichts eingerichtet werden, und die
+# Auswertung gilt rückwirkend. None = die Voreinstellung aus matomo/views.py.
+#   art: seite | titel | mailto | download | outlink | tiefe | dauer
+# MATOMO_ZIELE = [
+#     {"name": "Contact page reached", "art": "seite", "muster": "/kontakt",
+#      "beschreibung": "visited a page whose address contains /kontakt"},
+# ]
+MATOMO_ZIELE = None
+
+MATOMO_SPRACHE = "en"   # Sprache der Spaltentitel, die Matomo mitliefert
 MATOMO_TIMEOUT = 30

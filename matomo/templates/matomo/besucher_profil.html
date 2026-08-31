@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% block title %}Web Analytics – Visitor {{ kennung }}{% endblock %}
+
+{% block content %}
+{% include "matomo/_stil.html" %}
+<style>
+  .mt-weg { list-style:none; margin:0.5rem 0 0; padding:0; border-left:2px solid var(--octo-light-gray); }
+  .mt-weg li { position:relative; padding:0.25rem 0 0.25rem 1.1rem; font-size:0.9rem; }
+  .mt-weg li::before { content:""; position:absolute; left:-5px; top:0.65rem;
+                       width:8px; height:8px; border-radius:50%; background:var(--octo-petrol); }
+  .mt-weg .zeit { color:#666; font-size:0.82rem; margin-right:0.5rem; }
+  .mt-besuchkopf { display:flex; gap:1.2rem; flex-wrap:wrap; font-size:0.9rem; color:#444; }
+</style>
+
+<h1>Visitor</h1>
+<p class="mt-leise">
+  Matomo ID <code>{{ kennung }}</code> — an anonymous number Matomo assigns to the
+  device. It says nothing about who the person is.
+</p>
+
+{% if fehler %}<div class="alert alert-error">{{ fehler }}</div>{% endif %}
+
+{% if profil %}
+<div class="mt-kacheln">
+  <div class="mt-kachel"><div class="bez">Visits</div><div class="zahl">{{ profil.totalVisits|default:"–" }}</div></div>
+  <div class="mt-kachel"><div class="bez">Pageviews</div><div class="zahl">{{ profil.totalActions|default:"–" }}</div></div>
+  <div class="mt-kachel"><div class="bez">First visit</div><div class="zahl" style="font-size:1rem">{{ profil.firstVisit.prettyDate|default:"–" }}</div></div>
+  <div class="mt-kachel"><div class="bez">Last visit</div><div class="zahl" style="font-size:1rem">{{ profil.lastVisit.prettyDate|default:"–" }}</div></div>
+</div>
+{% endif %}
+
+{% for b in besuche %}
+<div class="card">
+  <h2>{{ b.zeit }}</h2>
+  <div class="mt-besuchkopf">
+    <span>{{ b.aktionen }} page{{ b.aktionen|pluralize }}</span>
+    {% if b.dauer %}<span>{{ b.dauer }}</span>{% endif %}
+    <span>Referrer: {{ b.herkunft }}</span>
+    <span>{{ b.stadt }}{% if b.stadt and b.land %}, {% endif %}{{ b.land }}</span>
+    <span>{{ b.geraet }} · {{ b.browser }} · {{ b.system }}</span>
+  </div>
+  {% if b.seiten %}
+  <ul class="mt-weg">
+    {% for s in b.seiten %}
+    <li><span class="zeit">{{ s.zeit }}</span>{{ s.adresse }}
+      {% if s.titel and s.titel != s.adresse %}<span class="mt-leise">— {{ s.titel }}</span>{% endif %}
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="mt-leise">No individual pageviews logged.</p>
+  {% endif %}
+</div>
+{% empty %}
+  {% if not fehler %}<p class="mt-leise">No visits found for this ID.</p>{% endif %}
+{% endfor %}
+
+<p><a href="{% if zurueck %}{{ zurueck }}{% else %}{% url 'matomo:besucher' %}{% endif %}">← back to visitors</a></p>
+{% endblock %}

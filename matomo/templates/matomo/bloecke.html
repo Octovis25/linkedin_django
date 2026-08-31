@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Web-Statistik – {{ seitentitel }}{% endblock %}
+{% block title %}Web Analytics – {{ seitentitel }}{% endblock %}
 
 {% block content %}
 {% include "matomo/_stil.html" %}
@@ -12,9 +12,8 @@
 {% include "matomo/_zeitraum.html" %}
 
 <p class="mt-leise">
-  {{ tage }} Tag{{ tage|pluralize:"e" }} zusammengerechnet.
-  Durchschnitts- und Prozentwerte lässt Matomo hier weg — sie über mehrere Tage
-  zu addieren wäre falsch. Für einen einzelnen Tag setz Von und Bis gleich.
+  {{ tage }} day{{ tage|pluralize }} added up. Averages and percentages are left out —
+  adding them across days would be wrong. For a single day set From and To to the same date.
 </p>
 
 {% for b in bloecke %}
@@ -36,7 +35,7 @@
       </table>
     </div>
   {% else %}
-    <p class="mt-leise" style="margin-top:0.75rem">Für diesen Zeitraum keine Daten.</p>
+    <p class="mt-leise" style="margin-top:0.75rem">No data for this range.</p>
   {% endif %}
 </div>
 {% endfor %}

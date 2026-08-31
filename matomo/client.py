@@ -36,7 +36,7 @@ def _basis() -> str:
     """Basis-Adresse der Website, egal ob MATOMO_URL die alte App-URL enthält."""
     url = (getattr(settings, "MATOMO_URL", "") or "").strip().rstrip("/")
     if not url:
-        raise MatomoError("MATOMO_URL ist nicht gesetzt.")
+        raise MatomoError("MATOMO_URL is not set.")
     for schnitt in ("/wp-content/", "/wp-json/", "/index.php"):
         if schnitt in url:
             url = url.split(schnitt)[0]
@@ -47,9 +47,9 @@ def _zugang():
     token = getattr(settings, "MATOMO_TOKEN", "") or ""
     if ":" not in token:
         raise MatomoError(
-            "MATOMO_TOKEN fehlt oder hat das falsche Format. Erwartet wird "
-            "'<wp-benutzer>:<anwendungspasswort>' — in der .env bzw. auf Render "
-            "unter Environment eintragen."
+            "MATOMO_TOKEN is missing or malformed. Expected "
+            "'<wp-user>:<application-password>' — set it in .env or, on Render, "
+            "under Environment."
         )
     benutzer, passwort = token.split(":", 1)
     return benutzer, passwort
@@ -93,10 +93,10 @@ def hole(pfad: str, *, cache_seconds: int | None = None, **params):
     if not text.startswith(("{", "[")):
         if "wp-login" in text or "Log In" in text:
             raise MatomoError(
-                "WordPress hat die Anmeldung abgelehnt (Login-Seite statt Daten). "
-                "Anwendungspasswort prüfen oder in WordPress neu erzeugen."
+                "WordPress rejected the sign-in (login page instead of data). Check the "
+                "application password or create a new one in WordPress."
             )
-        raise MatomoError(f"Keine JSON-Antwort von {pfad}: {text[:200]}")
+        raise MatomoError(f"No JSON response from {pfad}: {text[:200]}")
 
     ergebnis = antwort.json()
 
@@ -127,7 +127,7 @@ def report_metadata(*, period="day", date="yesterday", cache_seconds=3600):
 
 
 def report(module: str, action: str, *, period="day", date="yesterday",
-           flat=1, filter_limit=100, segment=None, cache_seconds=None):
+           flat=1, filter_limit=100, segment=None, cache_seconds=None, **weitere):
     """Einen einzelnen Bericht abrufen, so wie ihn report_metadata beschreibt.
 
     Liefert die processed_report-Antwort: ein dict mit u.a.
@@ -138,7 +138,7 @@ def report(module: str, action: str, *, period="day", date="yesterday",
                 apiModule=module, apiAction=action,
                 period=period, date=date, flat=flat,
                 filter_limit=filter_limit, segment=segment,
-                cache_seconds=cache_seconds)
+                cache_seconds=cache_seconds, **weitere)
 
 
 def kennzahlen(*, period="day", date="yesterday", segment=None, cache_seconds=None):

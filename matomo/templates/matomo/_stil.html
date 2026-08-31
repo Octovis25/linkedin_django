@@ -6,7 +6,24 @@
   .mt-filter { display:flex; gap:0.75rem; align-items:flex-end; flex-wrap:wrap; margin-bottom:1rem; }
   .mt-filter .form-group { margin-bottom:0; }
   .mt-filter input, .mt-filter select { width:auto; min-width:130px; }
-  .mt-tabelle { overflow-x:auto; }
+  .mt-tabelle { overflow:auto; max-height:60vh; }
+  /* base.html setzt overflow:hidden auf table (für die runden Ecken). Das macht
+     die Tabelle selbst zum Clipping-Bereich und hebelt position:sticky aus. */
+  /* base.html setzt overflow:hidden (runde Ecken) und border-collapse:collapse.
+     Beides verhindert einen klebenden Tabellenkopf: overflow macht die Tabelle
+     selbst zum Clipping-Bereich, und mit collapse gehören die Rahmen der
+     Tabelle statt den Zellen - Chrome lässt th dann nicht kleben. */
+  .mt-tabelle table { overflow:visible; border-radius:0;
+                      border-collapse:separate; border-spacing:0; }
+  .mt-tabelle table th, .mt-tabelle table td { border-bottom:1px solid var(--octo-light-gray); }
+  .mt-tabelle table thead th { border-bottom:none; }
+  /* Der Hintergrund muss auf den Zellen liegen, nicht auf thead: beim Kleben
+     bleibt der thead-Hintergrund zurück und die Zeilen scrollen durch. */
+  .mt-tabelle table thead th { position:sticky; top:0; z-index:3;
+                               background:var(--octo-petrol); color:var(--octo-white); }
+  .mt-tabelle table thead tr.mt-filterzeile th { z-index:2;
+      background:var(--octo-light-gray); box-shadow:0 1px 0 #ddd8c8; }
+  .mt-tabelle.mt-kurz { max-height:none; }
   .mt-tabelle table { min-width:100%; }
   .mt-tabelle td { white-space:nowrap; }
   .mt-tabelle td:first-child { white-space:normal; max-width:520px; word-break:break-word; }

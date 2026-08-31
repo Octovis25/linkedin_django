@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import datetime as dt
 
+from django.conf import settings
 from django.contrib.auth.decorators import login_required
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, render
@@ -26,6 +27,9 @@ NICHT_SUMMIERBAR = {
     "avg_time_transfer", "avg_time_dom_processing", "avg_time_dom_completion",
     "avg_time_on_load", "avg_bandwidth",
 }
+
+WOCHENTAGE = ["Monday", "Tuesday", "Wednesday", "Thursday",
+              "Friday", "Saturday", "Sunday"]
 
 MAX_TAGE = 400          # Schutz vor versehentlich riesigen Abfragen
 BESUCHS_LIMIT = 2000    # so viele Einzelbesuche holen wir höchstens
@@ -52,12 +56,12 @@ def _zeitfenster(request):
 
     if von > bis:
         von, bis = bis, von
-        hinweis = "Von und Bis waren vertauscht — ich habe sie getauscht."
+        hinweis = "From and To were swapped — I put them back in order."
     if bis > heute:
         bis = heute
     if (bis - von).days > MAX_TAGE:
         von = bis - dt.timedelta(days=MAX_TAGE)
-        hinweis = f"Zeitraum auf {MAX_TAGE} Tage begrenzt."
+        hinweis = f"Range limited to {MAX_TAGE} days."
     return von, bis, hinweis
 
 
@@ -83,9 +87,9 @@ def _zahl(wert):
 
 
 def _tagesberichte(roh):
-    """Zerlegt die Antwort in einzelne Tagesberichte."""
+    """Zerlegt die Antwort in einzelne Tagesberichte (für Titel und Metadaten)."""
     if isinstance(roh, dict):
-        if "reportData" in roh:
+        if "reportData" in roh or "metadata" in roh:
             return [roh]
         werte = [v for v in roh.values() if isinstance(v, dict)]
         if werte and all("reportData" in v or "columns" in v for v in werte):
@@ -93,51 +97,66 @@ def _tagesberichte(roh):
     return []
 
 
+def _datenquellen(inhalt, zeilenlisten, kennzahlen):
+    """Sammelt aus einer beliebig verschachtelten Antwort Zeilen und Kennzahlen.
+
+    Matomo verpackt einen Zeitraum je nach Bericht unterschiedlich:
+    reportData ist entweder eine Liste von Zeilen (ein Tag), ein Verzeichnis
+    Datum -> Zeilenliste (mehrere Tage) oder ein Verzeichnis von Kennzahlen.
+    Diese Funktion löst alle drei Fälle auf.
+    """
+    if isinstance(inhalt, list):
+        zeilenlisten.append([z for z in inhalt if isinstance(z, dict)])
+    elif isinstance(inhalt, dict):
+        if inhalt and all(isinstance(v, (list, dict)) for v in inhalt.values()):
+            for wert in inhalt.values():
+                _datenquellen(wert, zeilenlisten, kennzahlen)
+        elif inhalt:
+            kennzahlen.append(inhalt)
+
+
 def _summiere(roh):
-    """Addiert die Tagesberichte zu einer Tabelle: (Spalten, Zeilen)."""
+    """Addiert alles, was in der Antwort steckt, zu einer Tabelle: (Spalten, Zeilen)."""
     tage = _tagesberichte(roh)
     if not tage:
         return [], []
 
     titel = {}
+    zeilenlisten, kennzahlsaetze = [], []
     for t in tage:
         titel.update(t.get("columns") or {})
+        _datenquellen(t.get("reportData"), zeilenlisten, kennzahlsaetze)
 
-    gesammelt = {}      # label -> {schluessel: summe}
-    reihenfolge = []
-    kennzahlen = {}     # falls der Bericht gar keine Zeilen hat, sondern Werte
-
-    for t in tage:
-        daten = t.get("reportData")
-        if isinstance(daten, list):
-            for zeile in daten:
-                if not isinstance(zeile, dict):
+    gesammelt, reihenfolge = {}, []
+    for zeilen in zeilenlisten:
+        for zeile in zeilen:
+            name = zeile.get("label", "")
+            if name not in gesammelt:
+                gesammelt[name] = {}
+                reihenfolge.append(name)
+            for k, v in zeile.items():
+                if k == "label" or k in VERSTECKT or k in NICHT_SUMMIERBAR:
                     continue
-                name = zeile.get("label", "")
-                if name not in gesammelt:
-                    gesammelt[name] = {}
-                    reihenfolge.append(name)
-                for k, v in zeile.items():
-                    if k == "label" or k in VERSTECKT or k in NICHT_SUMMIERBAR:
-                        continue
-                    n = _zahl(v)
-                    if n is None:
-                        gesammelt[name].setdefault(k, v)
-                    else:
-                        vorher = gesammelt[name].get(k)
-                        gesammelt[name][k] = (vorher or 0) + n if isinstance(vorher, (int, float)) or vorher is None else v
-        elif isinstance(daten, dict):
-            for k, v in daten.items():
+                n = _zahl(v)
+                if n is None:
+                    gesammelt[name].setdefault(k, v)
+                else:
+                    vorher = gesammelt[name].get(k)
+                    gesammelt[name][k] = (vorher if isinstance(vorher, (int, float)) else 0) + n
+
+    if not gesammelt and kennzahlsaetze:
+        summen = {}
+        for satz in kennzahlsaetze:
+            for k, v in satz.items():
                 if k in VERSTECKT or k in NICHT_SUMMIERBAR:
                     continue
                 n = _zahl(v)
                 if n is None:
-                    kennzahlen.setdefault(k, v)
+                    summen.setdefault(k, v)
                 else:
-                    kennzahlen[k] = kennzahlen.get(k, 0) + n
-
-    if kennzahlen and not gesammelt:
-        return ["Kennzahl", "Wert"], [[titel.get(k, k), v] for k, v in kennzahlen.items()]
+                    vorher = summen.get(k)
+                    summen[k] = (vorher if isinstance(vorher, (int, float)) else 0) + n
+        return ["Metric", "Value"], [[titel.get(k, k), v] for k, v in summen.items()]
 
     if not gesammelt:
         return [], []
@@ -149,11 +168,10 @@ def _summiere(roh):
                 schluessel.append(k)
 
     zeilen = [[name] + [gesammelt[name].get(k, 0) for k in schluessel] for name in reihenfolge]
-    # nach der ersten Zahlenspalte absteigend sortieren
     if schluessel:
         zeilen.sort(key=lambda z: (-(z[1] if isinstance(z[1], (int, float)) else 0), str(z[0])))
 
-    spalten = ["Bezeichnung"] + [titel.get(k, k) for k in schluessel]
+    spalten = ["Name"] + [titel.get(k, k) for k in schluessel]
     return spalten, zeilen
 
 
@@ -220,10 +238,33 @@ def _besuchsprotokoll(von, bis, limit=BESUCHS_LIMIT, cache_seconds=300):
         aktionen = _zahl(b.get("actions")) or 0
 
         zeit = b.get("serverTimePretty") or ""
-        stunde = f"{zeit[:2]} Uhr" if len(zeit) >= 2 and zeit[:2].isdigit() else "unbekannt"
+        stunde = f"{zeit[:2]}:00" if len(zeit) >= 2 and zeit[:2].isdigit() else "unknown"
+
+        # Wochentag aus dem Datum, das Matomo mitliefert
+        tag, datum_iso, kw = "unknown", "unknown", "unknown"
+        roh_datum = _erstes(b, "serverDate", "firstActionDateTime", "lastActionDateTime")
+        if roh_datum:
+            try:
+                d = dt.date.fromisoformat(str(roh_datum)[:10])
+                tag = WOCHENTAGE[d.weekday()]
+                datum_iso = d.isoformat()
+                jahr, woche, _ = d.isocalendar()
+                kw = f"W{woche:02d} / {jahr}"
+            except (ValueError, IndexError):
+                pass
+
+        aktionen_liste = []
+        details = b.get("actionDetails") or []
+        for a in details:
+            if not isinstance(a, dict):
+                continue
+            aktionen_liste.append({
+                "typ": (a.get("type") or "action").lower(),
+                "url": a.get("url") or "",
+                "titel": a.get("pageTitle") or "",
+            })
 
         erste = ""
-        details = b.get("actionDetails") or []
         if details and isinstance(details[0], dict):
             erste = details[0].get("url") or details[0].get("pageTitle") or ""
             for vorsatz in ("https://octotrial.com", "http://octotrial.com",
@@ -235,23 +276,30 @@ def _besuchsprotokoll(von, bis, limit=BESUCHS_LIMIT, cache_seconds=300):
         besuche.append({
             "besucher": b.get("visitorId") or "",
             "zeit": f"{b.get('serverDatePretty','')} {zeit}".strip(),
+            "datum_de": (dt.date.fromisoformat(datum_iso).strftime("%d.%m.%Y")
+                         if datum_iso != "unknown" else "unknown"),
+            "uhrzeit": zeit or "unknown",
             "sortier": b.get("serverTimestamp") or 0,
             "dauer_sek": int(dauer),
             "dauer": b.get("visitDurationPretty") or f"{int(dauer)}s",
             "aktionen": int(aktionen),
-            "land": _erstes(b, "country", "countryName") or "unbekannt",
-            "stadt": _erstes(b, "city", "cityName") or "unbekannt",
-            "region": _erstes(b, "region", "regionName") or "unbekannt",
-            "geraet": _erstes(b, "deviceType", "deviceTypeName") or "unbekannt",
-            "browser": _erstes(b, "browserName", "browser") or "unbekannt",
+            "land": _erstes(b, "country", "countryName") or "unknown",
+            "stadt": _erstes(b, "city", "cityName") or "unknown",
+            "region": _erstes(b, "region", "regionName") or "unknown",
+            "geraet": _erstes(b, "deviceType", "deviceTypeName") or "unknown",
+            "browser": _erstes(b, "browserName", "browser") or "unknown",
             "system": _erstes(b, "operatingSystemName", "operatingSystem",
-                              "operatingSystemCode") or "unbekannt",
-            "sprache": _erstes(b, "language", "languageCode") or "unbekannt",
+                              "operatingSystemCode") or "unknown",
+            "sprache": _erstes(b, "language", "languageCode") or "unknown",
             "herkunft": _erstes(b, "referrerName", "referrerTypeName",
-                                "referrerType") or "unbekannt",
+                                "referrerType") or "unknown",
             "herkunft_typ": (_erstes(b, "referrerType") or "").lower(),
             "stunde": stunde,
+            "wochentag": tag,
+            "datum": datum_iso,
+            "kalenderwoche": kw,
             "erste_seite": erste,
+            "aktionen_liste": aktionen_liste,
             # dieser einzelne Besuch für sich betrachtet
             "besuch_auffaellig": int(dauer) == 0 and int(aktionen) <= 1,
         })
@@ -269,7 +317,7 @@ def _besuchsprotokoll(von, bis, limit=BESUCHS_LIMIT, cache_seconds=300):
     return besuche
 
 
-def _haeufigkeit(besuche, felder, titel=None, sortiere_nach_name=False):
+def _haeufigkeit(besuche, felder, titel=None, sortiere_nach_name=False, ordnung=None):
     """Zählt ein oder mehrere Merkmale, getrennt nach Mensch und Bot.
 
     `felder` ist ein Feldname oder ein Tupel davon — jedes wird zu einer
@@ -279,18 +327,162 @@ def _haeufigkeit(besuche, felder, titel=None, sortiere_nach_name=False):
         felder = (felder,)
     zaehler = {}
     for b in besuche:
-        schluessel = tuple(b.get(f) or "unbekannt" for f in felder)
+        schluessel = tuple(b.get(f) or "unknown" for f in felder)
         eintrag = zaehler.setdefault(schluessel, [0, 0])
         eintrag[1 if b["ist_bot"] else 0] += 1
 
     zeilen = [list(k) + [m, bo, m + bo] for k, (m, bo) in zaehler.items()]
-    if sortiere_nach_name:
+    if ordnung:
+        rang = {name: i for i, name in enumerate(ordnung)}
+        zeilen.sort(key=lambda z: (rang.get(z[0], len(rang)), str(z[0])))
+    elif sortiere_nach_name:
         zeilen.sort(key=lambda z: z[0])
     else:
         zeilen.sort(key=lambda z: (-z[-1], str(z[0])))
 
-    spalten = list(titel or felder) + ["Menschen", "Bots", "Gesamt"]
+    spalten = list(titel or felder) + ["Humans", "Bots", "Total"]
     return spalten, zeilen
+
+
+def _besucher_liste(besuche):
+    """Fasst die Einzelbesuche zu einer Zeile je Besucher zusammen."""
+    leute = {}
+    for b in besuche:
+        kennung = b["besucher"] or "-"
+        p = leute.get(kennung)
+        if p is None:
+            p = leute[kennung] = {
+                "kennung": kennung, "besuche": 0, "seiten": 0, "dauer": 0,
+                "erster": b["sortier"], "letzter": b["sortier"],
+                "zuletzt_datum": b["datum_de"], "zuletzt_zeit": b["uhrzeit"],
+                "zuletzt_iso": b["datum"], "land": b["land"], "stadt": b["stadt"],
+                "geraet": b["geraet"], "browser": b["browser"], "system": b["system"],
+                "herkunft": b["herkunft"], "ist_bot": True,
+            }
+        p["besuche"] += 1
+        p["seiten"] += b["aktionen"]
+        p["dauer"] += b["dauer_sek"]
+        if b["sortier"] > p["letzter"]:
+            p["letzter"] = b["sortier"]
+            p["zuletzt_datum"], p["zuletzt_zeit"] = b["datum_de"], b["uhrzeit"]
+            p["zuletzt_iso"] = b["datum"]
+            p["herkunft"] = b["herkunft"]
+        p["erster"] = min(p["erster"], b["sortier"])
+        if not b["ist_bot"]:
+            p["ist_bot"] = False
+
+    liste = sorted(leute.values(), key=lambda p: (-p["letzter"],))
+    for p in liste:
+        p["art"] = "Bot" if p["ist_bot"] else "Mensch"
+        p["dauer_text"] = (f"{p['dauer'] // 60}:{p['dauer'] % 60:02d} min"
+                           if p["dauer"] >= 60 else f"{p['dauer']}s")
+    return liste
+
+
+def _verlauf(besuche, von, bis):
+    """Zahlen für die Verlaufslinien: Besuche je Tag, Menschen und Bots getrennt.
+
+    Gezeichnet wird im Browser, nicht hier — nur so lässt sich eine Linie
+    ausblenden und die Achse danach neu skalieren. Tage ohne Besuche werden als
+    Null geführt; sonst spränge die Linie darüber hinweg und täuschte mehr
+    Verkehr vor, als es gab.
+    """
+    tage = []
+    d = von
+    while d <= bis:
+        tage.append(d)
+        d += dt.timedelta(days=1)
+    if len(tage) < 2:
+        return None
+
+    zaehler = {t.isoformat(): [0, 0] for t in tage}
+    for b in besuche:
+        eintrag = zaehler.get(b.get("datum"))
+        if eintrag is not None:
+            eintrag[1 if b["ist_bot"] else 0] += 1
+
+    daten = []
+    for t in tage:
+        menschen, bots = zaehler[t.isoformat()]
+        daten.append({
+            "datum": t.isoformat(),
+            "lang": f"{WOCHENTAGE[t.weekday()]}, {t.strftime('%d.%m.%Y')}",
+            "kurz": t.strftime("%d.%m."),
+            "ersterImMonat": t.day == 1,
+            "istMontag": t.weekday() == 0,
+            "menschen": menschen, "bots": bots,
+        })
+
+    return {
+        "daten": daten, "tage": len(tage),
+        "reihen": [
+            {"feld": "menschen", "name": "Humans", "farbe": "#0093A1",
+             "summe": sum(d["menschen"] for d in daten)},
+            {"feld": "bots", "name": "Bots", "farbe": "#F56E28",
+             "summe": sum(d["bots"] for d in daten)},
+        ],
+    }
+
+
+def _stundenraster(besuche):
+    """Zwei Raster nebeneinander: 7 Wochentage x 24 Stunden, Menschen und Bots.
+
+    Beide teilen sich denselben Höchstwert für die Deckkraft — sonst sähe eine
+    Stunde mit 2 Besuchen im einen Raster genauso kräftig aus wie eine mit 40
+    im anderen, und der Vergleich wäre wertlos.
+    """
+    zaehler = {"menschen": {tag: [0] * 24 for tag in WOCHENTAGE},
+               "bots": {tag: [0] * 24 for tag in WOCHENTAGE}}
+    ohne_zeit = 0
+
+    for b in besuche:
+        tag = b.get("wochentag")
+        stunde = b.get("stunde", "")
+        if tag not in WOCHENTAGE or not stunde[:2].isdigit():
+            ohne_zeit += 1
+            continue
+        zaehler["bots" if b["ist_bot"] else "menschen"][tag][int(stunde[:2])] += 1
+
+    hoechstwert = max((w for art in zaehler.values() for stunden in art.values()
+                       for w in stunden), default=0)
+
+    def baue(art, nur):
+        zeilen = []
+        for tag in WOCHENTAGE:
+            felder = [{
+                "stunde": stunde,
+                "stunde_text": f"{stunde:02d}:00",
+                "anzahl": anzahl,
+                "deckkraft": round(0.18 + 0.82 * anzahl / hoechstwert, 2) if hoechstwert else 0,
+            } for stunde, anzahl in enumerate(zaehler[art][tag])]
+            zeilen.append({"tag": tag, "kurz": tag[:2], "felder": felder,
+                           "summe": sum(f["anzahl"] for f in felder)})
+        return {"art": art, "nur": nur, "zeilen": zeilen,
+                "summe": sum(z["summe"] for z in zeilen)}
+
+    return {
+        "menschen": baue("menschen", "menschen"),
+        "bots": baue("bots", "bots"),
+        "hoechstwert": hoechstwert,
+        "ohne_zeit": ohne_zeit,
+    }
+
+
+def zeitpunkt_tabelle(besuche):
+    """Wochentag und Uhrzeit in einer Tabelle, chronologisch über die Woche."""
+    spalten, zeilen = _haeufigkeit(
+        besuche, ("wochentag", "stunde"), ["Weekday", "Hour"])
+    rang = {name: i for i, name in enumerate(WOCHENTAGE)}
+    zeilen.sort(key=lambda z: (rang.get(z[0], len(rang)), str(z[1])))
+    return {
+        "titel": "Weekday and hour",
+        "spalten": spalten, "zeilen": zeilen,
+        "hinweis": "Counts visits, not people; server time, not the visitors’ local time. "
+                   "Sorted from early Monday to late Sunday. Humans usually cluster on "
+                   "weekdays and during the day — anything spread evenly across all days "
+                   "and night hours suggests automation. Use the drop-downs to pick a "
+                   "single day or hour.",
+    }
 
 
 def _zeitraum_kontext(von, bis, hinweis):
@@ -393,47 +585,47 @@ def besucher(request):
     else:
         besuche = alle
 
-    def tab(titel, felder, spaltentitel, hinweis="", nach_name=False):
-        spalten, zeilen = _haeufigkeit(besuche, felder, spaltentitel, nach_name)
+    def tab(titel, felder, spaltentitel, hinweis="", nach_name=False, ordnung=None):
+        spalten, zeilen = _haeufigkeit(besuche, felder, spaltentitel, nach_name, ordnung)
         return {"titel": titel, "spalten": spalten, "zeilen": zeilen, "hinweis": hinweis}
 
     direkte = [b for b in besuche if b["herkunft_typ"] == "direct"
                or b["herkunft"].lower().startswith("direkt")]
 
+    leute = _besucher_liste(besuche)
+
     tabellen = [
-        tab("Städte", ("stadt", "land"), ["Stadt", "Land"],
-            "Land als eigene Spalte, damit du danach sortieren kannst. Städte sind "
-            "deutlich ungenauer als Länder — ein grober Anhaltspunkt, keine Adresse."),
-        tab("Herkunft", "herkunft", ["Herkunft"],
-            "„Direkte Zugriffe“ heißt: Der Browser hat keine verweisende Seite "
-            "mitgeschickt. Woher diese Besuche stammen, steht in der Tabelle darunter."),
+        tab("Cities", ("stadt", "land"), ["City", "Country"],
+            "Country as its own column so you can sort by it. Cities are far less exact "
+            "than countries — a rough hint, never an address."),
+        tab("Referrer", "herkunft", ["Referrer"],
+            "“Direct entry” means the browser sent no referring page. What can still be "
+            "said about those visits is in the table below."),
     ]
 
     if direkte:
         spalten, zeilen = _haeufigkeit(
             direkte, ("stadt", "land", "system", "erste_seite"),
-            ["Stadt", "Land", "System", "Erste Seite"])
+            ["City", "Country", "System", "Entry page"])
         tabellen.append({
-            "titel": "Direkte Zugriffe im Detail",
+            "titel": "Direct entries in detail",
             "spalten": spalten, "zeilen": zeilen,
-            "hinweis": "Eine verweisende Seite gibt es hier nicht — deshalb das, was "
-                       "sich sonst über diese Besuche sagen lässt. Gleiche Stadt, "
-                       "gleiches System und immer dieselbe Einstiegsseite in großer "
-                       "Zahl ist das Muster eines Skripts, nicht eines Publikums.",
+            "hinweis": "There is no referring page here, so this is what else can be "
+                       "said about these visits. The same city, the same system and "
+                       "always the same entry page, in numbers, is the pattern of a "
+                       "script — not of an audience.",
         })
 
     tabellen += [
-        tab("Länder", "land", ["Land"],
-            "Aus der IP-Adresse geschätzt. Bei VPN-Nutzern steht das Land des VPN-Servers."),
-        tab("Gerätetyp", "geraet", ["Gerät"]),
-        tab("Browser", "browser", ["Browser"]),
-        tab("Betriebssysteme", "system", ["System"],
-            "Auffällig viele Linux-Desktops sind ein Hinweis auf Rechenzentren."),
-        tab("Sprache des Browsers", "sprache", ["Sprache"],
-            "Hängt nicht von der IP ab und ist deshalb oft aussagekräftiger als das Land."),
-        tab("Nach Uhrzeit", "stunde", ["Uhrzeit"],
-            "Serverzeit. Gleichmäßige Verteilung über die Nacht spricht für Automatisierung.",
-            nach_name=True),
+        zeitpunkt_tabelle(besuche),
+        tab("Countries", "land", ["Country"],
+            "Estimated from the IP address. For VPN users this is the VPN server’s country."),
+        tab("Device type", "geraet", ["Device"]),
+        tab("Browsers", "browser", ["Browser"]),
+        tab("Operating systems", "system", ["System"],
+            "A striking number of Linux desktops points to data centres."),
+        tab("Browser language", "sprache", ["Language"],
+            "Independent of the IP address and therefore often more telling than the country."),
     ]
 
     return render(request, "matomo/besucher.html", {
@@ -445,8 +637,58 @@ def besucher(request):
         "dauer_schnitt": round(sum(dauern) / len(dauern)) if dauern else 0,
         "gerettet": sum(1 for b in alle if b.get("nachtraeglich_mensch")),
         "direkte": len(direkte),
-        "tabellen": tabellen,
+        "tabellen": tabellen, "leute": leute,
+        "raster": _stundenraster(besuche),
+        "verlauf": _verlauf(besuche, von, bis),
         "abgeschnitten": len(alle) >= BESUCHS_LIMIT,
+        "fehler": fehler,
+    })
+
+
+@login_required
+def besucher_profil(request, kennung):
+    """Alles, was Matomo über einen einzelnen Besucher weiß."""
+    fehler, profil, besuche = None, {}, []
+    try:
+        profil = client.hole("live/visitor_profile", visitorId=kennung,
+                             cache_seconds=120)
+        if not isinstance(profil, dict):
+            profil, fehler = {}, "Unexpected response from Matomo."
+    except Exception as e:
+        fehler = str(e)
+
+    for b in (profil.get("lastVisits") or []):
+        if not isinstance(b, dict):
+            continue
+        seiten = []
+        for a in (b.get("actionDetails") or []):
+            if not isinstance(a, dict):
+                continue
+            adresse = a.get("url") or a.get("pageTitle") or a.get("type") or ""
+            for vorsatz in ("https://octotrial.com", "http://octotrial.com",
+                            "https://www.octotrial.com", "http://www.octotrial.com"):
+                if adresse.startswith(vorsatz):
+                    adresse = adresse[len(vorsatz):] or "/"
+                    break
+            seiten.append({"zeit": a.get("serverTimePretty") or "",
+                           "adresse": adresse,
+                           "titel": a.get("pageTitle") or ""})
+        besuche.append({
+            "zeit": f"{b.get('serverDatePretty','')} {b.get('serverTimePretty','')}".strip(),
+            "dauer": b.get("visitDurationPretty") or "",
+            "aktionen": _zahl(b.get("actions")) or 0,
+            "herkunft": _erstes(b, "referrerName", "referrerTypeName") or "unknown",
+            "land": _erstes(b, "country", "countryName") or "unknown",
+            "stadt": _erstes(b, "city") or "",
+            "geraet": _erstes(b, "deviceType") or "",
+            "browser": _erstes(b, "browserName") or "",
+            "system": _erstes(b, "operatingSystemName") or "",
+            "seiten": seiten,
+        })
+
+    return render(request, "matomo/besucher_profil.html", {
+        "kennung": kennung, "profil": profil, "besuche": besuche,
+        "zurueck": request.GET.get("zurueck", ""),
         "fehler": fehler,
     })
 
@@ -458,6 +700,11 @@ def protokoll(request):
     nur = request.GET.get("nur", "alle")
     if nur not in ("alle", "menschen", "bots"):
         nur = "alle"
+    tag = request.GET.get("tag", "")
+    if tag not in WOCHENTAGE:
+        tag = ""
+    stunde = request.GET.get("stunde", "")
+    stunde = stunde if stunde.isdigit() and 0 <= int(stunde) <= 23 else ""
 
     fehler, besuche = None, []
     try:
@@ -471,8 +718,14 @@ def protokoll(request):
         besuche = [b for b in besuche if not b["ist_bot"]]
     elif nur == "bots":
         besuche = [b for b in besuche if b["ist_bot"]]
+    if tag:
+        besuche = [b for b in besuche if b.get("wochentag") == tag]
+    if stunde:
+        besuche = [b for b in besuche if b.get("stunde", "")[:2] == f"{int(stunde):02d}"]
 
     return render(request, "matomo/protokoll.html", {
+        "tag": tag, "stunde": stunde,
+        "stunde_text": f"{int(stunde):02d}:00 Uhr" if stunde else "",
         **_zeitraum_kontext(von, bis, hinweis),
         "besuche": besuche, "gesamt": gesamt, "bots": bots,
         "menschen": gesamt - bots, "angezeigt": len(besuche), "nur": nur,
@@ -486,23 +739,23 @@ def seiten(request):
     """Welche Inhalte aufgerufen wurden."""
     von, bis, hinweis = _zeitfenster(request)
     bloecke = _bloecke(von, bis, [
-        ("Meistbesuchte Seiten", "Actions", "getPageUrls",
-         "Nach Adresse. „Eindeutige Seitenansichten“ zählt einen Besuch nur einmal, "
-         "auch wenn jemand die Seite mehrfach geöffnet hat."),
-        ("Seitentitel", "Actions", "getPageTitles",
-         "Dieselben Aufrufe, nur nach Überschrift statt nach Adresse — meist besser lesbar."),
-        ("Einstiegsseiten", "Actions", "getEntryPageUrls",
-         "Wo Besucher ankommen. Die interessanteste Tabelle, wenn du wissen willst, "
-         "welche Inhalte Leute überhaupt hereinholen."),
-        ("Ausstiegsseiten", "Actions", "getExitPageUrls",
-         "Wo sie wieder gehen."),
-        ("Klicks auf externe Links", "Actions", "getOutlinks", ""),
-        ("Heruntergeladene Dateien", "Actions", "getDownloads", ""),
+        ("Most visited pages", "Actions", "getPageUrls",
+         "By address. “Unique pageviews” counts a visit once, even if someone opened "
+         "the page several times."),
+        ("Page titles", "Actions", "getPageTitles",
+         "The same views, by heading instead of address — usually easier to read."),
+        ("Entry pages", "Actions", "getEntryPageUrls",
+         "Where visitors arrive. The most interesting table if you want to know which "
+         "content brings people in at all."),
+        ("Exit pages", "Actions", "getExitPageUrls",
+         "Where they leave again."),
+        ("Clicks on outgoing links", "Actions", "getOutlinks", ""),
+        ("Downloaded files", "Actions", "getDownloads", ""),
     ], flach=1, limit=200)
     return render(request, "matomo/bloecke.html", {
         **_zeitraum_kontext(von, bis, hinweis),
-        "seitentitel": "Seiten",
-        "untertitel": "Welche Inhalte von octotrial.com aufgerufen wurden.",
+        "seitentitel": "Pages",
+        "untertitel": "Which content on octotrial.com was opened.",
         "bloecke": bloecke, "fehler": None,
     })
 
@@ -512,21 +765,20 @@ def suchbegriffe(request):
     """Nur das, wonach gesucht wurde."""
     von, bis, hinweis = _zeitfenster(request)
     bloecke = _bloecke(von, bis, [
-        ("Suchbegriffe aus Suchmaschinen", "Referrers", "getKeywords",
-         "Google und die meisten anderen Suchmaschinen geben den Suchbegriff seit "
-         "Jahren nicht mehr weiter. Was hier steht, ist deshalb nur ein Bruchteil — "
-         "der Rest erscheint als „Keyword not defined“."),
-        ("Suchmaschinen", "Referrers", "getSearchEngines",
-         "Über welche Suchmaschinen Besucher kamen — unabhängig davon, ob der "
-         "Suchbegriff mitgeliefert wurde."),
-        ("Suche auf der eigenen Website", "Actions", "getSiteSearchKeywords",
-         "Wonach Besucher im Suchfeld von octotrial.com gesucht haben. Bleibt leer, "
-         "wenn die Website-Suche in Matomo nicht eingerichtet ist."),
+        ("Search terms from search engines", "Referrers", "getKeywords",
+         "Google and most other search engines have not passed on the search term for "
+         "years. What you see here is a fraction — the rest shows up as "
+         "“Keyword not defined”."),
+        ("Search engines", "Referrers", "getSearchEngines",
+         "Which search engines visitors came from — whether or not the term was passed on."),
+        ("Search on your own site", "Actions", "getSiteSearchKeywords",
+         "What visitors typed into the search box on octotrial.com. Stays empty if site "
+         "search is not configured in Matomo."),
     ])
     return render(request, "matomo/bloecke.html", {
         **_zeitraum_kontext(von, bis, hinweis),
-        "seitentitel": "Suchbegriffe",
-        "untertitel": "Wonach Besucher gesucht haben, bevor sie auf octotrial.com landeten.",
+        "seitentitel": "Search terms",
+        "untertitel": "What visitors searched for before they landed on octotrial.com.",
         "bloecke": bloecke, "fehler": None,
     })
 
@@ -536,30 +788,30 @@ def ki(request):
     """KI-Verkehr: Menschen über KI-Assistenten und die Bots selbst."""
     von, bis, hinweis = _zeitfenster(request)
     bloecke = _bloecke(von, bis, [
-        ("Besucher, die über einen KI-Assistenten kamen", "Referrers", "getAIAssistants",
-         "Echte Menschen: Jemand hat ChatGPT, Perplexity oder Ähnliches gefragt, "
-         "octotrial.com als Quelle genannt bekommen und geklickt."),
-        ("KI-Chatbots im Überblick", "BotTracking", "get",
-         "Ab hier geht es um die Bots selbst. Sie erscheinen NICHT in den anderen "
-         "Reitern — Matomo hält sie aus der normalen Besucherstatistik heraus."),
-        ("Welche KI-Chatbots", "BotTracking", "getAIChatbotRequests",
-         "GPTBot, ClaudeBot, PerplexityBot und Verwandte."),
-        ("Von Bots gelesene Seiten", "BotTracking", "getAIChatbotContentPages", ""),
-        ("Von Bots bevorzugte Seiten", "BotTracking", "getAIChatbotAIFavouredPages",
-         "Inhalte, die KI-Systeme überdurchschnittlich oft holen."),
-        ("Von Menschen bevorzugte Seiten", "BotTracking", "getAIChatbotHumanFavouredPages",
-         "Die Gegenprobe: Was Menschen lesen, Bots aber links liegen lassen."),
-        ("Fehlerhafte Seiten und Dokumente", "BotTracking", "getAIChatbotBrokenContent",
-         "Adressen, an denen Bots auf Fehler stoßen — meist auch für Besucher kaputt."),
-        ("Von Bots geholte Dokumente", "BotTracking", "getAIChatbotContentDocuments",
-         "PDFs und andere Dateien."),
-        ("KI-Agentenbesuche", "AIAgents", "get",
-         "Agenten, die im Auftrag eines Nutzers handeln."),
+        ("Visitors who came via an AI assistant", "Referrers", "getAIAssistants",
+         "Real people: someone asked ChatGPT, Perplexity or similar, was given "
+         "octotrial.com as a source, and clicked."),
+        ("AI chatbots at a glance", "BotTracking", "get",
+         "From here on it is about the bots themselves. They do NOT appear in the other "
+         "tabs — Matomo keeps them out of the regular visitor statistics."),
+        ("Which AI chatbots", "BotTracking", "getAIChatbotRequests",
+         "GPTBot, ClaudeBot, PerplexityBot and relatives."),
+        ("Pages read by bots", "BotTracking", "getAIChatbotContentPages", ""),
+        ("Pages favoured by bots", "BotTracking", "getAIChatbotAIFavouredPages",
+         "Content AI systems fetch more often than average."),
+        ("Pages favoured by humans", "BotTracking", "getAIChatbotHumanFavouredPages",
+         "The counter-check: what humans read but bots ignore."),
+        ("Broken pages and documents", "BotTracking", "getAIChatbotBrokenContent",
+         "Addresses where bots hit errors — usually broken for visitors too."),
+        ("Documents fetched by bots", "BotTracking", "getAIChatbotContentDocuments",
+         "PDFs and other files."),
+        ("AI agent visits", "AIAgents", "get",
+         "Agents acting on behalf of a user."),
     ], flach=1, limit=150)
     return render(request, "matomo/bloecke.html", {
         **_zeitraum_kontext(von, bis, hinweis),
-        "seitentitel": "KI",
-        "untertitel": "Besucher aus KI-Assistenten und die KI-Bots, die octotrial.com lesen.",
+        "seitentitel": "AI",
+        "untertitel": "Visitors from AI assistants, and the AI bots that read octotrial.com.",
         "bloecke": bloecke, "fehler": None,
     })
 
@@ -588,6 +840,128 @@ def bericht(request, modul, aktion):
         **_zeitraum_kontext(von, bis, hinweis),
         "modul": modul, "aktion": aktion, "titel": titel,
         "spalten": spalten, "zeilen": zeilen, "limit": limit,
+        "fehler": fehler,
+    })
+
+
+# Ziele werden NICHT in Matomo eingerichtet, sondern hier aus dem Besuchs-
+# protokoll abgeleitet. Vorteil: nichts zu konfigurieren, und es gilt rückwirkend
+# für alle Besuche, die Matomo schon aufgezeichnet hat.
+# Über MATOMO_ZIELE in den Settings lässt sich die Liste ersetzen.
+STANDARD_ZIELE = [
+    {"name": "Contact page reached", "art": "seite", "muster": "/kontakt",
+     "beschreibung": "visited a page whose address contains /kontakt"},
+    {"name": "Email address clicked", "art": "mailto", "muster": "",
+     "beschreibung": "clicked a mailto: link"},
+    {"name": "File downloaded", "art": "download", "muster": "",
+     "beschreibung": "downloaded a file (PDF and the like)"},
+    {"name": "Left to LinkedIn", "art": "outlink", "muster": "linkedin.com",
+     "beschreibung": "followed an outgoing link to linkedin.com"},
+    {"name": "Read three pages or more", "art": "tiefe", "muster": "3",
+     "beschreibung": "opened at least 3 pages in one visit"},
+    {"name": "Stayed two minutes or longer", "art": "dauer", "muster": "120",
+     "beschreibung": "spent 120 seconds or more on the site"},
+]
+
+
+def _ziel_trifft(regel, b):
+    """Prüft eine Zielregel gegen einen einzelnen Besuch."""
+    art = regel.get("art")
+    muster = (regel.get("muster") or "").lower()
+    aktionen = b.get("aktionen_liste") or []
+
+    if art == "seite":
+        return any(a["typ"] == "action" and muster in (a["url"] or "").lower()
+                   for a in aktionen)
+    if art == "mailto":
+        return any((a["url"] or "").lower().startswith("mailto:") for a in aktionen)
+    if art == "download":
+        return any(a["typ"] == "download" for a in aktionen)
+    if art == "outlink":
+        return any(a["typ"] == "outlink" and muster in (a["url"] or "").lower()
+                   for a in aktionen)
+    if art == "titel":
+        return any(muster in (a["titel"] or "").lower() for a in aktionen)
+    if art == "tiefe":
+        try:
+            return b["aktionen"] >= int(muster or 0)
+        except ValueError:
+            return False
+    if art == "dauer":
+        try:
+            return b["dauer_sek"] >= int(muster or 0)
+        except ValueError:
+            return False
+    return False
+
+
+@login_required
+def ziele(request):
+    """Goals, abgeleitet aus dem Besuchsprotokoll - ohne Einrichtung in Matomo."""
+    von, bis, hinweis = _zeitfenster(request)
+    laenge = (bis - von).days + 1
+    vor_bis = von - dt.timedelta(days=1)
+    vor_von = vor_bis - dt.timedelta(days=laenge - 1)
+
+    regeln = getattr(settings, "MATOMO_ZIELE", None) or STANDARD_ZIELE
+
+    fehler, besuche, vorbesuche = None, [], []
+    try:
+        besuche = [b for b in _besuchsprotokoll(von, bis) if not b["ist_bot"]]
+        vorbesuche = [b for b in _besuchsprotokoll(vor_von, vor_bis) if not b["ist_bot"]]
+    except Exception as e:
+        fehler = str(e)
+
+    ziele_liste, mit_ziel = [], set()
+    for nummer, regel in enumerate(regeln):
+        treffer = [b for b in besuche if _ziel_trifft(regel, b)]
+        vortreffer = sum(1 for b in vorbesuche if _ziel_trifft(regel, b))
+        for b in treffer:
+            mit_ziel.add(id(b))
+        ziele_liste.append({
+            "nummer": nummer,
+            "name": regel.get("name") or f"Goal {nummer + 1}",
+            "bedingung": regel.get("beschreibung") or regel.get("art", ""),
+            "anzahl": len(treffer),
+            "vorher": vortreffer,
+            "unterschied": len(treffer) - vortreffer,
+            "quote": round(100 * len(treffer) / len(besuche), 1) if besuche else 0.0,
+            "besuche": treffer,
+        })
+
+    hoechster = max([z["anzahl"] for z in ziele_liste], default=0)
+    for z in ziele_liste:
+        z["anteil"] = round(100 * z["anzahl"] / hoechster) if hoechster else 0
+    ziele_liste.sort(key=lambda z: (-z["anzahl"], z["name"]))
+
+    erfolgreiche = [b for b in besuche if id(b) in mit_ziel]
+
+    # Woher kamen die, die etwas getan haben - und wo fing es an
+    def aufschluesselung(feld, titel):
+        zaehler = {}
+        for b in besuche:
+            eintrag = zaehler.setdefault(b.get(feld) or "unknown", [0, 0])
+            eintrag[0] += 1
+            if id(b) in mit_ziel:
+                eintrag[1] += 1
+        zeilen = [[name, ges, mit, round(100 * mit / ges, 1) if ges else 0.0]
+                  for name, (ges, mit) in zaehler.items()]
+        zeilen.sort(key=lambda z: (-z[2], -z[1]))
+        return {"titel": titel, "spalten": [titel, "Visits", "With goal", "Rate %"],
+                "zeilen": zeilen}
+
+    return render(request, "matomo/ziele.html", {
+        **_zeitraum_kontext(von, bis, hinweis),
+        "ziele": ziele_liste,
+        "gesamt": sum(z["anzahl"] for z in ziele_liste),
+        "mit_treffern": sum(1 for z in ziele_liste if z["anzahl"]),
+        "erfolgreiche": len(erfolgreiche),
+        "besuche": len(besuche), "vorbesuche": len(vorbesuche),
+        "unterschied": len(besuche) - len(vorbesuche),
+        "quote": round(100 * len(erfolgreiche) / len(besuche), 1) if besuche else 0.0,
+        "vor_von": vor_von.isoformat(), "vor_bis": vor_bis.isoformat(),
+        "herkunft": aufschluesselung("herkunft", "Referrer"),
+        "einstieg": aufschluesselung("erste_seite", "Entry page"),
         "fehler": fehler,
     })
 

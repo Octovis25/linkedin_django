@@ -33,12 +33,21 @@ Alles im Browser, ohne Nachladen und ohne fremde Bibliothek.
   var sammler = new Intl.Collator('de', { numeric: true, sensitivity: 'base' });
 
   function alsZahl(text) {
-    var roh = text.replace(/\s/g, '').replace(/%$/, '').replace(/\./g, '').replace(',', '.');
+    // Punkte NICHT als Tausendertrennung entfernen - sonst hielte "02.09.2026"
+    // für eine Zahl und die Spalte bekäme keine Auswahlliste.
+    var roh = text.replace(/\s/g, '').replace(/%$/, '').replace(',', '.');
     if (roh === '' || !/^-?\d+(\.\d+)?$/.test(roh)) return null;
     return parseFloat(roh);
   }
 
   function text(zelle) { return zelle ? zelle.textContent.trim() : ''; }
+
+  // Für Datumsspalten steht im data-sort ein sortierbarer Wert (JJJJ-MM-TT),
+  // während sichtbar TT.MM.JJJJ steht - sonst käme der 01.09. vor den 31.08.
+  function sortwert(zelle) {
+    if (!zelle) return '';
+    return (zelle.dataset && zelle.dataset.sort) ? zelle.dataset.sort : text(zelle);
+  }
 
   function aufbereiten(tabelle) {
     var kopf = tabelle.tHead && tabelle.tHead.rows[0];
@@ -53,7 +62,7 @@ Alles im Browser, ohne Nachladen und ohne fremde Bibliothek.
       zelle.classList.add('mt-kopf');
       zelle.setAttribute('role', 'button');
       zelle.setAttribute('tabindex', '0');
-      zelle.title = 'Nach dieser Spalte sortieren';
+      zelle.title = 'Sort by this column';
 
       function umschalten() {
         var richtung = zelle.getAttribute('data-richtung') === 'auf' ? 'ab' : 'auf';
@@ -61,7 +70,7 @@ Alles im Browser, ohne Nachladen und ohne fremde Bibliothek.
         zelle.setAttribute('data-richtung', richtung);
         var faktor = richtung === 'ab' ? -1 : 1;
         zeilen.sort(function (a, b) {
-          var x = text(a.cells[index]), y = text(b.cells[index]);
+          var x = sortwert(a.cells[index]), y = sortwert(b.cells[index]);
           var zx = alsZahl(x), zy = alsZahl(y);
           if (zx !== null && zy !== null) return (zx - zy) * faktor;
           if (zx !== null) return -1 * faktor;
@@ -92,17 +101,19 @@ Alles im Browser, ohne Nachladen und ohne fremde Bibliothek.
         if (!(w in werte)) { werte[w] = true; anzahl++; }
       });
 
-      // Zahlenspalten und Spalten ohne echte Auswahl bekommen keine Liste
-      if (nurZahlen || anzahl < 2 || anzahl > 200) {
+      // Zahlen- und Messwertspalten bekommen keine Liste, ebenso Spalten
+      // ohne echte Auswahl. Rechtsbündige Spalten sind per Konvention Zahlen.
+      var istMesswert = kopf.cells[i] && kopf.cells[i].classList.contains('mt-zahl');
+      if (nurZahlen || istMesswert || anzahl < 2 || anzahl > 200) {
         listen.push(null);
         filterzeile.appendChild(zelle);
         continue;
       }
 
       var liste = document.createElement('select');
-      liste.setAttribute('aria-label', 'Filter für ' + text(kopf.cells[i]));
+      liste.setAttribute('aria-label', 'Filter for ' + text(kopf.cells[i]));
       var leer = document.createElement('option');
-      leer.value = ''; leer.textContent = 'alle (' + anzahl + ')';
+      leer.value = ''; leer.textContent = 'all (' + anzahl + ')';
       liste.appendChild(leer);
 
       Object.keys(werte).sort(sammler.compare).forEach(function (w) {
@@ -120,11 +131,20 @@ Alles im Browser, ohne Nachladen und ohne fremde Bibliothek.
     if (!listen.some(function (l) { return l; })) return;
     tabelle.tHead.appendChild(filterzeile);
 
+    // Die Filterzeile klebt unter der Ueberschriftenzeile, damit beim Scrollen
+    // beides stehen bleibt. Die Hoehe steht erst nach dem Einfuegen fest.
+    requestAnimationFrame(function () {
+      var hoehe = kopf.getBoundingClientRect().height;
+      Array.prototype.forEach.call(filterzeile.cells, function (z) {
+        z.style.top = hoehe + 'px';
+      });
+    });
+
     var treffer = document.createElement('div');
     treffer.className = 'mt-trefferzeile';
     var knopf = document.createElement('button');
     knopf.type = 'button';
-    knopf.textContent = 'Filter zurücksetzen';
+    knopf.textContent = 'Reset filters';
     knopf.addEventListener('click', function () {
       listen.forEach(function (l) { if (l) l.value = ''; });
       filtern();
@@ -146,8 +166,8 @@ Alles im Browser, ohne Nachladen und ohne fremde Bibliothek.
       listen.forEach(function (l) { if (l) l.classList.toggle('mt-aktiv', !!l.value); });
       var gefiltert = listen.some(function (l) { return l && l.value; });
       zaehltext.textContent = gefiltert
-        ? sichtbar + ' von ' + zeilen.length + ' Zeilen'
-        : zeilen.length + ' Zeilen';
+        ? sichtbar + ' of ' + zeilen.length + ' rows'
+        : zeilen.length + ' rows';
       knopf.hidden = !gefiltert;
     }
     filtern();
