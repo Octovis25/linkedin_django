@@ -28,7 +28,13 @@
 .studio-sidebar #font-size { width:46px !important; }
 </style>
 
-<h1 style="margin-bottom:.5rem">🎨 Image Studio</h1>
+<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.5rem;gap:1rem">
+  <h1 style="margin:0">🎨 Image Studio</h1>
+  <button type="button" class="tbtn" onclick="document.getElementById('studio-help').style.display='flex'"
+          title="Show the documentation" style="white-space:nowrap">📖 Documentation</button>
+</div>
+
+{% include "media_library/_studio_help.html" %}
 
 {% if post_data %}
 <div class="post-banner">

@@ -1,0 +1,83 @@
+{% comment %}
+  Studio-Hilfe: Overlay mit Kurzanleitung (Englisch). Wird über den ❓-Help-Button
+  im Studio-Kopf eingeblendet. Selbstständig – kein zusätzliches JS/CSS nötig.
+{% endcomment %}
+<div id="studio-help"
+     onclick="if(event.target===this)this.style.display='none'"
+     style="display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.5);
+            align-items:flex-start;justify-content:center;padding:40px 16px;overflow:auto">
+  <div style="background:#fff;max-width:760px;width:100%;border-radius:12px;
+              box-shadow:0 12px 40px rgba(0,0,0,.3);padding:28px 32px;line-height:1.55;
+              color:#1f2d2f;font-size:15px">
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:1rem;margin-bottom:.5rem">
+      <h2 style="margin:0;color:#008591">🎨 Image Studio – User Guide</h2>
+      <button type="button" onclick="document.getElementById('studio-help').style.display='none'"
+              style="border:none;background:#eee;border-radius:8px;width:34px;height:34px;
+                     font-size:18px;cursor:pointer" title="Close">✕</button>
+    </div>
+
+    <div style="background:#e9f6f7;border:1px solid #b8e2e6;border-radius:10px;padding:14px 16px;margin:14px 0">
+      <h3 style="margin:.2rem 0;color:#0e7c86">⭐ Fill a cut-out (transparent) background</h3>
+      <ol style="margin:.4rem 0 .2rem 1.1rem;padding:0">
+        <li>In the <b>Canvas</b> panel on the left, find the row
+            <b>“Hintergrundfarbe” (Background colour)</b>.</li>
+        <li>Click a colour: <b>Creme</b>, <b>Weiß</b> (White), one of the lighter
+            <b>Video-Teals</b> (for video/GIF), or the small
+            <b>colour-picker box</b> on the far left for any custom colour.</li>
+        <li>The whole canvas fills instantly; your elements stay on top.</li>
+        <li>To go transparent again, click <b>“Transparent”</b>.</li>
+      </ol>
+      <p style="margin:.3rem 0 0">A background <i>colour</i> and a background
+        <i>image</i> replace each other – setting one removes the other.</p>
+    </div>
+
+    <h3 style="color:#0e7c86;margin-bottom:.2rem">Two kinds of “cut-out”</h3>
+    <ul style="margin:.2rem 0 .8rem 1.1rem;padding:0">
+      <li><b>One image:</b> select it → <b>“BG weg” (Remove background)</b> removes
+          that image’s own background.</li>
+      <li><b>The whole canvas:</b> use <b>“Hintergrundfarbe”</b>,
+          <b>“Bild als Hintergrund” (Image as background)</b> and
+          <b>“Hintergrundbild entfernen” (Remove background image)</b>.</li>
+    </ul>
+
+    <h3 style="color:#0e7c86;margin-bottom:.2rem">Editing an existing template</h3>
+    <ol style="margin:.2rem 0 .8rem 1.1rem;padding:0">
+      <li>Click <b>“+ Verwalten” (Manage)</b> under Templates.</li>
+      <li>Next to the template, click <b>“Im Editor öffnen” (Open in editor)</b>.</li>
+      <li>Make your changes.</li>
+      <li>Click <b>“💾 Vorlage speichern” (Save template)</b> →
+          choose <b>“Diese Vorlage aktualisieren” (Update this template)</b>.</li>
+      <li>Keep the <b>same name</b> – a new name creates a copy.</li>
+    </ol>
+
+    <h3 style="color:#0e7c86;margin-bottom:.2rem">Text</h3>
+    <ul style="margin:.2rem 0 .8rem 1.1rem;padding:0">
+      <li><b>“+ Text”</b> – single text field. <b>“+ Textblock”</b> – heading + body
+          as one object.</li>
+      <li><b>“✓ Haken + Text” (Check + text)</b> and
+          <b>“✓✓✓ Dreihaken” (Triple check)</b> for checkmark lines.</li>
+      <li>Double-click text to edit; change colour via the box in the <b>Text</b> panel.</li>
+    </ul>
+
+    <h3 style="color:#0e7c86;margin-bottom:.2rem">Editing an image</h3>
+    <ul style="margin:.2rem 0 .8rem 1.1rem;padding:0">
+      <li><b>Cut out / “BG weg”</b> – make the background transparent.</li>
+      <li><b>Recolour / “Farbtausch”</b> – pick a colour, click the area to recolour
+          (shading is preserved).</li>
+      <li>These edits are kept on save – also inside templates.</li>
+    </ul>
+
+    <h3 style="color:#0e7c86;margin-bottom:.2rem">Saving &amp; My outputs</h3>
+    <ul style="margin:.2rem 0 .8rem 1.1rem;padding:0">
+      <li><b>“💾 Speichern” (Save)</b> attaches the image to the open post.</li>
+      <li><b>“▾ Format”</b> – save as image (PNG), GIF or video.</li>
+      <li>Under <b>“Meine Ausgaben” (My outputs)</b>: click to reopen, ✕ to delete.</li>
+    </ul>
+
+    <h3 style="color:#0e7c86;margin-bottom:.2rem">Troubleshooting</h3>
+    <ul style="margin:.2rem 0 0 1.1rem;padding:0">
+      <li>Change not showing? Press <b>Ctrl + Shift + R</b> (reload without cache).</li>
+      <li>Colour too dark in video/GIF? Use a <b>Video-Teal</b> as the background colour.</li>
+    </ul>
+  </div>
+</div>
