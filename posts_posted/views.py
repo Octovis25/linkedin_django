@@ -355,7 +355,7 @@ def post_add(request):
         if form.is_valid():
             try:
                 form.save()
-                messages.success(request, "Post-Datum gespeichert!")
+                messages.success(request, "Post date saved!")
             except Exception as e:
                 messages.error(request, str(e))
         else:
@@ -399,12 +399,12 @@ def post_edit(request, pk):
                                     "UPDATE linkedin_posts_posted SET post_image=%s WHERE id=%s",
                                     [nc_path, post.pk]
                                 )
-                            messages.success(request, "Bild gespeichert!")
+                            messages.success(request, "Image saved!")
                         else:
-                            messages.error(request, "Nextcloud-Upload fehlgeschlagen!")
+                            messages.error(request, "Nextcloud upload failed!")
                     finally:
                         os.unlink(tmp_path)
-                messages.success(request, "Aktualisiert!")
+                messages.success(request, "Updated!")
             except Exception as e:
                 messages.error(request, str(e))
             return redirect("posts_posted:list")
@@ -418,7 +418,7 @@ def post_delete(request, pk):
     post = get_object_or_404(LinkedinPostPosted, pk=pk)
     if request.method == "POST":
         post.delete()
-        messages.success(request, "Post {} geloescht.".format(post.post_id))
+        messages.success(request, "Post {} deleted.".format(post.post_id))
         return redirect("posts_posted:list")
     return render(request, "posts_posted/confirm_delete.html", {"post": post})
 
@@ -447,14 +447,14 @@ def post_delete_image(request, pk):
         cur.execute("SELECT post_url, post_image FROM linkedin_posts_posted WHERE id = %s", [pk])
         row = cur.fetchone()
     if not row:
-        messages.error(request, "Post nicht gefunden.")
+        messages.error(request, "Post not found.")
         return redirect("posts_posted:list")
     post_url, nc_path = row
     if nc_path:
         delete_image_from_nextcloud(nc_path)
         with _conn.cursor() as cur:
             cur.execute("UPDATE linkedin_posts_posted SET post_image = NULL WHERE id = %s", [pk])
-        messages.success(request, "Bild gelöscht.")
+        messages.success(request, "Image deleted.")
     else:
-        messages.info(request, "Kein Bild vorhanden.")
+        messages.info(request, "No image present.")
     return redirect("posts_posted:list")

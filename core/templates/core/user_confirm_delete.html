@@ -1,13 +1,13 @@
 {% extends "core/base.html" %}
-{% block title %}User loeschen{% endblock %}
+{% block title %}Delete user{% endblock %}
 {% block content %}
-<h1>User loeschen</h1>
+<h1>Delete user</h1>
 <div class="card" style="max-width:500px;">
-  <p>Willst du den User <strong>{{ target_user.username }}</strong> ({{ target_user.get_full_name }}) wirklich loeschen?</p>
+  <p>Do you really want to delete user <strong>{{ target_user.username }}</strong> ({{ target_user.get_full_name }})?</p>
   <form method="post" style="margin-top:1rem;">
     {% csrf_token %}
-    <button type="submit" class="btn btn-danger">Ja, loeschen</button>
-    <a href="/users/" class="btn btn-secondary">Abbrechen</a>
+    <button type="submit" class="btn btn-danger">Yes, delete</button>
+    <a href="/users/" class="btn btn-secondary">Cancel</a>
   </form>
 </div>
 {% endblock %}

@@ -41,24 +41,24 @@
   {% if post_data.image %}<img src="/library/studio/api/post-image/{{ post_data.id }}/?v={% now 'U' %}" alt="">{% endif %}
   <div class="post-info">
     <strong>📌 Post #{{ post_data.id }}: {{ post_data.title|default:"Ohne Titel" }}</strong>
-    <p>Bild, GIF und Video werden beim Speichern am Post angehängt.</p>
+    <p>Image, GIF and video are attached to the post when you save.</p>
     <div class="post-files">
-      <span class="post-files-label">Dateien am Post:</span>
+      <span class="post-files-label">Files on the post:</span>
       {% if post_data.image_url %}
-        <button class="tbtn" data-act="open-post-file" data-kind="image" data-url="{{ post_data.image_url }}" title="Bild auf die Arbeitsfläche laden">📷 Bild</button>
-      {% else %}<span class="tbtn tbtn-off">📷 kein Bild</span>{% endif %}
+        <button class="tbtn" data-act="open-post-file" data-kind="image" data-url="{{ post_data.image_url }}" title="Load image onto the canvas">📷 Image</button>
+      {% else %}<span class="tbtn tbtn-off">📷 no image</span>{% endif %}
       {% if post_data.gif_url %}
-        <button class="tbtn" data-act="open-post-file" data-kind="gif" data-url="{{ post_data.gif_url }}" title="GIF auf die Arbeitsfläche laden">🎞 GIF</button>
-      {% else %}<span class="tbtn tbtn-off">🎞 kein GIF</span>{% endif %}
+        <button class="tbtn" data-act="open-post-file" data-kind="gif" data-url="{{ post_data.gif_url }}" title="Load GIF onto the canvas">🎞 GIF</button>
+      {% else %}<span class="tbtn tbtn-off">🎞 no GIF</span>{% endif %}
       {% if post_data.video_url %}
-        <a class="tbtn" href="{{ post_data.video_url }}" target="_blank" rel="noopener" title="Video ansehen / herunterladen">🎬 Video</a>
-      {% else %}<span class="tbtn tbtn-off">🎬 kein Video</span>{% endif %}
+        <a class="tbtn" href="{{ post_data.video_url }}" target="_blank" rel="noopener" title="View / download video">🎬 Video</a>
+      {% else %}<span class="tbtn tbtn-off">🎬 no video</span>{% endif %}
     </div>
   </div>
   {% if post_data.image %}
   <div class="post-actions">
-    {% if post_data.canvas_json %}<button class="tbtn primary" data-act="restore-post">✏️ Weiterbearbeiten</button>{% endif %}
-    <button class="tbtn" data-act="post-bg">🖼 Hintergrund</button>
+    {% if post_data.canvas_json %}<button class="tbtn primary" data-act="restore-post">✏️ Continue editing</button>{% endif %}
+    <button class="tbtn" data-act="post-bg">🖼 Background</button>
     <button class="tbtn" data-act="post-overlay">📐 Overlay</button>
   </div>
   {% endif %}
@@ -70,15 +70,15 @@
   .post-files .tbtn-off{opacity:.4;pointer-events:none}
 </style>
 {% elif post_id %}
-<div class="post-banner"><div class="post-info"><strong>📌 Post #{{ post_id }}</strong><p>Bild wird beim Speichern am Post angehängt.</p></div>
-  <button class="tbtn" data-act="copy-from-post" title="Ein bestehendes Bild von einem anderen Post übernehmen – wird als Kopie an diesen Post gespeichert">📥 Bild von anderem Post</button>
-  <a class="tbtn primary" href="/planner/uebersicht/?focus={{ post_id }}" title="Zurück zur Übersicht – dort den Status dieses Posts setzen (erst speichern nicht vergessen)">← Zur Übersicht &amp; Status</a>
+<div class="post-banner"><div class="post-info"><strong>📌 Post #{{ post_id }}</strong><p>Image is attached to the post when you save.</p></div>
+  <button class="tbtn" data-act="copy-from-post" title="Take an existing image from another post – saved as a copy on this post">📥 Image from another post</button>
+  <a class="tbtn primary" href="/planner/uebersicht/?focus={{ post_id }}" title="Back to the overview – set this post's status there (don't forget to save first)">← To overview &amp; status</a>
 </div>
 {% elif lib_data %}
 <div class="post-banner">
   <img src="{{ lib_data.image_url }}" alt="">
   <div class="post-info"><strong>📷 Bibliotheksbild bearbeiten</strong>
-    <p>{% if lib_data.canvas_json %}Canvas wird wiederhergestellt.{% else %}Bild wird als Element geladen.{% endif %}</p>
+    <p>{% if lib_data.canvas_json %}Canvas is being restored.{% else %}Image is loaded as an element.{% endif %}</p>
   </div>
 </div>
 {% endif %}
@@ -89,18 +89,18 @@
 <div class="studio-wrap">
 
   <!-- ============ LINKE SIDEBAR ============ -->
-  <button class="panel-toggle" id="toggle-left" title="Werkzeugleiste ein-/ausklappen">‹</button>
+  <button class="panel-toggle" id="toggle-left" title="Show/hide the toolbar">‹</button>
   <aside class="studio-sidebar">
 
     <section class="sidebar-section">
       <h3>🗂 Templates</h3>
       <div class="section-body">
-        <div id="tpl-list" class="tpl-grid"><span class="no-templates">Lädt…</span></div>
+        <div id="tpl-list" class="tpl-grid"><span class="no-templates">Loading…</span></div>
         <div class="swatch-row" style="margin-top:4px">
-          <button class="tbtn primary" data-act="new-template" title="Leere Fläche, um eine neue Vorlage zu bauen (Hintergrund, Logo, Textfelder)">➕ Neue Vorlage</button>
-          <button class="tbtn" data-act="save-template" title="Die aktuelle Vorlage speichern (Hintergrund + Logo + Textfelder)">💾 Vorlage speichern</button>
+          <button class="tbtn primary" data-act="new-template" title="Empty canvas to build a new template (background, logo, text fields)">➕ New template</button>
+          <button class="tbtn" data-act="save-template" title="Save the current template (background + logo + text fields)">💾 Save template</button>
         </div>
-        <a class="manage-link" href="/library/studio/templates/">+ Verwalten</a>
+        <a class="manage-link" href="/library/studio/templates/">+ Manage</a>
       </div>
     </section>
 
@@ -108,23 +108,23 @@
       <h3>🖼 Canvas</h3>
       <div class="section-body">
         <div class="swatch-row" style="margin-bottom:4px">
-          <button class="tbtn" data-act="canvas-size">📐 Größe</button>
-          <button class="tbtn danger" data-act="clear-all" title="Alles löschen">🧹 Leeren</button>
+          <button class="tbtn" data-act="canvas-size">📐 Size</button>
+          <button class="tbtn danger" data-act="clear-all" title="Clear everything">🧹 Clear</button>
         </div>
         {# Hintergrundfarbe gab es doppelt: hier und in der Sektion „Farbe".      #}
         {# Beide hiessen id="bg-color", also fand das JS immer nur diesen ersten  #}
         {# – der zweite war tot und sein Handler ueberschrieb diesen hier.        #}
         {# Jetzt: EINE Stelle fuer alles rund um den Hintergrund.                 #}
         <div style="display:flex;gap:4px;align-items:center;margin-bottom:4px">
-          <label style="font-size:.72rem;color:#666;white-space:nowrap">Farbe</label>
-          <input type="color" id="bg-color" class="field-color" value="#FBF8F0" title="Canvas-Hintergrund einfärben">
-          <button class="tbtn" data-act="bg-creme" title="Octotrial-Creme">Creme</button>
-          <button class="tbtn" data-act="bg-weiss" title="Weiß">Weiß</button>
-          <button class="tbtn" data-act="bg-transparent" title="Transparent (Schachbrett)">Transparent</button>
+          <label style="font-size:.72rem;color:#666;white-space:nowrap">Colour</label>
+          <input type="color" id="bg-color" class="field-color" value="#FBF8F0" title="Fill the canvas background">
+          <button class="tbtn" data-act="bg-creme" title="Octotrial cream">Cream</button>
+          <button class="tbtn" data-act="bg-weiss" title="White">White</button>
+          <button class="tbtn" data-act="bg-transparent" title="Transparent (checkerboard)">Transparent</button>
         </div>
         <div class="swatch-row" style="margin-bottom:4px">
-          <button class="tbtn" data-act="set-as-bg" title="Das ausgewählte Bild als Hintergrund festlegen – ideal, um daraus eine Vorlage zu bauen">🖼 Bild als Hintergrund</button>
-          <button class="tbtn" data-act="clear-bg" title="Entfernt das Hintergrundbild – die Hintergrundfarbe bleibt">🚫 Hintergrundbild entfernen</button>
+          <button class="tbtn" data-act="set-as-bg" title="Set the selected image as background – ideal for building a template">🖼 Image as background</button>
+          <button class="tbtn" data-act="clear-bg" title="Removes the background image – the background colour stays">🚫 Remove background image</button>
         </div>
         <div id="bg-info" style="font-size:.65rem;color:#888"></div>
       </div>
@@ -133,10 +133,10 @@
     <section class="sidebar-section">
       <h3>✏️ Text</h3>
       <div class="section-body">
-        <input type="text" id="text-input" class="field" placeholder="Text eingeben…" style="width:100%;margin-bottom:5px">
+        <input type="text" id="text-input" class="field" placeholder="Enter text…" style="width:100%;margin-bottom:5px">
         <div style="display:flex;gap:4px;align-items:center;margin-bottom:6px">
           <input type="number" id="font-size" class="field" value="32" min="6" max="400" step="1"
-                 title="Schriftgröße in Pixel – frei wählbar" style="width:58px">
+                 title="Font size in pixels – freely adjustable" style="width:58px">
           <input type="color" id="text-color" class="field-color" value="#111111">
           <select id="font-weight" class="field" style="width:70px">
             <option value="normal">Normal</option><option value="bold" selected>Fett</option>
@@ -144,56 +144,56 @@
           <button class="tbtn primary" data-act="add-text" style="margin-left:auto">+ Text</button>
         </div>
         <div class="swatch-row" style="margin-bottom:6px">
-          <button class="tbtn" data-act="text-left" title="Linksbündig">⯇</button>
-          <button class="tbtn" data-act="text-center" title="Zentriert">≡</button>
-          <button class="tbtn" data-act="text-right" title="Rechtsbündig">⯈</button>
+          <button class="tbtn" data-act="text-left" title="Left align">⯇</button>
+          <button class="tbtn" data-act="text-center" title="Centre">≡</button>
+          <button class="tbtn" data-act="text-right" title="Right align">⯈</button>
         </div>
 
-        <div class="lib-hint" style="margin-top:8px">Textblock: Überschrift + Fließtext als <b>ein</b> Objekt</div>
+        <div class="lib-hint" style="margin-top:8px">Text block: heading + body text as <b>one</b> object</div>
         <input type="text" id="tb-head" class="field" placeholder="Überschrift…" style="width:100%;margin-bottom:4px">
         <textarea id="tb-body" class="field" placeholder="Beschreibung…" rows="2"
                   style="width:100%;margin-bottom:5px;resize:vertical;font-family:inherit"></textarea>
         <div style="display:flex;gap:4px;align-items:center">
           <label style="font-size:.72rem;color:#666">Breite</label>
           <input type="number" id="tb-width" class="field" value="260" min="60" step="10" style="width:64px">
-          <label style="font-size:.72rem;color:#666">Größe</label>
+          <label style="font-size:.72rem;color:#666">Size</label>
           <input type="number" id="tb-size" class="field" value="19" min="8" step="1" style="width:52px">
           <button class="tbtn primary" data-act="add-textblock" style="margin-left:auto">+ Textblock</button>
         </div>
         <div class="swatch-row" style="margin-top:4px">
-          <button class="tbtn" data-act="add-checktext" title="Octovis-Haken + Text als EIN Objekt. Doppelklick zum Ändern, Text bricht an der Breite um, an der Ecke skalieren.">✓ Haken + Text</button>
-          <button class="tbtn" data-act="add-checklist" title="Drei Zeilen mit Haken als EIN Objekt (Dreihaken). Doppelklick: eine Zeile je Haken.">✓✓✓ Dreihaken</button>
+          <button class="tbtn" data-act="add-checktext" title="Octovis check + text as ONE object. Double-click to edit, text wraps at the width, scale at the corner.">✓ Check + text</button>
+          <button class="tbtn" data-act="add-checklist" title="Three checkmark lines as ONE object. Double-click: one line per check.">✓✓✓ Triple check</button>
         </div>
       </div>
     </section>
 
     <section class="sidebar-section">
-      <h3>🔗 Formen</h3>
+      <h3>🔗 Shapes</h3>
       <div class="section-body">
         <div class="swatch-row" style="margin-bottom:6px">
-          <button class="tbtn" data-shape="arrow"       title="Pfeil">➜</button>
-          <button class="tbtn" data-shape="line"        title="Linie">╱</button>
-          <button class="tbtn" data-shape="dottedLine"  title="Gestrichelt">┈</button>
-          <button class="tbtn" data-shape="circle"      title="Kreis">◯</button>
-          <button class="tbtn" data-shape="filledCircle" title="Gef. Kreis">●</button>
-          <button class="tbtn" data-shape="rect"        title="Rechteck">▭</button>
-          <button class="tbtn" data-shape="filledRect"  title="Gef. Rechteck">■</button>
-          <button class="tbtn" data-shape="hex"         title="Wabe (Umriss)">⬡</button>
-          <button class="tbtn" data-shape="filledHex"   title="Wabe (gefüllt)">⬢</button>
+          <button class="tbtn" data-shape="arrow"       title="Arrow">➜</button>
+          <button class="tbtn" data-shape="line"        title="Line">╱</button>
+          <button class="tbtn" data-shape="dottedLine"  title="Dashed">┈</button>
+          <button class="tbtn" data-shape="circle"      title="Circle">◯</button>
+          <button class="tbtn" data-shape="filledCircle" title="Filled circle">●</button>
+          <button class="tbtn" data-shape="rect"        title="Rectangle">▭</button>
+          <button class="tbtn" data-shape="filledRect"  title="Filled rectangle">■</button>
+          <button class="tbtn" data-shape="hex"         title="Hexagon (outline)">⬡</button>
+          <button class="tbtn" data-shape="filledHex"   title="Hexagon (filled)">⬢</button>
         </div>
-        <div class="lib-hint">Mit Text – klicken, tippen, Enter. Doppelklick zum Ändern:</div>
+        <div class="lib-hint">With text – click, type, Enter. Double-click to edit:</div>
         <div class="swatch-row">
-          <button class="tbtn" data-badge="circle" title="Kreis mit Nummer/Text – Text direkt eintippen, Doppelklick zum Ändern">① Kreis + Text</button>
-          <button class="tbtn" data-badge="hex" title="Wabe mit Nummer/Text – Text direkt eintippen, Doppelklick zum Ändern">⬢ Wabe + Text</button>
-          <button class="tbtn" data-badge="pill" title="Banner-Pille mit Text – Text direkt eintippen, Doppelklick zum Ändern">▭ Banner + Text</button>
+          <button class="tbtn" data-badge="circle" title="Circle with number/text – type directly, double-click to edit">① Circle + text</button>
+          <button class="tbtn" data-badge="hex" title="Hexagon with number/text – type directly, double-click to edit">⬢ Hexagon + text</button>
+          <button class="tbtn" data-badge="pill" title="Banner pill with text – type directly, double-click to edit">▭ Banner + text</button>
         </div>
       </div>
     </section>
 
     <section class="sidebar-section">
-      <h3>🎨 Farbe</h3>
+      <h3>🎨 Colour</h3>
       <div class="section-body">
-        <div style="font-size:.68rem;color:#888;margin-bottom:4px">Gilt für ausgewählten Text/Form und neue Formen:</div>
+        <div style="font-size:.68rem;color:#888;margin-bottom:4px">Applies to selected text/shape and new shapes:</div>
         <div id="palette-row" class="swatch-row"></div>
         {# Der zweite Hintergrund-Farbwaehler stand frueher hier und hatte        #}
         {# dieselbe id wie der in der Sektion „Canvas" – er war dadurch tot.      #}
@@ -201,64 +201,72 @@
         {# Palettenfarbe als Hintergrund uebernehmen.                            #}
         <div class="tl-row" style="margin-top:8px;gap:6px">
           <button class="tbtn" id="bg-color-apply" data-act="bg-color-apply" style="width:100%"
-                  title="Übernimmt die zuletzt in der Palette gewählte Farbe als Canvas-Hintergrund">🖌 Palettenfarbe als Hintergrund</button>
+                  title="Uses the colour last picked in the palette as the canvas background">🖌 Palette colour as background</button>
         </div>
       </div>
     </section>
 
     <section class="sidebar-section" id="retouch-section">
-      <h3>✂ Freistellen & Korrigieren</h3>
+      <h3>✂ Cut out & retouch</h3>
       <div class="section-body">
-        <div id="retouch-hint" class="no-templates">Wähle ein Bild.</div>
+        <div id="retouch-hint" class="no-templates">Select an image.</div>
         <div id="retouch-body" style="display:none">
-          <div class="retouch-label">Automatisch:</div>
+          <div class="retouch-label">Automatic:</div>
           <div class="swatch-row" style="margin-bottom:10px">
-            <button class="tbtn" data-act="cutout" style="width:100%" title="Erkannten Hintergrund rundum entfernen">✂ Hintergrund automatisch entfernen</button>
-            <button class="tbtn" data-act="checker-remove" style="width:100%;margin-top:4px" title="Nur das eingebackene Karo-/Schachbrettmuster entfernen – weiße Bildinhalte bleiben">🧩 Nur Karomuster entfernen</button>
+            <button class="tbtn" data-act="cutout" style="width:100%" title="Remove the detected background all around">✂ Remove background automatically</button>
+            <button class="tbtn" data-act="checker-remove" style="width:100%;margin-top:4px" title="Remove only the baked-in checkerboard pattern – white content stays">🧩 Remove checkerboard only</button>
           </div>
 
-          <!-- Anklicken: Pipette (überall) und Fläche (zusammenhängend) -->
-          <div class="retouch-label">Anklicken:</div>
+          <!-- Anklicken: transparent machen -->
+          <div class="retouch-label">Make transparent (click):</div>
           <div class="swatch-row" style="margin-bottom:6px">
-            <button class="tbtn" data-tool="pick" title="Farbe anklicken → diese Farbe wird im GANZEN Bild transparent">💧 Farbe überall weg</button>
-            <button class="tbtn" data-tool="fill" title="In eine Fläche klicken → nur diese zusammenhängende Fläche wird transparent">🫧 Fläche weg</button>
-            <button class="tbtn" data-tool="swap" title="In eine Fläche klicken → diese Fläche bekommt die unten gewählte Farbe">🎨 Fläche umfärben</button>
+            <button class="tbtn" data-tool="pick" title="Click a colour → that colour becomes transparent across the WHOLE image">💧 Remove colour everywhere</button>
+            <button class="tbtn" data-tool="fill" title="Click an area → only this connected area becomes transparent">🫧 Remove area</button>
+          </div>
+
+          <!-- Umfärben per Klick: erst Farbe mit der Pipette aufnehmen, dann Fläche anklicken -->
+          <div class="retouch-label">Recolour — 1st click picks the colour, then click the image:
+            <span id="recolor-swatch" title="picked colour" style="display:inline-block;width:15px;height:15px;border-radius:3px;border:1px solid #999;vertical-align:middle;margin-left:6px;background:transparent"></span>
+          </div>
+          <div class="swatch-row" style="margin-bottom:6px">
+            <button class="tbtn" data-tool="recolorpick" title="First click: pick a colour anywhere (e.g. the petrol background). Then click connected areas in the image to recolour them.">🎨 Recolour area</button>
+            <button class="tbtn" data-tool="recolorpickall" title="First click: pick a colour. Then click a colour in the image to recolour ALL matching areas.">🎨 Recolour whole colour</button>
           </div>
 
           <!-- Pinsel: von Hand über das Bild wischen -->
-          <div class="retouch-label">Mit dem Pinsel wischen:</div>
+          <div class="retouch-label">Wipe with the brush:</div>
           <div class="swatch-row" style="margin-bottom:6px">
-            <button class="tbtn" data-tool="erase" title="Über das Bild wischen → wird transparent">🧽 Radieren</button>
-            <button class="tbtn" data-tool="restore" title="Über das Bild wischen → das Original kommt an dieser Stelle zurück">↩ Zurückholen</button>
-            <button class="tbtn" data-tool="paint" title="Über das Bild malen → in der unten gewählten Farbe (nur dort, wo Bild ist)">🖌 Malen</button>
+            <button class="tbtn" data-tool="erase" title="Wipe over the image → becomes transparent">🧽 Erase</button>
+            <button class="tbtn" data-tool="restore" title="Wipe over the image → the original comes back there">↩ Restore</button>
+            <button class="tbtn" data-tool="paint" title="Paint over the image → in the colour chosen below (only where there is image)">🖌 Paint</button>
           </div>
 
           <!-- Bereich markieren, dann am Stück anwenden -->
-          <div class="retouch-label">Bereich wählen, dann anwenden:</div>
+          <div class="retouch-label">Select an area, then apply:</div>
           <div class="swatch-row" style="margin-bottom:6px">
-            <button class="tbtn" data-tool="rect" title="Rechteck über die Fläche ziehen">🔲 Rechteck ziehen</button>
-            <button class="tbtn" data-tool="mark" title="Fläche frei rot übermalen – gut für unregelmäßige Formen">✍ Frei markieren</button>
+            <button class="tbtn" data-tool="rect" title="Drag a rectangle over the area">🔲 Drag rectangle</button>
+            <button class="tbtn" data-tool="mark" title="Freely paint over an area in red – good for irregular shapes">✍ Free mark</button>
           </div>
           <div id="mark-apply-row" class="swatch-row" style="display:none;margin-bottom:6px">
-            <button class="tbtn danger" data-mark="remove" title="Markierten Bereich transparent machen">🗑 Löschen</button>
-            <button class="tbtn primary" data-mark="recolor" title="Markierten Bereich in die unten gewählte 🎨 Farbe umfärben">🎨 Umfärben</button>
+            <button class="tbtn danger" data-mark="remove" title="Make the marked area transparent">🗑 Delete</button>
+            <button class="tbtn primary" data-mark="recolor" title="Recolour the marked area to the 🎨 colour chosen below">🎨 Recolour</button>
           </div>
 
           <!-- Pinselgröße: nur bei den Wisch-/Markier-Werkzeugen sichtbar -->
           <div id="brush-row" class="tl-row" style="display:none;margin-bottom:6px;gap:6px">
             <span style="white-space:nowrap">Pinsel</span>
             <input type="range" id="brush-slider" class="tl-slider" min="3" max="120" step="1" value="20"
-                   title="Pinselgröße in Bildpunkten" style="flex:1">
+                   title="Brush size in pixels" style="flex:1">
             <span id="brush-val" style="font-size:.7rem;color:#666;min-width:3.2em;text-align:right">20 px</span>
           </div>
 
           <!-- Farbe: nur bei den umfärbenden Werkzeugen sichtbar -->
           <div id="recolor-color-row" class="tl-row" style="display:none;margin-bottom:6px;gap:6px">
-            <span style="white-space:nowrap">🎨 Farbe</span>
-            <input type="color" id="recolor-color" class="field-color" value="#F56E28" title="Farbe zum Umfärben und Malen – auch aus der Palette oben wählbar">
+            <span style="white-space:nowrap">🎨 Colour</span>
+            <input type="color" id="recolor-color" class="field-color" value="#F56E28" title="Colour for recolouring and painting – also selectable from the palette above">
           </div>
 
-          <button class="tbtn" data-tool="off" title="Werkzeug beenden" style="width:100%;margin-top:4px">✋ Fertig / Werkzeug aus</button>
+          <button class="tbtn" data-tool="off" title="End tool" style="width:100%;margin-top:4px">✋ Done / tool off</button>
           <div id="tool-status" style="font-size:.65rem;color:#888;margin-top:6px;min-height:1em"></div>
         </div>
       </div>
@@ -267,7 +275,7 @@
     <section class="sidebar-section" id="layers-section">
       <h3>🗂 Ebenen</h3>
       <div class="section-body">
-        <div id="layers-list"><span class="no-templates">Noch keine Elemente.</span></div>
+        <div id="layers-list"><span class="no-templates">No elements yet.</span></div>
       </div>
     </section>
 
@@ -279,7 +287,7 @@
 
     <!-- Kontextleiste für ausgewähltes Element (ÜBER dem Canvas) -->
     <div class="sel-bar" id="sel-bar">
-      <span class="hint">Kein Element ausgewählt · Bild hierher ziehen oder aus der Bibliothek wählen</span>
+      <span class="hint">No element selected · drag an image here or pick from the library</span>
     </div>
 
     <div class="canvas-host">
@@ -292,26 +300,26 @@
     <!-- Aktionsleiste UNTER dem Canvas: aufgeräumt in Gruppen -->
     <div class="studio-actionbar">
       <div class="group">
-        <button class="tbtn" data-act="new" title="Leeren Editor starten">🆕 Neu</button>
+        <button class="tbtn" data-act="new" title="Start an empty editor">🆕 New</button>
       </div>
       <div class="group group-save">
-        <input type="text" id="title-input" class="field" placeholder="Titel (Pflicht)…">
-        <button class="tbtn primary" id="save-btn" data-act="save-as">💾 Speichern als…</button>
-        <button class="tbtn" data-act="save-as-new" title="Format wählen: Bild / GIF / Video">▾ Format</button>
+        <input type="text" id="title-input" class="field" placeholder="Title (required)…">
+        <button class="tbtn primary" id="save-btn" data-act="save-as">💾 Save as…</button>
+        <button class="tbtn" data-act="save-as-new" title="Choose format: image / GIF / video">▾ Format</button>
         <button class="tbtn" data-act="download">📥 Download</button>
       </div>
       <div class="group" title="Verlauf">
-        <button class="tbtn" data-act="undo" title="Rückgängig (Strg+Z)">↶</button>
-        <button class="tbtn" data-act="redo" title="Wiederholen (Strg+Y)">↷</button>
+        <button class="tbtn" data-act="undo" title="Undo (Ctrl+Z)">↶</button>
+        <button class="tbtn" data-act="redo" title="Redo (Ctrl+Y)">↷</button>
       </div>
       <div class="group">
-        <a class="tbtn" href="{{ back_url }}" data-act="go-back" data-back="{{ back_url }}" title="Zurück zur Seite, von der du gekommen bist (erst speichern nicht vergessen)">← Zurück</a>
+        <a class="tbtn" href="{{ back_url }}" data-act="go-back" data-back="{{ back_url }}" title="Leave the Studio and go to the overview (don't forget to save first)">← Exit</a>
       </div>
       <span id="status-msg"></span>
     </div>
 
     <!-- Animation je Element (Timeline unter dem Canvas) -->
-    <div id="anim-bar" class="anim-bar"><span class="hint">Elemente hinzufügen, um sie zu animieren.</span></div>
+    <div id="anim-bar" class="anim-bar"><span class="hint">Add elements to animate them.</span></div>
   </main>
 
   <!-- ============ RECHTE SIDEBAR: BIBLIOTHEK ============ -->
@@ -321,16 +329,16 @@
     <section class="sidebar-section">
       <h3>⬆ Upload</h3>
       <div class="section-body">
-        <button class="tbtn primary" id="upload-btn" style="width:100%">📤 Bild hochladen</button>
+        <button class="tbtn primary" id="upload-btn" style="width:100%">📤 Upload image</button>
         <input type="file" id="upload-input" accept="image/*" multiple style="display:none">
-        <button class="tbtn" id="svg-import-btn" style="width:100%;margin-top:6px" title="SVG-Datei zerlegt einfügen: Bänder, Formen, Icons werden einzelne Objekte">📐 SVG importieren</button>
+        <button class="tbtn" id="svg-import-btn" style="width:100%;margin-top:6px" title="Insert an SVG split apart: ribbons, shapes, icons become individual objects">📐 Import SVG</button>
         <label style="display:flex;align-items:center;gap:4px;font-size:.72rem;color:#666;margin-top:3px">
-          <input type="checkbox" id="svg-as-group"> als 1 Objekt einfügen
+          <input type="checkbox" id="svg-as-group"> insert as 1 object
         </label>
         <input type="file" id="svg-file-input" accept=".svg,image/svg+xml" hidden>
-        <div class="lib-hint" style="margin-top:4px">SVGs aus Assets/Ausgaben öffnen sich per Klick automatisch zerlegt.</div>
+        <div class="lib-hint" style="margin-top:4px">SVGs from Assets/Outputs open automatically split apart on click.</div>
         <div id="upload-status" style="font-size:.7rem;color:#888;margin:4px 0"></div>
-        <div id="upload-grid" class="lib-grid"><span class="no-templates">Lädt…</span></div>
+        <div id="upload-grid" class="lib-grid"><span class="no-templates">Loading…</span></div>
       </div>
     </section>
 
@@ -338,23 +346,23 @@
     <section class="sidebar-section">
       <h3>🗂 Assets</h3>
       <div class="section-body">
-        <div class="lib-hint">Ordner anhaken (auch mehrere oder einen Überordner):</div>
-        <div id="lib-tree" class="lib-tree"><span class="no-templates">Lädt…</span></div>
-        <input type="text" id="lib-search" class="lib-search" placeholder="In Auswahl suchen…">
-        <div id="lib-grid" class="lib-grid"><span class="no-templates">Ordner anhaken zum Anzeigen.</span></div>
+        <div class="lib-hint">Tick folders (several or a parent folder):</div>
+        <div id="lib-tree" class="lib-tree"><span class="no-templates">Loading…</span></div>
+        <input type="text" id="lib-search" class="lib-search" placeholder="Search in selection…">
+        <div id="lib-grid" class="lib-grid"><span class="no-templates">Tick folders to display.</span></div>
       </div>
     </section>
 
     <!-- Fertige Ausgaben: Images / GIFs / Videos -->
     <section class="sidebar-section">
-      <h3>🎬 Meine Ausgaben</h3>
+      <h3>🎬 My outputs</h3>
       <div class="section-body">
         <div id="output-tabs" class="swatch-row" style="margin-bottom:6px">
           <button class="tbtn primary" data-out="Images">Images</button>
           <button class="tbtn" data-out="GIFs">GIFs</button>
           <button class="tbtn" data-out="Videos">Videos</button>
         </div>
-        <div id="output-grid" class="lib-grid"><span class="no-templates">Lädt…</span></div>
+        <div id="output-grid" class="lib-grid"><span class="no-templates">Loading…</span></div>
       </div>
     </section>
   </aside>
@@ -418,8 +426,8 @@
 // eine Zeile in der Browser-Konsole – auf der Seite passierte einfach nichts.
 if (!window.fabric && window.studioZeigeFehler) {
   window.studioZeigeFehler('Editor-Engine konnte nicht geladen werden.',
-    'fabric.min.js fehlt oder wurde blockiert. Auf dem Server prüfen: ' +
-    'staticfiles/media_library/studio/vendor/fabric.min.js (ggf. collectstatic ausführen).',
+    'fabric.min.js is missing or was blocked. Check on the server: ' +
+    'staticfiles/media_library/studio/vendor/fabric.min.js (run collectstatic if needed).',
     true);
 }
 </script>

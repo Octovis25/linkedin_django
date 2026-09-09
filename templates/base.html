@@ -1,6 +1,6 @@
 {% load static %}
 <!DOCTYPE html>
-<html lang="de">
+<html lang="en">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -243,14 +243,14 @@
     <div class="user-section">
       {% if live_url %}
         <a href="{{ live_url }}" target="_blank" rel="noopener" class="live-link"
-           title="Die öffentlich erreichbare Fassung dieses Portals">Live-Portal ↗</a>
+           title="The publicly accessible version of this portal">Live portal ↗</a>
       {% endif %}
       {% if user.is_authenticated %}
         {% if user.is_superuser %}
-          <a href="/users/">User-Verwaltung</a>
+          <a href="/users/">User management</a>
         {% endif %}
         <span class="user-info">{{ user.get_full_name|default:user.username }}</span>
-        <a href="/change-password/">Passwort ändern</a>
+        <a href="/change-password/">Change password</a>
         <a href="/logout/">Logout</a>
       {% else %}
         <a href="/login/">Login</a>
@@ -268,7 +268,7 @@
     <a href="/statistics/" {% if '/statistics/' in request.path %}class="active"{% endif %}>Statistics</a>
     <a href="/webstats/" {% if '/webstats/' in request.path %}class="active"{% endif %}>Web Analytics</a>
     {% if user.is_superuser %}
-    <a href="/db-admin/" {% if '/db-admin/' in request.path %}class="active"{% endif %}>DB Verwaltung</a>
+    <a href="/db-admin/" {% if '/db-admin/' in request.path %}class="active"{% endif %}>DB Admin</a>
     {% endif %}
   </nav>
   {% if '/data/' in request.path %}

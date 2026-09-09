@@ -151,7 +151,7 @@ def aufgaben_api(request):
             typ = data.get('typ', 'text')
             post_id = data.get('post_id')
             if not aufgabe:
-                return JsonResponse({'error': 'Aufgabe darf nicht leer sein'}, status=400)
+                return JsonResponse({'error': 'Task must not be empty'}, status=400)
             with connection.cursor() as c:
                 c.execute("INSERT INTO claude_aufgaben (aufgabe, typ, post_id) VALUES (%s, %s, %s)",
                           [aufgabe, typ, post_id])
@@ -720,7 +720,7 @@ def api_post(request):
             _ensure_media_columns()
             nc_path = (data.get('video_nc_path') or '').strip()
             if not nc_path:
-                return JsonResponse({'ok': False, 'error': 'video_nc_path fehlt'}, status=400)
+                return JsonResponse({'ok': False, 'error': 'video_nc_path missing'}, status=400)
             # Studio-Ausgabe → in den Planner/Videos-Ordner verschieben (keine Kopie).
             nc_path = _move_studio_output_to_planner(nc_path, PLANNER_VIDEOS_FOLDER)
             # Ein Medium pro Post: bisherige Medien (außer der neuen Datei) löschen.
@@ -735,7 +735,7 @@ def api_post(request):
             _ensure_media_columns()
             nc_path = (data.get('image_nc_path') or '').strip()
             if not nc_path:
-                return JsonResponse({'ok': False, 'error': 'image_nc_path fehlt'}, status=400)
+                return JsonResponse({'ok': False, 'error': 'image_nc_path missing'}, status=400)
             # Studio-Ausgabe → in den Planner/Images-Ordner verschieben (keine Kopie).
             nc_path = _move_studio_output_to_planner(nc_path, PLANNER_IMAGES_FOLDER)
             # Ein Medium pro Post: bisherige Medien (außer der neuen Datei) löschen.
@@ -2567,7 +2567,7 @@ def _linkedin_do_post_impl(request, post_id):
         if not token.get('buffer_token') or not _buf_pid:
             return JsonResponse({
                 'ok': False,
-                'error': 'Buffer ist nicht konfiguriert. Bitte Buffer Access Token speichern und Profil auswählen.'
+                'error': 'Buffer is not configured. Please save the Buffer access token and select a profile.'
             }, status=400)
 
         try:
@@ -2799,14 +2799,14 @@ def linkedin_post_video(request, post_id):
     if not token.get('buffer_token') or not token.get('buffer_profile_id'):
         return JsonResponse({
             'ok': False,
-            'error': 'Buffer ist nicht konfiguriert. Bitte Buffer Access Token speichern und Profil auswählen.'
+            'error': 'Buffer is not configured. Please save the Buffer access token and select a profile.'
         }, status=400)
 
     target = request.POST.get('target', 'org')
     if target != 'org':
         return JsonResponse({
             'ok': False,
-            'error': 'Video-Posting ist aktuell nur über Buffer für die Unternehmensseite aktiviert.'
+            'error': 'Video posting is currently only enabled via Buffer for the company page.'
         }, status=400)
 
     text = (request.POST.get('text') or '').strip()
@@ -2831,7 +2831,7 @@ def linkedin_post_video(request, post_id):
                 nc_path = row[0]
 
         if not nc_path:
-            return JsonResponse({'ok': False, 'error': 'Kein Video für diesen Post gespeichert.'}, status=400)
+            return JsonResponse({'ok': False, 'error': 'No video saved for this post.'}, status=400)
 
         video_url = _upload_video_to_cloudinary(post_id)
         print("BUFFER CLOUDINARY VIDEO URL:", video_url)
@@ -2915,7 +2915,7 @@ def api_video(request, post_id):
 
     video_file = request.FILES.get('video')
     if not video_file:
-        return JsonResponse({'ok': False, 'error': 'Keine Videodatei'}, status=400)
+        return JsonResponse({'ok': False, 'error': 'No video file'}, status=400)
 
     try:
         nc_path = _upload_video_to_nextcloud(video_file, post_id)
@@ -2973,7 +2973,7 @@ def api_trigger_scheduled(request):
                 from posts_posted.nc_storage import download_image_from_nextcloud
                 vid_bytes, _ = download_image_from_nextcloud(video_nc_path)
                 if not vid_bytes:
-                    errors.append({'id': pid, 'error': 'Video nicht auf Nextcloud gefunden'})
+                    errors.append({'id': pid, 'error': 'Video not found on Nextcloud'})
                     continue
                 import re as _re2
                 _author = None
@@ -3017,7 +3017,7 @@ def api_trigger_scheduled(request):
                 continue
             # Text/image posts via Make.com webhook
             if not wh_url:
-                errors.append({'id': pid, 'error': 'Kein Make.com Webhook konfiguriert'})
+                errors.append({'id': pid, 'error': 'No Make.com webhook configured'})
                 continue
             payload = {'text': content_txt or ''}
             if image:
@@ -3050,7 +3050,7 @@ def api_buffer_profiles(request):
     buf_token = data.get('token', '').strip()
 
     if not buf_token:
-        return JsonResponse({'error': 'Kein Token angegeben'}, status=400)
+        return JsonResponse({'error': 'No token provided'}, status=400)
 
     org_query = """
     query GetOrganizations {

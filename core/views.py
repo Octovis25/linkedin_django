@@ -221,9 +221,9 @@ def upload_import_view(request):
                     from posts_posted.views import fill_missing_post_images
                     filled, checked, img_err, dates_filled = fill_missing_post_images()
                     if filled:
-                        messages.success(request, f'{filled} fehlende(s) Post-Bild(er) automatisch aus Buffer befüllt.')
+                        messages.success(request, f'{filled} missing post image(s) auto-filled from Buffer.')
                     if dates_filled:
-                        messages.success(request, f'{dates_filled} fehlende(s) Post-Datum/Daten automatisch aus Buffer befüllt.')
+                        messages.success(request, f'{dates_filled} missing post date(s) auto-filled from Buffer.')
                 except Exception as _e:
                     print('Auto-Bild/Datum-Befuellen fehlgeschlagen:', _e)
 
@@ -272,11 +272,11 @@ def user_create(request):
         is_staff_cb = request.POST.get('is_staff') == 'on'
 
         if not email:
-            messages.error(request, 'E-Mail-Adresse ist Pflichtfeld.')
+            messages.error(request, 'Email address is required.')
             return render(request, 'core/user_create.html')
 
         if User.objects.filter(email=email).exists():
-            messages.error(request, 'Ein User mit dieser E-Mail existiert bereits.')
+            messages.error(request, 'A user with this email already exists.')
             return render(request, 'core/user_create.html')
 
         username = email.split('@')[0]
@@ -292,28 +292,32 @@ def user_create(request):
             first_name=first_name, last_name=last_name, is_staff=is_staff_cb,
         )
 
-        dashboard_url = getattr(settings, 'DASHBOARD_URL', 'http://localhost:8000')
-        subject = 'Dein Zugang zum LinkedIn Dashboard'
-        body = f"""Hallo {first_name or username},
+        # Link fuer die E-Mail: auf Render liefert LIVE_URL (=RENDER_EXTERNAL_URL)
+        # automatisch die Live-Adresse; lokal faellt es auf DASHBOARD_URL zurueck.
+        dashboard_url = (getattr(settings, 'LIVE_URL', '')
+                         or getattr(settings, 'DASHBOARD_URL', '')
+                         or 'http://localhost:8000').rstrip('/')
+        subject = 'Your access to the LinkedIn Dashboard'
+        body = f"""Hi {first_name or username},
 
-du wurdest zum LinkedIn Dashboard von Octotrial eingeladen.
+you have been invited to the Octotrial LinkedIn Dashboard.
 
-Deine Zugangsdaten:
+Your login details:
   URL:       {dashboard_url}
   Username:  {username}
-  Passwort:  {password}
+  Password:  {password}
 
-Bitte aendere dein Passwort nach dem ersten Login unter:
+Please change your password after your first login at:
 {dashboard_url}/change-password/
 
-Viele Gruesse
-Dein Octotrial-Team
+Best regards
+Your Octotrial team
 """
         try:
             send_mail(subject, body, settings.DEFAULT_FROM_EMAIL, [email])
-            messages.success(request, f'User "{username}" angelegt - Einladungsmail an {email} gesendet.')
+            messages.success(request, f'User "{username}" created – invitation email sent to {email}.')
         except Exception as e:
-            messages.warning(request, f'User "{username}" angelegt, aber E-Mail fehlgeschlagen: {e}')
+            messages.warning(request, f'User "{username}" created, but email failed: {e}')
 
         return redirect('user_list')
     return render(request, 'core/user_create.html')
@@ -323,12 +327,12 @@ Dein Octotrial-Team
 def user_delete(request, user_id):
     user = get_object_or_404(User, pk=user_id)
     if user == request.user:
-        messages.error(request, 'Du kannst dich nicht selbst loeschen.')
+        messages.error(request, 'You cannot delete yourself.')
         return redirect('user_list')
     if request.method == 'POST':
         username = user.username
         user.delete()
-        messages.success(request, f'User "{username}" wurde geloescht.')
+        messages.success(request, f'User "{username}" has been deleted.')
         return redirect('user_list')
     return render(request, 'core/user_confirm_delete.html', {'target_user': user})
 
@@ -337,13 +341,13 @@ def user_delete(request, user_id):
 def user_toggle_active(request, user_id):
     user = get_object_or_404(User, pk=user_id)
     if user == request.user:
-        messages.error(request, 'Du kannst deinen eigenen Account nicht deaktivieren.')
+        messages.error(request, 'You cannot deactivate your own account.')
         return redirect('user_list')
     if request.method == 'POST':
         user.is_active = not user.is_active
         user.save()
-        status = 'aktiviert' if user.is_active else 'deaktiviert'
-        messages.success(request, f'User "{user.username}" wurde {status}.')
+        status = 'activated' if user.is_active else 'deactivated'
+        messages.success(request, f'User "{user.username}" was {status}.')
     return redirect('user_list')
 
 

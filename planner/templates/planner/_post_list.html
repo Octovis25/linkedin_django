@@ -163,7 +163,7 @@
       <select id="pe-img-nc" onchange="peImgNcSelect()"
         style="font-size:11px;padding:4px 6px;border:0.5px solid #61CEBC;border-radius:4px;background:#fff;color:#008591;max-width:150px;flex-shrink:0"
         title="Choose a finished image from the Studio">
-        <option value="">📷 aus Studio…</option>
+        <option value="">📷 from Studio…</option>
       </select>
       <button type="button" onclick="peOpenStudio()"
         style="font-size:11px;padding:4px 8px;border:0.5px solid #61CEBC;border-radius:4px;background:#fff;cursor:pointer;color:#008591;white-space:nowrap;flex-shrink:0"
@@ -451,7 +451,7 @@ async function peReloadNcVideos() {
   };
   try {
     const s = await fetch('/planner/api/studio-outputs/').then(r => r.json());
-    if (s.ok) addGroup('🎨 Studio-Ausgaben', s.videos);
+    if (s.ok) addGroup('🎨 Studio outputs', s.videos);
   } catch (e) { /* optional */ }
   try {
     const r = await fetch('/planner/api/nc-videos/').then(r => r.json());
@@ -563,7 +563,7 @@ function pePreviewImg(input) {
 async function peReloadStudioImages() {
   const sel = document.getElementById('pe-img-nc');
   if (!sel) return;
-  sel.innerHTML = '<option value="">📷 aus Studio…</option>';
+  sel.innerHTML = '<option value="">📷 from Studio…</option>';
   try {
     const r = await fetch('/planner/api/studio-images/').then(r => r.json());
     if (r.ok && r.images) r.images.forEach(im => {
@@ -856,7 +856,7 @@ if (_liModalBg) _liModalBg.addEventListener('click', function(e) {
     </div>
     <div id="li-video-info" style="display:none;flex-direction:column;gap:8px;margin-bottom:8px;font-size:13px;padding:6px 10px;background:#f0fbf8;border:0.5px solid #61CEBC;border-radius:6px">
       <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-        <span style="color:#0F6E56">🎬 Video zugeordnet:</span>
+        <span style="color:#0F6E56">🎬 Video attached:</span>
         <span id="li-video-name" style="font-size:12px;color:#008591;font-weight:500"></span>
       </div>
       <video id="li-video-preview" controls preload="metadata"

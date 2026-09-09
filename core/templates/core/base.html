@@ -1,6 +1,6 @@
 {% load static %}
 <!DOCTYPE html>
-<html lang="de">
+<html lang="en">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -84,10 +84,10 @@
     <div class="user-section">
       {% if user.is_authenticated %}
         {% if user.is_superuser %}<a href="/planner/api-connect/">API Connect</a>{% endif %}
-        {% if user.is_superuser %}<a href="https://dashboard.render.com/" target="_blank" rel="noopener" title="Render-Dashboard in neuem Tab öffnen">Render ↗</a>{% endif %}
-        {% if user.is_staff %}<a href="/users/">User-Verwaltung</a>{% endif %}
+        {% if user.is_superuser %}<a href="https://dashboard.render.com/" target="_blank" rel="noopener" title="Open the Render dashboard in a new tab">Render ↗</a>{% endif %}
+        {% if user.is_staff %}<a href="/users/">User management</a>{% endif %}
         <span class="user-info">{{ user.get_full_name|default:user.username }}</span>
-        <a href="/change-password/">Passwort aendern</a>
+        <a href="/change-password/">Change password</a>
         <a href="/logout/">Logout</a>
       {% else %}
         <a href="/login/">Login</a>
@@ -103,7 +103,7 @@
     <a href="/assets/" {% if '/assets/' in request.path %}class="active"{% endif %}>Assets</a>
     <a href="/statistics/" {% if '/statistics/' in request.path %}class="active"{% endif %}>Statistics</a>
     {% if user.is_superuser %}
-    <a href="/db-admin/" {% if '/db-admin/' in request.path %}class="active"{% endif %}>DB Verwaltung</a>
+    <a href="/db-admin/" {% if '/db-admin/' in request.path %}class="active"{% endif %}>DB Admin</a>
     {% endif %}
   </nav>
   {% if '/data/' in request.path %}
@@ -131,9 +131,9 @@
     <a href="/library/studio/" {% if '/studio/' in request.path and '/flowcharts/' not in request.path and '/templates/' not in request.path %}class="active"{% endif %}>🎨 Studio</a>
     <a href="/library/studio/templates/" {% if '/studio/templates/' in request.path %}class="active"{% endif %}>📐 Templates</a>
     <a href="/library/studio/flowcharts/" {% if '/flowcharts/' in request.path %}class="active"{% endif %}>🔀 Flowcharts</a>
-    <a href="https://www.canva.com/" target="_blank" rel="noopener" title="Canva in neuem Tab öffnen">🖌️ Canva ↗</a>
-    <a href="https://www.photopea.com/" target="_blank" rel="noopener" title="Photopea (Foto-Editor) in neuem Tab öffnen">🖼️ Photopea ↗</a>
-    <a href="https://www.figma.com/" target="_blank" rel="noopener" title="Figma in neuem Tab öffnen">🎯 Figma ↗</a>
+    <a href="https://www.canva.com/" target="_blank" rel="noopener" title="Open Canva in a new tab">🖌️ Canva ↗</a>
+    <a href="https://www.photopea.com/" target="_blank" rel="noopener" title="Open Photopea (photo editor) in a new tab">🖼️ Photopea ↗</a>
+    <a href="https://www.figma.com/" target="_blank" rel="noopener" title="Open Figma in a new tab">🎯 Figma ↗</a>
   </div>
   {% endif %}
   {% if '/statistics/' in request.path %}

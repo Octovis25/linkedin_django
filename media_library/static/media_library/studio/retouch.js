@@ -26,7 +26,7 @@ export function getOriginal(obj) {
   if (obj._origImg) return Promise.resolve(obj._origImg);
   if (obj._origPromise) return obj._origPromise;
   const url = obj.originalUrl || obj.srcUrl;
-  if (!url) return Promise.reject(new Error('Kein Originalbild hinterlegt'));
+  if (!url) return Promise.reject(new Error('No original image stored'));
   obj._origPromise = loadImage(proxyUrl(url))
     .then(img => { obj._origImg = img; return img; })
     .catch(e => { obj._origPromise = null; throw e; });   // erneuter Versuch möglich

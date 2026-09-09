@@ -53,17 +53,17 @@ export function modal(title, text, buttons) {
 // Gibt Promise<HTMLImageElement> zurück.
 export function loadImage(url) {
   return new Promise((resolve, reject) => {
-    if (!url) { reject(new Error('Keine Bild-Adresse angegeben')); return; }
+    if (!url) { reject(new Error('No image URL provided')); return; }
     const img = new Image();
     const ziel = proxyUrl(url);
-    if (!ziel) { reject(new Error('Bild-Adresse konnte nicht aufgelöst werden')); return; }
+    if (!ziel) { reject(new Error('Image URL could not be resolved')); return; }
     // Bei data:/blob: kein crossOrigin setzen – manche Browser brechen das Laden
     // dann komplett ab, statt das Bild einfach anzuzeigen.
     if (!/^(data:|blob:)/i.test(String(ziel))) img.crossOrigin = 'anonymous';
     img.onload = () => resolve(img);
     // Aussagekräftige Meldung statt eines nackten Event-Objekts – vorher stand
     // im Fehlertext nur „[object Event]".
-    img.onerror = () => reject(new Error('Bild konnte nicht geladen werden: ' + String(ziel).slice(0, 120)));
+    img.onerror = () => reject(new Error('Image could not be loaded: ' + String(ziel).slice(0, 120)));
     img.src = ziel;
   });
 }

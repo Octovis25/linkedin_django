@@ -117,7 +117,7 @@ export async function vergebeneNamen() {
 // Macht einen Namen eindeutig, indem bei Bedarf _2, _3 … angehängt wird.
 // `eigener` ist der aktuell gehaltene Name – der gilt nicht als Kollision.
 export function eindeutig(name, belegt, eigener) {
-  const basis = entschaerfe(name) || 'Entwurf';
+  const basis = entschaerfe(name) || 'Draft';
   // Auch den eigenen Namen bereinigen: sonst gilt ein Altbestand-Titel mit
   // Leerzeichen („Header Q3") nicht als der eigene und die Funktion hängt dem
   // Namen unnötig ein _2 an.
@@ -139,9 +139,9 @@ export function frageNachNamen({ vorschlag, belegt, eigener, titel, hinweis }) {
     const box = document.createElement('div');
     box.className = 'studio-modal';
     box.innerHTML =
-      `<h4>${titel || 'Wie soll die Ausgabe heißen?'}</h4>` +
+      `<h4>${titel || 'What should the output be called?'}</h4>` +
       `<div style="font-size:.82rem;color:#555;margin-bottom:10px">${hinweis ||
-        'Der Name gilt für alle Formate dieses Entwurfs (Bild, GIF, Video) und steht im Dateinamen. ' +
+        'The name applies to all formats of this draft (image, GIF, video) and appears in the file name. ' +
         'Er muss eindeutig sein – Leerzeichen werden zu Unterstrichen.'}</div>` +
       `<input type="text" id="nm-feld" class="field" style="width:100%;font-size:1rem;padding:7px" ` +
       `value="${(vorschlag || '').replace(/"/g, '&quot;')}" spellcheck="false" autocomplete="off">` +
@@ -149,10 +149,10 @@ export function frageNachNamen({ vorschlag, belegt, eigener, titel, hinweis }) {
     const btns = document.createElement('div');
     btns.className = 'modal-btns';
     const ok = document.createElement('button');
-    ok.textContent = '✓ Übernehmen';
+    ok.textContent = '✓ Apply';
     ok.className = 'primary';
     const ab = document.createElement('button');
-    ab.textContent = 'Abbrechen';
+    ab.textContent = 'Cancel';
     btns.appendChild(ab); btns.appendChild(ok);
     box.appendChild(btns); bg.appendChild(box);
     document.body.appendChild(bg);
@@ -179,7 +179,7 @@ export function frageNachNamen({ vorschlag, belegt, eigener, titel, hinweis }) {
         ok.disabled = true; return null;
       }
       info.innerHTML = (sauber !== roh.trim())
-        ? `<span style="color:#666">Wird gespeichert als <b>${sauber}</b></span>`
+        ? `<span style="color:#666">Will be saved as <b>${sauber}</b></span>`
         : '<span style="color:#198754">Name ist frei.</span>';
       ok.disabled = false;
       return sauber;

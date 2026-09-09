@@ -45,7 +45,7 @@ export function renderPalette(container, onPick) {
   const add = document.createElement('div');
   add.className = 'swatch add';
   add.textContent = '+';
-  add.title = 'Farbe hinzufügen';
+  add.title = 'Add colour';
   add.onclick = () => {
     const picker = document.createElement('input');
     picker.type = 'color';
@@ -64,7 +64,7 @@ export function renderPalette(container, onPick) {
   // Export aus). Als eigene, markierte Gruppe „🎬 Video".
   const vlabel = document.createElement('span');
   vlabel.textContent = '🎬 Video-Teal:';
-  vlabel.title = 'Hellere Teal-Töne für Video/GIF – gleichen die Verdunklung beim Export aus.';
+  vlabel.title = 'Lighter teal tones for video/GIF – compensate for the darkening on export.';
   vlabel.style.cssText = 'flex-basis:100%;font-size:.66rem;color:#008591;margin:6px 0 2px';
   container.appendChild(vlabel);
   ['#0A97A3', '#12A7B4', '#1FB2C0'].forEach(col => {
@@ -73,7 +73,7 @@ export function renderPalette(container, onPick) {
     sw.style.background = col;
     sw.style.outline = '2px dotted #12A7B4';
     sw.style.outlineOffset = '1px';
-    sw.title = 'Video-Teal ' + col + ' – heller, für Video/GIF (gleicht die Verdunklung aus)';
+    sw.title = 'Video teal ' + col + ' – lighter, for video/GIF (compensates for the darkening)';
     sw.onclick = () => onPick(col);
     container.appendChild(sw);
   });
@@ -127,7 +127,7 @@ export function updateBgInfo(editor) {
   const el = document.getElementById('bg-info');
   if (!el) return;
   const parts = [];
-  if (editor.canvas.backgroundImage) parts.push('BG: Bild');
+  if (editor.canvas.backgroundImage) parts.push('BG: image');
   parts.push(`${editor.width}×${editor.height}`);
   parts.push(`${editor.canvas.getObjects().filter(o => !o._snap).length} Elemente`);
   el.textContent = parts.join(' · ');
@@ -150,7 +150,7 @@ export async function loadTemplateList(editor) {
       img.onclick = () => applyTemplate(editor, t);
       listEl.appendChild(img);
     });
-    if (!(data.templates || []).length) listEl.innerHTML = '<span class="no-templates">Keine Templates.</span>';
+    if (!(data.templates || []).length) listEl.innerHTML = '<span class="no-templates">No templates.</span>';
   } catch (e) {
     listEl.innerHTML = '<span class="no-templates">Fehler beim Laden.</span>';
   }
@@ -159,8 +159,8 @@ export async function loadTemplateList(editor) {
 export async function applyTemplate(editor, tpl) {
   // Ungespeicherte Arbeit nicht kommentarlos wegwerfen.
   if (typeof window.studioDarfVerlassen === 'function' && !window.studioDarfVerlassen()) return;
-  if (editor._locked) { status('⏳ Es lädt noch etwas – kurz warten', 'red'); return; }
-  status('⏳ Vorlage wird geladen…');
+  if (editor._locked) { status('⏳ Something is still loading – please wait', 'red'); return; }
+  status('⏳ Loading template…');
   // Neue Vorlagen tragen ein Layout (Hintergrund + Logo + Textfelder). Dann das
   // ganze Layout laden, damit man nur noch die Texte ersetzen muss.
   if (tpl.has_canvas) {
@@ -175,8 +175,8 @@ export async function applyTemplate(editor, tpl) {
         const vollstaendig = await restoreCanvas(editor, d.canvas_json);
         editor._templateId = tpl.id || null;
         updateBgInfo(editor);
-        status(vollstaendig ? '✅ Vorlage geladen – Texte anpassen'
-                            : '⚠️ Vorlage nur teilweise geladen', vollstaendig ? 'green' : 'red');
+        status(vollstaendig ? '✅ Template loaded – adjust the text'
+                            : '⚠️ Template only partially loaded', vollstaendig ? 'green' : 'red');
         return;
       }
     } catch (e) { console.warn('Template-Layout-Fehler, nutze Hintergrundbild:', e); }
@@ -192,10 +192,10 @@ export async function applyTemplate(editor, tpl) {
     editor._templateId = tpl.id || null;
     editor.snapshot();
     updateBgInfo(editor);
-    status('✅ Template geladen', 'green');
+    status('✅ Template loaded', 'green');
   } catch (e) {
     console.error('Template-Fehler:', e);
     status('❌ Template-Fehler', 'red');
-    toast('Template konnte nicht geladen werden', 'err');
+    toast('Template could not be loaded', 'err');
   }
 }

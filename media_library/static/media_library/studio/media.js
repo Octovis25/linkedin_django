@@ -13,19 +13,19 @@ export const ANIM_TYPES = [
 ];
 // Menschliche Beschriftung + Gruppierung (einmalig = spielt einmal, endlos = Schleife)
 export const ANIM_LABELS = {
-  none: 'Keine', fadeIn: 'Einblenden', fadeOut: 'Ausblenden',
-  slideLeft: 'Rein von rechts', slideRight: 'Rein von links',
-  slideUp: 'Rein von unten', slideDown: 'Rein von oben',
-  zoomIn: 'Reinzoomen', zoomOut: 'Rauszoomen', bounce: 'Hüpfen (einmal)',
-  pulse: 'Pulsieren (Schleife)', float: 'Schweben (Schleife)',
-  spin: 'Drehen (Schleife)', flash: 'Blinken (Schleife)',
-  wobble: 'Wackeln (Schleife)', shake: 'Zittern (Schleife)',
+  none: 'None', fadeIn: 'Fade in', fadeOut: 'Fade out',
+  slideLeft: 'In from right', slideRight: 'In from left',
+  slideUp: 'In from bottom', slideDown: 'In from top',
+  zoomIn: 'Zoom in', zoomOut: 'Zoom out', bounce: 'Bounce (once)',
+  pulse: 'Pulse (loop)', float: 'Float (loop)',
+  spin: 'Spin (loop)', flash: 'Flash (loop)',
+  wobble: 'Wobble (loop)', shake: 'Shake (loop)',
 };
 
 // Setzt eine Animation auf das aktuell gewählte Element.
 export function setAnim(editor, type, dur = 1200, delay = 0) {
   const o = editor.active();
-  if (!o) { toast('Erst ein Element wählen', 'err'); return; }
+  if (!o) { toast('Select an element first', 'err'); return; }
   o.anim = (type && type !== 'none') ? { type, dur, delay } : null;
   editor.snapshot();
 }
@@ -38,9 +38,9 @@ export function hasAnimations(editor) {
 // ===== Deko-Effekte (Partikel: Funkeln, Konfetti, Kreise, Strahlen …) ======
 export const EFFECTS = ['none', 'orbit', 'network', 'scan', 'neon', 'rays', 'glow', 'bubbles', 'confetti', 'hearts'];
 export const EFFECT_LABELS = {
-  none: 'Kein Effekt', orbit: '💫 Orbit', network: '🕸 Netzwerk', scan: '📡 Scan',
-  neon: '💠 Neon-Puls', rays: '☀️ Strahlen', glow: '💡 Glow', bubbles: '⭕ Kreise',
-  confetti: '🎊 Konfetti', hearts: '💕 Herzen',
+  none: 'No effect', orbit: '💫 Orbit', network: '🕸 Network', scan: '📡 Scan',
+  neon: '💠 Neon pulse', rays: '☀️ Rays', glow: '💡 Glow', bubbles: '⭕ Circles',
+  confetti: '🎊 Confetti', hearts: '💕 Hearts',
 };
 const FX_COLORS = ['#F56E28', '#008591', '#61CEBC', '#ffd700', '#ff4d6d', '#4d94ff'];
 let _fxOn = false, _fxTime = 0;
@@ -231,7 +231,7 @@ function play(editor, total, onFrame) {
 }
 
 export function previewAnimation(editor) {
-  if (!hasAnimations(editor)) { toast('Keine Animationen gesetzt', 'err'); return; }
+  if (!hasAnimations(editor)) { toast('No animations set', 'err'); return; }
   play(editor, animDuration(editor));
 }
 
@@ -270,9 +270,9 @@ function animDuration(editor) {
 // ---- Export als bewegtes Bild (WebM) -------------------------------------
 export async function exportVideo(editor, onBlob) {
   // Rueckgabe true/false: der Aufrufer darf nur bei true "Gespeichert" melden.
-  if (!hasAnimations(editor)) { toast('Keine Animationen – nichts zu exportieren', 'err'); return false; }
+  if (!hasAnimations(editor)) { toast('No animations – nothing to export', 'err'); return false; }
   const canvasEl = editor.canvas.lowerCanvasEl;
-  if (!canvasEl.captureStream) { toast('Browser unterstützt keine Video-Aufnahme', 'err'); return false; }
+  if (!canvasEl.captureStream) { toast('Browser does not support video capture', 'err'); return false; }
 
   status('🎬 Nehme Video auf…');
   editor.canvas.discardActiveObject();
@@ -293,8 +293,8 @@ export async function exportVideo(editor, onBlob) {
     await done;
   } catch (e) {
     console.error('Video-Aufnahme:', e);
-    status('❌ ' + (e.message || 'Video-Aufnahme fehlgeschlagen'), 'red');
-    toast(e.message || 'Video-Aufnahme fehlgeschlagen', 'err');
+    status('❌ ' + (e.message || 'Video capture failed'), 'red');
+    toast(e.message || 'Video capture failed', 'err');
     throw e;
   } finally {
     // Ohne finally blieb der Canvas nach einem Fehler auf voller Auflösung
@@ -305,13 +305,13 @@ export async function exportVideo(editor, onBlob) {
   }
 
   const blob = new Blob(chunks, { type: 'video/webm' });
-  if (!blob.size) { status('❌ Video ist leer', 'red'); toast('Video-Aufnahme lieferte keine Daten', 'err'); return false; }
+  if (!blob.size) { status('❌ Video is empty', 'red'); toast('Video capture returned no data', 'err'); return false; }
   if (typeof onBlob === 'function') { onBlob(blob); status('Bereit.'); return true; }
   // Kein Auto-Download – nur in „Meine Ausgaben" speichern (mit canvas_json → editierbar).
-  status('💾 Video wird gespeichert…');
+  status('💾 Saving video…');
   const erg = await saveAnimation(editor, blob, '.webm');
   if (!erg?.ok) return false;
-  status('✅ Video gespeichert!', 'green');
+  status('✅ Video saved!', 'green');
   return true;
 }
 
@@ -323,7 +323,7 @@ export async function downloadVideo(editor) {
     a.download = (document.getElementById('title-input')?.value.trim() || 'studio') + '.webm';
     a.click();
     setTimeout(() => URL.revokeObjectURL(a.href), 5000);
-    toast('Video heruntergeladen', 'ok');
+    toast('Video downloaded', 'ok');
   });
 }
 
@@ -343,7 +343,7 @@ function loadGifLib() {
 }
 
 export async function exportGif(editor, onBlob) {
-  if (!hasAnimations(editor)) { toast('Keine Animationen – nichts zu exportieren', 'err'); return false; }
+  if (!hasAnimations(editor)) { toast('No animations – nothing to export', 'err'); return false; }
   status('🎞 GIF wird erzeugt…');
   try {
     try {
@@ -352,9 +352,9 @@ export async function exportGif(editor, onBlob) {
       // Damit ein zweiter Versuch nach behobenem Problem möglich ist – vorher
       // blieb die fehlgeschlagene Promise bis zum Neuladen der Seite gecacht.
       _gifLibPromise = null;
-      throw new Error('GIF-Bibliothek konnte nicht geladen werden (vendor/gif.js)');
+      throw new Error('GIF library could not be loaded (vendor/gif.js)');
     }
-    if (!window.GIF) { _gifLibPromise = null; throw new Error('GIF-Bibliothek unvollständig'); }
+    if (!window.GIF) { _gifLibPromise = null; throw new Error('GIF library incomplete'); }
 
     const total = animDuration(editor);
     const fps = 12, frameMs = 1000 / fps;
@@ -409,18 +409,18 @@ export async function exportGif(editor, onBlob) {
     // während die Kodierung noch lief – wer den Tab schloss, verlor alles.
     status('🎞 GIF wird komprimiert…');
     const blob = await new Promise((resolve, reject) => {
-      const abbruch = setTimeout(() => reject(new Error('GIF-Erzeugung dauert zu lange (Worker-Datei erreichbar?)')), 180000);
+      const abbruch = setTimeout(() => reject(new Error('GIF generation is taking too long (worker file reachable?)')), 180000);
       gif.on('finished', b => { clearTimeout(abbruch); resolve(b); });
-      gif.on('abort', () => { clearTimeout(abbruch); reject(new Error('GIF-Erzeugung abgebrochen')); });
+      gif.on('abort', () => { clearTimeout(abbruch); reject(new Error('GIF generation cancelled')); });
       gif.render();
     });
 
     if (typeof onBlob === 'function') { onBlob(blob); status('Bereit.'); return true; }
     // Kein Auto-Download – nur in „Meine Ausgaben" speichern.
-    status('💾 GIF wird gespeichert…');
+    status('💾 Saving GIF…');
     const erg = await saveAnimation(editor, blob, '.gif');
     if (!erg?.ok) return false;
-    status('✅ GIF gespeichert!', 'green');
+    status('✅ GIF saved!', 'green');
     return true;
   } catch (e) {
     console.error('GIF-Export:', e);
@@ -438,6 +438,6 @@ export async function downloadGif(editor) {
     a.download = (document.getElementById('title-input')?.value.trim() || 'studio') + '.gif';
     a.click();
     setTimeout(() => URL.revokeObjectURL(a.href), 5000);
-    toast('GIF heruntergeladen', 'ok');
+    toast('GIF downloaded', 'ok');
   });
 }

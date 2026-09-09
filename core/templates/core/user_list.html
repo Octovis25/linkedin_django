@@ -1,14 +1,14 @@
 {% extends "core/base.html" %}
-{% block title %}User-Verwaltung{% endblock %}
+{% block title %}User management{% endblock %}
 {% block content %}
 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem;">
-  <h1>User-Verwaltung</h1>
-  <a href="/users/new/" class="btn btn-primary">+ Neuen User einladen</a>
+  <h1>User management</h1>
+  <a href="/users/new/" class="btn btn-primary">+ Invite new user</a>
 </div>
 <table>
   <thead>
     <tr>
-      <th>Name</th><th>Username</th><th>E-Mail</th><th>Rolle</th><th>Aktiv</th><th>Aktionen</th>
+      <th>Name</th><th>Username</th><th>Email</th><th>Role</th><th>Active</th><th>Actions</th>
     </tr>
   </thead>
   <tbody>
@@ -20,9 +20,9 @@
       <td>{% if u.is_superuser %}Superuser{% elif u.is_staff %}Staff{% else %}User{% endif %}</td>
       <td>
         {% if u.is_active %}
-          <span style="color:var(--octo-petrol);font-weight:500">✓ Aktiv</span>
+          <span style="color:var(--octo-petrol);font-weight:500">✓ Active</span>
         {% else %}
-          <span style="color:#aaa">✗ Inaktiv</span>
+          <span style="color:#aaa">✗ Inactive</span>
         {% endif %}
       </td>
       <td>
@@ -34,30 +34,30 @@
             {% if u.is_active %}
               <button type="submit" class="btn btn-sm"
                       style="background:#f0f0f0;color:#555;border:1px solid #ccc"
-                      onclick="return confirm('{{ u.username }} deaktivieren? Der Account bleibt erhalten.')">
-                Deaktivieren
+                      onclick="return confirm('Deactivate {{ u.username }}? The account is kept.')">
+                Deactivate
               </button>
             {% else %}
               <button type="submit" class="btn btn-sm"
                       style="background:var(--octo-petrol);color:#fff;border:none">
-                Aktivieren
+                Activate
               </button>
             {% endif %}
           </form>
           <!-- Löschen -->
           <form method="post" action="/users/{{ u.id }}/delete/" style="display:inline"
-                onsubmit="return confirm('User {{ u.username }} wirklich endgültig löschen?')">
+                onsubmit="return confirm('Permanently delete user {{ u.username }}?')">
             {% csrf_token %}
-            <button type="submit" class="btn btn-danger btn-sm">Löschen</button>
+            <button type="submit" class="btn btn-danger btn-sm">Delete</button>
           </form>
         </div>
         {% else %}
-        <span style="color:#aaa; font-size:0.85rem;">Du selbst</span>
+        <span style="color:#aaa; font-size:0.85rem;">You</span>
         {% endif %}
       </td>
     </tr>
     {% empty %}
-    <tr><td colspan="6" style="text-align:center; color:#aaa;">Keine User gefunden.</td></tr>
+    <tr><td colspan="6" style="text-align:center; color:#aaa;">No users found.</td></tr>
     {% endfor %}
   </tbody>
 </table>

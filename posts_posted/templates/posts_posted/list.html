@@ -52,13 +52,13 @@
 
 <div class="card">
 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;gap:1rem;flex-wrap:wrap">
-<h2 style="margin:0">Alle Posts ({{ posts|length }})</h2>
+<h2 style="margin:0">All posts ({{ posts|length }})</h2>
 <div style="display:flex;gap:.5rem;align-items:center">
 <button type="button" id="fill-img-btn" class="btn btn-sm" style="background:var(--octo-petrol,#008591);color:#fff;border:none"
-        onclick="fillImagesFromBuffer(this)">🖼️ Bilder automatisch befüllen</button>
+        onclick="fillImagesFromBuffer(this)">🖼️ Auto-fill images</button>
 <form style="display:flex;gap:.5rem;width:300px">
 <input type="text" name="q" value="{{ query }}" class="form-input" placeholder="Suche...">
-<button type="submit" class="btn btn-secondary btn-sm">Suchen</button>
+<button type="submit" class="btn btn-secondary btn-sm">Search</button>
 </form>
 </div>
 </div>
@@ -67,11 +67,11 @@
 <table>
 <thead><tr>
     <th>Post-ID</th>
-    <th>Post-Titel</th>
+    <th>Post title</th>
     <th>Post-Link</th>
     <th>Gepostet am</th>
-    <th>Bild</th>
-    <th>Aktionen</th>
+    <th>Image</th>
+    <th>Actions</th>
 </tr></thead>
 <tbody>
 {% for p in posts %}
@@ -103,14 +103,14 @@
     </td>
     <td class="actions-cell">
         {% if p.pp_id %}
-            <a href="{% url 'posts_posted:edit' p.pp_id %}" class="btn btn-secondary btn-sm">Bearbeiten</a>
+            <a href="{% url 'posts_posted:edit' p.pp_id %}" class="btn btn-secondary btn-sm">Edit</a>
         {% else %}
             <span style="color:#aaa;font-size:0.8rem">&mdash;</span>
         {% endif %}
     </td>
 </tr>
 {% empty %}
-<tr><td colspan="6" style="text-align:center;color:#aaa;padding:2rem">Noch keine Eintraege.</td></tr>
+<tr><td colspan="6" style="text-align:center;color:#aaa;padding:2rem">No entries yet.</td></tr>
 {% endfor %}
 </tbody></table>
 </div>

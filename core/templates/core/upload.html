@@ -21,7 +21,7 @@
     ">
         <div style="font-size: 2.5rem;">📂</div>
         <p style="margin: 0.5rem 0; font-size: 1rem; color: #555;">
-            Datei hier hinziehen oder klicken zum Auswählen
+            Drag a file here or click to select
         </p>
         <p style="font-size: 0.8rem; color: #999;">.xls, .xlsx oder .csv</p>
         <div id="drop-filename" style="margin-top:0.5rem; font-weight:600; color: var(--octo-teal, #00796b);"></div>
@@ -33,7 +33,7 @@
         <input type="file" id="file-input" name="file" accept=".xls,.xlsx,.csv"
                style="display:none;">
         <button type="submit" class="btn btn-primary" id="upload-btn" style="display:none;">
-            ⬆️ Jetzt hochladen
+            ⬆️ Upload now
         </button>
     </form>
 
@@ -70,7 +70,7 @@
                 <td>
                     <a href="{% url 'delete_file' file.name %}"
                        class="btn btn-danger btn-sm"
-                       onclick="return confirm('Datei {{ file.name }} löschen?')">
+                       onclick="return confirm('Delete file {{ file.name }}?')">
                         🗑️ Delete
                     </a>
                 </td>
@@ -79,13 +79,13 @@
         </tbody>
     </table>
     {% else %}
-    <p style="color: #666;">Keine Dateien hochgeladen.</p>
+    <p style="color: #666;">No files uploaded.</p>
     {% endif %}
 </div>
 
 <div class="card" style="background-color: var(--octo-light-gray);">
     <h2>🔍 Analyze & Import Files</h2>
-    <p style="margin-bottom: 1rem;">Analysiert alle Dateien im Upload-Ordner und importiert sie in die Datenbank.</p>
+    <p style="margin-bottom: 1rem;">Analyses all files in the upload folder and imports them into the database.</p>
     <form method="post" action="{% url 'analyze' %}">
         {% csrf_token %}
         <button type="submit" class="btn btn-secondary">🔍 Analyze & Import Files</button>

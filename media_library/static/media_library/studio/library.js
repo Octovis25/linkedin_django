@@ -25,7 +25,7 @@ async function einfuegen(item, opts) {
       if (!res.ok) throw new Error('HTTP ' + res.status);
       const text = await res.text();
       const n = await _svgHandler(text, false, opts);
-      toast(n ? `SVG eingefügt: ${n} Ebene(n)` : 'SVG enthielt keine Formen', n ? 'ok' : 'err');
+      toast(n ? `SVG inserted: ${n} layer(s)` : 'SVG contained no shapes', n ? 'ok' : 'err');
     } catch (e) {
       console.error(e);
       toast('SVG-Fehler: ' + e.message, 'err');
@@ -33,7 +33,7 @@ async function einfuegen(item, opts) {
     return;
   }
   try { await _editor.addImageUrl(url, opts); }
-  catch { toast('Bild-Fehler', 'err'); }
+  catch { toast('Image error', 'err'); }
 }
 
 // Angehakte Ordner-Pfade (relativ zu Octotrial_Assets) + aufgeklappte Ordner.
@@ -94,7 +94,7 @@ function initUpload() {
           body: fd,
         });
         const d = await r.json();
-        if (d.ok) statusEl.textContent = `✓ ${file.name} hochgeladen`;
+        if (d.ok) statusEl.textContent = `✓ ${file.name} uploaded`;
         else { statusEl.textContent = `✗ ${d.error || 'Fehler'}`; toast('Upload fehlgeschlagen', 'err'); }
       } catch (e) {
         statusEl.textContent = '✗ Fehler';
@@ -109,13 +109,13 @@ function initUpload() {
 async function loadUploads() {
   const grid = document.getElementById('upload-grid');
   if (!grid) return;
-  grid.innerHTML = '<span class="no-templates">Lädt…</span>';
+  grid.innerHTML = '<span class="no-templates">Loading…</span>';
   try {
     const r = await fetch(URLS.ncBrowse + '?folder=' + encodeURIComponent('Studio_Work/Upload'));
     const d = await r.json();
     grid.innerHTML = '';
     const items = d.items || [];
-    if (!items.length) { grid.innerHTML = '<span class="no-templates">Noch nichts hochgeladen.</span>'; return; }
+    if (!items.length) { grid.innerHTML = '<span class="no-templates">Nothing uploaded yet.</span>'; return; }
     items.forEach(item => {
       const wrap = document.createElement('div');
       wrap.className = 'lib-tile';
@@ -130,10 +130,10 @@ async function loadUploads() {
       const del = document.createElement('button');
       del.className = 'tile-del';
       del.textContent = '✕';
-      del.title = 'Upload löschen';
+      del.title = 'Delete upload';
       del.onclick = async (e) => {
         e.stopPropagation();
-        if (!confirm('Dieses hochgeladene Bild wirklich löschen?')) return;
+        if (!confirm('Really delete this uploaded image?')) return;
         del.disabled = true;
         try {
           const fd = new FormData();
@@ -142,9 +142,9 @@ async function loadUploads() {
             method: 'POST', headers: { 'X-CSRFToken': getCookie('csrftoken') }, body: fd,
           });
           const dd = await r.json();
-          if (dd.ok) { wrap.remove(); if (!grid.querySelector('.lib-tile')) grid.innerHTML = '<span class="no-templates">Noch nichts hochgeladen.</span>'; }
-          else { toast('Löschen fehlgeschlagen', 'err'); del.disabled = false; }
-        } catch (err) { toast('Fehler beim Löschen', 'err'); del.disabled = false; }
+          if (dd.ok) { wrap.remove(); if (!grid.querySelector('.lib-tile')) grid.innerHTML = '<span class="no-templates">Nothing uploaded yet.</span>'; }
+          else { toast('Delete failed', 'err'); del.disabled = false; }
+        } catch (err) { toast('Error while deleting', 'err'); del.disabled = false; }
       };
       wrap.appendChild(img);
       wrap.appendChild(del);
@@ -178,10 +178,10 @@ async function fetchFolder(path) {
 async function loadTree() {
   const tree = document.getElementById('lib-tree');
   if (!tree) return;
-  tree.innerHTML = '<span class="no-templates">Lädt…</span>';
+  tree.innerHTML = '<span class="no-templates">Loading…</span>';
   const root = await fetchFolder('');
   tree.innerHTML = '';
-  if (!root.subfolders.length) { tree.innerHTML = '<span class="no-templates">Keine Ordner.</span>'; return; }
+  if (!root.subfolders.length) { tree.innerHTML = '<span class="no-templates">No folders.</span>'; return; }
   for (const name of root.subfolders) tree.appendChild(await makeRow(name, name, 0));
 }
 
@@ -259,14 +259,14 @@ async function gatherImages(path, acc, seen, depth = 0) {
 async function refreshImages() {
   const grid = document.getElementById('lib-grid');
   if (!grid) return;
-  if (!_checked.size) { grid.innerHTML = '<span class="no-templates">Ordner anhaken zum Anzeigen.</span>'; return; }
-  grid.innerHTML = '<span class="no-templates">Lädt…</span>';
+  if (!_checked.size) { grid.innerHTML = '<span class="no-templates">Tick folders to display.</span>'; return; }
+  grid.innerHTML = '<span class="no-templates">Loading…</span>';
   const acc = [], seen = new Set();
   for (const p of _checked) await gatherImages(p, acc, seen);
   const q = (document.getElementById('lib-search')?.value || '').toLowerCase();
   const items = q ? acc.filter(it => (it.title || it.name || '').toLowerCase().includes(q)) : acc;
   grid.innerHTML = '';
-  if (!items.length) { grid.innerHTML = '<span class="no-templates">Keine Bilder gefunden.</span>'; return; }
+  if (!items.length) { grid.innerHTML = '<span class="no-templates">No images found.</span>'; return; }
   renderImages(grid, items);
 }
 
@@ -302,7 +302,7 @@ const OUTPUT_FOLDERS = {
 async function loadOutput() {
   const grid = document.getElementById('output-grid');
   if (!grid) return;
-  grid.innerHTML = '<span class="no-templates">Lädt…</span>';
+  grid.innerHTML = '<span class="no-templates">Loading…</span>';
   const folder = OUTPUT_FOLDERS[_outputTab] || OUTPUT_FOLDERS.Images;
   try {
     // NC-Ordner (zeigt alles). Fehlschlag hier = echter Fehler.
@@ -327,7 +327,7 @@ async function loadOutput() {
     // Hilfsdateien (Vorschau/Snapshot/ausgelagerte Objektbilder) nicht anzeigen.
     const items = (d.items || []).filter(it => !/_preview\.|_snap\.|_obj\d+\./i.test(it.name || ''));
     grid.innerHTML = '';
-    if (!items.length) { grid.innerHTML = '<span class="no-templates">Nichts gespeichert.</span>'; return; }
+    if (!items.length) { grid.innerHTML = '<span class="no-templates">Nothing saved.</span>'; return; }
     const isVideo = _outputTab === 'Videos';
     items.forEach(item => {
       const el = isVideo ? document.createElement('video') : document.createElement('img');
@@ -366,10 +366,10 @@ async function loadOutput() {
       }
       tile.appendChild(el);
       const del = document.createElement('button');
-      del.className = 'tile-del'; del.textContent = '✕'; del.title = 'Ausgabe löschen';
+      del.className = 'tile-del'; del.textContent = '✕'; del.title = 'Delete output';
       del.onclick = async (e) => {
         e.stopPropagation();
-        if (!confirm('Diese Ausgabe wirklich löschen? Das entfernt die Datei auch aus Nextcloud.')) return;
+        if (!confirm('Really delete this output? This also removes the file from Nextcloud.')) return;
         del.disabled = true;
         try {
           const fd = new FormData(); fd.append('nc_path', item.nc_path);
@@ -377,9 +377,9 @@ async function loadOutput() {
           const dd = await r.json();
           if (dd.ok) {
             tile.remove();
-            if (!grid.querySelector('.lib-tile')) grid.innerHTML = '<span class="no-templates">Nichts gespeichert.</span>';
-          } else { toast(dd.error || 'Löschen fehlgeschlagen', 'err'); del.disabled = false; }
-        } catch (err) { toast('Fehler beim Löschen', 'err'); del.disabled = false; }
+            if (!grid.querySelector('.lib-tile')) grid.innerHTML = '<span class="no-templates">Nothing saved.</span>';
+          } else { toast(dd.error || 'Delete failed', 'err'); del.disabled = false; }
+        } catch (err) { toast('Error while deleting', 'err'); del.disabled = false; }
       };
       tile.appendChild(del);
       grid.appendChild(tile);

@@ -35,21 +35,21 @@
     <textarea id="aufgabe-text" placeholder="What should Claude do? e.g. 'Write a LinkedIn post about clinical trials' or 'Cut out the image background'"></textarea>
     <div style="display:flex;flex-direction:column;gap:4px">
       <select id="aufgabe-typ">
-        <option value="text">✍️ Text schreiben</option>
-        <option value="bild">🖼 Bild bearbeiten</option>
-        <option value="freistellen">✂️ Freistellen</option>
-        <option value="post">📝 Post erstellen</option>
-        <option value="sonstiges">📋 Sonstiges</option>
+        <option value="text">✍️ Write text</option>
+        <option value="bild">🖼 Edit image</option>
+        <option value="freistellen">✂️ Cut out</option>
+        <option value="post">📝 Create post</option>
+        <option value="sonstiges">📋 Other</option>
       </select>
-      <button class="btn btn-primary btn-sm" onclick="createAufgabe()" style="white-space:nowrap">+ Aufgabe</button>
+      <button class="btn btn-primary btn-sm" onclick="createAufgabe()" style="white-space:nowrap">+ Task</button>
     </div>
   </div>
 
   <div class="filter-tabs">
-    <button class="active" onclick="filterAufgaben('', this)">Alle</button>
-    <button onclick="filterAufgaben('offen', this)">🔶 Offen</button>
-    <button onclick="filterAufgaben('in_arbeit', this)">🔷 In Arbeit</button>
-    <button onclick="filterAufgaben('erledigt', this)">✅ Erledigt</button>
+    <button class="active" onclick="filterAufgaben('', this)">All</button>
+    <button onclick="filterAufgaben('offen', this)">🔶 Open</button>
+    <button onclick="filterAufgaben('in_arbeit', this)">🔷 In progress</button>
+    <button onclick="filterAufgaben('erledigt', this)">✅ Done</button>
   </div>
 
   <div id="aufgaben-list"></div>
@@ -65,7 +65,7 @@ async function loadAufgaben() {
   const list = document.getElementById('aufgaben-list');
 
   if (!data.aufgaben.length) {
-    list.innerHTML = '<p style="color:#bbb;text-align:center;padding:2rem">Keine Aufgaben vorhanden.</p>';
+    list.innerHTML = '<p style="color:#bbb;text-align:center;padding:2rem">No tasks yet.</p>';
     return;
   }
 

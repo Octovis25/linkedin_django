@@ -22,7 +22,7 @@
 
   {% if posts %}
   <div class="bt-card">
-    <h3 style="font-size:15px;margin:0 0 1rem">Impressionen-Verlauf (alle 10 Posts)</h3>
+    <h3 style="font-size:15px;margin:0 0 1rem">Impressions history (all 10 posts)</h3>
     <canvas id="btAllChart" height="100"></canvas>
   </div>
 
@@ -30,7 +30,7 @@
     <table class="bt-table">
       <thead><tr>
         <th>Post</th><th>Gesendet</th>
-        <th class="bt-num">Impressionen</th>
+        <th class="bt-num">Impressions</th>
         <th class="bt-num">Reaktionen</th>
         <th class="bt-num">Kommentare</th>
         <th class="bt-num">Eng.-Rate</th>
@@ -51,8 +51,8 @@
   </div>
   {% else %}
   <div class="bt-card bt-empty">
-    Noch keine Buffer-Statistik vorhanden.<br>
-    Die Daten werden täglich nachts automatisch abgeholt (oder manuell mit
+    No Buffer statistics yet.<br>
+    The data is fetched automatically every night (or manually with
     <code>python manage.py fetch_buffer_stats</code>).
   </div>
   {% endif %}

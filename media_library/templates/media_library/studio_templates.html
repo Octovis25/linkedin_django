@@ -39,16 +39,16 @@
 <div class="card" style="margin-bottom:1.5rem;padding:1.25rem">
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.25rem">
     <h2 style="margin:0">🎨 Brand-Farbpalette</h2>
-    <span style="font-size:.8rem;color:#888">Änderungen wirken sofort auf Navigation, Buttons und das gesamte Portal</span>
+    <span style="font-size:.8rem;color:#888">Changes take effect immediately on navigation, buttons and the whole portal</span>
   </div>
-  <p style="font-size:.8rem;color:#aaa;margin-bottom:1rem">Klick auf eine Farbe zum Ändern → Speichern</p>
+  <p style="font-size:.8rem;color:#aaa;margin-bottom:1rem">Click a colour to change it → Save</p>
   <form method="post" action="/library/studio/brand-colors/save/">
     {% csrf_token %}
     <div style="display:flex;gap:1.25rem;align-items:flex-end;flex-wrap:wrap;margin-bottom:1rem">
       <div class="color-swatch-wrap">
         <div class="color-swatch-input"><input type="color" name="c1" value="{{ brand.c1 }}"></div>
         <span style="font-size:.8rem;font-weight:700;color:var(--octo-dark-petrol)">1</span>
-        <span style="font-size:.7rem;color:#888">Weiß/Hell</span>
+        <span style="font-size:.7rem;color:#888">White/Light</span>
       </div>
       <div class="color-swatch-wrap">
         <div class="color-swatch-input"><input type="color" name="c2" value="{{ brand.c2 }}"></div>
@@ -58,12 +58,12 @@
       <div class="color-swatch-wrap">
         <div class="color-swatch-input"><input type="color" name="c3" value="{{ brand.c3 }}"></div>
         <span style="font-size:.8rem;font-weight:700;color:var(--octo-dark-petrol)">3</span>
-        <span style="font-size:.7rem;color:#888">Primär</span>
+        <span style="font-size:.7rem;color:#888">Primary</span>
       </div>
       <div class="color-swatch-wrap">
         <div class="color-swatch-input"><input type="color" name="c4" value="{{ brand.c4 }}"></div>
         <span style="font-size:.8rem;font-weight:700;color:var(--octo-dark-petrol)">4</span>
-        <span style="font-size:.7rem;color:#888">Sekundär</span>
+        <span style="font-size:.7rem;color:#888">Secondary</span>
       </div>
       <div class="color-swatch-wrap">
         <div class="color-swatch-input"><input type="color" name="c5" value="{{ brand.c5 }}"></div>
@@ -77,7 +77,7 @@
       </div>
     </div>
     <!-- Extra-Farben -->
-    <p style="font-size:.8rem;color:#aaa;margin-bottom:.5rem">Zusätzliche Farben (optional)</p>
+    <p style="font-size:.8rem;color:#aaa;margin-bottom:.5rem">Additional colours (optional)</p>
     <div id="extra-colors-row" style="display:flex;gap:.75rem;align-items:flex-end;flex-wrap:wrap;margin-bottom:1rem">
       {% for ec in brand.extra_colors %}
       <div class="color-swatch-wrap" data-extra>
@@ -86,7 +86,7 @@
         <button type="button" onclick="this.closest('[data-extra]').remove()" style="background:none;border:none;color:#c00;cursor:pointer;font-size:.7rem">✕</button>
       </div>
       {% endfor %}
-      <button type="button" onclick="addExtraColor()" style="width:52px;height:52px;border-radius:8px;border:2px dashed #ccc;background:#f9f9f9;font-size:1.5rem;cursor:pointer;color:#888" title="Neue Farbe hinzufügen">+</button>
+      <button type="button" onclick="addExtraColor()" style="width:52px;height:52px;border-radius:8px;border:2px dashed #ccc;background:#f9f9f9;font-size:1.5rem;cursor:pointer;color:#888" title="Add new colour">+</button>
     </div>
     <button type="submit" class="btn btn-secondary">💾 Farben speichern</button>
   </form>
@@ -107,11 +107,11 @@
 </div>
 
 <div class="upload-box">
-  <h2>Neues Template hochladen</h2>
+  <h2>Upload new template</h2>
   <form method="post" action="/library/studio/template/upload/" enctype="multipart/form-data">
     {% csrf_token %}
     <div class="form-group">
-      <label>Bild (PNG/JPG aus Canva)</label>
+      <label>Image (PNG/JPG from Canva)</label>
       <input type="file" name="template" accept="image/*" required>
     </div>
     <div class="form-group">
@@ -124,12 +124,12 @@
         <input type="number" name="width" value="1200">
       </div>
       <div class="form-group">
-        <label>Höhe (px)</label>
+        <label>Height (px)</label>
         <input type="number" name="height" value="628">
       </div>
     </div>
-    <p style="font-size:.75rem;color:#888;margin-top:.5rem">💡 Farben werden automatisch aus dem Template-Bild erkannt wenn es im Studio geöffnet wird.</p>
-    <button type="submit" class="btn btn-secondary" style="margin-top:.5rem">Hochladen</button>
+    <p style="font-size:.75rem;color:#888;margin-top:.5rem">💡 Colours are detected automatically from the template image when it's opened in the Studio.</p>
+    <button type="submit" class="btn btn-secondary" style="margin-top:.5rem">Upload</button>
   </form>
 </div>
 
@@ -171,14 +171,14 @@
       </form>
       {% endif %}
       <div class="tpl-card-actions" style="margin-top:8px">
-        <a href="/library/studio/?template={{ t.id }}" class="btn btn-primary btn-sm">Im Editor öffnen</a>
+        <a href="/library/studio/?template={{ t.id }}" class="btn btn-primary btn-sm">Open in editor</a>
         <form method="post" action="/library/studio/template/toggle-active/{{ t.id }}/" style="display:inline">
           {% csrf_token %}
           <button class="btn btn-sm" title="{% if t.active %}Auf passiv setzen – erscheint dann nicht mehr in der Studio-Auswahl{% else %}Auf aktiv setzen – erscheint wieder in der Studio-Auswahl{% endif %}">{% if t.active %}⏸ Passiv{% else %}▶ Aktiv{% endif %}</button>
         </form>
         <form method="post" action="/library/studio/template/delete/{{ t.id }}/" style="display:inline">
           {% csrf_token %}
-          <button class="btn btn-danger btn-sm" onclick="return confirm('Template löschen?')">🗑</button>
+          <button class="btn btn-danger btn-sm" onclick="return confirm('Delete template?')">🗑</button>
         </form>
       </div>
     </div>
@@ -186,7 +186,7 @@
   {% endfor %}
 </div>
 {% else %}
-  <p style="color:#888">Noch keine Templates. Lade ein Canva-Export (PNG) hoch.</p>
+  <p style="color:#888">No templates yet. Upload a Canva export (PNG).</p>
 {% endif %}
 
 {% endblock %}

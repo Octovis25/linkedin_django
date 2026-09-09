@@ -4,7 +4,7 @@ import { loadImage, toast } from './util.js';
 import { proxyUrl } from './config.js';
 
 export const fabric = window.fabric;
-if (!fabric) console.error('Fabric.js nicht geladen!');
+if (!fabric) console.error('Fabric.js not loaded!');
 
 // Objekt-Caching global aus: verhindert grundsätzlich jedes "Verschmelzen"
 // von altem und neuem Bild beim Bearbeiten (immer direkt gerendert).
@@ -29,7 +29,7 @@ export class Editor {
   constructor(canvasEl) {
     // Klare Ursache statt „Cannot read properties of undefined (reading 'Canvas')".
     if (!fabric) {
-      throw new Error('Editor-Engine fehlt: vendor/fabric.min.js wurde nicht geladen. '
+      throw new Error('Editor engine missing: vendor/fabric.min.js was not loaded. '
                     + 'Auf dem Server prüfen (ggf. collectstatic ausführen).');
     }
     this.canvas = new fabric.Canvas(canvasEl, {

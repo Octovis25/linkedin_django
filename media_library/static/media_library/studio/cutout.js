@@ -41,7 +41,7 @@ export function removeBackground(imgEl, { tol = 50, islandMaxPct = 0.6 } = {}) {
   let imgData;
   try { imgData = ctx.getImageData(0, 0, W, H); }
   catch (e) {
-    return Promise.reject(new Error('Bild ist cross-origin getaintet – über den Proxy laden.'));
+    return Promise.reject(new Error('Image is cross-origin tainted – load via the proxy.'));
   }
   const d = imgData.data;
 
@@ -58,7 +58,7 @@ export function removeBackground(imgEl, { tol = 50, islandMaxPct = 0.6 } = {}) {
   // gemeldet, entfernt wurde nichts.
   sample(0, 0); sample(Math.max(0, W - 8), 0);
   sample(0, Math.max(0, H - 8)); sample(Math.max(0, W - 8), Math.max(0, H - 8));
-  if (!n) return Promise.reject(new Error('Bild zu klein zum Freistellen'));
+  if (!n) return Promise.reject(new Error('Image too small to cut out'));
   r = Math.round(r / n); g = Math.round(g / n); b = Math.round(b / n);
   const tol2 = tol * tol;
   // Weißschutz: helle, farbneutrale Pixel (Weiß/hellgrau) gelten NIE als
@@ -144,7 +144,7 @@ export function removeGrayBackground(imgEl, { minBright = 175, maxSat = 32 } = {
   ctx.drawImage(imgEl, 0, 0, W, H);
   let imgData;
   try { imgData = ctx.getImageData(0, 0, W, H); }
-  catch (e) { return Promise.reject(new Error('Bild getaintet – über den Proxy laden.')); }
+  catch (e) { return Promise.reject(new Error('Image tainted – load via the proxy.')); }
   const d = imgData.data;
   for (let i = 0; i < d.length; i += 4) {
     if (d[i + 3] === 0) continue;
@@ -172,7 +172,7 @@ export function removeCheckerboard(imgEl) {
   ctx.drawImage(imgEl, 0, 0, W, H);
   let imgData;
   try { imgData = ctx.getImageData(0, 0, W, H); }
-  catch (e) { return Promise.reject(new Error('Bild getaintet – über den Proxy laden.')); }
+  catch (e) { return Promise.reject(new Error('Image tainted – load via the proxy.')); }
   const d = imgData.data;
   const N = W * H;
   const neutral = (i) => (Math.max(d[i], d[i + 1], d[i + 2]) - Math.min(d[i], d[i + 1], d[i + 2])) <= 22;
@@ -286,7 +286,7 @@ export function recolorRegion(imgEl, px, py, hex, tol = 40) {
   ctx.drawImage(imgEl, 0, 0, W, H);
   let imgData;
   try { imgData = ctx.getImageData(0, 0, W, H); }
-  catch (e) { return Promise.reject(new Error('Bild getaintet – über den Proxy laden.')); }
+  catch (e) { return Promise.reject(new Error('Image tainted – load via the proxy.')); }
   const d = imgData.data;
   px = Math.round(px); py = Math.round(py);
   if (px < 0 || py < 0 || px >= W || py >= H) return loadImage(c.toDataURL('image/png'));
@@ -345,7 +345,7 @@ export function removeColorGlobal(imgEl, px, py, tol = 40) {
   ctx.drawImage(imgEl, 0, 0, W, H);
   let imgData;
   try { imgData = ctx.getImageData(0, 0, W, H); }
-  catch (e) { return Promise.reject(new Error('Bild getaintet – über den Proxy laden.')); }
+  catch (e) { return Promise.reject(new Error('Image tainted – load via the proxy.')); }
   const d = imgData.data;
   px = Math.round(px); py = Math.round(py);
   if (px < 0 || py < 0 || px >= W || py >= H) return loadImage(c.toDataURL('image/png'));
@@ -420,7 +420,7 @@ export function recolorSimilarAll(imgEl, px, py, hex, tol = 45) {
   ctx.drawImage(imgEl, 0, 0, W, H);
   let imgData;
   try { imgData = ctx.getImageData(0, 0, W, H); }
-  catch (e) { return Promise.reject(new Error('Bild getaintet – über den Proxy laden.')); }
+  catch (e) { return Promise.reject(new Error('Image tainted – load via the proxy.')); }
   const d = imgData.data;
   px = Math.round(px); py = Math.round(py);
   if (px < 0 || py < 0 || px >= W || py >= H) return loadImage(c.toDataURL('image/png'));
@@ -450,7 +450,7 @@ export function floodFillTransparent(imgEl, px, py, tol = 40) {
 
   let imgData;
   try { imgData = ctx.getImageData(0, 0, W, H); }
-  catch (e) { return Promise.reject(new Error('Bild getaintet – über den Proxy laden.')); }
+  catch (e) { return Promise.reject(new Error('Image tainted – load via the proxy.')); }
   const d = imgData.data;
 
   px = Math.round(px); py = Math.round(py);

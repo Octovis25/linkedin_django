@@ -139,7 +139,7 @@ def library_upload(request):
         return redirect('media_library:library')
     image = request.FILES.get('image')
     if not image:
-        messages.error(request, 'Kein Bild ausgewählt.')
+        messages.error(request, 'No image selected.')
         return redirect('media_library:library')
     title  = request.POST.get('title', '').strip()
     person = request.POST.get('person', '').strip()
@@ -193,7 +193,7 @@ def library_upload(request):
     # AJAX: return JSON instead of redirect
     if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
         return JsonResponse({'ok': True, 'title': title})
-    messages.success(request, 'Bild gespeichert!')
+    messages.success(request, 'Image saved!')
     return redirect('media_library:library')
 
 
@@ -246,7 +246,7 @@ def library_edit(request, item_id):
                    request.POST.get('tags','').strip(),
                    request.POST.get('note','').strip() or None,
                    item_id])
-    messages.success(request, 'Gespeichert!')
+    messages.success(request, 'Saved!')
     return redirect('media_library:library')
 
 
@@ -270,7 +270,7 @@ def library_delete(request, item_id):
     # AJAX request → JSON response
     if request.headers.get('X-Requested-With') == 'XMLHttpRequest' or 'fetch' in request.headers.get('Sec-Fetch-Mode', ''):
         return JsonResponse({'ok': True})
-    messages.success(request, 'Bild gelöscht.')
+    messages.success(request, 'Image deleted.')
     return redirect('media_library:library')
 
 
@@ -1075,7 +1075,7 @@ def studio_link_video(request):
         data = {}
     nc_path = (data.get('video_nc_path') or '').strip()
     if not nc_path:
-        return JsonResponse({'ok': False, 'error': 'video_nc_path fehlt'}, status=400)
+        return JsonResponse({'ok': False, 'error': 'video_nc_path missing'}, status=400)
 
     # Normalize bare filenames to the Planner/Videos folder.
     if not nc_path.startswith("Marketing"):
@@ -1097,7 +1097,7 @@ def studio_link_video(request):
             item_id = rows2[0][0] if rows2 else None
 
     if not item_id:
-        return JsonResponse({'ok': False, 'error': 'Item konnte nicht angelegt werden'}, status=500)
+        return JsonResponse({'ok': False, 'error': 'Item could not be created'}, status=500)
 
     return JsonResponse({'ok': True, 'item_id': item_id,
                          'studio_url': f"/library/studio/?lib_item={item_id}"})
@@ -1158,9 +1158,9 @@ def studio_brand_colors_save(request):
                 cur.execute("UPDATE brand_colors SET c1=%s,c2=%s,c3=%s,c4=%s,c5=%s,c6=%s,extra_colors=%s", [c1,c2,c3,c4,c5,c6,extra_json])
             else:
                 cur.execute("INSERT INTO brand_colors (c1,c2,c3,c4,c5,c6,extra_colors) VALUES (%s,%s,%s,%s,%s,%s,%s)", [c1,c2,c3,c4,c5,c6,extra_json])
-        messages.success(request, 'Brand-Farben gespeichert.')
+        messages.success(request, 'Brand colours saved.')
     except Exception as e:
-        messages.error(request, f'Fehler: {e}')
+        messages.error(request, f'Error: {e}')
     return redirect('/library/studio/templates/')
 
 
@@ -1171,7 +1171,7 @@ def studio_template_upload(request):
         return redirect('media_library:studio_templates')
     f = request.FILES.get('template')
     if not f:
-        messages.error(request, 'Kein Template ausgewählt.')
+        messages.error(request, 'No template selected.')
         return redirect('media_library:studio_templates')
     title  = request.POST.get('title', '').strip() or f.name
     width  = int(request.POST.get('width', 1080) or 1080)
@@ -1196,7 +1196,7 @@ def studio_template_upload(request):
     with connection.cursor() as c:
         c.execute("INSERT INTO studio_templates (nc_path, title, width, height, colors) VALUES (%s,%s,%s,%s,%s)",
                   [nc_path, title, width, height, colors_json])
-    messages.success(request, 'Template gespeichert!')
+    messages.success(request, 'Template saved!')
     return redirect('media_library:studio_templates')
 
 
@@ -1220,11 +1220,11 @@ def studio_template_save_from_canvas(request):
     except Exception:
         width, height = 1080, 1080
     if ',' not in data_url:
-        return JsonResponse({'ok': False, 'error': 'Kein Bild übermittelt'}, status=400)
+        return JsonResponse({'ok': False, 'error': 'No image submitted'}, status=400)
     try:
         content = base64.b64decode(data_url.split(',', 1)[1])
     except Exception:
-        return JsonResponse({'ok': False, 'error': 'Bild konnte nicht gelesen werden'}, status=400)
+        return JsonResponse({'ok': False, 'error': 'Image could not be read'}, status=400)
     filename = f"tpl_{int(time.time())}.png"
     nc_path = _nc_upload(content, f"{NC_STUDIO_TEMPLATES_FOLDER}/{filename}", 'image/png')
     if not nc_path:
@@ -1269,7 +1269,7 @@ def studio_template_save_from_canvas(request):
                 # und niemand konnte den Fehler bemerken.
                 if not _fehlende_spalte(e):
                     return JsonResponse(
-                        {'ok': False, 'error': f'Vorlage konnte nicht gespeichert werden: {e}'},
+                        {'ok': False, 'error': f'Template could not be saved: {e}'},
                         status=500)
                 c.execute("UPDATE studio_templates SET nc_path=%s, title=%s, width=%s, height=%s WHERE id=%s",
                           [nc_path, title, width, height, tpl_id])
@@ -1283,7 +1283,7 @@ def studio_template_save_from_canvas(request):
             # alle Textfelder und Ebenen waeren verloren, trotz Erfolgsmeldung.
             if not _fehlende_spalte(e):
                 return JsonResponse(
-                    {'ok': False, 'error': f'Vorlage konnte nicht angelegt werden: {e}'},
+                    {'ok': False, 'error': f'Template could not be created: {e}'},
                     status=500)
             c.execute("INSERT INTO studio_templates (nc_path, title, width, height, colors) VALUES (%s,%s,%s,%s,%s)",
                       [nc_path, title, width, height, colors_json])
@@ -1311,7 +1311,7 @@ def studio_template_colors(request, tpl_id):
     colors = [c for c in colors if c]
     with connection.cursor() as c:
         c.execute("UPDATE studio_templates SET colors=%s WHERE id=%s", [_j.dumps(colors), tpl_id])
-    messages.success(request, 'Farben gespeichert!')
+    messages.success(request, 'Colours saved!')
     return redirect('media_library:studio_templates')
 
 
@@ -1325,7 +1325,7 @@ def studio_template_delete(request, tpl_id):
         _nc_delete(rows[0][0])
         with connection.cursor() as c:
             c.execute("DELETE FROM studio_templates WHERE id=%s", [tpl_id])
-    messages.success(request, 'Template gelöscht.')
+    messages.success(request, 'Template deleted.')
     return redirect('media_library:studio_templates')
 
 
@@ -1781,7 +1781,7 @@ def studio_video_template_save(request):
     title = request.POST.get('title', f'Video-Vorlage {int(time.time())}')
     canvas_json = request.POST.get('canvas_json', '')
     if not canvas_json:
-        return JsonResponse({'error': 'Kein canvas_json'}, status=400)
+        return JsonResponse({'error': 'No canvas_json'}, status=400)
 
     # Upload base64 images to NC, replace with nc:// references
     canvas_json = _optimize_canvas_json(canvas_json, NC_STUDIO_VIDEO_TEMPLATES_FOLDER, title)
@@ -2063,7 +2063,7 @@ def studio_drawio_save(request):
             img_bytes = _b64.b64decode(data_url.split('base64,', 1)[1])
 
     if not img_bytes:
-        return JsonResponse({'error': 'Kein Bild erhalten'}, status=400)
+        return JsonResponse({'error': 'No image received'}, status=400)
 
     safe_title = _re.sub(r'[^a-zA-Z0-9_-]', '_', title)
     filename = f"{safe_title}_{int(time.time())}.png"
@@ -2101,7 +2101,7 @@ def studio_nc_folders(request):
 
     nc_url, username, password = _get_nc_credentials()
     if not all([nc_url, username, password]):
-        return JsonResponse({'folders': [], 'error': 'NC nicht konfiguriert'})
+        return JsonResponse({'folders': [], 'error': 'NC not configured'})
 
     propfind_url = "{}/remote.php/dav/files/{}/{}".format(
         nc_url.rstrip('/'), username, quote(NC_ASSETS_ROOT, safe='/')
@@ -2166,11 +2166,11 @@ def studio_nc_browse(request):
     # Security: only allow browsing within Octotrial_Assets
     nc_folder = NC_ASSETS_ROOT if show_all else f"{NC_ASSETS_ROOT}/{folder}"
     if '..' in nc_folder:
-        return JsonResponse({'items': [], 'error': 'Ungültiger Pfad'})
+        return JsonResponse({'items': [], 'error': 'Invalid path'})
 
     nc_url, username, password = _get_nc_credentials()
     if not all([nc_url, username, password]):
-        return JsonResponse({'items': [], 'error': 'NC nicht konfiguriert'})
+        return JsonResponse({'items': [], 'error': 'NC not configured'})
 
     propfind_url = "{}/remote.php/dav/files/{}/{}".format(
         nc_url.rstrip('/'), username, quote(nc_folder, safe='/')
@@ -2252,7 +2252,7 @@ def studio_shared_assets_list(request):
 
     nc_url, username, password = _get_nc_credentials()
     if not all([nc_url, username, password]):
-        return JsonResponse({'error': 'Nextcloud nicht konfiguriert'}, status=500)
+        return JsonResponse({'error': 'Nextcloud not configured'}, status=500)
 
     # Ensure folder exists
     _nc_ensure_folder(nc_url, username, password, NC_SHARED_ASSETS_FOLDER)
@@ -2372,11 +2372,11 @@ def studio_shared_assets_upload(request):
 
     nc_url, username, password = _get_nc_credentials()
     if not all([nc_url, username, password]):
-        return JsonResponse({'error': 'Nextcloud nicht konfiguriert'}, status=500)
+        return JsonResponse({'error': 'Nextcloud not configured'}, status=500)
 
     f = request.FILES.get('file')
     if not f:
-        return JsonResponse({'error': 'Keine Datei'}, status=400)
+        return JsonResponse({'error': 'No file'}, status=400)
 
     filename = f.name.replace(' ', '_')
     _nc_ensure_folder(nc_url, username, password, NC_SHARED_ASSETS_FOLDER)
@@ -2427,11 +2427,11 @@ def studio_upload(request):
     from urllib.parse import quote
     nc_url, username, password = _get_nc_credentials()
     if not all([nc_url, username, password]):
-        return JsonResponse({'error': 'Nextcloud nicht konfiguriert'}, status=500)
+        return JsonResponse({'error': 'Nextcloud not configured'}, status=500)
 
     f = request.FILES.get('file')
     if not f:
-        return JsonResponse({'error': 'Keine Datei'}, status=400)
+        return JsonResponse({'error': 'No file'}, status=400)
 
     filename = f.name.replace(' ', '_')
     content = f.read()
@@ -2466,7 +2466,7 @@ def studio_upload_delete(request):
     # Dateinamen sind erlaubt. Zusaetzlich auf den Upload-Ordner beschraenken.
     if any(seg == '..' for seg in nc_path.split('/')) \
             or not nc_path.startswith(NC_STUDIO_UPLOAD_FOLDER + '/'):
-        return JsonResponse({'error': 'Ungueltiger Pfad'}, status=400)
+        return JsonResponse({'error': 'Invalid path'}, status=400)
     _nc_delete(nc_path)
     return JsonResponse({'ok': True})
 
@@ -2482,7 +2482,7 @@ def studio_output_delete(request):
     # Whitelist-Vergleich nicht an Formalitaeten scheitert.
     nc_path = unquote((request.POST.get('nc_path') or '').strip()).lstrip('/')
     if not _within_app_folders(nc_path):
-        return JsonResponse({'ok': False, 'error': f'Ungueltiger Pfad: {nc_path}'}, status=400)
+        return JsonResponse({'ok': False, 'error': f'Invalid path: {nc_path}'}, status=400)
     _nc_delete(nc_path)
     # zugehörige Vorschau-Datei ebenfalls entfernen (best effort)
     try:
@@ -2508,7 +2508,7 @@ def studio_shared_assets_delete(request):
         return JsonResponse({'error': 'POST required'}, status=405)
     nc_path = request.POST.get('nc_path', '')
     if not nc_path or not nc_path.startswith(NC_SHARED_ASSETS_FOLDER):
-        return JsonResponse({'error': 'Ungültiger Pfad'}, status=400)
+        return JsonResponse({'error': 'Invalid path'}, status=400)
     from posts_posted.nc_storage import delete_image_from_nextcloud
     ok = delete_image_from_nextcloud(nc_path)
     return JsonResponse({'ok': ok})
@@ -2532,7 +2532,7 @@ def studio_db_item_to_nc(request):
     with connection.cursor() as c:
         rows = _safe(c, "SELECT id, nc_path, title FROM media_library_items WHERE id=%s", [item_id])
     if not rows:
-        return JsonResponse({'error': 'Element nicht gefunden'}, status=404)
+        return JsonResponse({'error': 'Element not found'}, status=404)
 
     row = rows[0]
     existing_nc_path = row[1]
@@ -2547,11 +2547,11 @@ def studio_db_item_to_nc(request):
     content, ct = download_image_from_nextcloud(existing_nc_path)
     if not content:
         # Try via library image endpoint (local DB proxy)
-        return JsonResponse({'error': 'Bild nicht ladbar'}, status=500)
+        return JsonResponse({'error': 'Image not loadable'}, status=500)
 
     nc_url, username, password = _get_nc_credentials()
     if not all([nc_url, username, password]):
-        return JsonResponse({'error': 'Nextcloud nicht konfiguriert'}, status=500)
+        return JsonResponse({'error': 'Nextcloud not configured'}, status=500)
 
     _nc_ensure_folder(nc_url, username, password, nc_folder)
 

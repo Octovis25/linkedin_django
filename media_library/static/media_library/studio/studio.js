@@ -18,9 +18,9 @@ import * as retouch from './retouch.js';
 function boot(name, fn) {
   try { return fn(); }
   catch (e) {
-    console.error('[studio] Init-Schritt „' + name + '" fehlgeschlagen:', e);
+    console.error('[studio] Init step “' + name + '” failed:', e);
     if (window.studioZeigeFehler) {
-      window.studioZeigeFehler('Ein Teil des Studios konnte nicht starten: ' + name,
+      window.studioZeigeFehler('Part of the Studio could not start: ' + name,
                                e.message || String(e));
     }
     return null;
@@ -36,8 +36,8 @@ const ls = {
 };
 
 const canvasEl = document.getElementById('main-canvas');
-if (!canvasEl && window.studioZeigeFehler) {
-  window.studioZeigeFehler('Zeichenfläche fehlt.', 'Das Element #main-canvas ist nicht im Seiten-Gerüst.');
+if (!canvasEl && window.studioZeigeFehler) { /* canvas missing */
+  window.studioZeigeFehler('Canvas missing.', 'The element #main-canvas is not in the page layout.');
 }
 const editor = new Editor(canvasEl);
 window._studioEditor = editor;   // für Debugging in der Konsole
@@ -98,16 +98,19 @@ document.querySelectorAll('.sidebar-section h3').forEach(h => {
 // verschwand unerwartet. Jetzt bleibt das Bild liegen; wenn es die Farbe
 // verdeckt, weist das Studio darauf hin.
 function setCanvasFarbe(farbe) {
+  // Nur die Hintergrund*farbe* setzen – ein vorhandenes Hintergrund*bild*
+  // (z. B. dein Teal-Template) NICHT anfassen, sonst verschwindet es unerwartet.
+  // Verdeckt das Bild die Farbe, weist das Studio darauf hin; entfernen kann man
+  // es bewusst über „🚫 Remove background image".
   editor.canvas.backgroundColor = farbe || '';
   editor.canvas.requestRenderAll();
   editor.snapshot();
   const pick = document.getElementById('bg-color');
   if (pick && farbe) pick.value = farbe;
   if (farbe && editor.canvas.backgroundImage) {
-    status(`Hintergrund: ${farbe} – wird noch vom Hintergrundbild verdeckt ` +
-           '(„🚫 Hintergrundbild entfernen")', '#B26A00');
+    status(`Background: ${farbe} – still covered by the background image (use “🚫 Remove background image” to show it)`, '#B26A00');
   } else {
-    status(farbe ? `Hintergrund: ${farbe}` : 'Hintergrund transparent.', '#198754');
+    status(farbe ? `Background: ${farbe}` : 'Background transparent.', '#198754');
   }
 }
 {
@@ -170,7 +173,7 @@ function askSize(w0, h0) {
       const aus = wrap.classList.contains(hideCls);
       btn.textContent = aus ? pfeile[1] : pfeile[0];
       btn.classList.toggle('aus', aus);
-      btn.title = aus ? 'Leiste festpinnen (schwebt beim Überfahren)' : 'Leiste ausklappen – Canvas wird größer';
+      btn.title = aus ? 'Pin the bar (floats on hover)' : 'Expand the bar – canvas gets larger';
     };
     paint();
 
@@ -272,7 +275,7 @@ async function _speichereAls(kind) {
   if (btn) {
     const lbl = kind === 'gif' ? '💾 GIF speichern' : kind === 'video' ? '💾 Video speichern' : '💾 Speichern';
     btn.textContent = lbl;
-    btn.title = 'Speichert im gleichen Format. Für ein anderes Format Umschalt+Klick.';
+    btn.title = 'Saves in the same format. Shift+Click for a different format.';
   }
 }
 
@@ -287,15 +290,15 @@ const actions = {
     const titleEl = document.getElementById('title-input');
     if (!titleEl || !titleEl.value.trim()) {
       if (titleEl) { titleEl.style.border = '2px solid #dc3545'; titleEl.focus(); }
-      status('⚠️ Bitte zuerst einen Titel eingeben!', '#dc3545');
+      status('⚠️ Please enter a title first!', '#dc3545');
       setTimeout(() => { if (titleEl) titleEl.style.border = ''; }, 2500);
       return;
     }
     // Format nur beim ersten Mal (oder nach „als…") abfragen und merken.
     let kind = _saveKind;
     if (!kind) {
-      kind = await modal('Speichern als…', 'Was möchtest du speichern?', [
-        { label: '🖼 Bild (PNG)', value: 'image' },
+      kind = await modal('Save as…', 'What would you like to save?', [
+        { label: '🖼 Image (PNG)', value: 'image' },
         { label: '🎞 GIF (mit Animationen)', value: 'gif' },
         { label: '🎬 Video (mit Animationen)', value: 'video' },
       ]);
@@ -313,11 +316,11 @@ const actions = {
     // Standbild gespeichert und die Animationen waren im Ergebnis nicht drin.
     if (kind === 'image' && media.hasAnimations(editor)) {
       const wahl = await modal('Animationen erkannt',
-        'Dieses Element hat Animationen, die geöffnete Datei ist aber ein Bild. Wie speichern?',
-        [ { label: '🖼 Als Bild (ohne Animation)', value: 'image' },
+        'This element has animations, but the opened file is an image. How to save?',
+        [ { label: '🖼 As image (no animation)', value: 'image' },
           { label: '🎞 Als GIF',                   value: 'gif' },
           { label: '🎬 Als Video',                 value: 'video' },
-          { label: 'Abbrechen',                    value: null } ]);
+          { label: 'Cancel',                    value: null } ]);
       if (!wahl) return;
       kind = wahl;
       _saveKind = wahl;
@@ -342,7 +345,7 @@ const actions = {
   'new':       async () => {
     const ok = await modal('Neu anfangen?', 'Leert den Editor (alle Elemente + Hintergrund). Nicht Gespeichertes geht verloren.', [
       { label: '🆕 Ja, neuer Editor', value: true },
-      { label: 'Abbrechen', value: false },
+      { label: 'Cancel', value: false },
     ]);
     if (!ok) return;
     editor.clearAll();
@@ -357,19 +360,19 @@ const actions = {
     editor.resetHistory();
     {
       const b = document.querySelector('[data-act="save-existing"]');
-      if (b) { b.textContent = '💾 Speichern als…'; b.dataset.act = 'save-as'; b.title = 'Format wählen und speichern'; }
+      if (b) { b.textContent = '💾 Save as…'; b.dataset.act = 'save-as'; b.title = 'Choose format and save'; }
     }
     const t = document.getElementById('title-input'); if (t) t.value = '';
     if (location.search) history.replaceState(null, '', '/library/studio/');
     window.dispatchEvent(new CustomEvent('studio:geladen'));   // Stand gilt als sauber
-    status('Neuer, leerer Editor.', '#888');
+    status('New, empty editor.', '#888');
   },
   undo:        () => editor.undo(),
   redo:        () => editor.redo(),
   grid: () => {
     const an = editor.toggleGrid();
     renderSelBar();   // Knopf-Zustand oben aktualisieren
-    status(an ? 'Raster an – nur zum Ausrichten, wird nicht mitgespeichert.' : 'Raster aus.', '#888');
+    status(an ? 'Grid on – for alignment only, not saved.' : 'Grid off.', '#888');
   },
   maximize: () => {
     const wrap = document.querySelector('.studio-wrap');
@@ -384,18 +387,18 @@ const actions = {
     if (wrap.classList.contains('hide-right') !== gross) tr?.click();
     renderSelBar();
     setTimeout(() => window.dispatchEvent(new Event('resize')), 220);
-    status(gross ? 'Große Fläche – Werkzeuge über die Randgriffe (‹ ›).' : 'Normale Ansicht.', '#888');
+    status(gross ? 'Large canvas – tools via the edge handles (‹ ›).' : 'Normal view.', '#888');
   },
   'set-as-bg': () => {
     const o = editor.active();
-    if (!o || o.type !== 'image') { toast('Erst ein Bild wählen', 'err'); return; }
+    if (!o || o.type !== 'image') { toast('Select an image first', 'err'); return; }
     editor.canvas.remove(o);
     o.set({ left: 0, top: 0, originX: 'left', originY: 'top',
             scaleX: editor.width / o.width, scaleY: editor.height / o.height, selectable: false, evented: false });
     editor.canvas.setBackgroundImage(o, editor.canvas.renderAll.bind(editor.canvas));
     editor.snapshot();
     bg.updateBgInfo?.(editor);
-    status('Bild als Hintergrund gesetzt.', '#198754');
+    status('Image set as background.', '#198754');
   },
   'add-textblock': () => addTextblock(),
   'add-checktext': () => {
@@ -412,10 +415,10 @@ const actions = {
     editor.canvas.setActiveObject(g);
     editor.canvas.requestRenderAll();
     editor.snapshot();
-    status('Haken + Text eingefügt – Doppelklick zum Ändern, an der Ecke skalieren.', '#198754');
+    status('Check + text inserted – double-click to edit, scale at the corner.', '#198754');
   },
   'add-checklist': () => {
-    const g = buildCheckList(['Erste Zeile', 'Zweite Zeile', 'Dritte Zeile'], {
+    const g = buildCheckList(['First line', 'Second line', 'Third line'], {
       width: +(document.getElementById('tb-width')?.value || 300),
       size:  +(document.getElementById('tb-size')?.value || 22),
       color: document.getElementById('text-color')?.value || '#161616',
@@ -425,7 +428,7 @@ const actions = {
     editor.canvas.setActiveObject(g);
     editor.canvas.requestRenderAll();
     editor.snapshot();
-    status('Dreihaken eingefügt – Doppelklick: eine Zeile je Haken. An der Ecke skalieren.', '#198754');
+    status('Triple check inserted – double-click: one line per check. Scale at the corner.', '#198754');
   },
   'add-text':  () => {
     // Alle Felder optional lesen: fehlt eines im Gerüst, soll trotzdem Text
@@ -439,13 +442,13 @@ const actions = {
     if (inp) inp.value = '';
   },
   'canvas-size': async () => {
-    const choice = await modal('Canvas-Größe', 'Format wählen', [
+    const choice = await modal('Canvas size', 'Choose format', [
       { label: '1080 × 1080 (Quadrat)', value: [1080, 1080] },
       { label: '1080 × 1350 (LinkedIn Hochformat)', value: [1080, 1350] },
       { label: '1024 × 1536 (Hochformat 2:3)', value: [1024, 1536] },
       { label: '1200 × 628 (Link)', value: [1200, 628] },
       { label: '1920 × 1080 (Video)', value: [1920, 1080] },
-      { label: '✏️ Eigene Größe…', value: 'frei' },
+      { label: '✏️ Custom size…', value: 'frei' },
     ]);
     if (!choice) return;
     if (choice === 'frei') {
@@ -460,9 +463,9 @@ const actions = {
   'bg-weiss':       () => setCanvasFarbe('#FFFFFF'),
   'bg-transparent': () => setCanvasFarbe(''),
   'clear-all': async () => {
-    const ok = await modal('Alles löschen?', 'Entfernt alle Elemente und den Hintergrund vom Canvas.', [
-      { label: '🧹 Ja, leeren', value: true },
-      { label: 'Abbrechen', value: false },
+    const ok = await modal('Clear everything?', 'Removes all elements and the background from the canvas.', [
+      { label: '🧹 Yes, clear', value: true },
+      { label: 'Cancel', value: false },
     ]);
     if (ok) editor.clearAll();
   },
@@ -472,8 +475,8 @@ const actions = {
   'zoom-out':   () => zeigeZoom(editor.zoom('out')),
   'zoom-reset': () => zeigeZoom(editor.zoom('reset')),
   duplicate:   () => editor.duplicateSelected(),
-  group:       () => { if (editor.group()) { renderSelBar(); status('Zu einer Gruppe verklebt.', '#198754'); } },
-  ungroup:     () => { if (editor.ungroup()) { renderSelBar(); status('Gruppierung gelöst.', '#888'); } },
+  group:       () => { if (editor.group()) { renderSelBar(); status('Glued into a group.', '#198754'); } },
+  ungroup:     () => { if (editor.ungroup()) { renderSelBar(); status('Group dissolved.', '#888'); } },
   delete:      () => editor.deleteSelected(),
   'flip-h':    () => editor.flip('h'),
   'flip-v':    () => editor.flip('v'),
@@ -491,20 +494,20 @@ const actions = {
   cutout:      () => doCutout(),
   'checker-remove': async () => {
     const o = targetImage();
-    if (!o) { toast('Kein Bild', 'err'); return; }
+    if (!o) { toast('No image', 'err'); return; }
     status('🧩 Entferne Schachbrettmuster…');
     try {
       const out = await removeCheckerboard(o._element);
-      if (!out) { status('Kein Schachbrettmuster gefunden – Bild unverändert', '#888'); return; }
+      if (!out) { status('No checkerboard pattern found – image unchanged', '#888'); return; }
       o.bgRemoved = true; o._work = null;
       retouch.replaceElement(o, out); editor.snapshot();
-      status('✅ Muster entfernt', 'green');
+      status('✅ Pattern removed', 'green');
     } catch (e) { status('❌ ' + (e.message || 'Fehler'), 'red'); }
   },
   'restore-post': async () => {
     if (!CONFIG.postData?.canvas_json) return;
     if (!window.studioDarfVerlassen || window.studioDarfVerlassen()) {
-      status('⏳ Entwurf wird geladen…');
+      status('⏳ Loading draft…');
       await io.restoreCanvas(editor, CONFIG.postData.canvas_json);
       status('Bereit.', '#888');
     }
@@ -517,29 +520,32 @@ const actions = {
     setCanvasFarbe(c);   // hält den Farbwähler in der Canvas-Sektion mit aktuell
   },
   'go-back': (btn) => {
-    // Studio läuft in neuem Tab → schließen bringt exakt zurück; sonst zur Herkunftsseite.
-    const url = (btn && btn.getAttribute('data-back')) || '/planner/uebersicht/';
-    try { window.close(); } catch (e) { /* egal */ }
-    setTimeout(() => { window.location.href = url; }, 200);
+    // Immer im gleichen Tab zur Herkunftsseite navigieren. (Früher wurde
+    // window.close() versucht – das schloss den Tab und man landete außerhalb
+    // der Seite.) Bei ungespeicherten Änderungen greift der beforeunload-Schutz.
+    let url = (btn && btn.getAttribute('data-back')) || '/planner/uebersicht/';
+    // Nur seiteneigene Ziele zulassen; sonst sichere Übersicht.
+    if (!/^\//.test(url) || url.indexOf('/library/studio') !== -1) url = '/planner/uebersicht/';
+    window.location.href = url;
   },
   'copy-from-post': () => copyImageFromPost(),
   'open-post-file': (btn) => {
     const url = btn && btn.dataset.url;
     if (!url) return;
     editor.addImageUrl(url, { fill: true });
-    status('Datei vom Post geladen – jetzt bearbeiten und speichern.', '#198754');
+    status('File loaded from the post – now edit and save.', '#198754');
   },
   'save-template': () => saveAsTemplate(),
   'new-template': async () => {
-    const ok = await modal('Neue Vorlage', 'Leert die Arbeitsfläche, damit du eine neue Vorlage baust – Hintergrund, Logo, Textfelder. Nicht Gespeichertes geht verloren.', [
-      { label: '➕ Ja, neue Vorlage', value: true },
-      { label: 'Abbrechen', value: false },
+    const ok = await modal('New template', 'Clears the canvas so you can build a new template – background, logo, text fields. Unsaved work is lost.', [
+      { label: '➕ Yes, new template', value: true },
+      { label: 'Cancel', value: false },
     ]);
     if (!ok) return;
     editor.clearAll();
     setTemplateId(null);   // frische Vorlage → beim Speichern neu anlegen
     const t = document.getElementById('title-input'); if (t) t.value = '';
-    status('Vorlage bauen: Hintergrund, Logo, Textfelder – dann „💾 Vorlage speichern".', '#888');
+    status('Build a template: background, logo, text fields – then “💾 Save template”.', '#888');
   },
 };
 
@@ -549,14 +555,14 @@ async function saveAsTemplate() {
   // aktualisieren" hätte die bestehende Vorlage mit dem leeren Stand
   // überschrieben. Das war unwiederbringlich.
   if (editor._locked) {
-    status('⏳ Wird noch geladen – bitte einen Moment warten', 'red');
-    toast('Die Vorlage lädt noch', 'err');
+    status('⏳ Still loading – please wait a moment', 'red');
+    toast('The template is still loading', 'err');
     return;
   }
   if (editor._ladefehler) {
     const weiter = window.confirm(
-      'Achtung: Der aktuelle Inhalt wurde beim Öffnen nicht vollständig geladen.\n\n' +
-      'Beim Speichern würde dieser unvollständige Stand die Vorlage ersetzen.\n\nTrotzdem speichern?');
+      'Warning: the current content was not fully loaded when opened.\n\n' +
+      'Saving would replace the template with this incomplete state.\n\nSave anyway?');
     if (!weiter) return;
   }
   // Eine Quelle der Wahrheit für die aktuell geladene Vorlage – egal ob sie über
@@ -564,18 +570,18 @@ async function saveAsTemplate() {
   const boundId = currentTemplateId();
   let updateExisting = false;
   if (boundId) {
-    const choice = await modal('Vorlage speichern',
-      'Du hast eine bestehende Vorlage geöffnet. Diese Vorlage aktualisieren – oder als neue Vorlage speichern?',
-      [ { label: '💾 Diese Vorlage aktualisieren', value: 'update' },
-        { label: '➕ Als neue Vorlage speichern',   value: 'new' },
-        { label: 'Abbrechen',                       value: null } ]);
+    const choice = await modal('Save template',
+      'You have an existing template open. Update this template – or save as a new template?',
+      [ { label: '💾 Update this template', value: 'update' },
+        { label: '➕ Save as new template',   value: 'new' },
+        { label: 'Cancel',                       value: null } ]);
     if (!choice) return;
     updateExisting = (choice === 'update');
   }
   const vorschlag = (document.getElementById('title-input')?.value || '').trim()
-                    || CONFIG.tplData?.title || 'Neue Vorlage';
-  const title = window.prompt(updateExisting ? 'Name der Vorlage (wird aktualisiert):'
-                                             : 'Name der neuen Vorlage:', vorschlag);
+                    || CONFIG.tplData?.title || 'New template';
+  const title = window.prompt(updateExisting ? 'Template name (will be updated):'
+                                             : 'Name of the new template:', vorschlag);
   if (title === null) return;                 // abgebrochen
   // Doppelte Namen vermeiden (nur beim Neuanlegen).
   if (!updateExisting) {
@@ -586,8 +592,8 @@ async function saveAsTemplate() {
         t => (t.title || '').trim().toLowerCase() === title.trim().toLowerCase());
       if (clash) {
         const go = await modal('Name schon vergeben',
-          `Es gibt bereits eine Vorlage „${title.trim()}". Möchtest du trotzdem eine zweite mit demselben Namen anlegen?`,
-          [ { label: 'Abbrechen (anderen Namen wählen)', value: null },
+          `A template named “${title.trim()}” already exists. Do you still want to create a second one with the same name?`,
+          [ { label: 'Cancel (choose a different name)', value: null },
             { label: 'Trotzdem anlegen',                 value: true } ]);
         if (!go) return;
       }
@@ -606,11 +612,11 @@ async function saveAsTemplate() {
   // Leere Fläche ist fast immer ein Versehen (z.B. zu früh geklickt) und würde
   // eine funktionierende Vorlage durch nichts ersetzen.
   if (updateExisting && !editor.realObjects().length && !editor.canvas.backgroundImage) {
-    const weiter = window.confirm('Die Arbeitsfläche ist leer.\n\n' +
-      'Die bestehende Vorlage würde durch eine leere Vorlage ersetzt.\n\nWirklich fortfahren?');
-    if (!weiter) { status('Abgebrochen', 'red'); return; }
+    const weiter = window.confirm('The canvas is empty.\n\n' +
+      'The existing template would be replaced by an empty one.\n\nReally continue?');
+    if (!weiter) { status('Cancelled', 'red'); return; }
   }
-  status('💾 Vorlage wird gespeichert…');
+  status('💾 Saving template…');
   try {
     const res = await fetch(CONFIG.urls?.saveTemplate || '/library/studio/template/save-canvas/', {
       method: 'POST',
@@ -622,7 +628,7 @@ async function saveAsTemplate() {
     if (!res.ok) {
       // Ohne diese Prüfung scheiterte res.json() an der HTML-Fehlerseite und der
       // Nutzer sah „SyntaxError: Unexpected token '<'".
-      const grund = res.status === 413 ? 'Vorlage zu groß für den Server'
+      const grund = res.status === 413 ? 'Template too large for the server'
                   : res.status === 403 ? 'Sitzung abgelaufen – bitte neu anmelden'
                   : 'Server-Fehler ' + res.status;
       toast(grund, 'err'); status('❌ ' + grund, 'red'); return;
@@ -630,14 +636,14 @@ async function saveAsTemplate() {
     const d = await res.json();
     if (d.ok) {
       setTemplateId(d.id);   // ab jetzt weiter dieselbe Vorlage aktualisieren
-      toast(d.updated ? 'Vorlage aktualisiert' : 'Vorlage gespeichert', 'ok');
-      status(d.updated ? '✅ Vorlage aktualisiert.' : '✅ Als Vorlage gespeichert.', '#198754');
+      toast(d.updated ? 'Template updated' : 'Template saved', 'ok');
+      status(d.updated ? '✅ Template updated.' : '✅ Saved as template.', '#198754');
       // Stand als gespeichert markieren – sonst fragte das Studio auch direkt
       // nach dem Speichern einer Vorlage noch nach ungespeicherten Änderungen.
       window.dispatchEvent(new CustomEvent('studio:vorlage-gespeichert'));
       bg.loadTemplateList(editor);
     } else { toast('Fehler: ' + (d.error || ''), 'err'); status('❌ ' + (d.error || 'Fehler'), 'red'); }
-  } catch (e) { toast('Speichern fehlgeschlagen', 'err'); status('❌ ' + (e.message || e), 'red'); }
+  } catch (e) { toast('Save failed', 'err'); status('❌ ' + (e.message || e), 'red'); }
 }
 function _cookie(name) {
   const m = document.cookie.match('(^|;)\\s*' + name + '\\s*=\\s*([^;]+)');
@@ -653,17 +659,17 @@ async function copyImageFromPost() {
       { credentials: 'same-origin' });
     const d = await res.json();
     posts = (d && d.ok && d.posts) || [];
-  } catch (e) { toast('Posts konnten nicht geladen werden', 'err'); return; }
-  if (!posts.length) { toast('Keine Posts mit Bild gefunden', 'err'); return; }
+  } catch (e) { toast('Posts could not be loaded', 'err'); return; }
+  if (!posts.length) { toast('No posts with an image found', 'err'); return; }
 
   const ov = document.createElement('div');
   ov.style.cssText = 'position:fixed;inset:0;z-index:10000;background:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center';
   const box = document.createElement('div');
   box.style.cssText = 'background:#fff;border-radius:12px;padding:16px;width:min(680px,92vw);max-height:82vh;overflow:auto;box-shadow:0 10px 40px rgba(0,0,0,.35)';
   box.innerHTML = '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">'
-    + '<strong style="font-size:15px;color:#0E7C86">Bild von anderem Post übernehmen</strong>'
+    + '<strong style="font-size:15px;color:#0E7C86">Take image from another post</strong>'
     + '<button id="cfp-x" class="tbtn">✕</button></div>'
-    + '<input id="cfp-q" placeholder="Suchen…" style="width:100%;padding:6px 8px;border:1px solid #ccc;border-radius:6px;margin-bottom:10px;box-sizing:border-box">'
+    + '<input id="cfp-q" placeholder="Search…" style="width:100%;padding:6px 8px;border:1px solid #ccc;border-radius:6px;margin-bottom:10px;box-sizing:border-box">'
     + '<div id="cfp-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:8px"></div>';
   ov.appendChild(box); document.body.appendChild(ov);
   const grid = box.querySelector('#cfp-grid');
@@ -687,8 +693,8 @@ async function copyImageFromPost() {
 async function ladeBildVonPost(p) {
   try {
     await editor.addImageUrl(p.thumb, {});   // same-origin Proxy → kein Tainting
-    status(`Bild von „${p.title}" übernommen. „Speichern" legt es als Kopie an diesem Post ab.`, '#198754');
-  } catch (e) { toast('Bild konnte nicht geladen werden', 'err'); }
+    status(`Image taken from “${p.title}”. “Save” stores it as a copy on this post.`, '#198754');
+  } catch (e) { toast('Image could not be loaded', 'err'); }
 }
 
 document.addEventListener('click', e => {
@@ -712,14 +718,14 @@ document.addEventListener('click', e => {
   if (shape) {
     e.preventDefault();
     try { editor.addShape(shape.dataset.shape, currentShapeColor); }
-    catch (err) { console.error(err); toast('Form konnte nicht eingefügt werden', 'err'); }
+    catch (err) { console.error(err); toast('Shape could not be inserted', 'err'); }
   }
 });
 
 // Textausrichtung des aktiven Textfelds setzen.
 function setTextAlign(align) {
   const o = editor.active();
-  if (!o || o.type !== 'textbox') { toast('Erst ein Textfeld wählen', 'err'); return; }
+  if (!o || o.type !== 'textbox') { toast('Select a text field first', 'err'); return; }
   o.set('textAlign', align);
   editor.canvas.requestRenderAll();
   editor.snapshot();
@@ -728,7 +734,7 @@ function setTextAlign(align) {
 // ---- Freistellen ----------------------------------------------------------
 async function doCutout() {
   const o = editor.active();
-  if (!o || o.type !== 'image') { toast('Erst ein Bild wählen', 'err'); return; }
+  if (!o || o.type !== 'image') { toast('Select an image first', 'err'); return; }
   status('✂ Stelle frei…');
   try {
     const cleaned = await removeBackground(o._element, { tol: 55 });
@@ -745,8 +751,9 @@ async function doCutout() {
 // ==== Freistellen & Korrektur-Werkzeuge ====================================
 let _tol = 50;
 let _brush = 20;
-let _tool = 'off';       // 'off' | 'fill' | 'swap' | 'pick' | 'paint' | 'mark' | 'rect' | 'erase' | 'restore'
+let _tool = 'off';       // 'off' | 'fill' | 'pick' | 'paint' | 'mark' | 'rect' | 'erase' | 'restore' | 'recolorpick' | 'recolorpickall'
 let _toolTarget = null;
+let _recolorPickColor = null;   // beim Umfärben zuerst per Klick aufgenommene Farbe
 let _painting = false;
 let _suppressClear = false;
 
@@ -801,7 +808,7 @@ function setTool(tool) {
     // lief in genau dieses return.
     werkzeugFlagsZuruecksetzen();
     _tool = 'off';
-    toast('Kein Bild vorhanden – erst ein Bild einfügen', 'err');
+    toast('No image present – insert an image first', 'err');
     return;
   }
   // Beim Verlassen des Markier-Modus offene (nicht angewendete) Markierung verwerfen.
@@ -827,21 +834,27 @@ function setTool(tool) {
   // statt ein Rechteck aufzuziehen. (Werkzeug bleibt an – siehe selection:cleared-Guard.)
   if (dragTool) editor.canvas.discardActiveObject();
   editor.canvas.requestRenderAll();
+  // Umfärb-Werkzeuge: beim Aktivieren Aufnahme-Zustand zurücksetzen (1. Klick = Farbe).
+  if (tool === 'recolorpick' || tool === 'recolorpickall') {
+    _recolorPickColor = null;
+    const sw = document.getElementById('recolor-swatch'); if (sw) sw.style.background = 'transparent';
+  }
   const hints = {
-    fill: 'In eine Fläche klicken → wird transparent (durchsichtig)',
-    pick: 'Hintergrundfarbe anklicken → diese Farbe wird ÜBERALL transparent',
-    swap: 'In eine Farbfläche klicken → dieser Bereich bekommt die gewählte Farbe',
-    paint: 'Über das Bild malen → in gewählter Farbe (nur wo Bild ist)',
-    mark: 'Fläche grob rot übermalen, dann unten „umfärben" oder „entfernen"',
-    rect: 'Rechteck über die Fläche ziehen, dann unten „umfärben" oder „entfernen"',
-    erase: 'Über das Bild wischen → wird transparent',
-    restore: 'Über das Bild wischen → Original kommt zurück',
-    off: 'Werkzeug aus',
+    fill: 'Click an area → becomes transparent',
+    pick: 'Click a background colour → that colour becomes transparent EVERYWHERE',
+    recolorpick: 'First click the colour you want (e.g. the background), then click the area(s) in the image to recolour',
+    recolorpickall: 'First click the colour you want, then click a colour in the image to recolour ALL matching areas',
+    paint: 'Paint over the image → in the chosen colour (only where there is image)',
+    mark: 'Roughly paint an area red, then “recolour” or “remove” below',
+    rect: 'Drag a rectangle over the area, then “recolour” or “remove” below',
+    erase: 'Wipe over the image → becomes transparent',
+    restore: 'Wipe over the image → the original comes back',
+    off: 'Tool off',
   };
   setToolStatus(hints[tool] || '');
   const isMark = (tool === 'mark' || tool === 'rect');
   const colorRow = document.getElementById('recolor-color-row');
-  if (colorRow) colorRow.style.display = (tool === 'paint' || tool === 'swap' || isMark) ? 'flex' : 'none';
+  if (colorRow) colorRow.style.display = (tool === 'paint' || isMark) ? 'flex' : 'none';
   const markRow = document.getElementById('mark-apply-row');
   if (markRow) markRow.style.display = isMark ? 'flex' : 'none';
   // Pinselgröße nur bei den Werkzeugen zeigen, die sie auch benutzen.
@@ -887,7 +900,7 @@ async function doPickAt(o, px, py) {
     const out = await removeColorGlobal(o._element, px, py, 42);
     o.bgRemoved = true; o._work = null;
     retouch.replaceElement(o, out); editor.snapshot();
-    setToolStatus('💧 Hintergrundfarbe entfernt – weiter klicken oder Werkzeug aus');
+    setToolStatus('💧 Background colour removed – keep clicking or turn the tool off');
   } catch (e) { setToolStatus('❌ Fehler'); }
 }
 
@@ -898,12 +911,77 @@ async function doSwapAt(o, px, py) {
     const out = await recolorRegion(o._element, px, py, hex, 40);
     o._work = null;
     retouch.replaceElement(o, out); editor.snapshot();
-    setToolStatus('🎨 Farbe getauscht – weiter klicken oder Werkzeug aus');
+    setToolStatus('🎨 Colour swapped – keep clicking or turn the tool off');
   } catch (e) { console.error('Farbtausch:', e); setToolStatus('❌ Fehler'); }
 }
 
 // doRecolorAt ist entfallen: die Funktion war bis auf die Toleranz identisch
 // mit doSwapAt (beide recolorRegion). Zwei Knöpfe für dieselbe Sache.
+
+// Alle farbähnlichen Flächen im GANZEN Bild ab dem Klickpunkt umfärben
+// (z. B. alle roten Stellen auf einmal). Nutzt dieselbe gewählte Farbe wie
+// „Recolour area". Transparenz bleibt erhalten.
+// Pipette: nimmt die Farbe an der Klickstelle vom SICHTBAREN Canvas auf
+// (inkl. Hintergrundfarbe und beliebiger Bilder) und setzt sie als Umfärb-Farbe.
+// So wählt man die Zielfarbe per Klick statt über die Palette.
+function _showRecolorSwatch(hex) {
+  const sw = document.getElementById('recolor-swatch');
+  if (sw) { sw.style.background = hex || 'transparent'; sw.title = hex ? ('picked colour: ' + hex) : 'no colour picked'; }
+}
+
+// Einen einzelnen Pixel aus einem fabric-Bildobjekt an der Szenen-Position pt lesen.
+function _samplePixelFromObject(o, pt) {
+  try {
+    const el = o._element; if (!el) return null;
+    const inv = fabric.util.invertTransform(o.calcTransformMatrix());
+    const p = fabric.util.transformPoint(pt, inv);
+    const W = el.naturalWidth || el.width, H = el.naturalHeight || el.height;
+    const x = Math.round(p.x + W / 2), y = Math.round(p.y + H / 2);
+    if (x < 0 || y < 0 || x >= W || y >= H) return null;
+    const c = document.createElement('canvas'); c.width = W; c.height = H;
+    const ctx = c.getContext('2d', { willReadFrequently: true });
+    ctx.drawImage(el, 0, 0, W, H);
+    const d = ctx.getImageData(x, y, 1, 1).data;
+    if (d[3] === 0) return null;   // transparente Stelle
+    return '#' + [d[0], d[1], d[2]].map(v => v.toString(16).padStart(2, '0')).join('');
+  } catch (_) { return null; }
+}
+
+// Farbe an der Klickstelle bestimmen – robust und ohne getaintete Gesamt-Canvas:
+// 1) Bild-Objekt unter dem Klick, 2) Hintergrundbild, 3) Hintergrundfarbe.
+function pickCanvasColor(e) {
+  const canvas = editor.canvas;
+  const pt = canvas.getPointer(e);
+  let hex = null;
+  const obj = canvas.findTarget ? canvas.findTarget(e, false) : null;
+  if (obj && obj.type === 'image') hex = _samplePixelFromObject(obj, pt);
+  if (!hex && canvas.backgroundImage && canvas.backgroundImage._element) hex = _samplePixelFromObject(canvas.backgroundImage, pt);
+  if (!hex && canvas.backgroundColor && typeof canvas.backgroundColor === 'string' && canvas.backgroundColor[0] === '#') hex = canvas.backgroundColor;
+  if (!hex) { setToolStatus('Couldn’t read a colour there – click directly on a coloured area or image'); return null; }
+  _showRecolorSwatch(hex);
+  return hex;
+}
+
+// Umfärben mit der zuvor aufgenommenen Farbe: entweder nur die zusammenhängende
+// Fläche (all=false) oder alle gleichfarbigen Flächen im Bild (all=true).
+async function doRecolorWith(o, px, py, hex, all) {
+  try {
+    const out = all ? await recolorSimilarAll(o._element, px, py, hex, 45)
+                    : await recolorRegion(o._element, px, py, hex, 40);
+    o._work = null; retouch.replaceElement(o, out); editor.snapshot();
+    setToolStatus('🎨 Recoloured – click more areas, or press the tool button again to pick a new colour');
+  } catch (e) { console.error('Recolour:', e); setToolStatus('❌ Error'); }
+}
+
+async function doSwapAllAt(o, px, py) {
+  const hex = document.getElementById('recolor-color')?.value || '#ffffff';
+  try {
+    const out = await recolorSimilarAll(o._element, px, py, hex, 45);
+    o._work = null;
+    retouch.replaceElement(o, out); editor.snapshot();
+    setToolStatus('🎨 All matching areas recoloured – keep clicking or turn the tool off');
+  } catch (e) { console.error('Recolour all:', e); setToolStatus('❌ Error'); }
+}
 
 // Ein Pinselschritt. `endgueltig` nur beim Loslassen der Maustaste:
 // Vorher wurde bei JEDER Mausbewegung ein Vollauflösungs-PNG kodiert
@@ -923,7 +1001,7 @@ async function paintAt(o, px, py, endgueltig = false) {
     try {
       origImg = await retouch.getOriginal(o);
     } catch (e) {
-      setToolStatus('❌ Originalbild nicht verfügbar – „Wiederherstellen" geht hier nicht');
+      setToolStatus('❌ Original image not available – “Restore” doesn’t work here');
       _painting = false;
       return;
     }
@@ -949,15 +1027,15 @@ async function applyMark(mode) {
     else await retouch.removeRect(o, x0, y0, x1, y1);
     clearSelRect();
     editor.canvas.requestRenderAll(); editor.snapshot();
-    setToolStatus(mode === 'recolor' ? '🎨 Bereich umgefärbt' : '🗑 Bereich entfernt');
+    setToolStatus(mode === 'recolor' ? '🎨 Area recoloured' : '🗑 Area removed');
     return;
   }
   // Freihand-Maske
-  if (!retouch.hasMask(o)) { toast('Nichts markiert – erst Rechteck ziehen oder frei markieren', 'err'); return; }
+  if (!retouch.hasMask(o)) { toast('Nothing marked – first drag a rectangle or mark freely', 'err'); return; }
   await retouch.applyMask(o, mode, color);
   editor.canvas.requestRenderAll();
   editor.snapshot();
-  setToolStatus(mode === 'recolor' ? '🎨 Markierung umgefärbt' : '🗑 Markierung entfernt');
+  setToolStatus(mode === 'recolor' ? '🎨 Selection recoloured' : '🗑 Selection removed');
 }
 
 let _rectStart = null;   // Bild-Pixel Startpunkt
@@ -1021,7 +1099,7 @@ function clearSelRect() {
     if (!_mqDrawing) return;
     _mqDrawing = false;
     _rectEnd = imgPixel(_toolTarget, ev);
-    setToolStatus('✅ Bereich gewählt → „🗑 Löschen" oder „🎨 Umfärben"');
+    setToolStatus('✅ Area selected → “🗑 Delete” or “🎨 Recolour”');
   };
   ov.addEventListener('pointerup', finish);
   ov.addEventListener('pointercancel', finish);
@@ -1029,9 +1107,21 @@ function clearSelRect() {
 
 editor.canvas.on('mouse:down', async (opt) => {
   if (_tool === 'off' || !_toolTarget) return;
+  // Kombiniertes Umfärben in EINEM Werkzeug: 1. Klick nimmt die Farbe auf
+  // (von irgendwo – z. B. dem Petrol-Hintergrund), danach färben Klicks die
+  // angeklickte Fläche im Bild um. Kein zweiter Knopf nötig.
+  if (_tool === 'recolorpick' || _tool === 'recolorpickall') {
+    if (_recolorPickColor == null) {
+      const hex = pickCanvasColor(opt.e);
+      if (hex) { _recolorPickColor = hex; setToolStatus('🎨 Colour ' + hex + ' – now click the area(s) to recolour'); }
+      return;
+    }
+    const { px, py } = imgPixel(_toolTarget, opt.e);
+    await doRecolorWith(_toolTarget, px, py, _recolorPickColor, _tool === 'recolorpickall');
+    return;
+  }
   const { px, py } = imgPixel(_toolTarget, opt.e);
   if (_tool === 'fill') { await doFillAt(_toolTarget, px, py); return; }
-  if (_tool === 'swap') { await doSwapAt(_toolTarget, px, py); return; }
   if (_tool === 'pick') { await doPickAt(_toolTarget, px, py); return; }
   if (_tool === 'rect') {
     clearSelRect();
@@ -1080,7 +1170,7 @@ editor.canvas.on('mouse:up', async () => {
       editor.snapshot();
     } catch (e) {
       console.error('commitWork:', e);
-      setToolStatus('❌ Änderung konnte nicht übernommen werden');
+      setToolStatus('❌ Change could not be applied');
     }
   }
 });
@@ -1148,7 +1238,7 @@ function addBadge(kind) {
   // Gemeinsame Palette färbt beides gleich -> Text wäre unsichtbar. Dann automatisch.
   if (_hex(textColor) === _hex(fill)) textColor = autoContrast(fill);
 
-  const dflt = (kind === 'circle' || kind === 'hex') ? '1' : 'Titel';
+  const dflt = (kind === 'circle' || kind === 'hex') ? '1' : 'Title';
   const g = buildBadge(kind, typed || dflt, fill, textColor);
   g.set({ left: editor.width / 2, top: editor.height / 2 });
   editor.canvas.add(g);
@@ -1208,7 +1298,7 @@ function buildTextblock(head, body, opts) {
 function addTextblock() {
   const head = document.getElementById('tb-head')?.value.trim() || '';
   const body = document.getElementById('tb-body')?.value.trim() || '';
-  if (!head && !body) { status('Bitte Überschrift oder Text eingeben.', '#dc3545'); return; }
+  if (!head && !body) { status('Please enter a heading or text.', '#dc3545'); return; }
   const g = buildTextblock(head, body, {
     width: +(document.getElementById('tb-width')?.value || 260),
     size: +(document.getElementById('tb-size')?.value || 19),
@@ -1220,7 +1310,7 @@ function addTextblock() {
   editor.canvas.setActiveObject(g);
   editor.canvas.requestRenderAll();
   editor.snapshot();
-  status('Textblock eingefügt – Doppelklick zum Ändern.', '#198754');
+  status('Text block inserted – double-click to edit.', '#198754');
 }
 
 function isTextblock(o) { return !!(o && o.shapeKind === 'textblock'); }
@@ -1265,7 +1355,7 @@ function startTextblockEdit(g) {
     z-index:9999;background:#fff;border:2px solid #F56E28;border-radius:8px;padding:8px;
     box-shadow:0 6px 20px rgba(0,0,0,.3);display:flex;flex-direction:column;gap:5px;width:300px;`;
   box.innerHTML = `
-    <input type="text" id="tb-e-head" placeholder="Überschrift" style="font-weight:700;font-size:14px;padding:5px;border:1px solid #ccc;border-radius:4px">
+    <input type="text" id="tb-e-head" placeholder="Heading" style="font-weight:700;font-size:14px;padding:5px;border:1px solid #ccc;border-radius:4px">
     <textarea id="tb-e-body" placeholder="Text" rows="3" style="font-size:13px;padding:5px;border:1px solid #ccc;border-radius:4px;resize:vertical;font-family:inherit"></textarea>
     <div style="display:flex;gap:8px;align-items:center;font-size:11px;color:#666">
       <label style="display:flex;gap:3px;align-items:center">Schriftgröße
@@ -1275,14 +1365,14 @@ function startTextblockEdit(g) {
         <input type="number" id="tb-e-width" min="60" step="10" style="width:64px;padding:3px;border:1px solid #ccc;border-radius:4px">
       </label>
     </div>
-    <div style="font-size:11px;color:#888">Strg+Enter = fertig, Esc = abbrechen</div>`;
+    <div style="font-size:11px;color:#888">Ctrl+Enter = done, Esc = cancel</div>`;
   document.body.appendChild(box);
   const hi = box.querySelector('#tb-e-head'), bi = box.querySelector('#tb-e-body');
   const si = box.querySelector('#tb-e-size'), wi = box.querySelector('#tb-e-width');
   hi.value = g.tbHead || ''; bi.value = g.tbBody || '';
   si.value = g.tbSize || 19; wi.value = g.tbWidth || 260;
   hi.focus(); hi.select();
-  status('Textblock bearbeiten – Größe/Breite anpassbar, Strg+Enter = fertig.');
+  status('Edit text block – size/width adjustable, Ctrl+Enter = done.');
 
   let done = false;
   const finish = save => {
@@ -1317,7 +1407,7 @@ function buildCheckList(items, opts) {
   const textLeft = Math.round(2 * r + size * 0.22);
   const parts = [];
   let y = 0;
-  (items.length ? items : ['Zeile']).forEach(txt => {
+  (items.length ? items : ['Line']).forEach(txt => {
     const tb = new fabric.Textbox(txt || ' ', {
       width: w, fontSize: size, fontWeight: 'bold',
       fontFamily: 'Roboto, Arial, sans-serif', fill: col,
@@ -1379,12 +1469,12 @@ function startChecklistEdit(g) {
       <label style="display:flex;gap:3px;align-items:center">Breite
         <input type="number" id="cl-e-width" min="60" step="10" style="width:64px;padding:3px;border:1px solid #ccc;border-radius:4px"></label>
     </div>
-    <div style="font-size:11px;color:#888">Strg+Enter = fertig, Esc = abbrechen</div>`;
+    <div style="font-size:11px;color:#888">Ctrl+Enter = done, Esc = cancel</div>`;
   document.body.appendChild(box);
   const bi = box.querySelector('#cl-e-body'), si = box.querySelector('#cl-e-size'), wi = box.querySelector('#cl-e-width');
   bi.value = (g.clItems || []).join('\n'); si.value = g.clSize || 22; wi.value = g.clWidth || 300;
   bi.focus();
-  status('Haken-Liste bearbeiten – eine Zeile je Haken, Strg+Enter = fertig.');
+  status('Edit checklist – one line per check, Ctrl+Enter = done.');
   let done = false;
   const finish = save => {
     if (done) return; done = true;
@@ -1473,18 +1563,18 @@ async function importSvgText(svgText, asGroup) {
   // (doppelte Bilder/Texte). Vorher fragen, ob geleert werden soll.
   if (editor.canvas.getObjects().length) {
     const leeren = await modal(
-      'Fläche zuerst leeren?',
-      'Auf der Arbeitsfläche liegen schon Elemente. Ohne Leeren wird das SVG darübergelegt – dann liegen Bilder und Texte doppelt aufeinander.',
+      'Clear the canvas first?',
+      'There are already elements on the canvas. Without clearing, the SVG is placed on top – then images and text overlap.',
       [
-        { label: '🧹 Leeren und einfügen', value: true },
-        { label: 'Darüberlegen', value: false },
+        { label: '🧹 Clear and insert', value: true },
+        { label: 'Place on top', value: false },
       ]);
     if (leeren) editor.clearAll();
   }
   return new Promise(resolve => {
     fabric.loadSVGFromString(svgText, (objects, options) => {
       const objs = (objects || []).filter(Boolean);
-      if (!objs.length) { status('SVG enthielt keine lesbaren Formen.', '#dc3545'); return resolve(0); }
+      if (!objs.length) { status('SVG contained no readable shapes.', '#dc3545'); return resolve(0); }
 
       // Auf die Canvas-Groesse einpassen (90 %, mittig)
       const sw = options?.width || editor.width;
@@ -1562,7 +1652,7 @@ async function importSvgText(svgText, asGroup) {
         const text = await f.text();
         const asGroup = !!document.getElementById('svg-as-group')?.checked;
         const n = await importSvgText(text, asGroup);
-        if (n) status(asGroup ? 'SVG als 1 Objekt eingefügt.' : `SVG eingefügt: ${n} Ebene(n).`, '#198754');
+        if (n) status(asGroup ? 'SVG inserted as 1 object.' : `SVG inserted: ${n} layer(s).`, '#198754');
       } catch (err) {
         console.error(err);
         status('SVG konnte nicht gelesen werden: ' + err.message, '#dc3545');
@@ -1616,7 +1706,7 @@ function startBadgeEdit(g) {
     box-shadow:0 4px 14px rgba(0,0,0,.25);outline:none;`;
   document.body.appendChild(inp);
   inp.focus(); inp.select();
-  status('Text eintippen, Enter = fertig (Esc = abbrechen).');
+  status('Type text, Enter = done (Esc = cancel).');
 
   let done = false;
   const finish = save => {
@@ -1665,7 +1755,7 @@ editor.canvas.on('mouse:dblclick', e => {
   if (isBadge(o)) startBadgeEdit(o);
   else if (isChecklist(o)) startChecklistEdit(o);
   else if (isTextblock(o)) startTextblockEdit(o);
-  else if (o && o.type === 'text') { textZuIText(o); status('Text ändern, dann daneben klicken.'); }
+  else if (o && o.type === 'text') { textZuIText(o); status('Edit text, then click beside it.'); }
 });
 
 document.addEventListener('click', e => {
@@ -1685,7 +1775,7 @@ document.addEventListener('keydown', e => {
   if (document.querySelector('.studio-modal-bg')) return;   // Dialog hat Vorrang
   e.preventDefault();
   setTool('off');
-  setToolStatus('Werkzeug beendet (Esc).');
+  setToolStatus('Tool ended (Esc).');
 });
 
 {
@@ -1714,7 +1804,7 @@ function renderSelBar() {
   const d = hasSel ? '' : 'disabled';
   const dImg = isImg ? '' : 'disabled';
   const activeLabel = !hasSel ? ''
-    : (objs.length > 1 ? `${objs.length} Elemente`
+    : (objs.length > 1 ? `${objs.length} elements`
        : layerLabel(objs[0], editor.realObjects().indexOf(objs[0]) + 1));
   const first = objs[0];
   const sw = first ? Math.round(first.getScaledWidth()) : '';
@@ -1724,30 +1814,33 @@ function renderSelBar() {
   const cy = fc ? Math.round(fc.y) : '';
   const maxi = document.querySelector('.studio-wrap')?.classList.contains('maxi');
   bar.innerHTML = `
-    <button class="tbtn ${editor.gridOn ? 'primary' : ''}" data-act="grid" title="Raster zum Ausrichten ein-/ausblenden (wird nicht mitgespeichert)">▦ Raster</button>
+    <button class="tbtn primary" data-act="undo" title="Undo the last action (Ctrl+Z)" style="font-weight:700">↶ Undo</button>
+    <button class="tbtn" data-act="redo" title="Redo the last undone action (Ctrl+Y)" style="font-weight:700">↷ Redo</button>
+    <span style="width:10px"></span>
+    <button class="tbtn ${editor.gridOn ? 'primary' : ''}" data-act="grid" title="Show/hide the alignment grid (not saved)">▦ Grid</button>
     <button class="tbtn" data-act="zoom-out" title="Verkleinern">🔍−</button>
-    <button class="tbtn" data-act="zoom-reset" title="Zoom zurücksetzen">⤢</button>
-    <button class="tbtn" data-act="zoom-in" title="Vergrößern">🔍+</button>
-    <button class="tbtn ${maxi ? 'primary' : ''}" data-act="maximize" title="Arbeitsfläche groß: Leisten weg, Fläche füllt den Bildschirm">⛶ Groß</button>
+    <button class="tbtn" data-act="zoom-reset" title="Reset zoom">⤢</button>
+    <button class="tbtn" data-act="zoom-in" title="Zoom in">🔍+</button>
+    <button class="tbtn ${maxi ? 'primary' : ''}" data-act="maximize" title="Large canvas: bars hidden, canvas fills the screen">⛶ Large</button>
     <span style="width:8px"></span>
     ${hasSel ? `<span class="sel-active" title="Aktives Element">${activeLabel}</span>` : ''}
-    ${hasSel ? `<span class="sel-size" title="Größe in Pixel${objs.length > 1 ? ' – gilt für alle ausgewählten Elemente' : ''}">
+    ${hasSel ? `<span class="sel-size" title="Size in pixels${objs.length > 1 ? ' – applies to all selected elements' : ''}">
         B <input type="number" id="sel-w" class="sel-num" min="1" step="1" value="${sw}">
         H <input type="number" id="sel-h" class="sel-num" min="1" step="1" value="${sh}">
-        <button class="tbtn" id="sel-lock" title="${_keepRatio ? 'Seitenverhältnis bleibt erhalten – klicken zum Entsperren' : 'Breite/Höhe frei – klicken zum Sperren'}">${_keepRatio ? '🔗' : '🔓'}</button>
+        <button class="tbtn" id="sel-lock" title="${_keepRatio ? 'Aspect ratio locked – click to unlock' : 'Width/height free – click to lock'}">${_keepRatio ? '🔗' : '🔓'}</button>
       </span>` : ''}
     ${hasSel ? `<span class="sel-size" title="Mittelpunkt in Pixel${objs.length > 1 ? ' – setzt alle auf dieselbe Stelle' : ''}">
         X <input type="number" id="sel-x" class="sel-num" step="1" value="${cx}">
         Y <input type="number" id="sel-y" class="sel-num" step="1" value="${cy}">
       </span>` : ''}
     ${objs.length > 1 ? `<span class="sel-size" title="Angleichen und verteilen">
-        <button class="tbtn" id="same-size" title="Alle auf die Größe des zuerst gewählten bringen">⧉ gleich groß</button>
-        <button class="tbtn" id="dist-h" title="Waagerecht gleichmäßig verteilen">↔≡</button>
-        <button class="tbtn" id="dist-v" title="Senkrecht gleichmäßig verteilen">↕≡</button>
+        <button class="tbtn" id="same-size" title="Make all the size of the first selected">⧉ same size</button>
+        <button class="tbtn" id="dist-h" title="Distribute evenly horizontally">↔≡</button>
+        <button class="tbtn" id="dist-v" title="Distribute evenly vertically">↕≡</button>
       </span>` : ''}
     <button class="tbtn" data-act="duplicate" title="Duplizieren (Strg+D)" ${d}>📋</button>
-    ${objs.length > 1 ? `<button class="tbtn" data-act="group" title="Ausgewählte Teile zu einer Gruppe verkleben">🔗 Gruppieren</button>` : ''}
-    ${editor.isGroup() ? `<button class="tbtn" data-act="ungroup" title="Gruppierung wieder lösen">✂ Lösen</button>` : ''}
+    ${objs.length > 1 ? `<button class="tbtn" data-act="group" title="Glue selected parts into a group">🔗 Group</button>` : ''}
+    ${editor.isGroup() ? `<button class="tbtn" data-act="ungroup" title="Ungroup again">✂ Ungroup</button>` : ''}
     <button class="tbtn" data-act="flip-h" title="Horizontal spiegeln" ${d}>↔</button>
     <button class="tbtn" data-act="flip-v" title="Vertikal spiegeln" ${d}>↕</button>
     <button class="tbtn" data-act="forward" title="Nach vorne" ${d}>⬆</button>
@@ -1760,8 +1853,8 @@ function renderSelBar() {
     <button class="tbtn" data-act="align-centerV" title="Vertikal zentrieren" ${d}>↕|</button>
     <button class="tbtn" data-act="align-bottom" title="Unten" ${d}>⬇|</button>
     <span style="width:8px"></span>
-    <button class="tbtn danger" data-act="delete" title="Löschen (Entf)" ${d}>🗑</button>
-    ${hasSel ? '' : '<span class="hint" style="margin-left:8px">Element wählen zum Bearbeiten</span>'}
+    <button class="tbtn danger" data-act="delete" title="Delete (Del)" ${d}>🗑</button>
+    ${hasSel ? '' : '<span class="hint" style="margin-left:8px">Select an element to edit</span>'}
   `;
   wireSizeFields();
 }
@@ -1841,7 +1934,7 @@ function wireSizeFields() {
 
   // ---- Gleichmäßig verteilen ----
   const dist = axis => {
-    if (editor.activeAll().length < 3) { status('Zum Verteilen mindestens 3 Elemente wählen.', '#dc3545'); return; }
+    if (editor.activeAll().length < 3) { status('Select at least 3 elements to distribute.', '#dc3545'); return; }
     const n = mitAuswahl(list => {
       const key = axis === 'h' ? 'x' : 'y';
       const items = list.map(o => ({ o, c: o.getCenterPoint() })).sort((a, b) => a.c[key] - b.c[key]);
@@ -1864,7 +1957,7 @@ function wireSizeFields() {
   const ss = document.getElementById('same-size');
   if (ss) ss.onclick = e => {
     e.preventDefault();
-    if (editor.activeAll().length < 2) { status('Mindestens 2 Elemente wählen.', '#dc3545'); return; }
+    if (editor.activeAll().length < 2) { status('Select at least 2 elements.', '#dc3545'); return; }
     let ziel = 0;
     const n = mitAuswahl(list => {
       // Vorbild = größtes Element, das ist berechenbar und unabhängig von der Klickreihenfolge
@@ -1885,18 +1978,18 @@ function wireSizeFields() {
 
 // ---- Ebenen-Liste ---------------------------------------------------------
 function layerLabel(o, i) {
-  if (o.type === 'image')   return '🖼 Bild ' + i;
-  if (o.shapeKind === 'textblock') return '📝 ' + (o.tbHead || o.tbBody || 'Textblock').slice(0, 14);
+  if (o.type === 'image')   return '🖼 Image ' + i;
+  if (o.shapeKind === 'textblock') return '📝 ' + (o.tbHead || o.tbBody || 'Text block').slice(0, 14);
   if (o.type === 'textbox') return '✏️ ' + (o.text || 'Text').slice(0, 14);
-  if (o.svgPart)            return '📐 SVG-Teil ' + o.svgPart;
-  if (o.shapeKind)          return '🔷 Form ' + i;
+  if (o.svgPart)            return '📐 SVG part ' + o.svgPart;
+  if (o.shapeKind)          return '🔷 Shape ' + i;
   return 'Element ' + i;
 }
 function renderLayers() {
   const list = document.getElementById('layers-list');
   if (!list) return;
   const objs = editor.realObjects();
-  if (!objs.length) { list.innerHTML = '<span class="no-templates">Noch keine Elemente.</span>'; return; }
+  if (!objs.length) { list.innerHTML = '<span class="no-templates">No elements yet.</span>'; return; }
   const active = editor.active();
   list.innerHTML = '';
   // Oben = vorderste Ebene → Reihenfolge umkehren.
@@ -1931,7 +2024,7 @@ function renderAnimBar() {
   const bar = document.getElementById('anim-bar');
   if (!bar) return;
   const objs = editor.realObjects();
-  if (!objs.length) { bar.innerHTML = '<span class="hint">Elemente hinzufügen, um sie zu animieren.</span>'; return; }
+  if (!objs.length) { bar.innerHTML = '<span class="hint">Add elements to animate them.</span>'; return; }
   bar.innerHTML = '';
   const head = document.createElement('div'); head.className = 'anim-bar-head';
   const title = document.createElement('span');
@@ -1940,19 +2033,19 @@ function renderAnimBar() {
   // Videolänge – gilt fürs ganze GIF/Video (nicht pro Element).
   const lenWrap = document.createElement('label');
   lenWrap.style.cssText = 'display:flex;align-items:center;gap:6px;font-size:.75rem;color:#555;margin-left:auto';
-  lenWrap.appendChild(document.createTextNode('🎬 Videolänge'));
+  lenWrap.appendChild(document.createTextNode('🎬 Video length'));
   const lenInp = document.createElement('input');
   lenInp.type = 'number'; lenInp.id = 'video-length'; lenInp.min = 0; lenInp.max = 15; lenInp.step = 0.5;
   lenInp.placeholder = 'auto';
   lenInp.style.cssText = 'width:58px;padding:3px;border:1px solid #ccc;border-radius:4px';
-  lenInp.title = 'Gesamtlänge von GIF/Video in Sekunden. Leer = automatisch.';
+  lenInp.title = 'Total length of GIF/video in seconds. Empty = automatic.';
   if (window._videoLen != null) lenInp.value = window._videoLen;
   lenInp.oninput = () => { window._videoLen = lenInp.value; };
   lenWrap.appendChild(lenInp);
   lenWrap.appendChild(document.createTextNode('Sek.'));
 
   const prevTop = document.createElement('button');
-  prevTop.className = 'tbtn primary'; prevTop.textContent = '▶ Vorschau';
+  prevTop.className = 'tbtn primary'; prevTop.textContent = '▶ Preview';
   prevTop.style.marginLeft = '10px';
   prevTop.onclick = () => media.previewAnimation(editor);
   head.appendChild(title); head.appendChild(lenWrap); head.appendChild(prevTop);
@@ -1963,7 +2056,7 @@ function renderAnimBar() {
 
     // Vorschaubild des Elements
     const th = document.createElement('img'); th.className = 'anim-thumb';
-    th.title = layerLabel(o, idx + 1) + ' – auswählen';
+    th.title = layerLabel(o, idx + 1) + ' – select';
     th.onclick = () => editor.selectObj(o);
     // Vorschaubild aus dem Cache. Ohne Cache wurde bei JEDEM Klick und jedem
     // Verschieben jedes Element neu als PNG gerastert – bei 25 Elementen
@@ -1980,7 +2073,7 @@ function renderAnimBar() {
     const col = document.createElement('div'); col.className = 'anim-col';
 
     const selRow = document.createElement('label'); selRow.className = 'anim-ctl';
-    selRow.innerHTML = '<span>Bewegung</span>';
+    selRow.innerHTML = '<span>Motion</span>';
     const sel = document.createElement('select'); sel.className = 'field';
     media.ANIM_TYPES.forEach(t => {
       const op = document.createElement('option'); op.value = t;
@@ -1995,7 +2088,7 @@ function renderAnimBar() {
     selRow.appendChild(sel);
 
     const fxRow = document.createElement('label'); fxRow.className = 'anim-ctl';
-    fxRow.innerHTML = '<span>Effekt</span>';
+    fxRow.innerHTML = '<span>Effect</span>';
     const fxsel = document.createElement('select'); fxsel.className = 'field';
     media.EFFECTS.forEach(t => {
       const op = document.createElement('option'); op.value = t;
@@ -2008,10 +2101,10 @@ function renderAnimBar() {
     // Tempo + Start (Verzögerung) nebeneinander
     const timeRow = document.createElement('div'); timeRow.className = 'anim-ctl anim-time';
     const durWrap = document.createElement('label'); durWrap.className = 'anim-time-item';
-    durWrap.innerHTML = '<span>Tempo</span>';
+    durWrap.innerHTML = '<span>Speed</span>';
     const dur = document.createElement('input');
     dur.type = 'range'; dur.className = 'tl-slider'; dur.min = 300; dur.max = 4000; dur.step = 100;
-    dur.value = o.anim?.dur || 1200; dur.title = 'Tempo (Dauer)';
+    dur.value = o.anim?.dur || 1200; dur.title = 'Speed (duration)';
     dur.oninput = () => { if (o.anim) o.anim.dur = +dur.value; };
     dur.onchange = () => editor.snapshot();
     durWrap.appendChild(dur);
@@ -2020,7 +2113,7 @@ function renderAnimBar() {
     delWrap.innerHTML = '<span>Start</span>';
     const del = document.createElement('input');
     del.type = 'range'; del.className = 'tl-slider'; del.min = 0; del.max = 3000; del.step = 100;
-    del.value = o.anim?.delay || 0; del.title = 'Start-Verzögerung: wann der Effekt einsetzt';
+    del.value = o.anim?.delay || 0; del.title = 'Start delay: when the effect begins';
     del.oninput = () => { if (o.anim) o.anim.delay = +del.value; };
     del.onchange = () => editor.snapshot();
     delWrap.appendChild(del);
@@ -2149,7 +2242,7 @@ editor.onChange(() => {
     freeToolTarget();
     _tool = 'off';
     werkzeugFlagsZuruecksetzen();
-    setToolStatus('Werkzeug beendet – das bearbeitete Bild ist nicht mehr da.');
+    setToolStatus('Tool ended – the edited image is no longer there.');
   }
   planeUiAufbau();
 });
@@ -2168,7 +2261,7 @@ editor.addImageUrl = async (url, opts) => {
       if (cleaned) {
         img.bgRemoved = true; img._work = null;
         retouch.replaceElement(img, cleaned); editor.snapshot();
-        status('✅ Muster entfernt', 'green');
+        status('✅ Pattern removed', 'green');
       } else {
         status('Bereit.', '#888');
       }
@@ -2180,20 +2273,20 @@ editor.addImageUrl = async (url, opts) => {
 // ---- Init -----------------------------------------------------------------
 // Jeder Schritt einzeln gekapselt: Ein Fehler in der Vorlagenliste darf nicht
 // mehr dazu führen, dass Bibliothek, Titel und das Laden der Datei ausfallen.
-boot('Vorlagenliste', () => bg.loadTemplateList(editor));
+boot('Template list', () => bg.loadTemplateList(editor));
 // Bibliothek erkennt SVGs selbst und schickt sie durch den Import statt sie
 // als flaches Bild einzusetzen.
-boot('SVG-Handler', () => {
+boot('SVG handler', () => {
   if (typeof lib.setSvgHandler === 'function') {
     lib.setSvgHandler((text, asGroup) => importSvgText(text, asGroup));
   }
 });
-boot('Bibliothek', () => {
+boot('Library', () => {
   if (typeof initLibrary !== 'function') throw new Error('initLibrary fehlt (alte library.js im Browser-Cache? Strg+F5)');
   initLibrary(editor);
 });
-boot('Auswahlleiste', () => renderSelBar());
-boot('Korrektur-Panel', () => updateRetouchPanel());
+boot('Selection bar', () => renderSelBar());
+boot('Retouch panel', () => updateRetouchPanel());
 
 // Aktuell geladene Vorlage – EINE Quelle der Wahrheit auf dem Editor-Objekt,
 // egal ob über die Verwaltung (?template=…) oder per Kachel-Klick (applyTemplate)
@@ -2212,7 +2305,7 @@ if (CONFIG.tplData?.id) setTemplateId(CONFIG.tplData.id);
 // Vorhandene Ausgabe geöffnet? → Knopf „Speichern" (gleiches Format) statt „Speichern als…".
 if (CONFIG.libData?.item_id || CONFIG.libData?.nc_path) {
   const b = document.querySelector('[data-act="save-as"]');
-  if (b) { b.textContent = '💾 Speichern'; b.dataset.act = 'save-existing'; b.title = 'Vorhandene Ausgabe im gleichen Format überschreiben'; }
+  if (b) { b.textContent = '💾 Save'; b.dataset.act = 'save-existing'; b.title = 'Overwrite the existing output in the same format'; }
 }
 
 (async function restoreInitial() {
@@ -2223,9 +2316,9 @@ if (CONFIG.libData?.item_id || CONFIG.libData?.nc_path) {
     // versehentliches Strg+Z hätte alles gelöscht.
     if (tpl?.canvas_json) {
       if (tpl.width && tpl.height) { editor.setSize(tpl.width, tpl.height); fit(); }
-      status('⏳ Vorlage wird geladen…');
+      status('⏳ Loading template…');
       if (await io.restoreCanvas(editor, tpl.canvas_json, { frisch: true })) {
-        status('Vorlage wird bearbeitet – „💾 Vorlage speichern" aktualisiert sie.', '#0E7C86');
+        status('Editing template – “💾 Save template” updates it.', '#0E7C86');
       }
       return;
     }
@@ -2233,12 +2326,12 @@ if (CONFIG.libData?.item_id || CONFIG.libData?.nc_path) {
     // Meldung sofort jede rote Warnung („nicht alle Bilder geladen", „Daten
     // unlesbar") – der Nutzer hielt den halbleeren Editor für seine Datei.
     if (post?.canvas_json) {
-      status('⏳ Entwurf wird geladen…');
+      status('⏳ Loading draft…');
       if (await io.restoreCanvas(editor, post.canvas_json, { frisch: true })) status('Bereit.', '#888');
       return;
     }
     if (libD?.canvas_json) {
-      status('⏳ Entwurf wird geladen…');
+      status('⏳ Loading draft…');
       if (await io.restoreCanvas(editor, libD.canvas_json, { frisch: true })) status('Bereit.', '#888');
       return;
     }
@@ -2252,8 +2345,8 @@ if (CONFIG.libData?.item_id || CONFIG.libData?.nc_path) {
         status('Bereit.', '#888');
       } catch (e) {
         editor._ladefehler = true;
-        status('❌ Bild konnte nicht geladen werden – Datei fehlt evtl. in Nextcloud', 'red');
-        toast('Bild nicht gefunden', 'err');
+        status('❌ Image could not be loaded – file may be missing in Nextcloud', 'red');
+        toast('Image not found', 'err');
       }
     } else {
       status('Bereit.', '#888');
@@ -2262,7 +2355,7 @@ if (CONFIG.libData?.item_id || CONFIG.libData?.nc_path) {
     console.warn('restoreInitial:', e);
     editor._locked = false;
     editor._ladefehler = true;
-    status('❌ Entwurf konnte nicht geladen werden', 'red');
+    status('❌ Draft could not be loaded', 'red');
   } finally {
     // Der Stand direkt nach dem Öffnen gilt als „gespeichert".
     window.dispatchEvent(new CustomEvent('studio:geladen'));
@@ -2271,7 +2364,7 @@ if (CONFIG.libData?.item_id || CONFIG.libData?.nc_path) {
 
 // Sicherstellen, dass Elemente normal anklickbar/auswählbar sind (kein Werkzeug/
 // keine Zeichenebene blockiert die Auswahl nach dem Laden).
-boot('Auswahl freigeben', () => {
+boot('Release selection', () => {
   _tool = 'off';
   editor.canvas.skipTargetFind = false;
   editor.canvas.selection = true;
@@ -2309,8 +2402,8 @@ window.addEventListener('beforeunload', e => {
 // Für Navigation innerhalb der Seite (Kachel-Klicks in library.js).
 window.studioDarfVerlassen = function () {
   if (!ungespeicherteAenderungen()) return true;
-  return window.confirm('Es gibt ungespeicherte Änderungen.\n\n' +
-                        'Wirklich verlassen? Die Änderungen gehen verloren.');
+  return window.confirm('There are unsaved changes.\n\n' +
+                        'Really leave? The changes will be lost.');
 };
 
 // „Bereit." setzt ausschließlich restoreInitial – und nur, wenn wirklich alles

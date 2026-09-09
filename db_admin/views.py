@@ -111,7 +111,7 @@ def db_sql(request):
         data = json.loads(request.body)
         sql  = data.get("sql", "").strip()
     except Exception:
-        return JsonResponse({"error": "Ungültige Anfrage"}, status=400)
+        return JsonResponse({"error": "Invalid request"}, status=400)
 
     if not sql:
         return JsonResponse({"error": "Kein SQL eingegeben"}, status=400)

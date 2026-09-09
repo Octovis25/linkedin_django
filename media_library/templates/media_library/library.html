@@ -50,18 +50,18 @@
   <div style="display:flex;gap:8px">
     <form method="get" style="display:flex;gap:6px">
       <input type="text" name="q" value="{{ filter_q }}" placeholder="Suche..." style="padding:.3rem .6rem;border:1px solid #ced4da;border-radius:.25rem;font-size:.85rem;width:160px">
-      <button type="submit" class="btn btn-primary btn-sm">Suchen</button>
+      <button type="submit" class="btn btn-primary btn-sm">Search</button>
       {% if filter_q or filter_person or filter_series or filter_tag %}
-      <a href="{% url 'media_library:library' %}" class="btn btn-secondary btn-sm">✕ Zurücksetzen</a>
+      <a href="{% url 'media_library:library' %}" class="btn btn-secondary btn-sm">✕ Reset</a>
       {% endif %}
     </form>
-    <button onclick="document.getElementById('modal-upload').classList.add('open')" class="btn btn-primary btn-sm">+ Bild hochladen</button>
+    <button onclick="document.getElementById('modal-upload').classList.add('open')" class="btn btn-primary btn-sm">+ Upload image</button>
   </div>
 </div>
 
 <div class="lib-layout">
   <div class="lib-sidebar">
-    <h3>Alle</h3>
+    <h3>All</h3>
     <a class="lib-nav {% if not filter_person and not filter_series and not filter_tag and not filter_folder %}active{% endif %}"
        href="{% url 'media_library:library' %}{% if filter_q %}?q={{ filter_q }}{% endif %}"
        ondragover="event.preventDefault();this.classList.add('drag-over')" ondragleave="this.classList.remove('drag-over')"
@@ -104,7 +104,7 @@
           + '<span class="folder-actions" onclick="event.stopPropagation()">'
           + '<button onclick="promptNewFolder(' + f.id + ')" title="Unterordner">+</button>'
           + '<button onclick="renameFolder(' + f.id + ',\'' + f.name.replace(/'/g, "\\'") + '\')" title="Umbenennen">✏️</button>'
-          + '<button onclick="deleteFolder(' + f.id + ',\'' + f.name.replace(/'/g, "\\'") + '\')" title="Löschen">🗑</button>'
+          + '<button onclick="deleteFolder(' + f.id + ',\'' + f.name.replace(/'/g, "\\'") + '\')" title="Delete">🗑</button>'
           + '</span></div>';
         html += subHtml;
       });
@@ -115,7 +115,7 @@
 
     <h3 style="display:flex;justify-content:space-between;align-items:center;margin-top:1rem">
       📐 Templates
-      <a href="/library/studio/templates/" style="border:none;background:none;cursor:pointer;font-size:12px;color:#008591;text-decoration:none" title="Templates verwalten">Verwalten →</a>
+      <a href="/library/studio/templates/" style="border:none;background:none;cursor:pointer;font-size:12px;color:#008591;text-decoration:none" title="Manage templates">Manage →</a>
     </h3>
     <a class="lib-nav" href="/library/studio/templates/" style="font-size:12px">
       📐 Templates verwalten ({{ templates_count }} vorhanden)
@@ -136,10 +136,10 @@
     <div id="lib-drop-overlay" style="display:none;position:absolute;inset:0;background:rgba(0,133,145,.12);border:3px dashed #008591;border-radius:8px;z-index:90;pointer-events:none;align-items:center;justify-content:center">
       <div style="text-align:center;color:#008591;font-size:1.1rem;font-weight:600">
         <p style="font-size:2.5rem;margin:0">📤</p>
-        <p style="margin:6px 0 0">Bilder hier ablegen zum Hochladen</p>
+        <p style="margin:6px 0 0">Drop images here to upload</p>
       </div>
     </div>
-    <p style="font-size:13px;color:#6c757d;margin-bottom:1rem">{{ items|length }} Bild{{ items|length|pluralize:"er" }}</p>
+    <p style="font-size:13px;color:#6c757d;margin-bottom:1rem">{{ items|length }} image{{ items|length|pluralize }}</p>
 
     {% if items %}
     <div class="img-grid">
@@ -150,7 +150,7 @@
         <div class="img-check" onclick="event.stopPropagation();toggleSelect({{ item.id }}, this)">✓</div>
         <div class="img-quick-actions">
           <a href="/library/studio/?lib_item={{ item.id }}" onclick="event.stopPropagation()" title="Im Studio bearbeiten" class="quick-btn studio-btn">🎨</a>
-          <button onclick="event.stopPropagation();quickDelete({{ item.id }}, this)" title="Löschen" class="quick-btn del-btn">🗑</button>
+          <button onclick="event.stopPropagation();quickDelete({{ item.id }}, this)" title="Delete" class="quick-btn del-btn">🗑</button>
         </div>
         {% if item.is_video %}
         <video src="{% url 'media_library:image' item.id %}" style="width:100%;aspect-ratio:1;object-fit:cover;display:block;background:#1a1a2e" muted preload="metadata" onmouseenter="this.play()" onmouseleave="this.pause();this.currentTime=0"></video>
@@ -158,7 +158,7 @@
         <img src="{% url 'media_library:image' item.id %}" alt="{{ item.title }}" loading="lazy" draggable="false">
         {% endif %}
         <div class="img-meta">
-          <div class="img-title">{{ item.title|default:"(kein Titel)" }}</div>
+          <div class="img-title">{{ item.title|default:"(no title)" }}</div>
           {% if item.person %}<div class="img-sub">👤 {{ item.person }}</div>{% endif %}
           {% if item.series %}<div class="img-sub">📚 {{ item.series }}</div>{% endif %}
           {% if item.tags %}
@@ -171,7 +171,7 @@
     {% else %}
     <div style="text-align:center;padding:3rem;color:#888">
       <p style="font-size:2rem;margin-bottom:.5rem">🎨</p>
-      <p>Noch keine Bilder. Lade dein erstes Bild hoch!</p>
+      <p>No images yet. Upload your first image!</p>
     </div>
     {% endif %}
   </div>
@@ -180,19 +180,19 @@
 <!-- Upload Modal -->
 <div id="modal-upload" class="modal-bg">
   <div class="modal-box">
-    <h3 style="margin:0 0 1rem;font-size:15px">Bild hochladen</h3>
+    <h3 style="margin:0 0 1rem;font-size:15px">Upload image</h3>
     <form method="post" action="{% url 'media_library:upload' %}" enctype="multipart/form-data">
       {% csrf_token %}
       {% if filter_folder and filter_folder != 'none' %}<input type="hidden" name="folder_id" value="{{ filter_folder }}">{% endif %}
       <div class="upload-zone" onclick="document.getElementById('lib-file').click()" id="upload-zone">
-        <p>📁 Klicken oder Bild hierher ziehen</p>
+        <p>📁 Click or drag an image here</p>
         <p id="upload-filename" style="font-size:12px;color:#008591;margin-top:4px"></p>
       </div>
       <input type="file" id="lib-file" name="image" accept="image/*" style="display:none" onchange="document.getElementById('upload-filename').textContent=this.files[0]?.name||''">
       <div style="margin-top:12px;display:grid;grid-template-columns:1fr 1fr;gap:8px">
         <div>
           <label style="font-size:12px;color:#6c757d">Titel</label>
-          <input type="text" name="title" placeholder="z.B. Dr. Anna — Erklärt" style="width:100%;font-size:13px;padding:5px 8px;border:0.5px solid #ced4da;border-radius:4px;box-sizing:border-box">
+          <input type="text" name="title" placeholder="e.g. Dr. Anna — Explains" style="width:100%;font-size:13px;padding:5px 8px;border:0.5px solid #ced4da;border-radius:4px;box-sizing:border-box">
         </div>
         <div>
           <label style="font-size:12px;color:#6c757d">Person / Charakter</label>
@@ -211,11 +211,11 @@
       </div>
       <div style="margin-top:8px">
         <label style="font-size:12px;color:#6c757d">Notiz</label>
-        <textarea name="note" placeholder="Wofür eignet sich dieses Bild?" style="width:100%;font-size:13px;padding:6px 8px;border:0.5px solid #ced4da;border-radius:4px;resize:vertical;min-height:50px;box-sizing:border-box"></textarea>
+        <textarea name="note" placeholder="What is this image good for?" style="width:100%;font-size:13px;padding:6px 8px;border:0.5px solid #ced4da;border-radius:4px;resize:vertical;min-height:50px;box-sizing:border-box"></textarea>
       </div>
       <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:12px">
-        <button type="button" onclick="document.getElementById('modal-upload').classList.remove('open')" class="btn btn-sm" style="border:0.5px solid #ced4da">Abbrechen</button>
-        <button type="submit" class="btn btn-primary btn-sm">Hochladen</button>
+        <button type="button" onclick="document.getElementById('modal-upload').classList.remove('open')" class="btn btn-sm" style="border:0.5px solid #ced4da">Cancel</button>
+        <button type="submit" class="btn btn-primary btn-sm">Upload</button>
       </div>
     </form>
   </div>
@@ -257,12 +257,12 @@
       <div style="display:flex;justify-content:space-between;align-items:center;margin-top:12px">
         <form id="delete-form" method="post" action="" style="margin:0">
           {% csrf_token %}
-          <button type="submit" onclick="return confirm('Bild wirklich löschen?')" style="font-size:12px;padding:4px 10px;border:0.5px solid #dc3545;border-radius:4px;background:#fff;color:#dc3545;cursor:pointer">🗑 Löschen</button>
+          <button type="submit" onclick="return confirm('Really delete the image?')" style="font-size:12px;padding:4px 10px;border:0.5px solid #dc3545;border-radius:4px;background:#fff;color:#dc3545;cursor:pointer">🗑 Delete</button>
         </form>
         <div style="display:flex;gap:8px">
           <a id="studio-edit-btn" href="#" style="font-size:13px;padding:5px 14px;background:#61CEBC;color:#fff;border:none;border-radius:4px;cursor:pointer;text-decoration:none;display:inline-flex;align-items:center;gap:4px">🎨 Studio</a>
-          <button type="button" onclick="document.getElementById('modal-detail').classList.remove('open')" style="font-size:13px;padding:5px 14px;border:0.5px solid #ced4da;border-radius:4px;background:#fff;cursor:pointer">Abbrechen</button>
-          <button type="submit" form="detail-form" style="font-size:13px;padding:5px 14px;background:#008080;color:#fff;border:none;border-radius:4px;cursor:pointer">Speichern</button>
+          <button type="button" onclick="document.getElementById('modal-detail').classList.remove('open')" style="font-size:13px;padding:5px 14px;border:0.5px solid #ced4da;border-radius:4px;background:#fff;cursor:pointer">Cancel</button>
+          <button type="submit" form="detail-form" style="font-size:13px;padding:5px 14px;background:#008080;color:#fff;border:none;border-radius:4px;cursor:pointer">Save</button>
         </div>
       </div>
     </form>
@@ -273,14 +273,14 @@
 <div class="bulk-bar" id="bulk-bar">
   <span id="bulk-count">0</span> ausgewählt
   <select id="bulk-folder-select" style="font-size:12px;padding:3px 6px;border:1px solid #ced4da;border-radius:4px">
-    <option value="">→ Ordner wählen…</option>
+    <option value="">→ Choose folder…</option>
     <option value="null">📂 Unsortiert</option>
     {% for f in folders %}
     <option value="{{ f.id }}">{{ f.name }}</option>
     {% endfor %}
   </select>
   <button onclick="bulkMove()" class="btn btn-primary btn-sm" style="font-size:12px">Verschieben</button>
-  <button onclick="bulkDelete()" class="btn btn-danger btn-sm" style="font-size:12px">🗑 Löschen</button>
+  <button onclick="bulkDelete()" class="btn btn-danger btn-sm" style="font-size:12px">🗑 Delete</button>
   <button onclick="clearSelection()" style="border:none;background:none;cursor:pointer;font-size:16px;color:#888">✕</button>
 </div>
 

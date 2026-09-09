@@ -44,7 +44,7 @@ export async function nameSicherstellen(editor) {
     return n;                                 // unverändert → nichts zu tun
   }
 
-  status('⏳ Namen prüfen…');
+  status('⏳ Checking names…');
   const belegt = await vergebeneNamen();
 
   // Umbenennen einer bestehenden Ausgabe: nur prüfen, nicht neu fragen.
@@ -60,9 +60,9 @@ export async function nameSicherstellen(editor) {
     const gewaehlt = await frageNachNamen({
       vorschlag: eindeutig(sauber, belegt, gespeicherterName), belegt, eigener: gespeicherterName,
       titel: 'Name schon vergeben',
-      hinweis: `„${sauber}" gehört bereits zu einer anderen Ausgabe. Bitte einen anderen Namen wählen.`,
+      hinweis: `“${sauber}” already belongs to another output. Please choose a different name.`,
     });
-    if (!gewaehlt) { status('Umbenennen abgebrochen – nichts gespeichert', 'red'); return null; }
+    if (!gewaehlt) { status('Rename cancelled – nothing saved', 'red'); return null; }
     if (feld) feld.value = gewaehlt;
     _festerName = gewaehlt;
     return gewaehlt;
@@ -74,13 +74,13 @@ export async function nameSicherstellen(editor) {
   if (!vorschlag) {
     // Kein Text im Entwurf und kein Post-Titel → durchnummerieren.
     let n = 1;
-    while (belegt.has(('Entwurf_' + n).toLowerCase())) n++;
-    vorschlag = 'Entwurf_' + n;
+    while (belegt.has(('Draft_' + n).toLowerCase())) n++;
+    vorschlag = 'Draft_' + n;
   }
   vorschlag = eindeutig(vorschlag, belegt, null);
 
   const gewaehlt = await frageNachNamen({ vorschlag, belegt, eigener: null });
-  if (!gewaehlt) { status('Speichern abgebrochen', 'red'); return null; }
+  if (!gewaehlt) { status('Save cancelled', 'red'); return null; }
   if (feld) { feld.value = gewaehlt; feld.style.border = ''; }
   _festerName = gewaehlt;
   return gewaehlt;
@@ -106,8 +106,8 @@ export function istAmSpeichern() { return _saving; }
 // Moment würde einen halb gefüllten Canvas über das Original schreiben.
 function ladeGuard(editor) {
   if (editor._locked) {
-    status('⏳ Wird noch geladen – bitte einen Moment warten', 'red');
-    toast('Der Entwurf lädt noch', 'err');
+    status('⏳ Still loading – please wait a moment', 'red');
+    toast('The draft is still loading', 'err');
     return true;
   }
   return false;
@@ -118,7 +118,7 @@ function ladeGuard(editor) {
 // „SyntaxError: Unexpected token '<'" statt einer verständlichen Meldung.
 async function leseAntwort(res) {
   if (!res.ok) {
-    if (res.status === 413) throw new Error('Datei zu groß für den Server (413)');
+    if (res.status === 413) throw new Error('File too large for the server (413)');
     if (res.status === 403) throw new Error('Nicht angemeldet oder Sitzung abgelaufen (403)');
     throw new Error(`Server-Fehler ${res.status}`);
   }
@@ -168,13 +168,13 @@ export async function saveImage(editor) {
   // dieselbe Datei zu speichern würde das Original endgültig zerstören.
   if (editor._ladefehler && (CONFIG.libData?.item_id || CONFIG.libData?.nc_path)) {
     const weiter = window.confirm(
-      'Achtung: Dieser Entwurf wurde beim Öffnen nicht vollständig geladen ' +
-      '(fehlende oder beschädigte Bilder).\n\n' +
-      'Wenn du jetzt speicherst, wird die vorhandene Datei mit dem unvollständigen ' +
-      'Stand überschrieben.\n\nTrotzdem speichern?');
-    if (!weiter) { status('Speichern abgebrochen', 'red'); return false; }
+      'Warning: this draft was not fully loaded when opened ' +
+      '(missing or corrupted images).\n\n' +
+      'If you save now, the existing file will be overwritten with the incomplete ' +
+      'state.\n\nSave anyway?');
+    if (!weiter) { status('Save cancelled', 'red'); return false; }
   }
-  if (_saving) { toast('Speichert bereits…', 'err'); return false; }
+  if (_saving) { toast('Already saving…', 'err'); return false; }
   _saving = true;
   try {
     return await _saveImage(editor);
@@ -198,8 +198,8 @@ async function _saveImage(editor) {
     dataUrl = exportPng(editor);          // nimmt Markierungs-Vorschauen zurück
     preview = editor.exportDataURL({ multiplier: 0.4 });
   } catch (e) {
-    status('❌ Export fehlgeschlagen (Bild getaintet)', 'red');
-    toast('Ein Bild ist cross-origin – über den Proxy laden', 'err');
+    status('❌ Export failed (image tainted)', 'red');
+    toast('An image is cross-origin – loading via the proxy', 'err');
     return false;
   }
 
@@ -229,10 +229,10 @@ async function _saveImage(editor) {
         // Das Bild liegt, aber der bearbeitbare Entwurf konnte nicht mitgespeichert
         // werden. Das muss der Nutzer wissen, bevor er die Seite schließt.
         status('⚠️ ' + d.warning, 'red');
-        toast('Bild gespeichert – Entwurf nicht (Details oben)', 'err');
+        toast('Image saved – draft not (details above)', 'err');
         window.alert('Achtung:\n\n' + d.warning);
       } else {
-        status('✅ Bild gespeichert!', 'green');
+        status('✅ Image saved!', 'green');
         toast('Gespeichert', 'ok');
       }
       // Merken, WAS gerade gespeichert wurde. Ohne das legt jedes weitere
@@ -246,11 +246,11 @@ async function _saveImage(editor) {
       return true;
     }
     status('❌ ' + (d.error || 'Fehler'), 'red');
-    toast(d.error || 'Speichern fehlgeschlagen', 'err');
+    toast(d.error || 'Save failed', 'err');
     return false;
   } catch (e) {
     status('❌ ' + (e.message || e), 'red');
-    toast(e.message || 'Speichern fehlgeschlagen', 'err');
+    toast(e.message || 'Save failed', 'err');
     return false;
   }
 }
@@ -262,7 +262,7 @@ export async function saveAnimation(editor, blob, ext) {
   // Denselben Namen wie das Bild verwenden: Bild, GIF und Video eines Entwurfs
   // heißen gleich und gehören dadurch zusammen.
   const title = await nameSicherstellen(editor);
-  if (!title) return { ok: false, error: 'abgebrochen' };
+  if (!title) return { ok: false, error: 'cancelled' };
   let preview = '';
   try { preview = editor.exportDataURL({ multiplier: 0.4 }); } catch (e) { /* egal */ }
   const safe = title.replace(/[^a-zA-Z0-9_.-]/g, '_') + ext;
@@ -292,18 +292,18 @@ export async function saveAnimation(editor, blob, ext) {
     const d = await leseAntwort(res);
     if (d.ok) {
       status('✅ Gespeichert als „' + title + '"', 'green');
-      toast('In „Meine Ausgaben" gespeichert', 'ok');
+      toast('Saved to “My outputs”', 'ok');
       CONFIG.libData = { ...(CONFIG.libData || {}), item_id: d.lib_id ?? null, title,
                          nc_path: d.nc_path ?? null, kind: ext === '.gif' ? 'gif' : 'video' };
       window.dispatchEvent(new CustomEvent('studio:output-changed',
         { detail: { tab: ext === '.gif' ? 'GIFs' : 'Videos' } }));
     } else {
-      toast(d.error || 'Speichern in Ausgaben fehlgeschlagen', 'err');
+      toast(d.error || 'Saving to outputs failed', 'err');
     }
     return d;
   } catch (e) {
     status('❌ ' + (e.message || e), 'red');
-    toast(e.message || 'Fehler beim Speichern in Ausgaben', 'err');
+    toast(e.message || 'Error saving to outputs', 'err');
     return { ok: false, error: String(e.message || e) };
   }
 }
@@ -317,7 +317,7 @@ export function downloadImage(editor) {
     a.click();
   } catch (e) {
     status('❌ Herunterladen fehlgeschlagen', 'red');
-    toast('Ein Bild ist cross-origin – über den Proxy laden', 'err');
+    toast('An image is cross-origin – loading via the proxy', 'err');
   }
 }
 
@@ -340,8 +340,8 @@ export function restoreCanvas(editor, canvasJsonStr, opts = {}) {
     // Nicht stillschweigend weitermachen: sonst hält der Nutzer den leeren
     // Editor für seine Datei, baut neu und überschreibt das reparable Original.
     editor._ladefehler = true;
-    status('❌ Gespeicherte Daten unlesbar – bitte nicht überschreiben', 'red');
-    toast('Entwurf konnte nicht gelesen werden', 'err');
+    status('❌ Saved data unreadable – please do not overwrite', 'red');
+    toast('Draft could not be read', 'err');
     return Promise.resolve(false);
   }
 
@@ -416,7 +416,7 @@ export function restoreCanvas(editor, canvasJsonStr, opts = {}) {
       editor.canvas.loadFromJSON(fabricState, () => finish(true));
     } catch (e) {
       console.warn('restoreCanvas Fehler:', e);
-      status('❌ Entwurf konnte nicht vollständig geladen werden', 'red');
+      status('❌ Draft could not be fully loaded', 'red');
       finish(false);
     }
     // Sicherheitsnetz: falls ein fehlendes Bild den Callback blockiert, nach
@@ -425,7 +425,7 @@ export function restoreCanvas(editor, canvasJsonStr, opts = {}) {
     // Undo-Basis festgeschrieben wurde.
     timer = setTimeout(() => {
       console.warn('restoreCanvas: Zeitüberschreitung beim Laden');
-      status('⚠️ Nicht alle Bilder konnten geladen werden', 'red');
+      status('⚠️ Not all images could be loaded', 'red');
       finish(false);
     }, 20000);
   });

@@ -76,7 +76,7 @@
     {% endif %}
     <div>
       <div style="font-size:14px;font-weight:600;color:#212529">{{ token.name }}</div>
-      <div style="font-size:12px;color:#6c757d">Persönliches Profil</div>
+      <div style="font-size:12px;color:#6c757d">Personal profile</div>
       {% if token.org_name %}
       <div style="font-size:12px;color:#0077B5;margin-top:2px">🏢 {{ token.org_name }}</div>
       {% endif %}
@@ -112,12 +112,12 @@
         <input type="text" name="org_name" value="{{ token.org_name|default:'' }}" placeholder="z. B. Octovis"
                style="font-size:13px;padding:5px 9px;border:0.5px solid #ced4da;border-radius:4px;width:160px">
       </div>
-      <button type="submit" class="btn-li" style="padding:7px 16px;font-size:13px">Speichern</button>
+      <button type="submit" class="btn-li" style="padding:7px 16px;font-size:13px">Save</button>
     </form>
   </div>
 
   {% elif creds_ok %}
-  <p style="font-size:13px;color:#555;margin:0 0 1rem">Verbinde dein LinkedIn-Konto, um Posts direkt zu veröffentlichen.</p>
+  <p style="font-size:13px;color:#555;margin:0 0 1rem">Connect your LinkedIn account to publish posts directly.</p>
   <a href="/planner/linkedin/auth/" class="btn-li">
     <svg width="16" height="16" viewBox="0 0 24 24" fill="#fff"><path d="M20.45 20.45h-3.55v-5.57c0-1.33-.03-3.04-1.85-3.04-1.85 0-2.13 1.45-2.13 2.94v5.67H9.37V9h3.41v1.56h.05c.47-.9 1.63-1.85 3.35-1.85 3.59 0 4.25 2.36 4.25 5.43v6.31zM5.34 7.43a2.06 2.06 0 1 1 0-4.12 2.06 2.06 0 0 1 0 4.12zM7.12 20.45H3.56V9h3.56v11.45z"/></svg>
     Mit LinkedIn verbinden
@@ -138,7 +138,7 @@
     <div class="setup-step">
       <div class="step-num">2</div>
       <div class="step-body">
-        Unter <strong>Products</strong> füge hinzu:<br>
+        Under <strong>Products</strong> add:<br>
         ✅ <em>Share on LinkedIn</em> &nbsp;·&nbsp; ✅ <em>Sign In with LinkedIn using OpenID Connect</em>
       </div>
     </div>
@@ -180,7 +180,7 @@
   </h2>
 
   <p style="font-size:12px;color:#6c757d;margin:0 0 1rem">
-    Buffer ermöglicht das Posten auf die <strong>Octovis LinkedIn-Seite</strong>.
+    Buffer enables posting to the <strong>Octovis LinkedIn page</strong>.
     Den Access Token findest du in Buffer unter <em>Settings → API Access</em> bzw. im Buffer Developer-Bereich.
   </p>
 
@@ -201,14 +201,14 @@
         <label style="font-size:11px;color:#888;display:block;margin-bottom:3px">Buffer Access Token</label>
         <div style="display:flex;gap:8px;flex-wrap:wrap">
           <input type="text" id="buf-token-input" value="{{ token.buffer_token|default:'' }}"
-                 placeholder="Neuen Buffer-Key hier einfügen …"
+                 placeholder="Paste new Buffer key here …"
                  style="font-size:13px;padding:5px 9px;border:0.5px solid #ced4da;border-radius:4px;flex:1;min-width:200px">
           <button type="button" onclick="loadBufferProfiles()"
                   style="padding:5px 14px;font-size:13px;border-radius:4px;background:#168DE2;color:#fff;border:none;cursor:pointer;font-weight:500">
             Profile laden
           </button>
         </div>
-        <div style="font-size:11px;color:#999;margin-top:3px">Token zum Posten/Löschen (Scopes: posts, ideas, account).</div>
+        <div style="font-size:11px;color:#999;margin-top:3px">Token for posting/deleting (scopes: posts, ideas, account).</div>
       </div>
 
 
@@ -226,7 +226,7 @@
           {% endif %}
         </select>
 
-        <label style="font-size:11px;color:#888;display:block;margin:10px 0 3px">Persönlicher LinkedIn-Kanal in Buffer (für OJ-Posts) — optional</label>
+        <label style="font-size:11px;color:#888;display:block;margin:10px 0 3px">Personal LinkedIn channel in Buffer (for OJ posts) — optional</label>
         <select id="buf-profile-select-person"
                 style="font-size:13px;padding:5px 9px;border:0.5px solid #ced4da;border-radius:4px;min-width:260px"
                 onchange="onProfileSelectPerson()">
@@ -235,7 +235,7 @@
             {{ token.buffer_profile_name_person|default:token.buffer_profile_id_person }}
           </option>
           {% else %}
-          <option value="">— kein persönlicher Kanal —</option>
+          <option value="">— no personal channel —</option>
           {% endif %}
         </select>
       </div>
@@ -244,7 +244,7 @@
 
       <div>
         <button type="submit" onclick="prepareBufferSubmit()"
-                class="btn-li" style="padding:7px 16px;font-size:13px">Speichern</button>
+                class="btn-li" style="padding:7px 16px;font-size:13px">Save</button>
       </div>
     </div>
   </form>
@@ -253,10 +253,10 @@
 <!-- ── Posts posten ── -->
 {% if token %}
 <div class="ac-card">
-  <h2>📤 Posts veröffentlichen</h2>
+  <h2>📤 Publish posts</h2>
 
   {% if ready_posts %}
-  <p style="font-size:12px;color:#6c757d;margin:0 0 1rem">Posts mit Status <strong>Ready</strong> oder <strong>Scheduled</strong></p>
+  <p style="font-size:12px;color:#6c757d;margin:0 0 1rem">Posts with status <strong>Ready</strong> or <strong>Scheduled</strong></p>
 
   {% for p in ready_posts %}
   <div class="post-card">
@@ -273,13 +273,13 @@
       </div>
     </div>
     <div class="post-actions">
-      <button class="btn-post btn-post-preview" onclick="openPostModal({{ p.id }})">✏️ Vorschau &amp; Posten</button>
+      <button class="btn-post btn-post-preview" onclick="openPostModal({{ p.id }})">✏️ Preview &amp; post</button>
     </div>
   </div>
   {% endfor %}
 
   {% else %}
-  <p style="font-size:13px;color:#aaa;text-align:center;padding:1.5rem 0">Keine Posts mit Status Ready oder Scheduled.</p>
+  <p style="font-size:13px;color:#aaa;text-align:center;padding:1.5rem 0">No posts with status Ready or Scheduled.</p>
   {% endif %}
 </div>
 {% endif %}
@@ -303,11 +303,11 @@
       {% endif %}
     </div>
 
-    <textarea id="pm-text" placeholder="Post-Text wird aus dem Content vorausgefüllt..."></textarea>
+    <textarea id="pm-text" placeholder="Post text is pre-filled from the content..."></textarea>
 
     <div style="display:flex;align-items:center;gap:8px;margin:10px 0">
       <label style="display:flex;align-items:center;gap:5px;font-size:13px;cursor:pointer">
-        <input type="checkbox" id="pm-include-img"> Bild anhängen
+        <input type="checkbox" id="pm-include-img"> Attach image
       </label>
       <span id="pm-char-count" style="font-size:12px;color:#6c757d;margin-left:auto">0 / 3000</span>
     </div>
@@ -315,7 +315,7 @@
     <div id="pm-result" style="display:none;margin:10px 0"></div>
 
     <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:12px">
-      <button type="button" onclick="closePostModal()" style="font-size:13px;padding:5px 14px;border:0.5px solid #ced4da;border-radius:4px;background:#fff;cursor:pointer">Abbrechen</button>
+      <button type="button" onclick="closePostModal()" style="font-size:13px;padding:5px 14px;border:0.5px solid #ced4da;border-radius:4px;background:#fff;cursor:pointer">Cancel</button>
       <button type="button" onclick="doPost()" id="pm-submit" class="btn-li" style="padding:6px 18px;font-size:13px">Jetzt posten</button>
     </div>
   </div>
@@ -448,7 +448,7 @@ async function loadBufferProfiles() {
     const prevOrg = document.getElementById('buf-pid-hidden').value;
     const prevPerson = document.getElementById('buf-pid-person-hidden').value;
     sel.innerHTML = '';
-    selP.innerHTML = '<option value="">— kein persönlicher Kanal —</option>';
+    selP.innerHTML = '<option value="">— no personal channel —</option>';
 
     if (!res.profiles || res.profiles.length === 0) {
       errEl.textContent = 'Keine LinkedIn-Profile in Buffer gefunden. Stelle sicher, dass die LinkedIn-Seite im neuen Buffer-Account verbunden ist.';
