@@ -11,6 +11,13 @@ const { initLibrary, refreshOutput } = lib;
 import * as media from './media.js';
 import { removeBackground, floodFillTransparent, recolorRegion, recolorSimilarAll, removeColorGlobal, hasCheckerboardBorder, removeCheckerboard } from './cutout.js';
 import * as retouch from './retouch.js';
+import { buildContext } from './toolbar.js';
+import { mountShell, initUi } from './ui.js';
+
+// Build rail, mode panels and the media panel from the declaration in
+// toolbar.js. This has to happen BEFORE anything below looks an element up by
+// id — every control the rest of this file talks to is created right here.
+mountShell();
 
 // Kapselt einen Initialisierungsschritt. Ohne das brach EIN Fehler irgendwo in
 // der langen Startsequenz alles Folgende ab – inklusive der Knopf-Verdrahtung.
@@ -514,11 +521,6 @@ const actions = {
   },
   'post-bg':      () => CONFIG.postData?.id && bg.setBackgroundImage(editor, `/library/studio/api/post-image/${CONFIG.postData.id}/`),
   'post-overlay': () => CONFIG.postData?.id && editor.addImageUrl(`/library/studio/api/post-image/${CONFIG.postData.id}/`),
-  'bg-color-apply': () => {
-    // Zuletzt in der Palette gewählte Farbe (z. B. ein Video-Teal) als Hintergrund.
-    const c = currentShapeColor || document.getElementById('bg-color')?.value || '#008591';
-    setCanvasFarbe(c);   // hält den Farbwähler in der Canvas-Sektion mit aktuell
-  },
   'go-back': (btn) => {
     // Immer im gleichen Tab zur Herkunftsseite navigieren. (Früher wurde
     // window.close() versucht – das schloss den Tab und man landete außerhalb
@@ -738,6 +740,27 @@ async function doCutout() {
   status('✂ Stelle frei…');
   try {
     const cleaned = await removeBackground(o._element, { tol: 55 });
+    // removeBackground schützt helle, farbneutrale Pixel bewusst (Weiß, Off-White,
+    // Hellgrau), damit weiße Bildinhalte wie Kittel oder Icons stehen bleiben.
+    // Bei weißem oder kariertem Hintergrund bleibt deshalb ALLES stehen – der
+    // Knopf sah dann aus, als täte er nichts. Jetzt sagt er, was los ist.
+    const eckeOffen = (() => {
+      try {
+        const c = document.createElement('canvas');
+        c.width = cleaned.width; c.height = cleaned.height;
+        const cx = c.getContext('2d'); cx.drawImage(cleaned, 0, 0);
+        const a = (x, y) => cx.getImageData(x, y, 1, 1).data[3];
+        return [a(0, 0), a(c.width - 1, 0), a(0, c.height - 1), a(c.width - 1, c.height - 1)]
+          .some(v => v === 0);
+      } catch (e) { return true; }
+    })();
+    if (!eckeOffen) {
+      status('Nothing removed: the background is white or very light, and white is '
+           + 'protected so white content survives. Use Erase → “Whole colour” and '
+           + 'click the background.', '#B26A00');
+      toast('Background looks white – use Erase → Whole colour', 'err');
+      return;
+    }
     o.bgRemoved = true; o._work = null;
     retouch.replaceElement(o, cleaned);
     editor.snapshot();
@@ -750,7 +773,7 @@ async function doCutout() {
 
 // ==== Freistellen & Korrektur-Werkzeuge ====================================
 let _tol = 50;
-let _brush = 20;
+let _brush = 6;   // feine Vorgabe; der Regler bildet quadratisch auf 1–120 px ab
 let _tool = 'off';       // 'off' | 'fill' | 'pick' | 'paint' | 'mark' | 'rect' | 'erase' | 'restore' | 'recolorpick' | 'recolorpickall'
 let _toolTarget = null;
 let _recolorPickColor = null;   // beim Umfärben zuerst per Klick aufgenommene Farbe
@@ -1181,8 +1204,11 @@ function updateRetouchPanel() {
   const hint = document.getElementById('retouch-hint');
   const body = document.getElementById('retouch-body');
   if (!hint || !body) return;
-  // Werkzeuge IMMER anzeigen; Hinweis nur, wenn kein Bild gewählt ist.
+  // Werkzeuge immer anzeigen, aber ohne Bild sichtbar STILLLEGEN. Vorher waren
+  // sie voll bedienbar und jeder Klick lief in einen kurzen Toast – von außen
+  // sah das aus, als täten die Knöpfe schlicht nichts.
   body.style.display = 'block';
+  body.classList.toggle('is-disabled', !isImg);
   hint.style.display = isImg ? 'none' : 'block';
   document.querySelectorAll('#retouch-body [data-tool]').forEach(b =>
     b.classList.toggle('primary', b.dataset.tool === _tool && _tool !== 'off'));
@@ -1779,13 +1805,20 @@ document.addEventListener('keydown', e => {
 });
 
 {
+  // Der Regler lief linear von 3 bis 120 px — damit lagen die feinen Größen auf
+  // den ersten Millimetern und waren praktisch nicht treffbar. Jetzt ist die
+  // Reglerstellung quadratisch auf die Pixelgröße abgebildet: die untere Hälfte
+  // des Wegs deckt 1–30 px ab, die obere den Rest bis 120.
+  const MIN_PX = 1, MAX_PX = 120;
+  const zuPixel = (v) => Math.max(MIN_PX,
+    Math.round(MIN_PX + Math.pow(v / 100, 2) * (MAX_PX - MIN_PX)));
   const brushS = document.getElementById('brush-slider');
   const brushV = document.getElementById('brush-val');
   if (brushS) {
-    _brush = +brushS.value || _brush;
+    _brush = zuPixel(+brushS.value);
     if (brushV) brushV.textContent = _brush + ' px';
     brushS.oninput = () => {
-      _brush = +brushS.value;
+      _brush = zuPixel(+brushS.value);
       if (brushV) brushV.textContent = _brush + ' px';   // ohne Guard warf das hier
     };
   }
@@ -1796,66 +1829,29 @@ let _keepRatio = true;
 
 function renderSelBar() {
   const bar = document.getElementById('sel-bar');
-  if (!bar) return;   // ohne diesen Guard riss ein fehlendes Element die ganze
-                      // Startsequenz ab (Datei laden, Titel, „Bereit."-Status)
+  if (!bar) return;   // without this guard a missing element tore down the
+                      // whole start-up sequence (file load, title, status)
   const objs = editor.activeAll();
-  const hasSel = objs.length > 0;
-  const isImg = objs.length === 1 && objs[0].type === 'image';
-  const d = hasSel ? '' : 'disabled';
-  const dImg = isImg ? '' : 'disabled';
-  const activeLabel = !hasSel ? ''
-    : (objs.length > 1 ? `${objs.length} elements`
-       : layerLabel(objs[0], editor.realObjects().indexOf(objs[0]) + 1));
   const first = objs[0];
-  const sw = first ? Math.round(first.getScaledWidth()) : '';
-  const sh = first ? Math.round(first.getScaledHeight()) : '';
-  const fc = first ? first.getCenterPoint() : null;
-  const cx = fc ? Math.round(fc.x) : '';
-  const cy = fc ? Math.round(fc.y) : '';
-  const maxi = document.querySelector('.studio-wrap')?.classList.contains('maxi');
-  bar.innerHTML = `
-    <button class="tbtn primary" data-act="undo" title="Undo the last action (Ctrl+Z)" style="font-weight:700">↶ Undo</button>
-    <button class="tbtn" data-act="redo" title="Redo the last undone action (Ctrl+Y)" style="font-weight:700">↷ Redo</button>
-    <span style="width:10px"></span>
-    <button class="tbtn ${editor.gridOn ? 'primary' : ''}" data-act="grid" title="Show/hide the alignment grid (not saved)">▦ Grid</button>
-    <button class="tbtn" data-act="zoom-out" title="Verkleinern">🔍−</button>
-    <button class="tbtn" data-act="zoom-reset" title="Reset zoom">⤢</button>
-    <button class="tbtn" data-act="zoom-in" title="Zoom in">🔍+</button>
-    <button class="tbtn ${maxi ? 'primary' : ''}" data-act="maximize" title="Large canvas: bars hidden, canvas fills the screen">⛶ Large</button>
-    <span style="width:8px"></span>
-    ${hasSel ? `<span class="sel-active" title="Aktives Element">${activeLabel}</span>` : ''}
-    ${hasSel ? `<span class="sel-size" title="Size in pixels${objs.length > 1 ? ' – applies to all selected elements' : ''}">
-        B <input type="number" id="sel-w" class="sel-num" min="1" step="1" value="${sw}">
-        H <input type="number" id="sel-h" class="sel-num" min="1" step="1" value="${sh}">
-        <button class="tbtn" id="sel-lock" title="${_keepRatio ? 'Aspect ratio locked – click to unlock' : 'Width/height free – click to lock'}">${_keepRatio ? '🔗' : '🔓'}</button>
-      </span>` : ''}
-    ${hasSel ? `<span class="sel-size" title="Mittelpunkt in Pixel${objs.length > 1 ? ' – setzt alle auf dieselbe Stelle' : ''}">
-        X <input type="number" id="sel-x" class="sel-num" step="1" value="${cx}">
-        Y <input type="number" id="sel-y" class="sel-num" step="1" value="${cy}">
-      </span>` : ''}
-    ${objs.length > 1 ? `<span class="sel-size" title="Angleichen und verteilen">
-        <button class="tbtn" id="same-size" title="Make all the size of the first selected">⧉ same size</button>
-        <button class="tbtn" id="dist-h" title="Distribute evenly horizontally">↔≡</button>
-        <button class="tbtn" id="dist-v" title="Distribute evenly vertically">↕≡</button>
-      </span>` : ''}
-    <button class="tbtn" data-act="duplicate" title="Duplizieren (Strg+D)" ${d}>📋</button>
-    ${objs.length > 1 ? `<button class="tbtn" data-act="group" title="Glue selected parts into a group">🔗 Group</button>` : ''}
-    ${editor.isGroup() ? `<button class="tbtn" data-act="ungroup" title="Ungroup again">✂ Ungroup</button>` : ''}
-    <button class="tbtn" data-act="flip-h" title="Horizontal spiegeln" ${d}>↔</button>
-    <button class="tbtn" data-act="flip-v" title="Vertikal spiegeln" ${d}>↕</button>
-    <button class="tbtn" data-act="forward" title="Nach vorne" ${d}>⬆</button>
-    <button class="tbtn" data-act="backward" title="Nach hinten" ${d}>⬇</button>
-    <span style="width:8px"></span>
-    <button class="tbtn" data-act="align-left" title="Links" ${d}>⬅</button>
-    <button class="tbtn" data-act="align-centerH" title="Horizontal zentrieren" ${d}>↔|</button>
-    <button class="tbtn" data-act="align-right" title="Rechts" ${d}>➡</button>
-    <button class="tbtn" data-act="align-top" title="Oben" ${d}>⬆|</button>
-    <button class="tbtn" data-act="align-centerV" title="Vertikal zentrieren" ${d}>↕|</button>
-    <button class="tbtn" data-act="align-bottom" title="Unten" ${d}>⬇|</button>
-    <span style="width:8px"></span>
-    <button class="tbtn danger" data-act="delete" title="Delete (Del)" ${d}>🗑</button>
-    ${hasSel ? '' : '<span class="hint" style="margin-left:8px">Select an element to edit</span>'}
-  `;
+  const centre = first ? first.getCenterPoint() : null;
+  // Which groups appear is decided by the `when` rules in toolbar.js, not by
+  // display toggles scattered through this file.
+  bar.innerHTML = buildContext({
+    hasSel:    objs.length > 0,
+    count:     objs.length,
+    isImg:     objs.length === 1 && objs[0].type === 'image',
+    isGroup:   editor.isGroup(),
+    label:     !objs.length ? ''
+               : (objs.length > 1 ? objs.length + ' elements'
+                  : layerLabel(objs[0], editor.realObjects().indexOf(objs[0]) + 1)),
+    w:         first ? Math.round(first.getScaledWidth()) : '',
+    h:         first ? Math.round(first.getScaledHeight()) : '',
+    x:         centre ? Math.round(centre.x) : '',
+    y:         centre ? Math.round(centre.y) : '',
+    keepRatio: _keepRatio,
+    gridOn:    !!editor.gridOn,
+    maxi:      !!document.querySelector('.studio-wrap')?.classList.contains('maxi'),
+  });
   wireSizeFields();
 }
 
@@ -2287,6 +2283,7 @@ boot('Library', () => {
 });
 boot('Selection bar', () => renderSelBar());
 boot('Retouch panel', () => updateRetouchPanel());
+boot('Shell', () => initUi());
 
 // Aktuell geladene Vorlage – EINE Quelle der Wahrheit auf dem Editor-Objekt,
 // egal ob über die Verwaltung (?template=…) oder per Kachel-Klick (applyTemplate)
@@ -2364,6 +2361,21 @@ if (CONFIG.libData?.item_id || CONFIG.libData?.nc_path) {
 
 // Sicherstellen, dass Elemente normal anklickbar/auswählbar sind (kein Werkzeug/
 // keine Zeichenebene blockiert die Auswahl nach dem Laden).
+// ---- Zoomen mit Strg+Mausrad über der Arbeitsfläche ----------------------
+// Für feines Retuschieren: erst heranzoomen, dann mit kleinem Pinsel arbeiten.
+// Ohne Strg scrollt das Rad weiter die Seite — sonst bleibt man beim Scrollen
+// versehentlich im Bild hängen.
+boot('Wheel zoom', () => {
+  const host = document.querySelector('.canvas-host');
+  if (!host) return;
+  host.addEventListener('wheel', (e) => {
+    if (!e.ctrlKey) return;
+    e.preventDefault();
+    zeigeZoom(editor.zoom(e.deltaY < 0 ? 'in' : 'out'));
+    editor.canvas.calcOffset();   // sonst treffen Pipette und Rechteck daneben
+  }, { passive: false });
+});
+
 boot('Release selection', () => {
   _tool = 'off';
   editor.canvas.skipTargetFind = false;

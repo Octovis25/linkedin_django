@@ -1,6 +1,7 @@
 {% comment %}
-  Studio help: overlay with a short guide (English). Shown via the 📖 Documentation
-  button in the Studio header. Self-contained – no extra JS/CSS needed.
+  Studio help: overlay with a short guide (English). Opened by the 📖 Help button
+  at the foot of the mode rail (see buildRail in toolbar.js). Self-contained –
+  no extra JS/CSS needed.
 {% endcomment %}
 <div id="studio-help"
      onclick="if(event.target===this)this.style.display='none'"
@@ -17,116 +18,170 @@
     </div>
 
     <p style="margin:.2rem 0 .6rem;color:#555">
-      Build images, GIFs and videos for your posts. The left column holds the tools,
-      the canvas is in the middle, and uploads, assets and your finished outputs are
-      on the right.
+      Build images, GIFs and videos for your posts. On the far left a narrow rail
+      switches between four <b>modes</b> — only the tools of the current mode are on
+      screen. Right at the bottom of that rail, set apart, sits <b>📖 Help</b>: it opens
+      this guide. The canvas sits in the middle, with the animation bar underneath, and
+      uploads, assets and your finished outputs are on the right.
     </p>
 
     <!-- Labelled schematic of the Studio layout -->
-    <svg viewBox="0 0 820 400" width="100%" style="display:block;margin:0 0 16px;border:1px solid #e2e5e8;border-radius:10px;background:#fbfdfd"
+    <svg viewBox="0 0 820 410" width="100%" style="display:block;margin:0 0 16px;border:1px solid #e2e5e8;border-radius:10px;background:#fbfdfd"
          xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Diagram of the Image Studio layout">
       <style>
-        .lbl{font:600 12px Roboto,Arial,sans-serif;fill:#0e4a52}
+        .lbl{font:600 11px Roboto,Arial,sans-serif;fill:#0e4a52}
         .sec{font:600 12px Roboto,Arial,sans-serif;fill:#008591}
-        .cap{font:11px Roboto,Arial,sans-serif;fill:#6b7b7d}
+        .cap{font:10px Roboto,Arial,sans-serif;fill:#6b7b7d}
         .hd{font:700 13px Roboto,Arial,sans-serif;fill:#008591}
-        .note{font:600 12px Roboto,Arial,sans-serif;fill:#b5531a}
+        .rail{font:700 9px Roboto,Arial,sans-serif;fill:#ffffff}
+        .railoff{font:700 9px Roboto,Arial,sans-serif;fill:#bfdcdf}
+        .note{font:600 11px Roboto,Arial,sans-serif;fill:#b5531a}
       </style>
 
       <!-- top bar -->
-      <rect x="12" y="12" width="796" height="34" rx="7" fill="#eef6f6" stroke="#cfe6e6"/>
-      <text x="26" y="34" class="hd">🎨 Image Studio</text>
-      <rect x="690" y="19" width="106" height="20" rx="6" fill="#fff" stroke="#008591"/>
-      <text x="702" y="33" class="lbl">📖 Documentation</text>
+      <rect x="12" y="12" width="796" height="30" rx="7" fill="#eef6f6" stroke="#cfe6e6"/>
+      <text x="26" y="32" class="hd">🎨 Image Studio</text>
 
-      <!-- LEFT: tools -->
-      <rect x="12" y="56" width="236" height="330" rx="8" fill="#fff" stroke="#dbe6e6"/>
-      <text x="24" y="78" class="cap">TOOLS</text>
-      <g>
-        <rect x="24" y="86"  width="212" height="26" rx="5" fill="#f4fafa" stroke="#e0eded"/><text x="34" y="103" class="sec">📁 Templates</text>
-        <rect x="24" y="118" width="212" height="46" rx="5" fill="#fff7f2" stroke="#f0d3c2"/>
-          <text x="34" y="135" class="sec">🖼 Canvas</text>
-          <text x="34" y="153" class="lbl">Colour: Cream · White · Transparent</text>
-        <rect x="24" y="170" width="212" height="26" rx="5" fill="#f4fafa" stroke="#e0eded"/><text x="34" y="187" class="sec">✏️ Text</text>
-        <rect x="24" y="202" width="212" height="26" rx="5" fill="#f4fafa" stroke="#e0eded"/><text x="34" y="219" class="sec">🔗 Shapes</text>
-        <rect x="24" y="234" width="212" height="26" rx="5" fill="#f4fafa" stroke="#e0eded"/><text x="34" y="251" class="sec">🎨 Colour · Video-Teals</text>
-        <rect x="24" y="266" width="212" height="26" rx="5" fill="#f4fafa" stroke="#e0eded"/><text x="34" y="283" class="sec">✂ Cut out &amp; retouch</text>
+
+      <!-- MODE RAIL -->
+      <rect x="12" y="52" width="52" height="342" rx="8" fill="#084a50"/>
+      <rect x="17" y="58"  width="42" height="40" rx="6" fill="#ffffff"/>
+      <text x="38" y="82"  class="sec" text-anchor="middle" style="font-size:11px">Build</text>
+      <text x="38" y="120" class="railoff" text-anchor="middle">Insert</text>
+      <text x="38" y="162" class="railoff" text-anchor="middle">Image</text>
+      <text x="38" y="204" class="railoff" text-anchor="middle">Layers</text>
+      <line x1="20" y1="352" x2="56" y2="352" stroke="#2b6f75" stroke-width="1"/>
+      <text x="38" y="374" class="railoff" text-anchor="middle">📖 Help</text>
+
+      <!-- MODE PANEL -->
+      <rect x="70" y="52" width="190" height="342" rx="8" fill="#fff" stroke="#dbe6e6"/>
+      <rect x="70" y="52" width="190" height="26" rx="8" fill="#f4fafa" stroke="#e0eded"/>
+      <text x="82" y="70" class="sec">Build</text>
+      <rect x="80" y="88"  width="170" height="52" rx="5" fill="#f4fafa" stroke="#e0eded"/>
+        <text x="90" y="104" class="sec">Template</text>
+        <text x="90" y="120" class="cap">thumbnails · New · Save · Manage</text>
+      <rect x="80" y="148" width="170" height="86" rx="5" fill="#fff7f2" stroke="#f0d3c2"/>
+        <text x="90" y="164" class="sec">Canvas</text>
+        <text x="90" y="181" class="cap">Size</text>
+        <text x="90" y="197" class="lbl">Colour: Cream · White · None</text>
+        <text x="90" y="213" class="cap">Image: From selection · Remove</text>
+        <text x="90" y="229" class="cap">Clear canvas</text>
+      <text x="90" y="256" class="cap">(Insert, Image and Layers</text>
+      <text x="90" y="270" class="cap">replace this area)</text>
+      <!-- pinned foot -->
+      <rect x="70" y="336" width="190" height="58" rx="8" fill="#fbfdfd" stroke="#e0eded"/>
+      <text x="82" y="354" class="sec">Brand colours</text>
+      <rect x="82"  y="362" width="18" height="18" rx="4" fill="#008591"/>
+      <rect x="104" y="362" width="18" height="18" rx="4" fill="#F56E28"/>
+      <rect x="126" y="362" width="18" height="18" rx="4" fill="#FBF8F0" stroke="#ddd"/>
+      <rect x="148" y="362" width="18" height="18" rx="4" fill="#1B2426"/>
+      <rect x="170" y="362" width="18" height="18" rx="4" fill="#61CEBC"/>
+      <text x="196" y="376" class="cap">always visible</text>
+
+      <!-- STAGE -->
+      <rect x="268" y="52" width="300" height="26" rx="6" fill="#fff" stroke="#dbe6e6"/>
+      <rect x="276" y="58" width="46" height="14" rx="4" fill="#008591"/>
+      <text x="299" y="69" class="rail" text-anchor="middle">↶ Undo</text>
+      <rect x="326" y="58" width="46" height="14" rx="4" fill="#008591"/>
+      <text x="349" y="69" class="rail" text-anchor="middle">↷ Redo</text>
+      <text x="380" y="69" class="cap">size · position · arrange · align · zoom</text>
+
+      <rect x="268" y="84" width="300" height="212" rx="8" fill="#cfd9db" stroke="#bfcacc"/>
+      <rect x="330" y="94" width="176" height="192" rx="4" fill="#fbf8f0" stroke="#d7dee0"/>
+      <text x="418" y="196" text-anchor="middle" class="cap">Your design</text>
+
+      <rect x="268" y="302" width="300" height="26" rx="6" fill="#fff" stroke="#dbe6e6"/>
+      <text x="278" y="319" class="cap">New · Title · 💾 Save as · ▾ Format · 📥 Download · ← Exit</text>
+
+      <rect x="268" y="334" width="300" height="60" rx="6" fill="#fff" stroke="#dbe6e6"/>
+      <text x="278" y="350" class="sec">🎬 Animation per element</text>
+      <rect x="278" y="356" width="30" height="30" rx="4" fill="#e7eff0"/>
+      <text x="316" y="368" class="cap">Motion · Effect</text>
+      <text x="316" y="382" class="cap">Speed · Start</text>
+      <text x="470" y="350" class="cap">Video length · ▶ Preview</text>
+
+      <!-- MEDIA -->
+      <rect x="576" y="52" width="232" height="342" rx="8" fill="#fff" stroke="#dbe6e6"/>
+      <rect x="576" y="52" width="232" height="26" rx="8" fill="#f4fafa" stroke="#e0eded"/>
+      <text x="588" y="70" class="sec">Media</text>
+      <rect x="586" y="86" width="212" height="20" rx="5" fill="#eff4f5"/>
+      <rect x="588" y="88" width="68" height="16" rx="4" fill="#fff" stroke="#dbe6e6"/>
+      <text x="622" y="100" class="lbl" text-anchor="middle">Upload</text>
+      <text x="692" y="100" class="cap" text-anchor="middle">Assets</text>
+      <text x="762" y="100" class="cap" text-anchor="middle">Outputs</text>
+      <text x="588" y="126" class="cap">Upload image · Import SVG</text>
+      <g fill="#f4fafa" stroke="#e0eded">
+        <rect x="588" y="136" width="64" height="64" rx="5"/>
+        <rect x="658" y="136" width="64" height="64" rx="5"/>
+        <rect x="728" y="136" width="64" height="64" rx="5"/>
+        <rect x="588" y="206" width="64" height="64" rx="5"/>
+        <rect x="658" y="206" width="64" height="64" rx="5"/>
+        <rect x="728" y="206" width="64" height="64" rx="5"/>
       </g>
+      <text x="588" y="294" class="cap">Assets: tick folders · search</text>
+      <text x="588" y="312" class="cap">Outputs: Images · GIFs · Videos</text>
 
-      <!-- MIDDLE: canvas -->
-      <rect x="260" y="56" width="320" height="330" rx="8" fill="#fff" stroke="#dbe6e6"/>
-      <rect x="276" y="72" width="288" height="24" rx="5" fill="#f4fafa" stroke="#e0eded"/>
-      <text x="286" y="88" class="cap">↶ Undo · ↷ Redo · Grid · Zoom · Large · align</text>
-      <rect x="276" y="106" width="288" height="264" rx="6" fill="#fafbfc" stroke="#d7dee0" stroke-dasharray="5 4"/>
-      <text x="420" y="242" text-anchor="middle" class="cap">Your design</text>
-
-      <!-- RIGHT: upload / assets / outputs -->
-      <rect x="592" y="56" width="216" height="330" rx="8" fill="#fff" stroke="#dbe6e6"/>
-      <rect x="604" y="70" width="192" height="42" rx="5" fill="#f4fafa" stroke="#e0eded"/>
-        <text x="614" y="87" class="sec">⬆ Upload</text><text x="614" y="104" class="lbl">Upload image · Import SVG</text>
-      <rect x="604" y="120" width="192" height="150" rx="5" fill="#f4fafa" stroke="#e0eded"/>
-        <text x="614" y="137" class="sec">📁 Assets</text>
-        <text x="614" y="156" class="cap">Tick folders to show</text>
-        <text x="622" y="176" class="lbl">☑ Backgrounds</text>
-        <text x="622" y="194" class="lbl">☑ Logo</text>
-        <text x="622" y="212" class="lbl">☐ Graphics</text>
-        <text x="622" y="230" class="lbl">☐ Templates</text>
-      <rect x="604" y="278" width="192" height="96" rx="5" fill="#f4fafa" stroke="#e0eded"/>
-        <text x="614" y="295" class="sec">🎬 My outputs</text>
-        <text x="614" y="313" class="cap">Images · GIFs · Videos</text>
-        <rect x="614" y="320" width="46" height="46" rx="4" fill="#dfeff0" stroke="#bfe0e1"/>
-
-      <!-- callout: fill background -->
-      <text x="300" y="150" class="note">◀ Fill a transparent</text>
-      <text x="300" y="166" class="note">background here</text>
-      <path d="M296 156 L242 150" stroke="#F56E28" stroke-width="1.6" fill="none" marker-end="url(#ah)"/>
-      <defs>
-        <marker id="ah" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
-          <path d="M0 0 L6 3 L0 6 Z" fill="#F56E28"/>
-        </marker>
-      </defs>
+      <!-- callout -->
+      <text x="272" y="424" class="note"> </text>
     </svg>
 
     <!-- ⭐ Highlighted quick answer -->
     <div style="background:#e9f6f7;border:1px solid #b8e2e6;border-radius:10px;padding:14px 16px;margin:0 0 16px">
       <h3 style="margin:.2rem 0;color:#0e7c86">⭐ Fill a cut-out (transparent) background</h3>
       <ol style="margin:.4rem 0 .2rem 1.1rem;padding:0">
-        <li>In the <b>Canvas</b> panel, go to the <b>Colour</b> row.</li>
-        <li>Click <b>Cream</b>, <b>White</b>, a <b>Video-Teal</b> (for video/GIF), or the
-            small <b>colour box</b> for any custom colour.</li>
+        <li>Go to mode <b>Build</b> and there to the <b>Canvas</b> section, row <b>Colour</b>.</li>
+        <li>Click <b>Cream</b>, <b>White</b>, or the small <b>colour box</b> for any custom
+            colour. For a video teal, pick it from <b>Brand colours</b> at the bottom of the
+            panel first, then use the colour box.</li>
         <li>The whole canvas fills instantly; your elements stay on top.</li>
-        <li>Back to see-through: click <b>Transparent</b>.</li>
+        <li>Back to see-through: click <b>None</b>.</li>
       </ol>
       <p style="margin:.3rem 0 0">If a template loaded a background <i>image</i> (e.g. a teal
         layout), a colour sits behind it and stays hidden – click
-        <b>🚫 Remove background image</b> first, then pick your colour.</p>
+        <b>Image → Remove</b> in the same section first, then pick your colour.</p>
     </div>
 
     <!-- Panel tour, mirrors the left column top→bottom -->
-    <h3 style="color:#0e7c86;margin-bottom:.2rem">The panels (left column, top to bottom)</h3>
+    <h3 style="color:#0e7c86;margin-bottom:.2rem">The four modes (rail on the far left)</h3>
     <ul style="margin:.2rem 0 .9rem 1.1rem;padding:0">
-      <li><b>Templates</b> – reusable layouts. <b>New template</b>, <b>Save template</b>,
-          <b>+ Manage</b>.</li>
-      <li><b>Canvas</b> – <b>Size</b>, <b>Clear</b>, the <b>Colour</b> row (background fill),
-          <b>Image as background</b>, <b>Remove background image</b>.</li>
-      <li><b>Text</b> – <b>+ Text</b>, <b>+ Text block</b> (heading + body),
-          <b>✓ Check + text</b>, <b>✓✓✓ Triple check</b>.</li>
-      <li><b>Shapes</b> – arrows, lines, circles, rectangles, hexagons, and
-          <b>Circle / Hexagon / Banner + text</b>.</li>
-      <li><b>Colour</b> – colour for the selected text/shape and new shapes, plus the
-          lighter <b>Video-Teals</b> for video/GIF.</li>
-      <li><b>Cut out &amp; retouch</b> – see below.</li>
+      <li><b>Build</b> – <b>Template</b> (thumbnails, New, Save, Manage) and <b>Canvas</b>
+          (Size, the <b>Colour</b> row for the background fill, <b>Image: From selection /
+          Remove</b>, <b>Clear canvas</b>). Clicking a template thumbnail while elements are
+          already on the canvas asks first: <b>keep your elements and take the background
+          only</b>, or <b>replace everything</b> with the template. So you can cut an image out
+          first and pick the template afterwards.</li>
+      <li><b>Insert</b> – <b>Text</b> (+ Text, alignment), <b>Text block</b> (heading + body,
+          <b>Check + text</b>, <b>Checklist</b>), <b>Shapes</b> (arrows, lines, circles,
+          rectangles, hexagons) and <b>Badges</b> (Circle, Hexagon, Banner with text).</li>
+      <li><b>Image</b> – cut out and retouch the selected image, see below.</li>
+      <li><b>Layers</b> – the element list plus <b>Forward / Backward</b> and
+          <b>Group / Ungroup</b>.</li>
+      <li><b>📖 Help</b> – below the separator at the foot of the rail. Not a mode: it
+          opens this guide and leaves your current panel exactly where it was.</li>
+    </ul>
+    <p style="margin:0 0 .9rem"><b>Brand colours</b> are not part of a mode: they sit pinned
+      at the bottom of the panel and stay visible in all four. The palette colours the
+      selected text or shape and every new shape you insert.</p>
+
+    <h3 style="color:#0e7c86;margin-bottom:.2rem">The three bars around the canvas</h3>
+    <ul style="margin:.2rem 0 .9rem 1.1rem;padding:0">
+      <li><b>Above the canvas:</b> <b>↶ Undo</b> and <b>↷ Redo</b> sit at the far left and are
+          always there (Ctrl+Z / Ctrl+Y). Everything to their right depends on what is
+          selected: <b>W / H</b> and <b>X / Y</b> with the 🔗 aspect-ratio lock, duplicate,
+          flip, forward/backward, the six <b>alignment</b> buttons, delete — and, with more
+          than one element selected, <b>same size</b> and <b>distribute</b>. On the far right
+          the view controls: <b>grid</b>, <b>zoom</b> (also <b>Ctrl + mouse wheel</b> over the
+          canvas) and <b>⛶ large canvas</b>. The small handles <b>‹</b> and <b>›</b> at the
+          edges fold the side panels away and back.</li>
+      <li><b>Below the canvas:</b> <b>New</b>, the <b>Title</b> field, <b>💾 Save as…</b>,
+          <b>▾ Format</b>, <b>📥 Download</b> and <b>← Exit</b>.</li>
+      <li><b>Animation bar (bottom):</b> one row per element with <b>Motion</b>, <b>Effect</b>,
+          <b>Speed</b> and <b>Start</b>, plus <b>Video length</b> and <b>▶ Preview</b> in its
+          header. All elements sit side by side so you can time them against each other.
+          Click the header to fold the bar away while you are building a still image.</li>
     </ul>
 
-    <h3 style="color:#0e7c86;margin-bottom:.2rem">Top &amp; bottom bars</h3>
-    <ul style="margin:.2rem 0 .9rem 1.1rem;padding:0">
-      <li><b>Bar above the canvas:</b> <b>↶ Undo</b> / <b>↷ Redo</b> (undo the last action –
-          Ctrl+Z / Ctrl+Y), plus <b>Grid</b>, <b>Zoom</b>, <b>Large</b> and alignment tools.</li>
-      <li><b>Bar below the canvas:</b> <b>💾 Save as…</b>, <b>▾ Format</b>, <b>📥 Download</b>,
-          and <b>← Exit</b> (leave the Studio and go back to the overview).</li>
-    </ul>
-
-    <h3 style="color:#0e7c86;margin-bottom:.2rem">Right column</h3>
+    <h3 style="color:#0e7c86;margin-bottom:.2rem">Media panel (right, three tabs)</h3>
     <ul style="margin:.2rem 0 .9rem 1.1rem;padding:0">
       <li><b>Upload</b> – <b>Upload image</b> or <b>Import SVG</b> (tick “insert as 1 object”
           to keep an SVG whole).</li>
@@ -141,8 +196,10 @@
       <h3 style="margin:.2rem 0;color:#b5531a">🛠 Step by step: build a post</h3>
       <ol style="margin:.4rem 0 .2rem 1.2rem;padding:0">
         <li><b>Start from a template.</b> Click a thumbnail under <b>Templates</b> (or
-            <b>New template</b> for a blank one). The background and logo load onto the canvas.</li>
-        <li><b>Set the background.</b> In <b>Canvas → Colour</b> pick <b>Cream</b> or <b>White</b>
+            <b>New</b> under Template for a blank one). The background and logo load onto the
+            canvas. You don't have to start here — if something is already on the canvas, the
+            Studio offers to take only the template's background and leave your work in place.</li>
+        <li><b>Set the background.</b> In <b>Build → Canvas → Colour</b> pick <b>Cream</b> or <b>White</b>
             – or a <b>Video-Teal</b> if you’ll export a GIF/video.</li>
         <li><b>Add your image.</b> Use <b>Upload image</b> on the right, or tick a folder under
             <b>Assets</b> and click a picture. Drag it into place; scale from a corner handle.</li>
@@ -198,24 +255,73 @@
       </ol>
     </div>
 
-    <h3 style="color:#0e7c86;margin-bottom:.2rem">Cut out &amp; retouch (an image)</h3>
+    <h3 style="color:#0e7c86;margin-bottom:.2rem">Cut out &amp; retouch — mode <b>Image</b></h3>
+    <p style="margin:.2rem 0 .5rem">Select an image on the canvas, then switch to <b>Image</b>.
+      You make two choices instead of hunting through a list of buttons: <b>which tool</b>, and
+      <b>how far it reaches</b>.</p>
+    <ul style="margin:.2rem 0 .6rem 1.1rem;padding:0">
+      <li><b>Automatic</b> – <b>Remove background</b> works in one click on a
+          <b>coloured</b> background: it averages the four corners, then eats inwards from the
+          edges. On a <b>white or light</b> background it deliberately does nothing — see the
+          box below. <b>Remove checkerboard</b> takes out a baked-in checkerboard pattern and
+          leaves white content standing.</li>
+      <li><b>Tool</b> – <b>Erase</b> (make transparent), <b>Recolour</b> (replace colour) or
+          <b>Select</b> (mark an area first).</li>
+      <li><b>Applies to</b> – <b>Click an area</b> (the default: click a spot, that connected
+          area goes), <b>Brush</b> (wipe over it by hand) or <b>Whole colour</b> (click a
+          colour, every matching area in the image goes).</li>
+    </ul>
+    <table style="border-collapse:collapse;font-size:14px;margin:0 0 .7rem">
+      <tr style="background:#f4fafa">
+        <th style="text-align:left;padding:5px 10px;border:1px solid #e0eded"></th>
+        <th style="text-align:left;padding:5px 10px;border:1px solid #e0eded">Click an area</th>
+        <th style="text-align:left;padding:5px 10px;border:1px solid #e0eded">Brush</th>
+        <th style="text-align:left;padding:5px 10px;border:1px solid #e0eded">Whole colour</th>
+      </tr>
+      <tr>
+        <td style="padding:5px 10px;border:1px solid #e0eded"><b>Erase</b></td>
+        <td style="padding:5px 10px;border:1px solid #e0eded">click one area away</td>
+        <td style="padding:5px 10px;border:1px solid #e0eded">wipe it away by hand</td>
+        <td style="padding:5px 10px;border:1px solid #e0eded">that colour goes everywhere</td>
+      </tr>
+      <tr>
+        <td style="padding:5px 10px;border:1px solid #e0eded"><b>Recolour</b></td>
+        <td style="padding:5px 10px;border:1px solid #e0eded">recolour one area</td>
+        <td style="padding:5px 10px;border:1px solid #e0eded">paint over it</td>
+        <td style="padding:5px 10px;border:1px solid #e0eded">recolour every matching area</td>
+      </tr>
+    </table>
     <ul style="margin:.2rem 0 .9rem 1.1rem;padding:0">
-      <li><b>Automatic:</b> <b>Remove background automatically</b>, or
-          <b>Remove checkerboard only</b>.</li>
-      <li><b>Make transparent (click):</b> <b>Remove colour everywhere</b>, <b>Remove area</b>.</li>
-      <li><b>Recolour by clicking</b> – one tool, no colour palette:
-          click <b>🎨 Recolour area</b> (or <b>🎨 Recolour whole colour</b>), then
-          <b>first click the colour you want</b> anywhere (e.g. your petrol background – it
-          shows in the little swatch), and <b>then click the area(s) in the image</b> to
-          recolour. “Recolour area” affects only the connected area you click; “whole colour”
-          affects every matching area (e.g. all books, a piece of clothing). Pick the
-          background colour to make part of the image blend into the background. To use a new
-          colour, press the tool button again.</li>
-      <li><b>Wipe with the brush:</b> <b>Erase</b>, <b>Restore</b>, <b>Paint</b>.</li>
-      <li><b>Select an area, then apply:</b> <b>Drag rectangle</b> or <b>Free mark</b>,
-          then Delete or Recolour.</li>
+      <li><b>Recolouring works in two clicks:</b> first click picks the colour you want
+          (e.g. your petrol background — it shows in the little swatch), then click into the
+          image. Pick the background colour to make part of the image blend into the
+          background. For a different colour, press the tool button again.</li>
+      <li><b>Select</b> gives you <b>Rectangle</b> or <b>Free</b> marking, then
+          <b>Delete area</b> or <b>Recolour area</b>.</li>
+      <li><b>Restore</b> brushes the original back where you erased too much;
+          <b>Done</b> ends the tool. <b>Esc</b> also ends it.</li>
+      <li>The brush size and the colour box only appear for the tools that use them. The
+          <b>brush slider is not linear</b>: the lower half covers 1–31 px, so the fine sizes
+          are easy to hit. Far left is 1 px, far right 120 px.</li>
+      <li><b>Zoom in for detail work:</b> <b>Ctrl + mouse wheel</b> over the work surface, or
+          the 🔍 buttons in the bar above the canvas (up to 24×). Zoom in first, then work with
+          a 1–3 px brush. Without Ctrl the wheel scrolls the page as usual.</li>
+      <li>With no image on the canvas the whole panel is greyed out — there is nothing to work
+          on. Insert an image from <b>Media</b> and the tools come alive.</li>
       <li>These edits are kept on save – also inside templates.</li>
     </ul>
+
+    <div style="background:#fff8f2;border:1px solid #f0d3c2;border-radius:10px;padding:14px 16px;margin:0 0 16px">
+      <h3 style="margin:.2rem 0;color:#b5531a">Why “Remove background” sometimes does nothing</h3>
+      <p style="margin:.4rem 0 .2rem">It protects white on purpose. Pixels that are bright and
+        colour-neutral (brightness 200 or more, barely any colour) are never treated as
+        background, so white content — lab coats, white icons, light areas in an illustration —
+        survives. The price: on a <b>white or checkerboard</b> background everything is
+        protected and nothing is removed.</p>
+      <p style="margin:.4rem 0 0">In that case the Studio says so and leaves the image
+        untouched. Use <b>Erase → Whole colour</b> and click the background: that removes the
+        clicked colour throughout the image, without the white protection.</p>
+    </div>
 
     <h3 style="color:#0e7c86;margin-bottom:.2rem">Editing an existing template</h3>
     <ol style="margin:.2rem 0 .9rem 1.1rem;padding:0">
@@ -223,6 +329,9 @@
       <li>Make your changes.</li>
       <li>Click <b>💾 Save template</b> → choose <b>Update this template</b>.</li>
       <li>Keep the <b>same name</b> – a new name creates a copy.</li>
+      <li>If you only took a template's <b>background</b>, the Studio does not tie the canvas to
+          that template. Saving then offers to create a <b>new</b> template instead of
+          overwriting the original.</li>
     </ol>
 
     <h3 style="color:#0e7c86;margin-bottom:.2rem">Saving to a post</h3>

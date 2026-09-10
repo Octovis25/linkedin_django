@@ -1,74 +1,158 @@
 /* ==========================================================================
-   Image Studio v2 – styles
-   Ausgelagert aus studio.html. Nutzt die Brand-CSS-Variablen aus base/brand.css
-   (--octo-petrol, --octo-orange, --brand-c1..c6 …).
+   Image Studio – styles
+   Uses the brand variables from base/brand.css (--octo-petrol, --octo-orange,
+   --brand-c1..c6 …).
+
+   Structure of this file:
+     1. shell  – rail, panels, collapsing bars   (new)
+     2. controls for the declarative toolbar     (new)
+     3. everything from the Canvas section down  (unchanged, proven)
+     4. a short block of visual overrides at the end
+
+   The template no longer carries an inline <style> block with !important.
+   Sizes live in the variables below, in one place.
    ========================================================================== */
 
-/* ---- Layout ------------------------------------------------------------- */
-.studio-wrap        { display:flex; gap:.6rem; align-items:flex-start; width:100%;
-                      max-width:100%; box-sizing:border-box; position:relative; }
-.studio-sidebar     { flex:0 0 250px; width:250px; display:flex; flex-direction:column;
-                      gap:0; max-height:calc(100vh - 80px); overflow-y:auto;
-                      transition:flex-basis .18s ease, width .18s ease; }
-.studio-main        { flex:1 1 auto; min-width:0; }
-.studio-right       { flex:0 0 260px; width:260px; max-height:calc(100vh - 80px); overflow-y:auto;
-                      transition:flex-basis .18s ease, width .18s ease; }
+:root{
+  --st-petrol:      var(--octo-petrol, #008591);
+  --st-petrol-deep: #084A50;
+  --st-orange:      var(--octo-orange, #F56E28);
+  --st-muted:       #6C7B7E;
+  --st-line:        #DFE5E6;
+  --st-surface:     #CFD9DB;     /* work surface around the canvas */
+  --st-rail:        62px;
+  --st-side:        272px;
+  --st-right:       284px;
+}
 
-/* ---- Leisten einklappen: schweben über dem Canvas statt zu verschwinden --- */
+/* ---- Page head ---------------------------------------------------------- */
+.studio-head        { display:flex; align-items:center; justify-content:space-between;
+                      gap:1rem; margin-bottom:.5rem; }
+.studio-head h1     { margin:0; }
+
+/* ---- Shell -------------------------------------------------------------- */
+/* Deliberately flex, not grid: the canvas is sized by fit() in studio.js from
+   .canvas-host's clientHeight, and that only works with the explicit height
+   the Canvas section further down gives it. */
+.studio-wrap        { display:flex; gap:.5rem; align-items:flex-start; width:100%;
+                      max-width:100%; box-sizing:border-box; position:relative; }
+.studio-main        { flex:1 1 auto; min-width:0; }
+
+/* ---- Mode rail: its own colour block, so it reads as navigation ---------- */
+.mode-rail          { flex:0 0 var(--st-rail); align-self:stretch;
+                      background:var(--st-petrol-deep); border-radius:8px; padding:6px;
+                      display:flex; flex-direction:column; gap:3px;
+                      box-shadow:0 1px 3px rgba(0,0,0,.14); }
+.rail-btn           { width:100%; height:52px; border:0; background:none; cursor:pointer;
+                      border-radius:6px; position:relative; color:#BFDCDF; font:inherit;
+                      display:flex; flex-direction:column; align-items:center;
+                      justify-content:center; gap:2px;
+                      font-size:10px; font-weight:600; letter-spacing:.02em; }
+.rail-btn .ico      { font-size:18px; line-height:1; }
+.rail-btn:hover     { background:rgba(255,255,255,.13); color:#fff; }
+.rail-btn.active    { background:#fff; color:var(--st-petrol);
+                      box-shadow:inset 3px 0 0 var(--st-orange); }
+
+/* ---- Panels ------------------------------------------------------------- */
+.studio-sidebar     { flex:0 0 var(--st-side); width:var(--st-side); }
+.studio-right       { flex:0 0 var(--st-right); width:var(--st-right); }
+.studio-sidebar,
+.studio-right       { display:flex; flex-direction:column; background:#fff; border-radius:8px;
+                      box-shadow:0 1px 4px rgba(0,0,0,.1);
+                      max-height:calc(100vh - 195px); min-height:460px;
+                      transition:flex-basis .18s ease, width .18s ease; }
+.panel-head         { display:flex; align-items:center; gap:8px; padding:8px 10px 7px;
+                      border-bottom:1px solid var(--st-line); flex:0 0 auto; }
+.panel-head h2      { margin:0; font-size:13px; font-weight:700; }
+.panel-scroll       { padding:9px 10px 14px; overflow-y:auto; flex:1 1 auto; min-height:0; }
+
+/* The handle must live OUTSIDE the panel it hides. Inside the panel it was
+   translated away together with it — once collapsed, there was no way back and
+   the whole toolbar stayed unreachable. */
+.panel-toggle       { position:sticky; top:0; z-index:50; align-self:flex-start;
+                      flex:0 0 20px; width:20px; height:90px; margin-top:4px;
+                      border:1px solid var(--st-line); border-radius:6px; background:#fff;
+                      color:var(--st-petrol); cursor:pointer; font-size:.8rem; line-height:1;
+                      display:flex; align-items:center; justify-content:center; padding:0;
+                      box-shadow:0 1px 4px rgba(0,0,0,.08); }
+.panel-toggle:hover { background:#e8f5f6; }
+.panel-toggle.aus   { background:var(--st-petrol); color:#fff; border-color:var(--st-petrol); }
+
+/* Collapsed bars float over the canvas instead of vanishing — the tools stay
+   one hover away (edge handle). Kept from the previous layout. */
 .studio-wrap.hide-left  .studio-sidebar,
 .studio-wrap.hide-right .studio-right {
-  position:absolute; top:0; z-index:40; width:250px; flex-basis:0;
-  background:#eef1f3; border-radius:8px; padding:6px;
+  position:absolute; top:0; z-index:40; flex-basis:0;
   box-shadow:0 8px 30px rgba(0,0,0,.28);
   transition:transform .18s ease, opacity .18s ease;
 }
-.studio-wrap.hide-left  .studio-sidebar { left:26px;  transform:translateX(calc(-100% - 30px)); opacity:0; pointer-events:none; }
-.studio-wrap.hide-right .studio-right   { right:26px; width:260px;
+.studio-wrap.hide-left  .studio-sidebar { left:calc(var(--st-rail) + 8px); width:var(--st-side);
+                                          transform:translateX(calc(-100% - 80px)); opacity:0; pointer-events:none; }
+.studio-wrap.hide-right .studio-right   { right:0; width:var(--st-right);
                                           transform:translateX(calc(100% + 30px)); opacity:0; pointer-events:none; }
-/* eingeblendet: beim Überfahren des Griffs oder solange festgepinnt */
 .studio-wrap.hide-left.peek-left   .studio-sidebar,
 .studio-wrap.hide-right.peek-right .studio-right { transform:none; opacity:1; pointer-events:auto; }
 
-/* ---- Große Arbeitsfläche: Leisten schweben zur Seite (per Randgriff wieder
-       einblendbar), Canvas wird höher. Werkzeuge bleiben erreichbar. -------- */
-.studio-wrap.maxi .canvas-host  { height:calc(100vh - 130px); }
-
-.panel-toggle       { position:sticky; top:0; z-index:50; align-self:flex-start;
-                      flex:0 0 22px; width:22px; height:90px; margin-top:4px;
-                      border:1px solid #dfe3e6; border-radius:6px; background:#fff;
-                      color:#0E7C86; cursor:pointer; font-size:.8rem; line-height:1;
-                      display:flex; align-items:center; justify-content:center;
-                      box-shadow:0 1px 4px rgba(0,0,0,.08); padding:0; }
-.panel-toggle:hover { background:#e8f5f6; }
-.panel-toggle.aus   { background:#0E7C86; color:#fff; border-color:#0E7C86; }
-
-/* ---- Sidebar sections --------------------------------------------------- */
-.sidebar-section    { background:#fff; border-radius:6px; box-shadow:0 1px 4px rgba(0,0,0,.1);
-                      padding:.75rem; margin-bottom:.5rem; }
-.sidebar-section h3 { font-size:.85rem; color:var(--octo-petrol,#008591); margin:0 0 .5rem;
-                      cursor:pointer; user-select:none; display:flex;
-                      justify-content:space-between; align-items:center; }
-.sidebar-section h3::after           { content:'▾'; font-size:.7rem; color:#aaa; transition:transform .2s; }
+/* ---- Sections inside a mode panel --------------------------------------- */
+/* Class name kept as .sidebar-section: studio.js binds the collapse handler to
+   `.sidebar-section h3` and leaves #retouch-section permanently open. */
+.sidebar-section    { margin-bottom:14px; }
+.sidebar-section:last-child { margin-bottom:0; }
+.sidebar-section h3 { margin:0 0 6px; font-size:10px; font-weight:700; color:var(--st-muted);
+                      letter-spacing:.06em; text-transform:uppercase; cursor:pointer;
+                      user-select:none; display:flex; justify-content:space-between;
+                      align-items:center; }
+.sidebar-section h3::after           { content:'▾'; font-size:9px; color:#aaa; transition:transform .2s; }
 .sidebar-section.collapsed h3::after { transform:rotate(-90deg); }
 .sidebar-section.collapsed .section-body { display:none; }
 
-/* ---- Linke Werkzeugleiste: einheitliche, kompakte Schriftgröße ----------- */
-.studio-sidebar .sidebar-section { padding:.55rem .6rem; margin-bottom:.4rem; }
-.studio-sidebar .sidebar-section h3 { font-size:13px !important; margin-bottom:.4rem; }
-/* Alle Bedienelemente exakt gleich groß – überschreibt Inline-Größen. */
-.studio-sidebar .tbtn,
-.studio-sidebar .field,
-.studio-sidebar input,
-.studio-sidebar select,
-.studio-sidebar textarea,
-.studio-sidebar label,
-.studio-sidebar .lib-hint,
-.studio-sidebar .retouch-label { font-size:12px !important; line-height:1.3; }
-.studio-sidebar .tbtn { padding:4px 7px; }
-.studio-sidebar .field,
-.studio-sidebar input,
-.studio-sidebar select,
-.studio-sidebar textarea { padding:4px 6px; }
+/* ---- Controls for the declarative toolbar ------------------------------- */
+.ctl-row            { display:flex; gap:5px; align-items:center; flex-wrap:wrap; margin-bottom:5px; }
+.ctl-row:last-child { margin-bottom:0; }
+.ctl-grid           { display:grid; grid-template-columns:repeat(auto-fill,minmax(30px,1fr)); gap:4px; }
+.ctl-label          { font-size:.7rem; color:var(--st-muted); min-width:40px; }
+.ctl-value          { font-size:.7rem; color:var(--st-muted); min-width:3.2em; text-align:right; }
+.hint               { font-size:.7rem; color:var(--st-muted); margin:0 0 6px; line-height:1.4; }
+.hint.inline        { margin:0; }
+.placeholder        { font-size:.72rem; color:#9AA7A9; font-style:italic; }
+.placeholder-box    { font-size:.75rem; color:#8B999B; text-align:center; line-height:1.6;
+                      padding:12px 6px; background:#F5F8F9; border-radius:6px; margin-bottom:9px; }
+.placeholder-box .big { display:block; font-size:20px; margin-bottom:3px; }
+.check              { display:flex; align-items:center; gap:5px; font-size:.7rem;
+                      color:var(--st-muted); margin-bottom:5px; }
+.tool-status,
+.upload-status,
+.bg-info            { font-size:.68rem; color:var(--st-muted); margin-top:5px; min-height:1em; }
+.picked-swatch      { display:inline-block; width:15px; height:15px; border-radius:3px;
+                      border:1px solid #999; background:transparent; vertical-align:middle; }
+.scope-row          { margin-bottom:6px; }
+.bar-sep            { width:1px; height:20px; background:var(--st-line); margin:0 3px; flex:0 0 auto; }
+.bar-gap            { flex:1 1 auto; }
+
+.tbtn.wide          { width:100%; justify-content:center; display:flex; margin-bottom:5px; }
+.tbtn.push          { margin-left:auto; }
+.tbtn-ico           { display:flex; justify-content:center; padding:5px 0; font-size:14px; }
+.tbtn-off           { opacity:.4; pointer-events:none; }
+.field.wide         { width:100%; box-sizing:border-box; margin-bottom:5px; }
+.field-num          { width:56px; }
+textarea.field      { font-family:inherit; resize:vertical; }
+
+/* Segmented control: media tabs, retouch scope, output tabs */
+.seg                { display:flex; background:#EFF4F5; border-radius:6px; padding:2px; gap:2px;
+                      margin-bottom:6px; }
+.seg-btn            { flex:1; font:inherit; font-size:.7rem; border:0; background:none;
+                      border-radius:4px; padding:4px 6px; cursor:pointer; color:var(--st-muted); }
+.seg-btn.on         { background:#fff; color:var(--st-petrol); font-weight:700;
+                      box-shadow:0 1px 2px rgba(0,0,0,.09); }
+#output-tabs        { background:#EFF4F5; border-radius:6px; padding:2px; gap:2px; }
+#output-tabs .tbtn  { flex:1; justify-content:center; border:0; background:none; font-size:.7rem; }
+#output-tabs .tbtn.primary { background:#fff; color:var(--st-petrol); }
+
+/* ---- Animation bar wrapper (collapsible) -------------------------------- */
+.anim-wrap.closed .anim-row { display:none; }
+.anim-bar-title::before     { content:'▾ '; color:#aaa; font-size:9px; }
+.anim-wrap.closed .anim-bar-title::before { content:'▸ '; }
+.anim-bar-head              { cursor:pointer; }
 
 /* ---- Canvas: fester Rahmen, kein Scrollen ------------------------------- */
 .canvas-host        { height:calc(100vh - 195px); min-height:460px;
@@ -279,3 +363,77 @@ a.manage-link       { font-size:.75rem; color:var(--octo-petrol,#008591); }
 #rect-overlay.active { display:block; }
 #rect-marquee       { position:absolute; border:2px solid var(--octo-orange,#F56E28);
                       background:rgba(245,110,40,.22); pointer-events:none; box-sizing:border-box; }
+
+/* ==========================================================================
+   4. Visual overrides — the few places where the new shell differs from the
+      proven rules above. Kept at the end so the origin of each change is
+      obvious.
+   ========================================================================== */
+
+/* The canvas sits on a work surface, not in a white box. The old near-white
+   host made the empty space around a square canvas look like a broken frame.
+   Height and overflow stay exactly as above — fit() depends on them. */
+.canvas-host        { background:var(--st-surface); border-color:#BFCACC; }
+
+/* Context bar and action bar are cards now, so the stage reads as three
+   stacked bands: what is selected · the canvas · what you do with it. */
+.sel-bar            { background:#fff; border-radius:8px; box-shadow:0 1px 4px rgba(0,0,0,.1);
+                      padding:5px 9px; margin-bottom:.5rem; min-height:38px; }
+.studio-actionbar   { background:#fff; border-radius:8px; box-shadow:0 1px 4px rgba(0,0,0,.1);
+                      padding:6px 9px; margin-top:.5rem; padding-top:6px; border-top:0; }
+.anim-wrap          { margin-top:.5rem; }
+.anim-bar           { margin-top:0; max-height:186px; overflow-y:auto; }
+
+/* Templates: two per row reads better in a 250 px panel than four thumbnails
+   the size of a stamp. */
+.tpl-grid           { grid-template-columns:repeat(2,1fr); max-height:184px; }
+.tpl-thumb          { aspect-ratio:1; }
+
+/* Sub-headings inside a section: plain labels, not collapsible headers —
+   studio.js attaches the collapse handler to every `.sidebar-section h3`. */
+.group-head         { margin:10px 0 5px; font-size:10px; font-weight:700; color:var(--st-muted);
+                      letter-spacing:.06em; text-transform:uppercase; }
+.group-head:first-child { margin-top:0; }
+
+/* --- Full window width on this page only --------------------------------- */
+/* base.html caps every page at `main { max-width:1400px; margin:1rem auto }`.
+   For a text page that is right; for the Studio it means ~250 px of dead
+   margin left and right on a wide screen, while the canvas and the two side
+   panels fight over what's left. This stylesheet is only loaded by the Studio,
+   so the override stays local to it. */
+main:has(.studio-wrap) { max-width:none; padding:0 1rem; margin-top:.5rem; }
+/* Fallback for browsers without :has() — harmless everywhere else, because
+   only the Studio page loads this file. */
+@supports not selector(:has(*)) { main { max-width:none; padding:0 1rem; } }
+
+/* --- Proportions --------------------------------------------------------- */
+/* The canvas no longer eats the whole height: a shorter host means fit()
+   scales the canvas down, and the panels get the visual weight back. */
+.canvas-host        { height:calc(100vh - 265px); min-height:340px; }
+.studio-sidebar,
+.studio-right       { min-height:340px; max-height:calc(100vh - 265px); }
+.studio-head h1     { font-size:1.25rem; }
+
+/* --- Brand colours: pinned to the bottom of the left panel ---------------- */
+/* Not part of a mode: the palette colours the current selection and every new
+   shape, so it has to be reachable from Insert and Image too. */
+.panel-foot         { flex:0 0 auto; border-top:1px solid var(--st-line);
+                      padding:8px 10px 9px; background:#FBFDFD; }
+.foot-label         { display:block; font-size:10px; font-weight:700; color:var(--st-muted);
+                      letter-spacing:.06em; text-transform:uppercase; margin-bottom:5px; }
+/* A disabled Undo/Redo must still be legible — it is a state, not a ghost. */
+.tbtn.primary:disabled { opacity:.45; }
+
+/* --- Retouch without an image -------------------------------------------- */
+/* The tools stay on screen so you can see what the mode offers, but they are
+   visibly out of service. Before this they looked fully operational and every
+   click just produced a short toast — indistinguishable from a dead button. */
+#retouch-body.is-disabled { opacity:.45; pointer-events:none; filter:grayscale(.4); }
+#retouch-hint b     { color:#5A686A; }
+
+/* --- Help in the mode rail ------------------------------------------------ */
+/* Set apart below the four modes: it opens the guide instead of switching a
+   panel. In the page header nobody found it. */
+.rail-sep           { height:1px; background:rgba(255,255,255,.18); margin:7px 6px; }
+.rail-help          { color:#9FC9CD; }
+.rail-help:hover    { background:rgba(255,255,255,.13); color:#fff; }

@@ -1,6 +1,6 @@
 // background.js – Hintergrundbild, Templates, Farbpalette.
-import { loadImage, toast, status } from './util.js';
-import { URLS, CONFIG } from './config.js';
+import { loadImage, toast, status, modal } from './util.js';
+import { URLS, CONFIG, proxyUrl } from './config.js';
 import { restoreCanvas } from './io.js';
 
 const PALETTE_KEY = 'studio_palette_v2';
@@ -156,10 +156,48 @@ export async function loadTemplateList(editor) {
   }
 }
 
+// Applies only the template's background to the current canvas and leaves
+// every element in place. This is what makes the order of work free: cut an
+// image out first, decide on the template afterwards.
+async function nurHintergrundAnwenden(editor, canvasJsonStr) {
+  const state = JSON.parse(canvasJsonStr);
+  const fab = state.fabric || state;
+  editor.canvas.backgroundColor = fab.backgroundColor || '';
+  const bgi = fab.backgroundImage;
+  if (bgi && bgi.src) {
+    const imgEl = await loadImage(proxyUrl(bgi.src));
+    const fImg = new window.fabric.Image(imgEl, { crossOrigin: 'anonymous' });
+    // Canvas size is deliberately NOT changed — the background fills the
+    // current size, exactly like the plain-image template path below.
+    fImg.set({ scaleX: editor.width / fImg.width, scaleY: editor.height / fImg.height,
+               originX: 'left', originY: 'top', left: 0, top: 0 });
+    editor.canvas.setBackgroundImage(fImg, editor.canvas.renderAll.bind(editor.canvas));
+  } else {
+    editor.canvas.setBackgroundImage(null, editor.canvas.renderAll.bind(editor.canvas));
+  }
+  editor.canvas.requestRenderAll();
+  editor.snapshot();
+}
+
 export async function applyTemplate(editor, tpl) {
   // Ungespeicherte Arbeit nicht kommentarlos wegwerfen.
   if (typeof window.studioDarfVerlassen === 'function' && !window.studioDarfVerlassen()) return;
   if (editor._locked) { status('⏳ Something is still loading – please wait', 'red'); return; }
+
+  // A template with a layout replaces the WHOLE canvas. That forced the order
+  // of work: template first, everything else after — anyone who cut out an
+  // image first and then picked a template lost the work. Now it asks.
+  let nurHintergrund = false;
+  const vorhanden = editor.realObjects().length;
+  if (tpl.has_canvas && vorhanden) {
+    const wahl = await modal('Load template',
+      `There ${vorhanden === 1 ? 'is 1 element' : 'are ' + vorhanden + ' elements'} on the canvas.`,
+      [ { label: '🖼 Keep my elements – take the background only', value: 'bg' },
+        { label: '♻️ Replace everything with the template',        value: 'all' },
+        { label: 'Cancel',                                          value: null } ]);
+    if (!wahl) return;
+    nurHintergrund = (wahl === 'bg');
+  }
   status('⏳ Loading template…');
   // Neue Vorlagen tragen ein Layout (Hintergrund + Logo + Textfelder). Dann das
   // ganze Layout laden, damit man nur noch die Texte ersetzen muss.
@@ -168,6 +206,15 @@ export async function applyTemplate(editor, tpl) {
       const res = await fetch(`/library/studio/template/canvas/${tpl.id}/`, { credentials: 'same-origin' });
       if (!res.ok) throw new Error('Server-Fehler ' + res.status);
       const d = await res.json();
+      if (d.ok && d.canvas_json && nurHintergrund) {
+        await nurHintergrundAnwenden(editor, d.canvas_json);
+        // _templateId is deliberately NOT bound here: the canvas is now your
+        // composition, not that template. "Save template" therefore offers to
+        // create a new one instead of silently overwriting the original.
+        updateBgInfo(editor);
+        status('✅ Background taken from the template – your elements stayed', 'green');
+        return;
+      }
       if (d.ok && d.canvas_json) {
         // await: ohne das lief der Rest hier auf einem noch LEEREN Canvas –
         // die Erfolgsmeldung und die Elementzahl waren schlicht falsch, und der
