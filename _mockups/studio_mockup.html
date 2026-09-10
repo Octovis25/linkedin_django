@@ -159,6 +159,33 @@
   .actionbar .status{font-size:11px;color:var(--muted)}
   .actionbar .sep{width:1px;height:22px;background:var(--line);margin:0 3px}
 
+  /* ---------- Animationsleiste: bleibt unter dem Canvas ---------- */
+  .animbar{background:var(--panel);border-radius:var(--radius);box-shadow:0 1px 3px rgba(0,0,0,.09);
+           overflow:hidden;flex:0 0 auto}
+  .animbar .head{display:flex;align-items:center;gap:9px;padding:7px 11px;
+                 border-bottom:1px solid var(--line);cursor:pointer}
+  .animbar .head .t{font-size:12px;font-weight:700;color:var(--petrol)}
+  .animbar .head .grow{flex:1}
+  .animbar .head .len{display:flex;align-items:center;gap:5px;font-size:11px;color:var(--muted)}
+  .animbar .head .len input{width:56px;font:inherit;font-size:11px;border:1px solid var(--line);
+                            border-radius:5px;padding:3px 5px}
+  .animbar .rows{display:flex;gap:8px;padding:9px 11px;overflow-x:auto}
+  .animbar.closed .rows{display:none}
+  .animbar .chev{color:var(--muted);font-size:11px;transition:transform .18s}
+  .animbar.closed .chev{transform:rotate(-90deg)}
+  .arow{flex:0 0 210px;display:flex;gap:8px;align-items:flex-start;
+        border:1px solid var(--line);border-radius:7px;padding:7px 8px;background:#FCFDFD}
+  .arow .th{width:38px;height:38px;border-radius:5px;background:#E7EFF0;flex:0 0 auto;
+            display:flex;align-items:center;justify-content:center;font-size:17px;cursor:pointer}
+  .arow .col{flex:1;min-width:0;display:flex;flex-direction:column;gap:4px}
+  .arow .ctl{display:flex;align-items:center;gap:5px;font-size:10.5px;color:var(--muted)}
+  .arow .ctl > span{min-width:38px}
+  .arow select{font:inherit;font-size:11px;border:1px solid var(--line);border-radius:5px;
+               padding:2px 4px;flex:1;min-width:0;background:#fff}
+  .arow .times{display:flex;gap:6px}
+  .arow .times label{display:flex;align-items:center;gap:4px;flex:1;font-size:10.5px;color:var(--muted)}
+  .arow input[type=range]{width:100%;height:14px}
+
   /* ---------- Rechts ---------- */
   .thumbs{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-top:8px}
   .thumb{aspect-ratio:1;border-radius:5px;border:1px solid var(--line);cursor:pointer;
@@ -276,6 +303,20 @@
       <span class="grow"></span>
       <span class="status">Saved 2 min ago</span>
       <button class="btn">Exit</button>
+    </div>
+
+    <!-- Animation je Element — bleibt, wo sie war: unter dem Canvas -->
+    <div class="animbar" id="animbar">
+      <div class="head" id="anim-head">
+        <span class="chev">▾</span>
+        <span class="t">🎬 Animation per element</span>
+        <span class="grow"></span>
+        <label class="len">Video length
+          <input placeholder="auto" title="Total length of GIF/video in seconds. Empty = automatic."> sec
+        </label>
+        <button class="btn primary" onclick="event.stopPropagation()">▶ Preview</button>
+      </div>
+      <div class="rows" id="anim-rows"></div>
     </div>
 
   </main>
@@ -449,16 +490,13 @@ const PANELS = {
       <div class="layerrow"><span class="k">▭</span> Background</div>
     </div>
     <div class="group">
-      <h3>Animation — selected element</h3>
-      <div class="row"><label class="lbl">Type</label>
-        <select class="field" style="flex:1"><option>None</option><option selected>Fade in</option><option>Slide</option><option>Zoom</option></select>
+      <h3>Order</h3>
+      <div class="row">
+        <button class="btn" style="flex:1">⬆ Forward</button>
+        <button class="btn" style="flex:1">⬇ Backward</button>
       </div>
-      <div class="row"><label class="lbl">Duration</label><input type="range" value="45"><span class="hint" style="margin:0">1.2 s</span></div>
-      <div class="row"><label class="lbl">Delay</label><input type="range" value="10"><span class="hint" style="margin:0">0.2 s</span></div>
-      <div class="row"><label class="lbl">Effect</label>
-        <select class="field" style="flex:1"><option>None</option><option>Orbit</option><option>Network</option><option>Glow</option></select>
-      </div>
-      <button class="btn wide" style="margin-top:4px">▶ Preview animation</button>
+      <p class="hint" style="margin-top:9px">🎬 Animation und Effekte bleiben in der Leiste
+        unter dem Canvas — dort siehst du alle Elemente nebeneinander.</p>
     </div>`},
 
   help: {title:'Help', sub:'kurz & durchsuchbar', html:`
@@ -578,7 +616,9 @@ const COVER = [
  ['🗑 Löschen / 🎨 Umfärben der Markierung','Image → Select → Delete area / Recolour area','keep'],
  ['Pinselgröße-Slider, 🎨 Farbwähler, ✋ Werkzeug aus','Image → Optionen zum aktiven Werkzeug, „Done"','keep'],
  ['🗂 Ebenen-Liste','Layers → Liste (Klick wählt aus)','keep'],
- ['Animationsleiste unter dem Canvas','Layers → Animation (Typ, Dauer, Delay, Effekt, Vorschau)','move'],
+ ['🎬 Animationsleiste unter dem Canvas (je Element: Motion, Effect, Speed, Start)','bleibt unter dem Canvas, jetzt zusätzlich einklappbar','keep'],
+ ['🎬 Video length + ▶ Preview','bleibt im Kopf der Animationsleiste','keep'],
+ ['▾ Format: Bild / GIF / Video, 📥 Download','Aktionsleiste (unverändert)','keep'],
  ['Kontextleiste: 📋 🔗 ✂ ↔ ↕ ⬆ ⬇, 6× Ausrichten, 🗑','Kontextleiste über dem Canvas (vollständig)','keep'],
  ['Kontextleiste: X / Y / Breite / Höhe + 🔒 Seitenverhältnis','Kontextleiste, direkt hinter dem Elementtyp','keep'],
  ['Kontextleiste: ⧉ gleiche Größe, ⇹ / ⇵ verteilen','Kontextleiste, bei den Ausrichten-Knöpfen','keep'],
@@ -660,6 +700,32 @@ const cov = document.getElementById('cover');
 document.getElementById('cover-btn').onclick   = () => cov.classList.add('on');
 document.getElementById('cover-close').onclick = () => cov.classList.remove('on');
 cov.onclick = e => { if (e.target === cov) cov.classList.remove('on'); };
+
+/* ---------- Animationsleiste ---------- */
+const ANIM_ROWS = [
+  {ico:'🐙', name:'octopus.png',       motion:'Fade in',  fx:'Glow',   dur:45, del:10},
+  {ico:'T',  name:'Trial oversight…',  motion:'Slide up', fx:'None',   dur:60, del:35},
+  {ico:'T',  name:'octotrial.com',     motion:'Fade in',  fx:'None',   dur:35, del:60},
+  {ico:'▭',  name:'Background',        motion:'None',     fx:'Network',dur:50, del:0}
+];
+const MOTIONS = ['None','Fade in','Slide up','Slide left','Zoom in','Pop'];
+const FX      = ['None','Orbit','Network','Scan','Neon','Rays','Glow','Bubbles','Confetti','Hearts'];
+document.getElementById('anim-rows').innerHTML = ANIM_ROWS.map(r => `
+  <div class="arow">
+    <div class="th" title="${r.name} — select">${r.ico}</div>
+    <div class="col">
+      <label class="ctl"><span>Motion</span><select>${
+        MOTIONS.map(m => `<option${m===r.motion?' selected':''}>${m}</option>`).join('')}</select></label>
+      <label class="ctl"><span>Effect</span><select>${
+        FX.map(m => `<option${m===r.fx?' selected':''}>${m}</option>`).join('')}</select></label>
+      <div class="times">
+        <label>Speed<input type="range" value="${r.dur}"></label>
+        <label>Start<input type="range" value="${r.del}"></label>
+      </div>
+    </div>
+  </div>`).join('');
+const abar = document.getElementById('animbar');
+document.getElementById('anim-head').onclick = () => abar.classList.toggle('closed');
 
 document.getElementById('media-body').innerHTML = MEDIA.upload;
 renderPanel(); renderCtx();
