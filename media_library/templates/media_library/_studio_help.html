@@ -318,6 +318,35 @@
       <li>These edits are kept on save – also inside templates.</li>
     </ul>
 
+    <div style="background:#eef6f7;border:1px solid #b8e2e6;border-radius:10px;padding:14px 16px;margin:0 0 16px">
+      <b>Worked example: removing a small blemish inside a graphic</b>
+      <p style="margin:.4rem 0">A pale speck inside the lens of a pair of glasses, a few pixels
+      wide. The trick is to repair it with <i>exactly</i> the colour around it, so nothing shows.</p>
+      <ol style="margin:.2rem 0 .4rem 1.1rem;padding:0">
+        <li>Click the image, go to <b>Image</b>, and zoom in with <b>Ctrl + mouse wheel</b>
+            until the spot is large on screen.</li>
+        <li><b>Recolour</b>, leave <b>Applies to</b> on <b>Click an area</b>, and click the
+            <i>clean</i> colour right next to the blemish. The status line under the tools now
+            reads <code>🎨 Colour #3DC2C2 – now click the area(s) to recolour</code>.
+            <b>Note that hex value down.</b></li>
+        <li>Click the blemish. If it disappears cleanly, you are done.</li>
+        <li>Soft edges often leave a halo behind. Then press <b>Ctrl+Z</b>, switch
+            <b>Applies to</b> to <b>Brush</b>, set the slider to <b>1–3 px</b>, type the noted
+            hex into the <b>Colour</b> field, and paint over the spot by hand.</li>
+        <li><b>Done</b>, then <b>Save as…</b> — the repair lives in the pixels, not in a layer.</li>
+      </ol>
+      <p style="margin:.4rem 0"><b>Why note the hex down:</b> switching the scope resets the
+      picked colour. The little swatch goes empty and the Brush would paint with whatever is in
+      the Colour field instead.</p>
+      <p style="margin:.4rem 0 0"><b>Do not use Erase here.</b> Erasing makes the spot
+      transparent, and what shows through is the canvas background — usually a different colour
+      than the graphic around the blemish. You trade a light speck for a dark hole.</p>
+    </div>
+
+    <p style="margin:.2rem 0 .9rem">If a graphic carries the same blemish every time you insert
+    it, it is in the source file, not in your edit. Repair it once in the asset and upload that
+    again, rather than retouching it in every post.</p>
+
     <div style="background:#fff8f2;border:1px solid #f0d3c2;border-radius:10px;padding:14px 16px;margin:0 0 16px">
       <h3 style="margin:.2rem 0;color:#b5531a">Why “Remove background” sometimes does nothing</h3>
       <p style="margin:.4rem 0 .2rem">It protects white on purpose. Pixels that are bright and
