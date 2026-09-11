@@ -1051,6 +1051,52 @@ pruefe('Alter Entwurf überlebt Speichern und Öffnen mit seinem Start',
   alteRunde === 1100, alteRunde);
 await sauber('Gemeinsame Uhr');
 
+
+// ---- 20. Sagt die Medien-Leiste, WAS schiefgelaufen ist? -----------------
+// Vorher stand bei jedem Problem „Fehler beim Laden." – abgelaufene Sitzung,
+// Serverfehler und kaputte Antwort sahen identisch aus.
+const leseTests = await page.evaluate(async () => {
+  const u = await import('/util.js');
+  const bau = (status, typ, body) => new Response(body, { status, headers: { 'Content-Type': typ } });
+  const hol = async r => { try { await u.readJson(r); return 'kein Fehler'; } catch (e) { return e.message; } };
+  return {
+    ok:    await u.readJson(bau(200, 'application/json', '{"ok":true,"n":7}')).then(d => d.n),
+    f500:  await hol(bau(500, 'application/json', '{}')),
+    f413:  await hol(bau(413, 'text/plain', 'zu gross')),
+    f403:  await hol(bau(403, 'text/plain', 'nope')),
+    login: await hol(bau(200, 'text/html', '<!doctype html><html><body>Bitte anmelden</body></html>')),
+    murks: await hol(bau(200, 'application/json', 'das ist kein JSON')),
+  };
+});
+pruefe('Gute Antwort kommt als Objekt zurück', leseTests.ok === 7, leseTests.ok);
+pruefe('500 nennt den Serverfehler', /500/.test(leseTests.f500), leseTests.f500);
+pruefe('413 sagt "zu groß"', /too large/i.test(leseTests.f413), leseTests.f413);
+pruefe('403 sagt "nicht angemeldet"', /signed in|session/i.test(leseTests.f403), leseTests.f403);
+pruefe('Login-Seite statt JSON wird als abgelaufene Sitzung erkannt',
+  /session expired/i.test(leseTests.login), leseTests.login);
+pruefe('Kaputtes JSON heißt nicht "Sitzung abgelaufen"',
+  /unexpected/i.test(leseTests.murks), leseTests.murks);
+
+// Es darf nur EINE Fassung davon geben – io.js und library.js teilen sie sich.
+const eineFassung = await page.evaluate(async () => {
+  const quellen = await Promise.all(['/io.js', '/library.js', '/util.js']
+    .map(async p => [p, await (await fetch(p)).text()]));
+  return {
+    eigeneFassungen: quellen.filter(([, t]) => /function\s+(readJson|leseAntwort)\s*\(/.test(t)).map(([p]) => p),
+    importiert: quellen.filter(([, t]) => /import\s*\{[^}]*readJson/.test(t)).map(([p]) => p),
+    rohesJson: quellen.filter(([p, t]) => p !== '/util.js' && /await\s+\w+\.json\(\)/.test(t)).map(([p]) => p),
+  };
+});
+pruefe('Der Antwort-Leser existiert genau einmal',
+  eineFassung.eigeneFassungen.length === 1 && eineFassung.eigeneFassungen[0] === '/util.js',
+  eineFassung.eigeneFassungen.join(','));
+pruefe('io.js und library.js benutzen dieselbe Fassung',
+  eineFassung.importiert.includes('/io.js') && eineFassung.importiert.includes('/library.js'),
+  eineFassung.importiert.join(','));
+pruefe('Kein Modul liest Server-Antworten mehr ungeprüft',
+  eineFassung.rohesJson.length === 0, eineFassung.rohesJson.join(','));
+await sauber('Fehlermeldungen');
+
 // ---- Ausgabe --------------------------------------------------------------
 console.log('\n===== ERGEBNIS =====');
 for (const r of ergebnis) console.log((r.ok ? '  OK   ' : '  FEHL ') + r.name + (r.detail ? '   [' + r.detail + ']' : ''));

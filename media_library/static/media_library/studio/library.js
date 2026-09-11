@@ -4,12 +4,15 @@
 //          (auch Überordner rekursiv) zeigen ihre Bilder gesammelt im Raster.
 //   UNTEN: fertige Studio-Ausgaben Images / GIFs / Videos zum Weiterbearbeiten.
 import { URLS, getCookie, CONFIG } from './config.js';
-import { toast } from './util.js';
+import { toast, readJson } from './util.js';
 
 // Async work kicked off from a sync handler. Without this the rejection reaches
 // the global handler in studio.html and paints a red banner over the page for
 // what is usually a failed background refresh.
 const guard = (p, what) => Promise.resolve(p).catch(e => console.error('[library] ' + what + ':', e));
+
+// Fehlermeldungen landen im DOM – nie ungeprüft.
+const esc = t => String(t).replace(/[<>&]/g, c => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' }[c]));
 
 let _editor = null;
 
@@ -100,7 +103,7 @@ function initUpload() {
           headers: { 'X-CSRFToken': getCookie('csrftoken') },
           body: fd,
         });
-        const d = await r.json();
+        const d = await readJson(r);
         if (d.ok) melde(`✓ ${file.name} uploaded`);
         else { melde(`✗ ${d.error || 'Fehler'}`); toast('Upload fehlgeschlagen', 'err'); }
       } catch (e) {
@@ -119,7 +122,7 @@ async function loadUploads() {
   grid.innerHTML = '<span class="no-templates">Loading…</span>';
   try {
     const r = await fetch(URLS.ncBrowse + '?folder=' + encodeURIComponent('Studio_Work/Upload'));
-    const d = await r.json();
+    const d = await readJson(r);
     grid.innerHTML = '';
     const items = d.items || [];
     if (!items.length) { grid.innerHTML = '<span class="no-templates">Nothing uploaded yet.</span>'; return; }
@@ -148,7 +151,7 @@ async function loadUploads() {
           const r = await fetch(URLS.uploadDelete, {
             method: 'POST', headers: { 'X-CSRFToken': getCookie('csrftoken') }, body: fd,
           });
-          const dd = await r.json();
+          const dd = await readJson(r);
           if (dd.ok) { wrap.remove(); if (!grid.querySelector('.lib-tile')) grid.innerHTML = '<span class="no-templates">Nothing uploaded yet.</span>'; }
           else { toast('Delete failed', 'err'); del.disabled = false; }
         } catch (err) { toast('Error while deleting', 'err'); del.disabled = false; }
@@ -158,7 +161,9 @@ async function loadUploads() {
       grid.appendChild(wrap);
     });
   } catch (e) {
-    grid.innerHTML = '<span class="no-templates">Fehler beim Laden.</span>';
+    // Grund zeigen statt „Fehler": readJson unterscheidet abgelaufene Sitzung,
+    // Serverfehler und unerwartete Antwort – genau das will man hier lesen.
+    grid.innerHTML = '<span class="no-templates">' + esc(e?.message || 'Could not load.') + '</span>';
   }
 }
 
@@ -170,11 +175,11 @@ async function fetchFolder(path) {
   try {
     if (path === '') {
       const r = await fetch(URLS.ncFolders);
-      const d = await r.json();
+      const d = await readJson(r);
       data = { subfolders: (d.folders || []).map(f => f.name), items: [] };
     } else {
       const r = await fetch(URLS.ncBrowse + '?folder=' + encodeURIComponent(path));
-      const d = await r.json();
+      const d = await readJson(r);
       data = { subfolders: (d.subfolders || []).map(f => f.name), items: d.items || [] };
     }
   } catch (e) { /* leer lassen */ }
@@ -314,10 +319,10 @@ async function loadOutput() {
   try {
     // NC-Ordner (zeigt alles). Fehlschlag hier = echter Fehler.
     const rNc = await fetch(URLS.ncBrowse + '?folder=' + encodeURIComponent(folder));
-    const d = await rNc.json();
+    const d = await readJson(rNc);
     // DB-Liste (liefert die bewährte lib_item-ID zum Öffnen). Fehlschlag ignorieren.
     let db = {};
-    try { const rDb = await fetch(URLS.apiSaved); db = await rDb.json(); } catch (e) { /* egal */ }
+    try { const rDb = await fetch(URLS.apiSaved); db = await readJson(rDb); } catch (e) { /* egal */ }
     const dbList = _outputTab === 'Images' ? (db.images || [])
                  : _outputTab === 'GIFs'   ? (db.anim_images || [])
                  :                            (db.videos || []);
@@ -391,7 +396,7 @@ async function loadOutput() {
         try {
           const fd = new FormData(); fd.append('nc_path', item.nc_path);
           const r = await fetch(URLS.outputDelete, { method: 'POST', headers: { 'X-CSRFToken': getCookie('csrftoken') }, body: fd });
-          const dd = await r.json();
+          const dd = await readJson(r);
           if (dd.ok) {
             tile.remove();
             if (!grid.querySelector('.lib-tile')) grid.innerHTML = '<span class="no-templates">Nothing saved.</span>';
@@ -402,7 +407,9 @@ async function loadOutput() {
       grid.appendChild(tile);
     });
   } catch (e) {
-    grid.innerHTML = '<span class="no-templates">Fehler beim Laden.</span>';
+    // Grund zeigen statt „Fehler": readJson unterscheidet abgelaufene Sitzung,
+    // Serverfehler und unerwartete Antwort – genau das will man hier lesen.
+    grid.innerHTML = '<span class="no-templates">' + esc(e?.message || 'Could not load.') + '</span>';
   }
 }
 

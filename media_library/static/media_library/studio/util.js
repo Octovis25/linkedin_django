@@ -83,3 +83,23 @@ export function debounce(fn, ms) {
   let t;
   return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); };
 }
+
+// Liest eine Server-Antwort als JSON – mit klarer Ursache statt „Fehler".
+// EINE Stelle für die ganze App: io.js und library.js benutzen dieselbe, damit
+// eine abgelaufene Sitzung überall gleich heißt und nicht in einem Modul als
+// „Fehler beim Laden" endet.
+export async function readJson(res) {
+  if (!res.ok) {
+    if (res.status === 413) throw new Error('File too large for the server (413)');
+    if (res.status === 403) throw new Error('Not signed in, or the session has expired (403)');
+    if (res.status === 401) throw new Error('Not signed in (401)');
+    throw new Error(`Server error ${res.status}`);
+  }
+  const txt = await res.text();
+  try { return JSON.parse(txt); }
+  catch {
+    // Kein JSON: fast immer die Login-Seite nach Ablauf der Sitzung.
+    if (/<\s*html/i.test(txt)) throw new Error('Session expired – please sign in again');
+    throw new Error('Unexpected server response');
+  }
+}

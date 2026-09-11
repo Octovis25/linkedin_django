@@ -1,7 +1,7 @@
 // io.js – Speichern & Laden. Erzeugt PNG + canvas_json, spricht das bestehende
 // Django-Backend an (studio_save). Reload rekonstruiert exakt den Fabric-State.
 import { URLS, POST_ID, CONFIG, getCookie, proxyUrl } from './config.js';
-import { toast, status } from './util.js';
+import { toast, status, readJson } from './util.js';
 import { fabric, EXTRA_PROPS } from './editor.js';
 import { beendeVorschauen, vorschauenUebernehmen } from './retouch.js';
 import { vorschlagAusInhalt, vergebeneNamen, eindeutig, entschaerfe, frageNachNamen } from './namen.js';
@@ -116,16 +116,6 @@ function ladeGuard(editor) {
 // Einheitliche Antwortauswertung: ohne res.ok-Prüfung liefert ein 500er eine
 // HTML-Fehlerseite, an der res.json() scheitert – der Nutzer sah dann
 // „SyntaxError: Unexpected token '<'" statt einer verständlichen Meldung.
-async function leseAntwort(res) {
-  if (!res.ok) {
-    if (res.status === 413) throw new Error('File too large for the server (413)');
-    if (res.status === 403) throw new Error('Nicht angemeldet oder Sitzung abgelaufen (403)');
-    throw new Error(`Server-Fehler ${res.status}`);
-  }
-  const txt = await res.text();
-  try { return JSON.parse(txt); }
-  catch { throw new Error('Unerwartete Server-Antwort'); }
-}
 
 // Baut das canvas_json. Enthält:
 //   fabric        – vollständiger Fabric-State für exakten Reload
@@ -223,7 +213,7 @@ async function _saveImage(editor) {
       headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCookie('csrftoken') },
       body: JSON.stringify(body),
     });
-    const d = await leseAntwort(res);
+    const d = await readJson(res);
     if (d.ok) {
       if (d.warning) {
         // Das Bild liegt, aber der bearbeitbare Entwurf konnte nicht mitgespeichert
@@ -289,7 +279,7 @@ export async function saveAnimation(editor, blob, ext) {
       headers: { 'X-CSRFToken': getCookie('csrftoken') },
       body: fd,
     });
-    const d = await leseAntwort(res);
+    const d = await readJson(res);
     if (d.ok) {
       status('✅ Gespeichert als „' + title + '"', 'green');
       toast('Saved to “My outputs”', 'ok');

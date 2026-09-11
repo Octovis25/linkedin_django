@@ -3,7 +3,15 @@
 {% block title %}🎨 Image Studio{% endblock %}
 {% block content %}
 
-<link rel="stylesheet" href="{% static 'media_library/studio/studio.css' %}?v={% now 'U' %}">
+{% comment %}
+No cache buster on these files, on purpose. In production WhiteNoise serves them
+under a content hash (CompressedManifestStaticFilesStorage), so a deploy changes
+the file name and the browser fetches the new one by itself. In DEBUG the
+NoCacheStaticInDebug middleware sends no-cache for everything under STATIC_URL.
+The old per-second "?v=" stamp changed on every request, so the whole Studio was
+re-downloaded on every single page load and nothing could ever be cached.
+{% endcomment %}
+<link rel="stylesheet" href="{% static 'media_library/studio/studio.css' %}">
 
 <div class="studio-head">
   <h1>🎨 Image Studio</h1>
@@ -13,7 +21,7 @@
 
 {% if post_data %}
 <div class="post-banner">
-  {% if post_data.image %}<img src="/library/studio/api/post-image/{{ post_data.id }}/?v={% now 'U' %}" alt="">{% endif %}
+  {% if post_data.image %}<img src="/library/studio/api/post-image/{{ post_data.id }}/" alt="">{% endif %}
   <div class="post-info">
     <strong>📌 Post #{{ post_data.id }}: {{ post_data.title|default:"Untitled" }}</strong>
     <p>Image, GIF and video are attached to the post when you save.</p>
@@ -170,21 +178,21 @@ if (!window.fabric && window.studioZeigeFehler) {
 <script type="importmap">
 {
   "imports": {
-    "{% get_static_prefix %}media_library/studio/background.js": "{% static 'media_library/studio/background.js' %}?v={% now 'U' %}",
-    "{% get_static_prefix %}media_library/studio/config.js":     "{% static 'media_library/studio/config.js' %}?v={% now 'U' %}",
-    "{% get_static_prefix %}media_library/studio/cutout.js":     "{% static 'media_library/studio/cutout.js' %}?v={% now 'U' %}",
-    "{% get_static_prefix %}media_library/studio/editor.js":     "{% static 'media_library/studio/editor.js' %}?v={% now 'U' %}",
-    "{% get_static_prefix %}media_library/studio/io.js":         "{% static 'media_library/studio/io.js' %}?v={% now 'U' %}",
-    "{% get_static_prefix %}media_library/studio/library.js":    "{% static 'media_library/studio/library.js' %}?v={% now 'U' %}",
-    "{% get_static_prefix %}media_library/studio/media.js":      "{% static 'media_library/studio/media.js' %}?v={% now 'U' %}",
-    "{% get_static_prefix %}media_library/studio/namen.js":      "{% static 'media_library/studio/namen.js' %}?v={% now 'U' %}",
-    "{% get_static_prefix %}media_library/studio/retouch.js":    "{% static 'media_library/studio/retouch.js' %}?v={% now 'U' %}",
-    "{% get_static_prefix %}media_library/studio/toolbar.js":    "{% static 'media_library/studio/toolbar.js' %}?v={% now 'U' %}",
-    "{% get_static_prefix %}media_library/studio/ui.js":         "{% static 'media_library/studio/ui.js' %}?v={% now 'U' %}",
-    "{% get_static_prefix %}media_library/studio/util.js":       "{% static 'media_library/studio/util.js' %}?v={% now 'U' %}"
+    "{% get_static_prefix %}media_library/studio/background.js": "{% static 'media_library/studio/background.js' %}",
+    "{% get_static_prefix %}media_library/studio/config.js":     "{% static 'media_library/studio/config.js' %}",
+    "{% get_static_prefix %}media_library/studio/cutout.js":     "{% static 'media_library/studio/cutout.js' %}",
+    "{% get_static_prefix %}media_library/studio/editor.js":     "{% static 'media_library/studio/editor.js' %}",
+    "{% get_static_prefix %}media_library/studio/io.js":         "{% static 'media_library/studio/io.js' %}",
+    "{% get_static_prefix %}media_library/studio/library.js":    "{% static 'media_library/studio/library.js' %}",
+    "{% get_static_prefix %}media_library/studio/media.js":      "{% static 'media_library/studio/media.js' %}",
+    "{% get_static_prefix %}media_library/studio/namen.js":      "{% static 'media_library/studio/namen.js' %}",
+    "{% get_static_prefix %}media_library/studio/retouch.js":    "{% static 'media_library/studio/retouch.js' %}",
+    "{% get_static_prefix %}media_library/studio/toolbar.js":    "{% static 'media_library/studio/toolbar.js' %}",
+    "{% get_static_prefix %}media_library/studio/ui.js":         "{% static 'media_library/studio/ui.js' %}",
+    "{% get_static_prefix %}media_library/studio/util.js":       "{% static 'media_library/studio/util.js' %}"
   }
 }
 </script>
-<script type="module" src="{% static 'media_library/studio/studio.js' %}?v={% now 'U' %}"></script>
+<script type="module" src="{% static 'media_library/studio/studio.js' %}"></script>
 
 {% endblock %}
