@@ -14,6 +14,62 @@ const guard = (p, what) => Promise.resolve(p).catch(e => console.error('[library
 // Fehlermeldungen landen im DOM – nie ungeprüft.
 const esc = t => String(t).replace(/[<>&]/g, c => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' }[c]));
 
+// ── Kacheln erst laden, wenn man sie sieht ──────────────────────────────────
+// A tile shows the full-size file: a saved output is a 1080x1080 PNG, an asset
+// can be larger still. Forty tiles in the grid meant forty full downloads and
+// forty full-size bitmaps in memory every time the Studio opened - before the
+// canvas got a single frame. Now a tile carries its address in data-src and
+// only fetches once it comes near the viewport.
+const _sichtbar = (typeof IntersectionObserver === 'function')
+  ? new IntersectionObserver((eintraege, beob) => {
+      for (const e of eintraege) {
+        if (!e.isIntersecting) continue;
+        beob.unobserve(e.target);
+        const url = e.target.dataset.src;
+        if (url) { delete e.target.dataset.src; e.target.src = url; }
+      }
+    }, { rootMargin: '400px' })
+  : null;
+
+// Ohne IntersectionObserver (sehr alte Browser) wird sofort geladen - langsam,
+// aber nie leer.
+function spaetLaden(el, url) {
+  if (!_sichtbar) { el.src = url; return; }
+  el.loading = 'lazy';
+  el.decoding = 'async';
+  el.dataset.src = url;
+  _sichtbar.observe(el);
+}
+
+// Gleichzeitige Ordnerabrufe begrenzen. Jeder geht über Django weiter an
+// Nextcloud; fünfzig auf einmal treffen einen Server mit wenigen
+// Arbeitsprozessen, und dann steht alles. Die Grenze gilt global und nicht je
+// Aufruf - ein verschachtelter Baum multipliziert sonst jede Ebene mit der
+// nächsten, und aus "sechs parallel" werden hundert.
+const GRENZE = 6;
+let _offen = 0;
+const _warteschlange = [];
+
+function _weiter() {
+  while (_offen < GRENZE && _warteschlange.length) {
+    _offen++;
+    _warteschlange.shift()();
+  }
+}
+
+// Gibt ein Versprechen zurück, das sich auflöst, sobald ein Platz frei ist.
+function _platz() {
+  return new Promise(ok => { _warteschlange.push(ok); _weiter(); });
+}
+
+function _frei() { _offen--; _weiter(); }
+
+// Ruft `arbeit` für jeden Eintrag auf und behält die Reihenfolge der Ergebnisse
+// bei. Die Drosselung steckt in fetchFolder, nicht hier.
+function parallel(liste, arbeit) {
+  return Promise.all(liste.map(arbeit));
+}
+
 let _editor = null;
 
 // SVGs müssen zerlegt eingefügt werden, nicht als flaches Bild.
@@ -169,22 +225,35 @@ async function loadUploads() {
 
 // ── Assets: anhakbarer Ordnerbaum ───────────────────────────────────────────
 // Holt Inhalt eines Ordners (gecacht). path '' = oberste Ebene.
+// Läuft derselbe Ordner gerade schon? Seit die Unterordner gleichzeitig geholt
+// werden, fragen sonst mehrere Aufrufe denselben Pfad parallel ab und der
+// Cache greift bei keinem von ihnen.
+const _laufend = new Map();
+
 async function fetchFolder(path) {
   if (_cache.has(path)) return _cache.get(path);
-  let data = { subfolders: [], items: [] };
-  try {
-    if (path === '') {
-      const r = await fetch(URLS.ncFolders);
-      const d = await readJson(r);
-      data = { subfolders: (d.folders || []).map(f => f.name), items: [] };
-    } else {
-      const r = await fetch(URLS.ncBrowse + '?folder=' + encodeURIComponent(path));
-      const d = await readJson(r);
-      data = { subfolders: (d.subfolders || []).map(f => f.name), items: d.items || [] };
-    }
-  } catch (e) { /* leer lassen */ }
-  _cache.set(path, data);
-  return data;
+  if (_laufend.has(path)) return _laufend.get(path);
+  const lauf = (async () => {
+    let data = { subfolders: [], items: [] };
+    await _platz();
+    try {
+      if (path === '') {
+        const r = await fetch(URLS.ncFolders);
+        const d = await readJson(r);
+        data = { subfolders: (d.folders || []).map(f => f.name), items: [] };
+      } else {
+        const r = await fetch(URLS.ncBrowse + '?folder=' + encodeURIComponent(path));
+        const d = await readJson(r);
+        data = { subfolders: (d.subfolders || []).map(f => f.name), items: d.items || [] };
+      }
+    } catch (e) { /* leer lassen */ }
+    finally { _frei(); }
+    _cache.set(path, data);
+    _laufend.delete(path);
+    return data;
+  })();
+  _laufend.set(path, lauf);
+  return lauf;
 }
 
 async function loadTree() {
@@ -257,14 +326,23 @@ async function makeRow(name, path, depth) {
 }
 
 // Sammelt rekursiv alle Bilder aus einem Ordner und seinen Unterordnern.
-async function gatherImages(path, acc, seen, depth = 0) {
-  if (depth > 6) return;
+// Die Unterordner einer Ebene werden gleichzeitig geholt, nicht nacheinander:
+// vorher war die Wartezeit die Summe aller Ordnerabrufe, und bei einem Baum mit
+// dreissig Ordnern kamen so schnell zwanzig Sekunden zusammen. Die Reihenfolge
+// im Raster bleibt dieselbe - erst der Ordner selbst, dann seine Unterordner
+// der Reihe nach - weil jede Ebene ihre Ergebnisse in der alten Ordnung
+// zusammensetzt.
+async function gatherImages(path, seen, depth = 0) {
+  if (depth > 6) return [];
   const d = await fetchFolder(path);
+  const eigene = [];
   for (const it of d.items) {
     const key = it.nc_path || it.url;
-    if (!seen.has(key)) { seen.add(key); acc.push(it); }
+    if (!seen.has(key)) { seen.add(key); eigene.push(it); }
   }
-  for (const sub of d.subfolders) await gatherImages(path + '/' + sub, acc, seen, depth + 1);
+  const kinder = await parallel(d.subfolders,
+    sub => gatherImages(path + '/' + sub, seen, depth + 1));
+  return eigene.concat(...kinder);
 }
 
 // Zeigt die Bilder aller angehakten Ordner (rekursiv) im Raster.
@@ -273,8 +351,8 @@ async function refreshImages() {
   if (!grid) return;
   if (!_checked.size) { grid.innerHTML = '<span class="no-templates">Tick folders to display.</span>'; return; }
   grid.innerHTML = '<span class="no-templates">Loading…</span>';
-  const acc = [], seen = new Set();
-  for (const p of _checked) await gatherImages(p, acc, seen);
+  const seen = new Set();
+  const acc = [].concat(...await parallel([..._checked], p => gatherImages(p, seen)));
   const q = (document.getElementById('lib-search')?.value || '').toLowerCase();
   const items = q ? acc.filter(it => (it.title || it.name || '').toLowerCase().includes(q)) : acc;
   grid.innerHTML = '';
@@ -286,13 +364,15 @@ function renderImages(grid, items) {
   items.forEach(item => {
     const img = document.createElement('img');
     img.className = 'lib-thumb';
-    img.src = item.url;
     img.title = item.title || item.name || '';
     img.draggable = true;
     img.onerror = () => { img.style.opacity = .3; img.title += ' (nicht ladbar)'; };
     img.onclick = () => einfuegen(item);
     img.addEventListener('dragstart', e => e.dataTransfer.setData('text/studio-url', item.url));
     grid.appendChild(img);
+    // Erst anhängen, dann laden - der Beobachter braucht das Element im Dokument,
+    // sonst schneidet er es nie.
+    spaetLaden(img, item.url);
   });
 }
 
@@ -344,7 +424,10 @@ async function loadOutput() {
     items.forEach(item => {
       const el = isVideo ? document.createElement('video') : document.createElement('img');
       el.className = 'lib-thumb';
-      el.src = item.url;
+      // Videos laden sofort: sie holen mit preload="metadata" nur den Kopf der
+      // Datei, und es sind wenige. Bilder sind die Last - die werden gestundet,
+      // sobald die Kachel im Dokument haengt (weiter unten).
+      if (isVideo) el.src = item.url;
       el.title = item.title || item.name || '';
       // A thumbnail whose file will not load is greyed out instead of sitting
       // there looking healthy — for videos it used to stay a black rectangle.
@@ -405,6 +488,10 @@ async function loadOutput() {
       };
       tile.appendChild(del);
       grid.appendChild(tile);
+      // Jetzt haengt die Kachel im Dokument - ab hier kann der Beobachter sie
+      // schneiden und das Bild holen, sobald sie in die Naehe des Sichtbereichs
+      // kommt.
+      if (!isVideo) spaetLaden(el, item.url);
     });
   } catch (e) {
     // Grund zeigen statt „Fehler": readJson unterscheidet abgelaufene Sitzung,
