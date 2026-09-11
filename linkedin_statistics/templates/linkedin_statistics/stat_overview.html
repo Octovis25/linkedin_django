@@ -198,7 +198,7 @@
   <div id="videoSplitWrapper" style="position:relative;width:100%;height:400px;overflow:hidden">
     <canvas id="videoSplit"></canvas>
   </div>
-  <p class="agg-note">Each bar = one post. Orange = Video, Teal = No Video. Hover to see Clicks. Sorted by impressions descending.</p>
+  <p class="agg-note">Each bar = one post, newest first. Orange = Video, Teal = No Video. Hover for the clicks, click a bar to open that post in the Overview.</p>
 </div>
 
 <!-- ═══ 6. Top 5 nach Impressions ═══ -->
@@ -248,8 +248,9 @@ const impVideoData    = {{ chart_imp_video_json|safe }};
 const impNoVideoData  = {{ chart_imp_novideo_json|safe }};
 const cliVideoData    = {{ chart_cli_video_json|safe }};
 const cliNoVideoData  = {{ chart_cli_novideo_json|safe }};
+const postIds         = {{ chart_post_ids_json|safe }};
 
-/* ── Video vs No Video: per-post Impressions + Clicks ── */
+/* ── Video vs No Video: impressions per post, newest first ── */
 if (postLabels && postLabels.length) {
   // Merge video/novideo into single arrays with per-bar color
   const impData = postLabels.map((_, i) => impVideoData[i] ?? impNoVideoData[i] ?? 0);
@@ -257,9 +258,8 @@ if (postLabels && postLabels.length) {
   const isVideo = postLabels.map((_, i) => impVideoData[i] !== null && impVideoData[i] !== undefined);
 
   const colImp = isVideo.map(v => v ? 'rgba(245,110,40,0.75)' : 'rgba(0,133,145,0.65)');
-  const colCli = isVideo.map(v => v ? 'rgba(160,60,10,0.9)'  : 'rgba(0,80,90,0.85)');
 
-  const dynamicHeight = Math.max(300, postLabels.length * 18);
+  const dynamicHeight = Math.max(300, postLabels.length * 16);
   document.getElementById('videoSplitWrapper').style.height = dynamicHeight + 'px';
 
   new Chart(document.getElementById('videoSplit').getContext('2d'), {
@@ -273,13 +273,6 @@ if (postLabels && postLabels.length) {
           backgroundColor: colImp,
           borderWidth: 0,
           maxBarThickness: 12,
-        },
-        {
-          label: 'Clicks',
-          data: cliData,
-          backgroundColor: colCli,
-          borderWidth: 0,
-          maxBarThickness: 6,
         }
       ]
     },
@@ -288,6 +281,18 @@ if (postLabels && postLabels.length) {
       responsive: true,
       maintainAspectRatio: false,
       interaction: { mode: 'index', intersect: false },
+      onHover: (e, treffer) => {
+        e.native.target.style.cursor = treffer.length ? 'pointer' : 'default';
+      },
+      onClick: (e, treffer) => {
+        if (!treffer.length) return;
+        const id = postIds[treffer[0].index];
+        if (!id) return;
+        // Zeitraum mitnehmen, sonst faellt ein aelterer Post aus dem
+        // Standardfenster der Uebersicht heraus und die Karte fehlt.
+        const p = new URLSearchParams({ from: '{{ date_from }}', to: '{{ date_to }}' });
+        window.location.href = '/?' + p.toString() + '#card-' + encodeURIComponent(id);
+      },
       plugins: {
         legend: {
           position: 'top',
@@ -295,20 +300,29 @@ if (postLabels && postLabels.length) {
             generateLabels: () => [
               { text: 'Impressions – Video',    fillStyle: 'rgba(245,110,40,0.75)', strokeStyle: 'transparent' },
               { text: 'Impressions – No Video', fillStyle: 'rgba(0,133,145,0.65)',  strokeStyle: 'transparent' },
-              { text: 'Clicks – Video',         fillStyle: 'rgba(160,60,10,0.9)',   strokeStyle: 'transparent' },
-              { text: 'Clicks – No Video',      fillStyle: 'rgba(0,80,90,0.85)',    strokeStyle: 'transparent' },
             ]
           }
         },
         tooltip: {
           callbacks: {
-            label: ctx => ctx.dataset.label + ': ' + ctx.parsed.x
+            label: ctx => 'Impressions: ' + ctx.parsed.x,
+            // Die Klicks sind aus dem Diagramm raus, aber nicht verloren:
+            // beim Darauffahren stehen sie weiterhin da.
+            afterLabel: ctx => 'Clicks: ' + (cliData[ctx.dataIndex] ?? 0),
           }
         }
       },
       scales: {
         x: { title: { display: true, text: 'Count' }, beginAtZero: true },
-        y: { ticks: { font: { size: 11 } } }
+        y: {
+          ticks: {
+            font: { size: 11 },
+            // Ohne autoSkip:false blendet Chart.js bei vielen Zeilen einfach
+            // jede zweite Beschriftung aus - dann weiss man nicht, welcher
+            // Balken zu welchem Post gehoert.
+            autoSkip: false,
+          }
+        }
       }
     }
   });

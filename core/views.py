@@ -27,7 +27,6 @@ def home_view(request):
     content_type = request.GET.get('content_type', '')
     search = request.GET.get('search', '')
     category_filter = request.GET.get('category', '')
-    category_filter = request.GET.get('category', '')
     d_from = request.GET.get('from', (date.today() - timedelta(days=365)).isoformat())
     d_to   = request.GET.get('to', date.today().isoformat())
 
@@ -53,16 +52,18 @@ def home_view(request):
         if category_filter:
             sql += " AND pp.category = %s"
             params.append(category_filter)
-        if category_filter:
-            sql += " AND pp.category = %s"
-            params.append(category_filter)
         if content_type == 'video':
             sql += " AND lp.content_type = 'Video'"
         elif content_type == 'novideo':
             sql += " AND (lp.content_type != 'Video' OR lp.content_type IS NULL)"
         if search:
-            sql += " AND (lp.post_title LIKE %s OR pp.post_title LIKE %s)"
-            params += [f'%{search}%', f'%{search}%']
+            # Der Beitragstext selbst liegt NICHT in diesen Tabellen - linkedin_posts
+            # und linkedin_posts_posted fuehren nur Titel, Datum und Kennzahlen.
+            # Gesucht wird deshalb ueber alles, was hier ueberhaupt an Text steht:
+            # beide Titel, die Kategorie und die Notiz.
+            sql += (" AND (lp.post_title LIKE %s OR pp.post_title LIKE %s"
+                    " OR pp.category LIKE %s OR pp.comment LIKE %s)")
+            params += [f'%{search}%'] * 4
         sql += " ORDER BY COALESCE(pp.post_date, lp.post_date) DESC"
         try:
             c.execute(sql, params)

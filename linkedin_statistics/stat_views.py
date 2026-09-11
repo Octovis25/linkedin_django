@@ -299,14 +299,15 @@ def overview(request):
             'ctr':     float(r[4] or 0),
         }
 
-    # Chart 3: per-post Impressions, sorted desc, colored by Video vs No Video
+    # Chart 3: per-post Impressions, newest first, colored by Video vs No Video
     with connection.cursor() as c:
         rows_posts = _safe(c, """
             SELECT COALESCE(pp.post_title, lp.post_title, lp.post_id),
                    CASE WHEN lp.content_type = 'Video' THEN 'video' ELSE 'novideo' END AS ctype,
                    COALESCE(m.impressions, 0),
                    COALESCE(m.clicks, 0),
-                   COALESCE(pp.post_date, lp.post_date)
+                   COALESCE(pp.post_date, lp.post_date),
+                   lp.post_id
             FROM linkedin_posts lp
             LEFT JOIN linkedin_posts_posted pp ON lp.post_id = pp.post_id
             INNER JOIN linkedin_posts_metrics m ON lp.post_id = m.post_id
@@ -316,16 +317,24 @@ def overview(request):
             )
               AND COALESCE(pp.post_date, lp.post_date) BETWEEN %s AND %s
               AND (pp.category IS NULL OR pp.category != 'Event')
-            ORDER BY m.impressions DESC
+            ORDER BY COALESCE(pp.post_date, lp.post_date) DESC, m.impressions DESC
         """, [d_from, d_to])
 
     post_labels, imp_video, imp_novideo, cli_video, cli_novideo = [], [], [], [], []
+    # Die Post-ID wandert mit ins Diagramm: ein Klick auf einen Balken soll zur
+    # Karte dieses Posts in der Uebersicht springen (dort steht /#card-<id>).
+    post_ids = []
     for r in (rows_posts or []):
-        title = (r[0] or '')[:40]
+        # Das Datum stand schon immer in der Abfrage, wurde aber nie angezeigt.
+        # Ohne es sagt die Liste nicht, aus welcher Zeit ein Balken stammt.
+        datum = r[4]
+        stempel = datum.strftime('%d.%m.%y') if hasattr(datum, 'strftime') else str(datum or '')[:10]
+        title = (r[0] or '')[:34]
         ctype = r[1]
         imp   = int(r[2] or 0)
         cli   = int(r[3] or 0)
-        post_labels.append(title)
+        post_labels.append(f'{stempel} · {title}' if stempel else title)
+        post_ids.append(r[5])
         imp_video.append(imp if ctype == 'video' else None)
         imp_novideo.append(imp if ctype == 'novideo' else None)
         cli_video.append(cli if ctype == 'video' else None)
@@ -347,6 +356,7 @@ def overview(request):
         'chart_shares_json':      json.dumps(shares),
         'chart_views_json':       json.dumps(views_data),
         'chart_post_labels_json':   json.dumps(post_labels),
+        'chart_post_ids_json':      json.dumps([str(x) for x in post_ids]),
         'chart_imp_video_json':     json.dumps(imp_video),
         'chart_imp_novideo_json':   json.dumps(imp_novideo),
         'chart_cli_video_json':     json.dumps(cli_video),

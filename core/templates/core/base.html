@@ -44,6 +44,13 @@
     nav { display: flex; gap: 0; border-bottom: 2px solid var(--octo-light-gray); }
     nav a { color: var(--octo-petrol); text-decoration: none; font-weight: 500; padding: 0.5rem 1rem; border-bottom: 3px solid transparent; transition: all 0.3s; }
     nav a:hover, nav a.active { color: var(--octo-orange); border-bottom-color: var(--octo-orange); }
+    .user-section a.live-link { border: 1px solid var(--octo-petrol); border-radius: 5px;
+                                padding: 0.15rem 0.6rem; font-size: 0.85rem; }
+    .user-section a.live-link:hover { border-color: var(--octo-orange); background: var(--octo-light-gray); }
+    /* Links that leave the app look like it, before the click. */
+    .sub-nav a.ext, .user-section a.ext { color: #7d8f8d; }
+    .sub-nav a.ext:hover, .user-section a.ext:hover { color: var(--octo-orange); }
+    .sub-nav .ext-sep { color: #b9c9c9; padding: 0.4rem 0.2rem; user-select: none; }
     .sub-nav { display: flex; gap: 0; background: var(--octo-light-gray); padding: 0 1.5rem; }
     .sub-nav a { color: var(--octo-dark-petrol); padding: 0.4rem 1rem; font-size: 0.9rem; text-decoration: none; border-bottom: 2px solid transparent; }
     .sub-nav a:hover, .sub-nav a.active { color: var(--octo-orange); border-bottom-color: var(--octo-orange); }
@@ -80,11 +87,15 @@
 <body>
 <header>
   <div class="header-top">
-    <a href="/statistics/"><img src="{% static 'images/octovis_logo.png' %}" alt="Octovis Logo" class="logo" /></a>
+    <a href="/" title="Back to the overview"><img src="{% static 'images/octovis_logo.png' %}" alt="Octovis Logo" class="logo" /></a>
     <div class="user-section">
+      {% if live_url %}
+        <a href="{{ live_url }}" target="_blank" rel="noopener" class="live-link"
+           title="The publicly accessible version of this portal">Live portal &#8599;</a>
+      {% endif %}
       {% if user.is_authenticated %}
         {% if user.is_superuser %}<a href="/planner/api-connect/">API Connect</a>{% endif %}
-        {% if user.is_superuser %}<a href="https://dashboard.render.com/" target="_blank" rel="noopener" title="Open the Render dashboard in a new tab">Render ↗</a>{% endif %}
+        {% if user.is_superuser %}<a href="https://dashboard.render.com/" target="_blank" rel="noopener" class="ext" title="Open the Render dashboard in a new tab">Render ↗</a>{% endif %}
         {% if user.is_staff %}<a href="/users/">User management</a>{% endif %}
         <span class="user-info">{{ user.get_full_name|default:user.username }}</span>
         <a href="/change-password/">Change password</a>
@@ -94,23 +105,30 @@
       {% endif %}
     </div>
   </div>
+        {% comment %}
+Order follows the working day, not the history of the app:
+Overview and Statistics sit together because both answer "how did it go";
+Create Posts and Image Studio are the daily work; Data is for looking things
+up, so it moved right; Collectives became a sub-entry under Data.
+{% endcomment %}
         <nav>
     <a href="/" {% if request.path == '/' %}class="active"{% endif %}>Overview</a>
-    <a href="/data/posts/" {% if '/data/' in request.path %}class="active"{% endif %}>Data</a>
-    <a href="/collectives/" {% if '/collectives/' in request.path %}class="active"{% endif %}>Collectives</a>
+    <a href="/statistics/" {% if '/statistics/' in request.path %}class="active"{% endif %}>LinkedIn Statistics</a>
+    <a href="/webstats/" {% if '/webstats/' in request.path %}class="active"{% endif %}>Web Analytics</a>
     <a href="/planner/" {% if '/planner/' in request.path %}class="active"{% endif %}>Create Posts</a>
     <a href="/library/studio/" {% if '/library/' in request.path %}class="active"{% endif %}>Image Studio</a>
     <a href="/assets/" {% if '/assets/' in request.path %}class="active"{% endif %}>Assets</a>
-    <a href="/statistics/" {% if '/statistics/' in request.path %}class="active"{% endif %}>Statistics</a>
+    <a href="/data/posts/" {% if '/data/' in request.path or '/collectives/' in request.path %}class="active"{% endif %}>Data</a>
     {% if user.is_superuser %}
     <a href="/db-admin/" {% if '/db-admin/' in request.path %}class="active"{% endif %}>DB Admin</a>
     {% endif %}
   </nav>
-  {% if '/data/' in request.path %}
+  {% if '/data/' in request.path or '/collectives/' in request.path %}
   <div class="sub-nav">
     <a href="/data/posts/" {% if request.path == '/data/posts/' %}class="active"{% endif %}>Posts Posted</a>
     <a href="/data/posts/buffer/" {% if '/data/posts/buffer/' in request.path %}class="active"{% endif %}>Buffer Posts Posted</a>
     <a href="/data/upload/" {% if request.path == '/data/upload/' %}class="active"{% endif %}>Upload</a>
+    <a href="/collectives/" {% if '/collectives/' in request.path %}class="active"{% endif %}>Collectives</a>
   </div>
   {% endif %}
   {% if '/planner/' in request.path %}
@@ -122,7 +140,7 @@
     <a href="/planner/scheduled/" {% if '/scheduled/' in request.path %}class="active"{% endif %}>Scheduled</a>
     <a href="/planner/archive/" {% if '/archive/' in request.path %}class="active"{% endif %}>Archive</a>
     <a href="/planner/all/" {% if '/all/' in request.path %}class="active"{% endif %}>All</a>
-    <a href="/planner/oj/" {% if '/oj/' in request.path %}class="active"{% endif %}>OJ</a>
+    {% if user.is_superuser %}<a href="/planner/oj/" {% if '/oj/' in request.path %}class="active"{% endif %}>OJ</a>{% endif %}
     {% if user.is_superuser %}<a href="/planner/aufgaben/" {% if '/aufgaben/' in request.path %}class="active"{% endif %}>🤖 Claude tasks</a>{% endif %}
   </div>
   {% endif %}
@@ -131,20 +149,29 @@
     <a href="/library/studio/" {% if '/studio/' in request.path and '/flowcharts/' not in request.path and '/templates/' not in request.path %}class="active"{% endif %}>🎨 Studio</a>
     <a href="/library/studio/templates/" {% if '/studio/templates/' in request.path %}class="active"{% endif %}>📐 Templates</a>
     <a href="/library/studio/flowcharts/" {% if '/flowcharts/' in request.path %}class="active"{% endif %}>🔀 Flowcharts</a>
-    <a href="https://www.canva.com/" target="_blank" rel="noopener" title="Open Canva in a new tab">🖌️ Canva ↗</a>
-    <a href="https://www.photopea.com/" target="_blank" rel="noopener" title="Open Photopea (photo editor) in a new tab">🖼️ Photopea ↗</a>
-    <a href="https://www.figma.com/" target="_blank" rel="noopener" title="Open Figma in a new tab">🎯 Figma ↗</a>
+    <span class="ext-sep" aria-hidden="true">|</span>
+    <a href="https://www.canva.com/" target="_blank" rel="noopener" class="ext" title="Open Canva in a new tab">🖌️ Canva ↗</a>
+    <a href="https://www.photopea.com/" target="_blank" rel="noopener" class="ext" title="Open Photopea (photo editor) in a new tab">🖼️ Photopea ↗</a>
+    <a href="https://www.figma.com/" target="_blank" rel="noopener" class="ext" title="Open Figma in a new tab">🎯 Figma ↗</a>
   </div>
   {% endif %}
   {% if '/statistics/' in request.path %}
   <div class="sub-nav">
     <a href="/statistics/" {% if request.path == '/statistics/' %}class="active"{% endif %}>General</a>
     <a href="/statistics/timeline/" {% if '/statistics/timeline' in request.path %}class="active"{% endif %}>Timeline</a>
+    <a href="/statistics/video/" {% if '/statistics/video' in request.path %}class="active"{% endif %}>Video vs. No Video</a>
   </div>
   {% endif %}
-  {% if '/collectives/' in request.path %}
+  {% if '/webstats/' in request.path %}
   <div class="sub-nav">
-    <a href="/collectives/" {% if request.path == '/collectives/' %}class="active"{% endif %}>Dashboard</a>
+    <a href="/webstats/" {% if request.path == '/webstats/' %}class="active"{% endif %}>Overview</a>
+    <a href="/webstats/besucher/" {% if '/besucher' in request.path %}class="active"{% endif %}>Visitors</a>
+    <a href="/webstats/seiten/" {% if '/seiten' in request.path %}class="active"{% endif %}>Pages</a>
+    <a href="/webstats/ziele/" {% if '/ziele' in request.path %}class="active"{% endif %}>Goals</a>
+    <a href="/webstats/suchbegriffe/" {% if '/suchbegriffe' in request.path %}class="active"{% endif %}>Search terms</a>
+    <a href="/webstats/ki/" {% if '/webstats/ki/' in request.path %}class="active"{% endif %}>AI</a>
+    <a href="/webstats/protokoll/" {% if '/protokoll' in request.path %}class="active"{% endif %}>Log</a>
+    <a href="/webstats/archiv/" {% if '/archiv' in request.path %}class="active"{% endif %}>Archive</a>
   </div>
   {% endif %}
 </header>
@@ -161,5 +188,10 @@
 <footer>
   LinkedIn Dashboard &copy; 2026 Octotrial
 </footer>
+{% comment %}
+Kept because the second base template (templates/base.html) offered this block
+and now forwards here: any page that filled it must keep working.
+{% endcomment %}
+{% block extra_js %}{% endblock %}
 </body>
 </html>

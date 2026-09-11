@@ -333,3 +333,27 @@ document.querySelectorAll('.tl-inner').forEach(inner => {
 
 </script>
 {% endblock %}
+
+<style>
+  .tl-card.ziel { outline: 2px solid #F56E28; outline-offset: 3px; border-radius: 8px;
+                  animation: zielBlink 2.4s ease-out 1; }
+  @keyframes zielBlink {
+    0%, 55% { background: #FDF1E8; }
+    100%    { background: transparent; }
+  }
+  @media (prefers-reduced-motion: reduce) { .tl-card.ziel { animation: none; } }
+</style>
+<script>
+(function () {
+  function hervorheben() {
+    if (!location.hash.startsWith('#card-')) return;
+    var karte = document.getElementById(location.hash.slice(1));
+    if (!karte) return;
+    karte.classList.add('ziel');
+    karte.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    setTimeout(function () { karte.classList.remove('ziel'); }, 2600);
+  }
+  hervorheben();
+  window.addEventListener('hashchange', hervorheben);
+})();
+</script>

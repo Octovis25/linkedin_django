@@ -1,5 +1,5 @@
 from django.shortcuts import render, redirect
-from django.contrib.auth.decorators import login_required
+from django.contrib.auth.decorators import login_required, user_passes_test
 from django.http import JsonResponse, Http404
 from django.db import connection
 from django.views.decorators.csrf import csrf_exempt
@@ -446,6 +446,10 @@ def archive_view(request):
 @login_required
 def all_view(request):
     topic_filter = request.GET.get('topic', '')
+    # Begriffssuche ueber den gesamten Bestand. Anders als auf der Startseite
+    # liegt hier der Beitragstext selbst in der Tabelle (planner_posts.content),
+    # deshalb findet die Suche auch Begriffe, die nur im Text vorkommen.
+    suche = (request.GET.get('q') or '').strip()
     with connection.cursor() as c:
         topics = _topics(c)
         sql = """SELECT p.id, p.title, p.content, p.status, p.planned_date,
@@ -458,6 +462,13 @@ def all_view(request):
         if topic_filter:
             sql += " AND p.topic_id=%s"
             params.append(topic_filter)
+        if suche:
+            # Mehrere Woerter werden UND-verknuepft: "SOP Audit" findet nur
+            # Beitraege, in denen beides vorkommt - egal in welchem Feld.
+            for wort in suche.split()[:6]:
+                sql += (" AND (p.title LIKE %s OR p.content LIKE %s"
+                        " OR COALESCE(p.comment,'') LIKE %s)")
+                params += [f'%{wort}%'] * 3
         sql += " ORDER BY p.updated_at DESC, p.created_at DESC"
         posts = _q(c, sql, params)
 
@@ -477,6 +488,7 @@ def all_view(request):
         'posts': posts_list,
         'topics': topics,
         'topic_filter': topic_filter,
+        'suche': suche,
         'statuses': ['Draft', 'Review', 'Ready', 'Scheduled', 'Posted', 'Archive'],
         'tab': 'all',
         'posts_json': _posts_to_json(posts_list),
@@ -566,7 +578,11 @@ def uebersicht_view(request):
     })
 
 
+# Die Verwaltung des persoenlichen Profils gehoert nur Ortrud. Bis hierher
+# stand nur @login_required davor - damit kam JEDES angemeldete Konto hinein,
+# anders als bei Claude tasks und DB Admin, die beide abgesichert sind.
 @login_required
+@user_passes_test(lambda u: u.is_superuser)
 def oj_view(request):
     with connection.cursor() as c:
         topics = _topics(c)

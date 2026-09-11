@@ -34,6 +34,16 @@
        style="font-size:13px;padding:4px 10px;border:0.5px solid #2c4bff;border-radius:4px;background:#fff;color:#2c4bff;text-decoration:none;white-space:nowrap"
        title="Open Buffer to schedule videos manually for now">🎬 Open Buffer</a>
     <form method="get" style="display:flex;gap:8px;margin:0">
+      {% if tab == "all" %}
+      <input type="search" name="q" id="pe-suche" value="{{ suche|default:'' }}"
+             placeholder="Search title and text&hellip;" autocomplete="off"
+             style="font-size:13px;padding:4px 10px;border:0.5px solid #ced4da;border-radius:4px;min-width:190px">
+      <button type="submit"
+              style="font-size:13px;padding:4px 12px;border:0.5px solid #008080;border-radius:4px;background:#008080;color:#fff;cursor:pointer">Search</button>
+      {% if suche %}<a href="?{% if topic_filter %}topic={{ topic_filter }}{% endif %}"
+         style="font-size:13px;padding:4px 8px;color:#6c757d;text-decoration:none"
+         title="Clear the search">&times;</a>{% endif %}
+      {% endif %}
       <select name="topic" onchange="this.form.submit()" style="font-size:13px;padding:4px 8px;border:0.5px solid #ced4da;border-radius:4px">
         <option value="">All topics</option>
         {% for t in topics %}<option value="{{ t.id }}" {% if topic_filter == t.id|stringformat:"s" %}selected{% endif %}>{{ t.name }}</option>{% endfor %}
@@ -42,7 +52,7 @@
   </div>
 </div>
 
-<p style="font-size:13px;color:#6c757d;margin-bottom:1rem">{{ posts|length }} posts</p>
+<p style="font-size:13px;color:#6c757d;margin-bottom:1rem">{{ posts|length }} posts{% if tab == "all" and suche %} matching &bdquo;{{ suche }}&ldquo;{% endif %}</p>
 
 {% if tab == "scheduled" %}
 {% comment %}
