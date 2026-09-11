@@ -21,6 +21,9 @@ export const ANIM_LABELS = {
   spin: 'Spin (loop)', flash: 'Flash (loop)',
   wobble: 'Wobble (loop)', shake: 'Shake (loop)',
 };
+// Motions that never end. They are driven by the wall clock instead of by a
+// progress ratio, which is why they need their own Start handling in applyAt().
+export const LOOP_TYPES = new Set(['pulse', 'float', 'spin', 'flash', 'wobble', 'shake']);
 
 // Setzt eine Animation auf das aktuell gewählte Element.
 export function setAnim(editor, type, dur = 1200, delay = 0) {
@@ -49,9 +52,14 @@ function _h(n) { const x = Math.sin(n * 12.9898) * 43758.5453; return x - Math.f
 
 function _drawEffects(ctx, editor) {
   const z = editor.canvas.getZoom();
-  const t = _fxTime;
   editor.canvas.getObjects().forEach(o => {
     if (o._snap || !o.fx || o.fx === 'none') return;
+    // Effects honour the Start slider as well. They used to ignore it: every
+    // effect was drawn from frame zero, so three elements with different start
+    // times all began together.
+    const start = o.fxDelay || 0;
+    if (_fxTime < start) return;
+    const t = _fxTime - start;
     const b = o.getBoundingRect(true);
     const L = b.left * z, T = b.top * z, W = b.width * z, H = b.height * z;
     const cx = L + W / 2, cy = T + H / 2, R = Math.max(W, H) / 2;
@@ -159,27 +167,34 @@ function ensureFxHook(editor) {
   });
 }
 
-export function setEffect(editor, obj, fx) {
+export function setEffect(editor, obj, fx, delay = 0) {
   if (!obj) return;
   obj.fx = (fx && fx !== 'none') ? fx : null;
+  obj.fxDelay = obj.fx ? (+delay || 0) : 0;
   editor.snapshot();
 }
 
 // Wendet den Animationszustand zum Zeitpunkt t (ms) auf ein Objekt an.
 // Speichert/wiederherstellt Originalwerte über _base.
-function applyAt(o, t) {
+export function applyAt(o, t) {
   if (!o.anim) return;
   if (!o._base) o._base = { opacity: o.opacity, left: o.left, top: o.top, scaleX: o.scaleX, scaleY: o.scaleY, angle: o.angle };
   const b = o._base;
-  const { type, dur, delay } = o.anim;
+  const { type, dur } = o.anim;
+  const delay = o.anim.delay || 0;
   let p = (t - delay) / dur;               // Fortschritt 0..1
   p = Math.max(0, Math.min(1, p));
   const ease = 1 - Math.pow(1 - p, 3);     // easeOutCubic
 
   o.set({ opacity: b.opacity, left: b.left, top: b.top, scaleX: b.scaleX, scaleY: b.scaleY, angle: b.angle });
+  // A loop that has not started yet rests in its base state — the line above
+  // has just restored it. Without this an element ignored its Start entirely:
+  // one-shot motions divide by `dur` and so subtract the delay, but the loop
+  // clock below used to run off the raw `t`.
+  if (LOOP_TYPES.has(type) && t < delay) { o.setCoords(); return; }
   // Schleifen-Tempo an den Dauer-Regler koppeln: größere Dauer = langsamer.
   // dur=1200 ⇒ sp=1 (unverändert); dur=2400 ⇒ halbe Geschwindigkeit.
-  const tt = (t / 1000) * (1200 / Math.max(200, dur));
+  const tt = (Math.max(0, t - delay) / 1000) * (1200 / Math.max(200, dur));
   switch (type) {
     // — einmalige Effekte (über die Dauer) —
     case 'fadeIn':     o.set({ opacity: b.opacity * ease }); break;
@@ -232,7 +247,8 @@ function play(editor, total, onFrame) {
 
 export function previewAnimation(editor) {
   if (!hasAnimations(editor)) { toast('No animations set', 'err'); return; }
-  play(editor, animDuration(editor));
+  // Called from a click handler: keep a failed frame off the global handler.
+  play(editor, animDuration(editor)).catch(e => console.error('[media] preview:', e));
 }
 
 // Für Export: Canvas auf volle Auflösung setzen und Zoom + Verschiebung
@@ -253,14 +269,15 @@ function animDuration(editor) {
   // Deckel bei 15 s: 30 s × 12 fps = 360 Frames à 2,5 MB Kopie = ~900 MB im
   // Arbeitsspeicher, bevor die GIF-Kodierung überhaupt startet → Tab-Absturz.
   if (secs && secs > 0) return Math.min(secs, 15) * 1000;
-  const LOOPS = new Set(['pulse', 'float', 'spin', 'flash', 'wobble', 'shake']);
   let max = 1500, hasLoop = false;
   editor.canvas.getObjects().forEach(o => {
     if (o.anim) {
       max = Math.max(max, (o.anim.delay || 0) + (o.anim.dur || 1200) + 300);
-      if (LOOPS.has(o.anim.type)) hasLoop = true;
+      if (LOOP_TYPES.has(o.anim.type)) hasLoop = true;
     }
-    if (o.fx && o.fx !== 'none') hasLoop = true;
+    // A late effect needs room after its Start, otherwise an effect set to
+    // begin at 2.5 s never appears in a 4 s export.
+    if (o.fx && o.fx !== 'none') { hasLoop = true; max = Math.max(max, (o.fxDelay || 0) + 1500); }
   });
   // Schleifen-Bewegungen/Effekte: mind. 4 s, sonst nur ein kurzer Hopser.
   if (hasLoop) max = Math.max(max, 4000);

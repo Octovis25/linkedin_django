@@ -122,7 +122,10 @@
   function zeige(titel, text, wichtig) {
     if (festgehalten && !wichtig) return;
     if (wichtig) festgehalten = true;
-    if (!box) {
+    // isConnected: once the user closes the banner with the x, or a test removes
+    // it, `box` still points at the detached node — every later error was then
+    // written into nothing and the page looked healthy while it was not.
+    if (!box || !box.isConnected) {
       box = document.createElement('div');
       box.id = 'studio-fehler';
       box.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:99999;background:#b3261e;' +

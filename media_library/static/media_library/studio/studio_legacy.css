@@ -1,0 +1,281 @@
+/* ==========================================================================
+   Image Studio v2 – styles
+   Ausgelagert aus studio.html. Nutzt die Brand-CSS-Variablen aus base/brand.css
+   (--octo-petrol, --octo-orange, --brand-c1..c6 …).
+   ========================================================================== */
+
+/* ---- Layout ------------------------------------------------------------- */
+.studio-wrap        { display:flex; gap:.6rem; align-items:flex-start; width:100%;
+                      max-width:100%; box-sizing:border-box; position:relative; }
+.studio-sidebar     { flex:0 0 250px; width:250px; display:flex; flex-direction:column;
+                      gap:0; max-height:calc(100vh - 80px); overflow-y:auto;
+                      transition:flex-basis .18s ease, width .18s ease; }
+.studio-main        { flex:1 1 auto; min-width:0; }
+.studio-right       { flex:0 0 260px; width:260px; max-height:calc(100vh - 80px); overflow-y:auto;
+                      transition:flex-basis .18s ease, width .18s ease; }
+
+/* ---- Leisten einklappen: schweben über dem Canvas statt zu verschwinden --- */
+.studio-wrap.hide-left  .studio-sidebar,
+.studio-wrap.hide-right .studio-right {
+  position:absolute; top:0; z-index:40; width:250px; flex-basis:0;
+  background:#eef1f3; border-radius:8px; padding:6px;
+  box-shadow:0 8px 30px rgba(0,0,0,.28);
+  transition:transform .18s ease, opacity .18s ease;
+}
+.studio-wrap.hide-left  .studio-sidebar { left:26px;  transform:translateX(calc(-100% - 30px)); opacity:0; pointer-events:none; }
+.studio-wrap.hide-right .studio-right   { right:26px; width:260px;
+                                          transform:translateX(calc(100% + 30px)); opacity:0; pointer-events:none; }
+/* eingeblendet: beim Überfahren des Griffs oder solange festgepinnt */
+.studio-wrap.hide-left.peek-left   .studio-sidebar,
+.studio-wrap.hide-right.peek-right .studio-right { transform:none; opacity:1; pointer-events:auto; }
+
+/* ---- Große Arbeitsfläche: Leisten schweben zur Seite (per Randgriff wieder
+       einblendbar), Canvas wird höher. Werkzeuge bleiben erreichbar. -------- */
+.studio-wrap.maxi .canvas-host  { height:calc(100vh - 130px); }
+
+.panel-toggle       { position:sticky; top:0; z-index:50; align-self:flex-start;
+                      flex:0 0 22px; width:22px; height:90px; margin-top:4px;
+                      border:1px solid #dfe3e6; border-radius:6px; background:#fff;
+                      color:#0E7C86; cursor:pointer; font-size:.8rem; line-height:1;
+                      display:flex; align-items:center; justify-content:center;
+                      box-shadow:0 1px 4px rgba(0,0,0,.08); padding:0; }
+.panel-toggle:hover { background:#e8f5f6; }
+.panel-toggle.aus   { background:#0E7C86; color:#fff; border-color:#0E7C86; }
+
+/* ---- Sidebar sections --------------------------------------------------- */
+.sidebar-section    { background:#fff; border-radius:6px; box-shadow:0 1px 4px rgba(0,0,0,.1);
+                      padding:.75rem; margin-bottom:.5rem; }
+.sidebar-section h3 { font-size:.85rem; color:var(--octo-petrol,#008591); margin:0 0 .5rem;
+                      cursor:pointer; user-select:none; display:flex;
+                      justify-content:space-between; align-items:center; }
+.sidebar-section h3::after           { content:'▾'; font-size:.7rem; color:#aaa; transition:transform .2s; }
+.sidebar-section.collapsed h3::after { transform:rotate(-90deg); }
+.sidebar-section.collapsed .section-body { display:none; }
+
+/* ---- Linke Werkzeugleiste: einheitliche, kompakte Schriftgröße ----------- */
+.studio-sidebar .sidebar-section { padding:.55rem .6rem; margin-bottom:.4rem; }
+.studio-sidebar .sidebar-section h3 { font-size:13px !important; margin-bottom:.4rem; }
+/* Alle Bedienelemente exakt gleich groß – überschreibt Inline-Größen. */
+.studio-sidebar .tbtn,
+.studio-sidebar .field,
+.studio-sidebar input,
+.studio-sidebar select,
+.studio-sidebar textarea,
+.studio-sidebar label,
+.studio-sidebar .lib-hint,
+.studio-sidebar .retouch-label { font-size:12px !important; line-height:1.3; }
+.studio-sidebar .tbtn { padding:4px 7px; }
+.studio-sidebar .field,
+.studio-sidebar input,
+.studio-sidebar select,
+.studio-sidebar textarea { padding:4px 6px; }
+
+/* ---- Canvas: fester Rahmen, kein Scrollen ------------------------------- */
+.canvas-host        { height:calc(100vh - 195px); min-height:460px;
+                      display:flex; align-items:center; justify-content:center;
+                      background:#f4f5f7; border:1px solid #dcdfe3; border-radius:8px;
+                      overflow:auto; padding:10px; box-sizing:border-box; }
+#canvas-wrap        { position:relative; border-radius:4px; line-height:0;
+                      box-shadow:0 2px 12px rgba(0,0,0,.15);
+                      background:#e9ebee; }   /* ruhiger, neutraler Hintergrund (kein Muster) */
+#canvas-wrap.drag-over { outline:3px dashed var(--octo-orange,#F56E28); outline-offset:-3px; }
+/* Fabric legt einen .canvas-container an – der muss mitschrumpfen */
+#canvas-wrap .canvas-container { border-radius:4px; }
+
+.tbtn               { font-size:12px; padding:5px 9px; border:1px solid #d5d5d5; border-radius:5px;
+                      background:#fff; cursor:pointer; line-height:1; white-space:nowrap;
+                      transition:background .15s,border-color .15s; }
+.tbtn:hover         { background:#f0f7f7; border-color:var(--octo-petrol,#008591); }
+.tbtn:disabled      { opacity:.4; cursor:not-allowed; }
+.tbtn.danger        { color:#dc3545; }
+.tbtn.danger:hover  { background:#fff5f5; border-color:#dc3545; }
+.tbtn.primary       { background:var(--octo-petrol,#008591); color:#fff; border-color:var(--octo-petrol,#008591); }
+.tbtn.primary:hover { filter:brightness(1.08); }
+
+/* ---- Aktionsleiste unter dem Canvas ------------------------------------- */
+.studio-actionbar   { display:flex; gap:.5rem; flex-wrap:wrap; align-items:center;
+                      margin-top:.6rem; padding-top:.6rem; border-top:1px solid #e3e3e3; }
+.studio-actionbar .group { display:flex; gap:.3rem; align-items:center; padding-right:.5rem;
+                      border-right:1px solid #e8e8e8; }
+.studio-actionbar .group:last-of-type { border-right:none; }
+.studio-actionbar .group-save { flex-wrap:wrap; }
+
+/* ---- Contextual selection bar over the canvas --------------------------- */
+.sel-bar            { display:flex; gap:4px; margin-bottom:6px; flex-wrap:wrap; align-items:center;
+                      min-height:30px; }
+.sel-bar .hint      { font-size:.72rem; color:#888; }
+.sel-active         { font-size:.72rem; font-weight:600; color:var(--octo-orange,#F56E28);
+                      background:#fff3ec; border:1px solid #f5c9ad; border-radius:5px;
+                      padding:2px 8px; margin-right:4px; white-space:nowrap; }
+.sel-size           { display:inline-flex; align-items:center; gap:3px; font-size:.72rem;
+                      color:#666; background:#fafafa; border:1px solid #e2e2e2;
+                      border-radius:5px; padding:1px 4px; margin-right:4px; white-space:nowrap; }
+.sel-num            { width:52px; font-size:.72rem; padding:2px 3px; text-align:right;
+                      border:1px solid #ccc; border-radius:4px; background:#fff; }
+.sel-num:focus      { outline:none; border-color:var(--octo-orange,#F56E28); }
+.sel-size .tbtn     { padding:1px 4px; line-height:1; }
+
+/* ---- Grids: templates + library ---------------------------------------- */
+.tpl-grid           { display:grid; grid-template-columns:repeat(4,1fr); gap:.3rem;
+                      max-height:120px; overflow-y:auto; }
+.tpl-thumb          { width:100%; aspect-ratio:16/9; object-fit:cover; border-radius:4px; cursor:pointer;
+                      border:2px solid transparent; transition:border-color .2s; }
+.tpl-thumb:hover, .tpl-thumb.selected { border-color:var(--octo-orange,#F56E28); }
+
+.lib-grid           { display:grid; grid-template-columns:repeat(auto-fill, minmax(80px, 1fr)); gap:.3rem;
+                      max-height:300px; overflow-y:auto; }
+.lib-thumb          { width:100%; aspect-ratio:1; object-fit:cover; border-radius:4px; cursor:grab;
+                      border:2px solid transparent; transition:border-color .2s; background:#eee; }
+.lib-thumb:hover    { border-color:var(--octo-orange,#F56E28); }
+.lib-thumb.dragging { opacity:.5; cursor:grabbing; }
+
+/* Upload-Kachel mit Löschen-✕ */
+.lib-tile           { position:relative; border-radius:6px; }
+.lib-tile.active     { outline:3px solid var(--octo-orange,#F56E28); outline-offset:1px;
+                       box-shadow:0 0 0 4px rgba(245,110,40,.25); }
+.lib-tile.active::after { content:'✎ geöffnet'; position:absolute; left:2px; bottom:2px;
+                       font-size:.6rem; background:var(--octo-orange,#F56E28); color:#fff;
+                       padding:1px 5px; border-radius:4px; }
+.lib-tile .tile-del { position:absolute; top:2px; right:2px; width:18px; height:18px;
+                      border:none; border-radius:50%; background:rgba(0,0,0,.55); color:#fff;
+                      font-size:11px; line-height:1; cursor:pointer; display:flex;
+                      align-items:center; justify-content:center; opacity:0; transition:opacity .15s; }
+.lib-tile:hover .tile-del { opacity:1; }
+.lib-tile .tile-del:hover { background:#c0392b; }
+
+/* Ordner-Kacheln + Breadcrumb im Assets-Browser */
+.lib-folder         { display:flex; flex-direction:column; align-items:center; justify-content:center;
+                      aspect-ratio:1; border:1px solid #e2e2e2; border-radius:6px; cursor:pointer;
+                      background:#fafafa; padding:2px; transition:border-color .15s,background .15s; }
+.lib-folder:hover   { border-color:var(--octo-petrol,#008591); background:#f0f7f7; }
+.lib-folder-icon    { font-size:22px; line-height:1; }
+.lib-folder-name    { font-size:.6rem; color:#555; text-align:center; margin-top:2px;
+                      overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:100%; }
+.lib-crumb          { display:flex; flex-wrap:wrap; align-items:center; gap:2px; margin-bottom:6px;
+                      font-size:.72rem; }
+.crumb-btn          { border:none; background:none; color:var(--octo-petrol,#008591); cursor:pointer;
+                      padding:1px 3px; border-radius:3px; font-size:.72rem; }
+.crumb-btn:hover    { background:#eef6f6; text-decoration:underline; }
+
+.lib-search         { width:100%; margin-bottom:.4rem; padding:.3rem .45rem;
+                      border:1px solid #ccc; border-radius:4px; font-size:.8rem; box-sizing:border-box; }
+.no-templates       { font-size:.82rem; color:#888; }
+a.manage-link       { font-size:.75rem; color:var(--octo-petrol,#008591); }
+
+/* ---- Palette swatches --------------------------------------------------- */
+.swatch-row         { display:flex; gap:5px; align-items:center; flex-wrap:wrap; }
+.swatch             { width:22px; height:22px; border-radius:5px; cursor:pointer;
+                      border:2px solid #fff; box-shadow:0 0 0 1px #ccc; position:relative; }
+.swatch:hover       { transform:scale(1.12); }
+.swatch.add         { display:flex; align-items:center; justify-content:center; font-size:14px;
+                      color:#888; background:#f4f4f4; box-shadow:0 0 0 1px #ddd; }
+
+/* ---- Inputs ------------------------------------------------------------- */
+.field              { padding:.28rem .4rem; border:1px solid #ccc; border-radius:4px; font-size:.8rem; }
+.field-color        { width:28px; height:26px; border:none; padding:0; cursor:pointer; border-radius:4px; }
+#title-input        { width:200px; }
+
+/* ---- Post banner -------------------------------------------------------- */
+.post-banner        { background:#f0faf9; border:1px solid #61CEBC; border-radius:6px;
+                      padding:8px 12px; margin-bottom:.5rem; display:flex; gap:10px;
+                      align-items:center; font-size:.8rem; }
+.post-banner img    { width:40px; height:40px; border-radius:4px; object-fit:cover;
+                      border:2px solid #61CEBC; flex-shrink:0; }
+.post-banner .post-info    { flex:1; min-width:0; }
+.post-banner .post-info strong { color:var(--octo-dark-petrol,#004f57); font-size:.82rem; }
+.post-banner .post-info p  { margin:2px 0 0; color:#888; font-size:.72rem; }
+.post-banner .post-actions { display:flex; gap:4px; flex-shrink:0; }
+
+/* ---- Status message ----------------------------------------------------- */
+#status-msg         { font-size:.85rem; min-height:1.1em; }
+
+/* ---- Ebenen-Liste ------------------------------------------------------- */
+#layers-list        { display:flex; flex-direction:column; gap:2px; max-height:180px; overflow-y:auto; }
+.layer-row          { display:flex; align-items:center; gap:2px; padding:2px 4px; border-radius:4px;
+                      background:#f6f7f8; }
+.layer-row.active   { background:#e0f2f1; outline:1px solid var(--octo-petrol,#008591); }
+.layer-name         { flex:1; font-size:.72rem; cursor:pointer; overflow:hidden;
+                      text-overflow:ellipsis; white-space:nowrap; }
+.layer-btn          { border:none; background:none; cursor:pointer; font-size:.8rem; padding:0 3px;
+                      color:#555; border-radius:3px; }
+.layer-btn:hover    { background:#dfe7e7; color:var(--octo-petrol,#008591); }
+
+/* ---- Retouch-Panel Beschriftungen -------------------------------------- */
+.retouch-label      { font-size:.72rem; color:#555; font-weight:600; margin-bottom:4px; }
+/* Freistellen-Panel immer offen: Pfeil weg, nie einklappen */
+#retouch-section h3           { cursor:default; }
+#retouch-section h3::after    { display:none; }
+#retouch-section .section-body{ display:block !important; }
+
+/* ---- Timeline / animation ---------------------------------------------- */
+.tl-row             { display:flex; align-items:center; gap:6px; font-size:.72rem; margin-bottom:4px; }
+.tl-slider          { -webkit-appearance:none; appearance:none; height:14px; background:transparent; cursor:pointer; flex:1; }
+.tl-slider::-webkit-slider-runnable-track { height:3px; border-radius:2px; background:#ddd; }
+.tl-slider::-webkit-slider-thumb { -webkit-appearance:none; width:14px; height:14px; border-radius:50%;
+                      margin-top:-5.5px; border:2px solid #fff; box-shadow:0 1px 3px rgba(0,0,0,.3);
+                      background:var(--octo-orange,#F56E28); }
+.tl-slider::-moz-range-track { height:3px; border-radius:2px; background:#ddd; border:none; }
+.tl-slider::-moz-range-thumb { width:14px; height:14px; border-radius:50%; border:2px solid #fff;
+                      box-shadow:0 1px 3px rgba(0,0,0,.3); background:var(--octo-orange,#F56E28); }
+
+/* ---- Modal dialog ------------------------------------------------------- */
+.studio-modal-bg    { position:fixed; inset:0; background:rgba(0,0,0,.45); z-index:10000;
+                      display:flex; align-items:center; justify-content:center; }
+.studio-modal       { background:#fff; border-radius:12px; box-shadow:0 8px 32px rgba(0,0,0,.3);
+                      padding:20px 24px; max-width:340px; text-align:center; font-family:inherit; }
+.studio-modal h4    { margin:0 0 12px; font-size:1rem; }
+.studio-modal .modal-btns { display:flex; flex-direction:column; gap:8px; margin-top:8px; }
+.studio-modal .modal-btns button { padding:9px 12px; border:1px solid #ddd; border-radius:8px;
+                      background:#f8f8f8; cursor:pointer; font-size:.85rem; }
+.studio-modal .modal-btns button:hover { background:#eef6f6; }
+
+/* ---- Toast -------------------------------------------------------------- */
+.studio-toast       { position:fixed; bottom:20px; left:50%; transform:translateX(-50%);
+                      background:#222; color:#fff; padding:10px 18px; border-radius:8px;
+                      font-size:.85rem; z-index:10001; opacity:0; transition:opacity .25s;
+                      pointer-events:none; }
+.studio-toast.show  { opacity:.95; }
+.studio-toast.err   { background:#c0392b; }
+.studio-toast.ok    { background:#1e8449; }
+
+/* ---- Assets: anhakbarer Ordnerbaum ------------------------------------- */
+.lib-hint           { font-size:.68rem; color:#888; margin-bottom:3px; }
+.lib-tree           { max-height:190px; overflow-y:auto; border:1px solid #e6e8ea;
+                      border-radius:6px; padding:3px; margin-bottom:.4rem; background:#fafbfc; }
+.lib-trow           { display:flex; align-items:center; gap:5px; padding:2px 3px;
+                      font-size:.74rem; border-radius:4px; }
+.lib-trow:hover     { background:#eef4f4; }
+.lib-trow input[type=checkbox] { margin:0; cursor:pointer; flex:0 0 auto; }
+.lib-trow .fexp     { width:12px; text-align:center; cursor:pointer; color:#999;
+                      user-select:none; flex:0 0 auto; }
+.lib-trow .fname    { flex:1; cursor:pointer; overflow:hidden; text-overflow:ellipsis;
+                      white-space:nowrap; }
+
+/* ---- Upload-Vorschau: scrollbar ---------------------------------------- */
+#upload-grid        { max-height:150px; overflow-y:auto; }
+
+/* ---- Animations-Leiste unter dem Canvas -------------------------------- */
+.anim-bar           { display:flex; flex-direction:column; gap:3px;
+                      margin-top:.4rem; padding:.35rem .45rem; background:#fff;
+                      border:1px solid #e3e3e3; border-radius:8px; }
+.anim-bar-title     { font-size:.72rem; color:var(--octo-petrol,#008591); font-weight:600; }
+.anim-bar .hint     { font-size:.68rem; color:#888; }
+.anim-row           { display:flex; align-items:center; gap:7px; padding:3px 5px;
+                      background:#f6f8f9; border:1px solid #e6e8ea; border-radius:6px; }
+.anim-thumb         { width:32px; height:32px; flex:0 0 auto; object-fit:contain;
+                      background:#fff; border:1px solid #e0e0e0; border-radius:5px; cursor:pointer; }
+.anim-thumb:hover   { border-color:var(--octo-orange,#F56E28); }
+.anim-col           { display:flex; flex-direction:column; gap:2px; flex:1; min-width:0; }
+.anim-ctl           { display:flex; align-items:center; gap:5px; font-size:.66rem; color:#555; }
+.anim-ctl > span    { flex:0 0 52px; }
+.anim-ctl select, .anim-ctl input { flex:1; min-width:0; font-size:.66rem; padding:1px 4px; height:22px; }
+.anim-bar-head      { display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:2px; }
+.anim-time          { gap:10px; }
+.anim-time-item     { display:flex; align-items:center; gap:5px; flex:1; min-width:0; }
+.anim-time-item > span { flex:0 0 auto; font-size:.64rem; color:#777; }
+
+/* ---- Rechteck-Auswahl (eigene Zeichenebene über dem Canvas) ------------- */
+#rect-overlay       { position:absolute; inset:0; z-index:30; display:none; cursor:crosshair; }
+#rect-overlay.active { display:block; }
+#rect-marquee       { position:absolute; border:2px solid var(--octo-orange,#F56E28);
+                      background:rgba(245,110,40,.22); pointer-events:none; box-sizing:border-box; }

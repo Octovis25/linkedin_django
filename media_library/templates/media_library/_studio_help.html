@@ -176,7 +176,8 @@
       <li><b>Below the canvas:</b> <b>New</b>, the <b>Title</b> field, <b>💾 Save as…</b>,
           <b>▾ Format</b>, <b>📥 Download</b> and <b>← Exit</b>.</li>
       <li><b>Animation bar (bottom):</b> one row per element with <b>Motion</b>, <b>Effect</b>,
-          <b>Speed</b> and <b>Start</b>, plus <b>Video length</b> and <b>▶ Preview</b> in its
+          <b>Speed</b> and <b>Start</b> (when it begins – valid for Motion and Effect),
+          plus <b>Video length</b> and <b>▶ Preview</b> in its
           header. All elements sit side by side so you can time them against each other.
           Click the header to fold the bar away while you are building a still image.</li>
     </ul>
@@ -244,6 +245,12 @@
             <b>Motion</b> (e.g. <i>Fade in</i>, <i>In from bottom</i>) and/or an
             <b>Effect</b> (e.g. <i>Network</i>, <i>Confetti</i>), plus a <b>Speed</b>.
             Repeat for other elements.</li>
+        <li><b>Stagger the elements.</b> <b>Start</b> says when that element begins, in
+            milliseconds from the first frame. It applies to <b>Motion</b> and
+            <b>Effect</b> alike, including the looping ones (<i>Pulse</i>, <i>Float</i>,
+            <i>Spin</i>…): until its Start is reached the element simply rests. Give three
+            similar elements 0, 600 and 1200 and they come in one after another instead of
+            moving in lockstep.</li>
         <li><b>Preview.</b> Click <b>▶ Preview</b> to play it on the canvas.</li>
         <li><b>Length.</b> Set <b>Video length</b> (seconds) in the bar; empty = automatic.
             Looping effects run a few seconds.</li>

@@ -2,7 +2,7 @@
 //   Radieren      = mit Pinsel transparent machen
 //   Wiederherstellen = Originalpixel per Pinsel zurückholen
 // Arbeitet auf einer Offscreen-Arbeitskopie in Bild-Auflösung.
-import { loadImage } from './util.js';
+import { loadImage, toast } from './util.js';
 import { proxyUrl } from './config.js';
 
 // Liefert (und initialisiert bei Bedarf) die Arbeits-Canvas eines fabric-Bildes.
@@ -91,9 +91,16 @@ export function replaceElement(obj, imgEl) {
 export function commitWork(obj) {
   if (!obj._work) return Promise.resolve();
   const gen = (obj._commitGen = (obj._commitGen || 0) + 1);
+  // Failing here must not reach the global handler as a red banner: a tainted
+  // canvas or an oversized image makes toDataURL throw or return "data:,", and
+  // loadImage then rejects. The edit is lost either way — the user gets a toast
+  // and keeps working, instead of a crash message over the whole page.
   return loadImage(obj._work.canvas.toDataURL('image/png')).then(img => {
     if (gen !== obj._commitGen) return;   // ein neuerer Stand ist bereits da
     replaceElement(obj, img);
+  }).catch(e => {
+    console.error('[retouch] commitWork:', e);
+    toast('The edit could not be applied to the image.', 'err');
   });
 }
 

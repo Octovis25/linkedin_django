@@ -27,7 +27,12 @@ export function getPalette() {
 export function addCustomColor(hex) {
   let custom = [];
   try { custom = JSON.parse(localStorage.getItem(PALETTE_KEY) || '[]'); } catch (e) {}
-  if (!custom.includes(hex)) { custom.push(hex); localStorage.setItem(PALETTE_KEY, JSON.stringify(custom)); }
+  // Writing can throw on a full quota or with site data blocked. The colour is
+  // then simply not remembered for next time — no reason to take the page down.
+  if (!custom.includes(hex)) {
+    custom.push(hex);
+    try { localStorage.setItem(PALETTE_KEY, JSON.stringify(custom)); } catch (e) {}
+  }
 }
 
 // Rendert Swatches in ein Ziel-Element. onPick(hex) callback.

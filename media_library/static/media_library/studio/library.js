@@ -6,6 +6,11 @@
 import { URLS, getCookie, CONFIG } from './config.js';
 import { toast } from './util.js';
 
+// Async work kicked off from a sync handler. Without this the rejection reaches
+// the global handler in studio.html and paints a red banner over the page for
+// what is usually a failed background refresh.
+const guard = (p, what) => Promise.resolve(p).catch(e => console.error('[library] ' + what + ':', e));
+
 let _editor = null;
 
 // SVGs müssen zerlegt eingefügt werden, nicht als flaches Bild.
@@ -50,14 +55,14 @@ export function initLibrary(editor) {
   const search = document.getElementById('lib-search');
   if (search) {
     let t;
-    search.oninput = () => { clearTimeout(t); t = setTimeout(refreshImages, 250); };
+    search.oninput = () => { clearTimeout(t); t = setTimeout(() => guard(refreshImages(), 'search refresh'), 250); };
   }
   document.querySelectorAll('#output-tabs [data-out]').forEach(btn => {
-    btn.onclick = () => { _outputTab = btn.dataset.out; highlightOutput(); loadOutput(); };
+    btn.onclick = () => { _outputTab = btn.dataset.out; highlightOutput(); guard(loadOutput(), 'output tab'); };
   });
   highlightOutput();
-  loadTree();        // Assets-Ordnerbaum laden
-  loadOutput();      // Output-Auswahl laden
+  guard(loadTree(), 'asset tree');
+  guard(loadOutput(), 'output list');
   enableCanvasDrop();
   initUpload();
   // Nach dem Speichern die Ausgaben-Liste auffrischen und auf den passenden
@@ -68,7 +73,7 @@ export function initLibrary(editor) {
       _outputTab = tab;
       highlightOutput();
     }
-    loadOutput();
+    guard(loadOutput(), 'output refresh after save');
   });
 }
 
@@ -78,13 +83,15 @@ function initUpload() {
   const input = document.getElementById('upload-input');
   const statusEl = document.getElementById('upload-status');
   if (!btn || !input) return;
+  // #upload-status may be absent; the upload itself must still work.
+  const melde = txt => { if (statusEl) statusEl.textContent = txt; };
   btn.onclick = () => input.click();
-  loadUploads();
+  guard(loadUploads(), 'uploads');
   input.onchange = async () => {
     const files = [...input.files];
     input.value = '';
     for (const file of files) {
-      statusEl.textContent = `Lade ${file.name}…`;
+      melde(`Lade ${file.name}…`);
       try {
         const fd = new FormData();
         fd.append('file', file);
@@ -94,15 +101,15 @@ function initUpload() {
           body: fd,
         });
         const d = await r.json();
-        if (d.ok) statusEl.textContent = `✓ ${file.name} uploaded`;
-        else { statusEl.textContent = `✗ ${d.error || 'Fehler'}`; toast('Upload fehlgeschlagen', 'err'); }
+        if (d.ok) melde(`✓ ${file.name} uploaded`);
+        else { melde(`✗ ${d.error || 'Fehler'}`); toast('Upload fehlgeschlagen', 'err'); }
       } catch (e) {
-        statusEl.textContent = '✗ Fehler';
+        melde('✗ Fehler');
         toast('Upload-Fehler', 'err');
       }
     }
     setTimeout(() => { if (statusEl) statusEl.textContent = ''; }, 3000);
-    loadUploads();
+    guard(loadUploads(), 'uploads');
   };
 }
 
@@ -229,11 +236,11 @@ async function makeRow(name, path, depth) {
       }
     }
   };
-  exp.onclick = expand;
-  label.onclick = expand;
+  exp.onclick = () => guard(expand(), 'expand folder');
+  label.onclick = () => guard(expand(), 'expand folder');
   cb.onchange = () => {
     if (cb.checked) _checked.add(path); else _checked.delete(path);
-    refreshImages();
+    guard(refreshImages(), 'folder selection');
   };
 
   row.appendChild(exp);
@@ -334,14 +341,24 @@ async function loadOutput() {
       el.className = 'lib-thumb';
       el.src = item.url;
       el.title = item.title || item.name || '';
+      // A thumbnail whose file will not load is greyed out instead of sitting
+      // there looking healthy — for videos it used to stay a black rectangle.
+      el.onerror = () => {
+        el.style.opacity = .3;
+        el.title = (el.title || item.name || '') + ' – preview could not be loaded';
+      };
       if (isVideo) {
         el.muted = true; el.loop = true; el.playsInline = true; el.preload = 'metadata';
         el.style.background = '#000';
         el.addEventListener('loadeddata', () => { try { el.currentTime = 0.1; } catch (e) {} });
-        el.addEventListener('mouseenter', () => el.play());
-        el.addEventListener('mouseleave', () => el.pause());
-      } else {
-        el.onerror = () => { el.style.opacity = .3; };
+        // play() returns a promise. When the file is unreachable it rejects with
+        // "The element has no supported sources." — unhandled, that reached the
+        // global handler and threw a red error banner over a hover.
+        el.addEventListener('mouseenter', () => {
+          const p = el.play();
+          if (p && p.catch) p.catch(() => { el.onerror(); });
+        });
+        el.addEventListener('mouseleave', () => { try { el.pause(); } catch (e) {} });
       }
       // Öffnen: bevorzugt über die DB-ID (bewährter Weg, stellt Canvas wieder her),
       // sonst über den NC-Pfad.
@@ -408,4 +425,4 @@ function enableCanvasDrop() {
 }
 
 // Nach dem Speichern aufrufbar, um die Output-Auswahl zu aktualisieren.
-export function refreshOutput() { loadOutput(); }
+export function refreshOutput() { guard(loadOutput(), 'output refresh'); }

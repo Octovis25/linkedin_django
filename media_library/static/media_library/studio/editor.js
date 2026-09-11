@@ -15,7 +15,7 @@ if (fabric) fabric.Object.prototype.objectCaching = false;
 // Speichern nie unterschiedliche Eigenschaften mitnehmen. Fehlt hier ein Eintrag,
 // geht die betreffende Bearbeitung beim Undo ODER beim Wiederöffnen verloren.
 export const EXTRA_PROPS = [
-  'srcUrl', 'originalUrl', 'bgRemoved', 'edited', 'anim', 'shapeKind', 'fx', 'svgPart',
+  'srcUrl', 'originalUrl', 'bgRemoved', 'edited', 'anim', 'shapeKind', 'fx', 'fxDelay', 'svgPart',
   'tbHead', 'tbBody', 'tbWidth', 'tbSize', 'tbAlign', 'tbCheck', 'tbColor',
   'clItems', 'clWidth', 'clSize', 'clColor',
 ];
