@@ -404,9 +404,16 @@ def archive_view(request):
     topic_filter = request.GET.get('topic', '')
     with connection.cursor() as c:
         topics = _topics(c)
+        # Ein Post kann auf zwei Arten fertig sein: rausgegangen oder fallengelassen.
+        # Beide landen hier. Ohne linkedin_posted/link konnte die Seite die beiden
+        # nicht auseinanderhalten und zeigte einen undifferenzierten Stapel.
+        # Der Status taugt dafuer nicht: ein veroeffentlichter Post, den jemand
+        # spaeter von Hand wegraeumt, steht danach auf 'Archive' - rausgegangen
+        # ist er trotzdem.
         sql = """SELECT p.id, p.title, p.content, p.status, p.planned_date,
                         p.image, t.name, t.color, p.topic_id, p.comment,
-                        p.updated_at, p.created_at
+                        p.updated_at, p.created_at,
+                        COALESCE(p.linkedin_posted, 0), COALESCE(p.link, '')
                  FROM planner_posts p
                  LEFT JOIN planner_topics t ON p.topic_id = t.id
                  WHERE p.status IN ('Posted', 'Archive')"""
@@ -426,6 +433,10 @@ def archive_view(request):
             'topic_name': r[6] or '', 'topic_color': r[7] or 'gray',
             'topic_id': r[8], 'comment': r[9] or '', 'bg': bg, 'fg': fg,
             'updated_at': r[10], 'created_at': r[11],
+            # Rausgegangen, wenn das Flag steht ODER ein LinkedIn-Link haengt.
+            # Alles andere im Archiv wurde von Hand abgelegt, also verworfen.
+            'linkedin_posted': bool(r[12]) or bool(r[13]),
+            'link': r[13] or '',
         })
 
     _attach_video_paths(posts_list)

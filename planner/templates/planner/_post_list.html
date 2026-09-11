@@ -59,9 +59,34 @@ promote_scheduled_to_posted(). Before this note existed it looked broken.
 </p>
 {% endif %}
 
+{% if tab == "archive" %}
+{% comment %}
+Two ways a post can be finished: it went out, or it was dropped. The database
+has held both all along (status Posted vs Archive), but this page used to merge
+them into one undated pile. The split reads linkedin_posted, not the status
+word, so a published post that was later tidied away still counts as published.
+{% endcomment %}
+<div id="pe-ende-filter" style="display:flex;gap:6px;align-items:center;margin:-.4rem 0 1rem;flex-wrap:wrap">
+  <span style="font-size:12px;color:#6c757d;margin-right:4px">Show:</span>
+  <button type="button" data-ende-filter="all" class="pe-ef pe-ef-on">All</button>
+  <button type="button" data-ende-filter="posted" class="pe-ef">Published</button>
+  <button type="button" data-ende-filter="dropped" class="pe-ef">Discarded</button>
+  <span id="pe-ende-count" style="font-size:12px;color:#6c757d;margin-left:4px"></span>
+</div>
+<style>
+  .pe-ef { font:500 12px/1 inherit; cursor:pointer; padding:6px 12px; border-radius:999px;
+           border:1px solid #d9e3e3; background:#fff; color:#4a5c5c; }
+  .pe-ef:hover { border-color:#F56E28; color:#F56E28; }
+  .pe-ef-on { background:#008591; border-color:#008591; color:#fff; }
+  .pe-ende { font:500 10.5px/1 inherit; padding:3px 7px; border-radius:5px; white-space:nowrap; }
+  .pe-ende-posted  { background:#e8f5f1; color:#0e7c86; }
+  .pe-ende-dropped { background:#f1f1f1; color:#6c757d; }
+</style>
+{% endif %}
+
 <div style="display:flex;flex-direction:column;gap:8px">
 {% for p in posts %}
-<div style="background:#fff;border:0.5px solid #e0e0e0;border-radius:10px;padding:12px 14px">
+<div class="pe-card" data-ende="{% if p.linkedin_posted %}posted{% else %}dropped{% endif %}" style="background:#fff;border:0.5px solid #e0e0e0;border-radius:10px;padding:12px 14px">
   <div style="display:flex;gap:10px;align-items:center">
     {% if p.image %}
     <img src="/planner/image/{{ p.id }}/?v={% now 'U' %}" style="width:56px;height:56px;border-radius:6px;object-fit:cover;flex-shrink:0;cursor:zoom-in" onclick="peLightbox('/planner/image/{{ p.id }}/?v={% now 'U' %}')">
@@ -102,6 +127,7 @@ promote_scheduled_to_posted(). Before this note existed it looked broken.
       </p>
     </div>
     <div style="display:flex;gap:6px;flex-shrink:0;align-items:center">
+      {% if tab == "archive" %}{% if p.linkedin_posted %}<span class="pe-ende pe-ende-posted" title="Went out on LinkedIn">Published</span>{% else %}<span class="pe-ende pe-ende-dropped" title="Never went out – put away by hand">Discarded</span>{% endif %}{% endif %}
       <select onchange="setStatus({{ p.id }}, this.value)" style="font-size:12px;padding:3px 6px;border:0.5px solid #ced4da;border-radius:4px;cursor:pointer">
         <option {% if p.status == 'Draft' %}selected{% endif %} value="Draft">Draft</option>
         <option {% if p.status == 'Review' %}selected{% endif %} value="Review">Review</option>
@@ -895,4 +921,32 @@ if (_liModalBg) _liModalBg.addEventListener('click', function(e) {
     </div>
   </div>
 </div>
+{% endif %}
+
+{% if tab == "archive" %}
+<script>
+(function () {
+  var leiste = document.getElementById("pe-ende-filter");
+  if (!leiste) return;
+  var zaehler = document.getElementById("pe-ende-count");
+  function zeige(wahl) {
+    var karten = document.querySelectorAll(".pe-card");
+    var sichtbar = 0;
+    karten.forEach(function (k) {
+      var passt = wahl === "all" || k.dataset.ende === wahl;
+      k.hidden = !passt;
+      if (passt) sichtbar++;
+    });
+    leiste.querySelectorAll("[data-ende-filter]").forEach(function (b) {
+      b.classList.toggle("pe-ef-on", b.dataset.endeFilter === wahl);
+    });
+    if (zaehler) zaehler.textContent = sichtbar + " of " + karten.length;
+  }
+  leiste.addEventListener("click", function (e) {
+    var b = e.target.closest("[data-ende-filter]");
+    if (b) zeige(b.dataset.endeFilter);
+  });
+  zeige("all");
+})();
+</script>
 {% endif %}
