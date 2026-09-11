@@ -44,6 +44,21 @@
 
 <p style="font-size:13px;color:#6c757d;margin-bottom:1rem">{{ posts|length }} posts</p>
 
+{% if tab == "scheduled" %}
+{% comment %}
+Why a post can still sit here although it is already live on LinkedIn: the
+Buffer sync is a once-a-day cron job (render.yaml, service buffer-posts-daily).
+It runs at 12:00 UTC = 14:00 German summer time, i.e. AFTER the usual 08:00
+posting slot, and only then are sent posts moved to Posted / Archive by
+promote_scheduled_to_posted(). Before this note existed it looked broken.
+{% endcomment %}
+<p style="font-size:12px;color:#6c757d;background:#f4fafa;border:1px solid #e0eded;border-radius:8px;padding:8px 12px;margin:-.4rem 0 1rem">
+  ℹ️ Posts that have already gone out on LinkedIn move to <b>Archive</b>
+  automatically – but only after the daily Buffer sync at <b>14:00</b>. Until then a
+  post that is already published still shows up here. Nothing is wrong.
+</p>
+{% endif %}
+
 <div style="display:flex;flex-direction:column;gap:8px">
 {% for p in posts %}
 <div style="background:#fff;border:0.5px solid #e0e0e0;border-radius:10px;padding:12px 14px">

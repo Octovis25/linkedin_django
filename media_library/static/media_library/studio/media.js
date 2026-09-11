@@ -1,5 +1,7 @@
 // media.js – Animationen + Export als bewegtes Bild (WebM-Video) und GIF.
-// Jedes Element kann eine Animation tragen: obj.anim = {type, dur, delay}.
+// Jedes Element kann eine Animation tragen: obj.anim = {type, dur} und/oder
+// einen Deko-Effekt obj.fx. Wann es losgeht, steht EINMAL in obj.startAt –
+// siehe startOf()/elapsedAt() weiter unten.
 // Beim Abspielen werden Opacity/Position/Skalierung/Winkel über die Zeit
 // interpoliert und der Canvas Frame für Frame gerendert.
 import { toast, status } from './util.js';
@@ -25,11 +27,39 @@ export const ANIM_LABELS = {
 // progress ratio, which is why they need their own Start handling in applyAt().
 export const LOOP_TYPES = new Set(['pulse', 'float', 'spin', 'flash', 'wobble', 'shake']);
 
+/* ---------------------------------------------------------------------------
+   ONE clock for everything that moves.
+
+   Motion and Effect used to be two systems: each kept its own start value and
+   read its own clock. That is what let them drift apart — one honoured the Start
+   slider, the other never even looked at it. Both now go through the three
+   helpers below, so a change to the timing is a change for both by construction.
+
+   `startAt` is the single stored start. The fallbacks read drafts saved before
+   this change: those carry the value inside `anim.delay` or `fxDelay`, and they
+   must keep working untouched.
+   --------------------------------------------------------------------------- */
+export function startOf(o) {
+  return (o?.startAt ?? o?.anim?.delay ?? o?.fxDelay ?? 0) || 0;
+}
+export function hasStarted(o, t) { return t >= startOf(o); }
+export function elapsedAt(o, t) { return Math.max(0, t - startOf(o)); }
+// Writes the start in the one place that counts. The two legacy fields are kept
+// in step so a draft saved now still opens on an older deployment.
+export function setStart(o, ms) {
+  const v = Math.max(0, +ms || 0);
+  o.startAt = v;
+  if (o.anim) o.anim.delay = v;
+  if (o.fx) o.fxDelay = v;
+  return v;
+}
+
 // Setzt eine Animation auf das aktuell gewählte Element.
 export function setAnim(editor, type, dur = 1200, delay = 0) {
   const o = editor.active();
   if (!o) { toast('Select an element first', 'err'); return; }
-  o.anim = (type && type !== 'none') ? { type, dur, delay } : null;
+  o.anim = (type && type !== 'none') ? { type, dur } : null;
+  setStart(o, delay);
   editor.snapshot();
 }
 
@@ -57,9 +87,8 @@ function _drawEffects(ctx, editor) {
     // Effects honour the Start slider as well. They used to ignore it: every
     // effect was drawn from frame zero, so three elements with different start
     // times all began together.
-    const start = o.fxDelay || 0;
-    if (_fxTime < start) return;
-    const t = _fxTime - start;
+    if (!hasStarted(o, _fxTime)) return;
+    const t = elapsedAt(o, _fxTime);
     const b = o.getBoundingRect(true);
     const L = b.left * z, T = b.top * z, W = b.width * z, H = b.height * z;
     const cx = L + W / 2, cy = T + H / 2, R = Math.max(W, H) / 2;
@@ -170,7 +199,7 @@ function ensureFxHook(editor) {
 export function setEffect(editor, obj, fx, delay = 0) {
   if (!obj) return;
   obj.fx = (fx && fx !== 'none') ? fx : null;
-  obj.fxDelay = obj.fx ? (+delay || 0) : 0;
+  setStart(obj, delay);
   editor.snapshot();
 }
 
@@ -181,7 +210,7 @@ export function applyAt(o, t) {
   if (!o._base) o._base = { opacity: o.opacity, left: o.left, top: o.top, scaleX: o.scaleX, scaleY: o.scaleY, angle: o.angle };
   const b = o._base;
   const { type, dur } = o.anim;
-  const delay = o.anim.delay || 0;
+  const delay = startOf(o);
   let p = (t - delay) / dur;               // Fortschritt 0..1
   p = Math.max(0, Math.min(1, p));
   const ease = 1 - Math.pow(1 - p, 3);     // easeOutCubic
@@ -194,7 +223,7 @@ export function applyAt(o, t) {
   if (LOOP_TYPES.has(type) && t < delay) { o.setCoords(); return; }
   // Schleifen-Tempo an den Dauer-Regler koppeln: größere Dauer = langsamer.
   // dur=1200 ⇒ sp=1 (unverändert); dur=2400 ⇒ halbe Geschwindigkeit.
-  const tt = (Math.max(0, t - delay) / 1000) * (1200 / Math.max(200, dur));
+  const tt = (elapsedAt(o, t) / 1000) * (1200 / Math.max(200, dur));
   switch (type) {
     // — einmalige Effekte (über die Dauer) —
     case 'fadeIn':     o.set({ opacity: b.opacity * ease }); break;
@@ -272,12 +301,12 @@ function animDuration(editor) {
   let max = 1500, hasLoop = false;
   editor.canvas.getObjects().forEach(o => {
     if (o.anim) {
-      max = Math.max(max, (o.anim.delay || 0) + (o.anim.dur || 1200) + 300);
+      max = Math.max(max, startOf(o) + (o.anim.dur || 1200) + 300);
       if (LOOP_TYPES.has(o.anim.type)) hasLoop = true;
     }
     // A late effect needs room after its Start, otherwise an effect set to
     // begin at 2.5 s never appears in a 4 s export.
-    if (o.fx && o.fx !== 'none') { hasLoop = true; max = Math.max(max, (o.fxDelay || 0) + 1500); }
+    if (o.fx && o.fx !== 'none') { hasLoop = true; max = Math.max(max, startOf(o) + 1500); }
   });
   // Schleifen-Bewegungen/Effekte: mind. 4 s, sonst nur ein kurzer Hopser.
   if (hasLoop) max = Math.max(max, 4000);

@@ -43,7 +43,9 @@ services:
   - type: cron
     name: buffer-posts-daily
     runtime: python
-    schedule: "0 4 * * *"
+    schedule: "0 12 * * *"          # 14 Uhr deutsche Sommerzeit - NACH dem Posten,
+                                    # damit gesendete Posts noch am selben Tag
+                                    # von Scheduled ins Archiv wandern.
     buildCommand: pip install -r requirements.txt
     startCommand: python manage.py fetch_buffer_posts
     envVars:

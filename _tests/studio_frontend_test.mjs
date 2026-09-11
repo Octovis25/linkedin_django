@@ -970,6 +970,87 @@ pruefe('Nach einem Fehlschlag gelingt der nächste Versuch wieder',
 pruefe('Kein Dauer-Sperrflag „speichert gerade" hängen geblieben', await page.evaluate(async () =>
   (await import('/io.js')).istAmSpeichern() === false));
 await sauber('Zweiter Versuch');
+
+// ---- 19. Eine Uhr für Bewegung und Effekt --------------------------------
+// Motion und Effect waren zwei Systeme mit je eigenem Startwert. Jetzt lesen
+// beide startOf(). Hier wird geprüft, dass das auch für ALTE Entwürfe gilt:
+// die tragen ihren Start noch in anim.delay bzw. fxDelay.
+const uhr = await page.evaluate(async () => {
+  const m = await import('/media.js');
+  const f = window.fabric;
+  const neuesElement = () => new f.Rect({ left: 50, top: 50, width: 40, height: 40 });
+
+  // 1. Entwurf von heute: startAt
+  const a = neuesElement(); a.anim = { type: 'pulse', dur: 1200 }; a.startAt = 900;
+
+  // 2. Alter Entwurf, nur Bewegung: Start steckt in anim.delay
+  const b = neuesElement(); b.anim = { type: 'pulse', dur: 1200, delay: 900 };
+
+  // 3. Alter Entwurf, nur Effekt: Start steckt in fxDelay
+  const c = neuesElement(); c.fx = 'glow'; c.fxDelay = 900;
+
+  // 4. Gar kein Start gesetzt
+  const d = neuesElement(); d.anim = { type: 'pulse', dur: 1200 };
+
+  // setStart hält beide Altfelder in Schritt, damit ein heute gespeicherter
+  // Entwurf auch auf einer älteren Version noch richtig startet.
+  const e = neuesElement(); e.anim = { type: 'pulse', dur: 1200 }; e.fx = 'glow';
+  m.setStart(e, 750);
+
+  return {
+    neu: m.startOf(a), altBewegung: m.startOf(b), altEffekt: m.startOf(c), ohne: m.startOf(d),
+    spiegelAnim: e.anim.delay, spiegelFx: e.fxDelay, spiegelStart: e.startAt,
+    vorStart: m.hasStarted(a, 400), nachStart: m.hasStarted(a, 1000),
+    verstrichen: m.elapsedAt(a, 1500),
+  };
+});
+pruefe('Neuer Entwurf: startAt wird gelesen', uhr.neu === 900, uhr.neu);
+pruefe('Alter Entwurf mit Bewegung behält seinen Start', uhr.altBewegung === 900, uhr.altBewegung);
+pruefe('Alter Entwurf mit Effekt behält seinen Start', uhr.altEffekt === 900, uhr.altEffekt);
+pruefe('Ohne Angabe ist der Start 0', uhr.ohne === 0, uhr.ohne);
+pruefe('setStart hält die Altfelder in Schritt',
+  uhr.spiegelStart === 750 && uhr.spiegelAnim === 750 && uhr.spiegelFx === 750,
+  `${uhr.spiegelStart} / ${uhr.spiegelAnim} / ${uhr.spiegelFx}`);
+pruefe('hasStarted trennt vorher und nachher', uhr.vorStart === false && uhr.nachStart === true);
+pruefe('elapsedAt zählt ab dem eigenen Nullpunkt', uhr.verstrichen === 600, uhr.verstrichen);
+
+// Der eigentliche Punkt: Bewegung und Effekt am selben Element MÜSSEN dieselbe
+// Zeit sehen. Vorher war genau das nicht so.
+const gleich = await page.evaluate(async () => {
+  const m = await import('/media.js');
+  const o = new window.fabric.Rect({ left: 50, top: 50, width: 40, height: 40 });
+  o.anim = { type: 'pulse', dur: 1200 }; o.fx = 'glow';
+  m.setStart(o, 800);
+  // Was die Bewegung als Start sieht …
+  const fuerBewegung = m.startOf(o);
+  // … und was der Effekt sieht. Eine Quelle, also identisch.
+  const fuerEffekt = m.startOf(o);
+  m.setStart(o, 1600);                 // Start ändern: beide ziehen mit
+  return { fuerBewegung, fuerEffekt, nachAenderung: m.startOf(o) };
+});
+pruefe('Bewegung und Effekt sehen denselben Start',
+  gleich.fuerBewegung === gleich.fuerEffekt && gleich.fuerBewegung === 800,
+  `${gleich.fuerBewegung} / ${gleich.fuerEffekt}`);
+pruefe('Start ändern wirkt auf beide zugleich', gleich.nachAenderung === 1600, gleich.nachAenderung);
+
+// Alter Entwurf durch die volle Speicher-Runde: der Start muss überleben.
+const alteRunde = await page.evaluate(async () => {
+  const io = await import('/io.js');
+  const m  = await import('/media.js');
+  const ed = window._studioEditor;
+  ed.canvas.getObjects().slice().forEach(o => ed.canvas.remove(o));
+  const alt = new window.fabric.Rect({ left: 60, top: 60, width: 40, height: 40 });
+  alt.anim = { type: 'pulse', dur: 1200, delay: 1100 };   // Format von vorher
+  ed.canvas.add(alt); ed.canvas.requestRenderAll();
+  const j = io.buildCanvasJson(ed, '');
+  ed.canvas.getObjects().slice().forEach(o => ed.canvas.remove(o));
+  await io.restoreCanvas(ed, j);
+  return m.startOf(ed.realObjects()[0]);
+});
+pruefe('Alter Entwurf überlebt Speichern und Öffnen mit seinem Start',
+  alteRunde === 1100, alteRunde);
+await sauber('Gemeinsame Uhr');
+
 // ---- Ausgabe --------------------------------------------------------------
 console.log('\n===== ERGEBNIS =====');
 for (const r of ergebnis) console.log((r.ok ? '  OK   ' : '  FEHL ') + r.name + (r.detail ? '   [' + r.detail + ']' : ''));

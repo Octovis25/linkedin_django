@@ -1371,7 +1371,7 @@ function rebuildTextblock(g, head, body, over = {}) {
   });
   if (!ng) return null;
   ng.set({ left: c.x, top: c.y, angle: g.angle, scaleX: g.scaleX, scaleY: g.scaleY,
-           anim: g.anim, fx: g.fx });
+           anim: g.anim, fx: g.fx, fxDelay: g.fxDelay, startAt: g.startAt });
   const idx = editor.canvas.getObjects().indexOf(g);
   editor.canvas.remove(g);
   editor.canvas.add(ng);
@@ -1481,7 +1481,7 @@ function rebuildChecklist(g, items, over = {}) {
     color: over.color || g.clColor || '#161616',
   });
   if (!ng) return null;
-  ng.set({ left: c.x, top: c.y, angle: g.angle, scaleX: g.scaleX, scaleY: g.scaleY, anim: g.anim, fx: g.fx });
+  ng.set({ left: c.x, top: c.y, angle: g.angle, scaleX: g.scaleX, scaleY: g.scaleY, anim: g.anim, fx: g.fx, fxDelay: g.fxDelay, startAt: g.startAt });
   const idx = editor.canvas.getObjects().indexOf(g);
   editor.canvas.remove(g);
   editor.canvas.add(ng);
@@ -1717,7 +1717,7 @@ function rebuildBadge(g, txt) {
   const c = g.getCenterPoint();
   const ng = buildBadge(kind, txt, fill, textColor);
   ng.set({ left: c.x, top: c.y, angle: g.angle, scaleX: g.scaleX, scaleY: g.scaleY,
-           anim: g.anim, fx: g.fx });
+           anim: g.anim, fx: g.fx, fxDelay: g.fxDelay, startAt: g.startAt });
   const idx = editor.canvas.getObjects().indexOf(g);
   editor.canvas.remove(g);
   editor.canvas.add(ng);
@@ -2100,8 +2100,9 @@ function renderAnimBar() {
     sel.onchange = () => {
       const t = sel.value;
       o.anim = (t && t !== 'none')
-        ? { type: t, dur: o.anim?.dur || 1200, delay: o.anim?.delay ?? o.fxDelay ?? 0 }
+        ? { type: t, dur: o.anim?.dur || 1200 }
         : null;
+      media.setStart(o, media.startOf(o));   // eine Quelle fuer beide Systeme
       editor.snapshot();
     };
     selRow.appendChild(sel);
@@ -2118,7 +2119,7 @@ function renderAnimBar() {
       const v = fxsel.value;
       o.fx = (v && v !== 'none') ? v : null;
       // Keep the effect on the same Start as the motion, so one slider drives both.
-      if (o.fx) o.fxDelay = o.anim?.delay ?? o.fxDelay ?? 0;
+      media.setStart(o, media.startOf(o));
       editor.snapshot();
     };
     fxRow.appendChild(fxsel);
@@ -2138,15 +2139,11 @@ function renderAnimBar() {
     delWrap.innerHTML = '<span>Start</span>';
     const del = document.createElement('input');
     del.type = 'range'; del.className = 'tl-slider'; del.min = 0; del.max = 3000; del.step = 100;
-    del.value = o.anim?.delay ?? o.fxDelay ?? 0;
+    del.value = media.startOf(o);
     del.title = 'Start delay: when motion and effect begin';
     // One slider, both systems. It used to write only into o.anim.delay, so
     // with Motion = none it silently did nothing at all.
-    del.oninput = () => {
-      const v = +del.value;
-      if (o.anim) o.anim.delay = v;
-      o.fxDelay = v;
-    };
+    del.oninput = () => media.setStart(o, del.value);
     del.onchange = () => editor.snapshot();
     delWrap.appendChild(del);
 
