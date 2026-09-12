@@ -60,13 +60,13 @@
     <td>
         {% if p.thumbnail_url %}
         <div class="thumb-wrap">
-            <img src="{{ p.thumbnail_url }}" class="thumb" alt="Bild" referrerpolicy="no-referrer">
-            <img src="{{ p.thumbnail_url }}" class="thumb-large" alt="Bild gross" referrerpolicy="no-referrer">
+            <img src="{{ p.thumbnail_url }}" class="thumb" alt="Post image" referrerpolicy="no-referrer">
+            <img src="{{ p.thumbnail_url }}" class="thumb-large" alt="Post image, enlarged" referrerpolicy="no-referrer">
         </div>
         {% elif p.planner_id and p.has_image %}
         <div class="thumb-wrap">
-            <img src="{% url 'planner_image' p.planner_id %}" class="thumb" alt="Bild">
-            <img src="{% url 'planner_image' p.planner_id %}" class="thumb-large" alt="Bild gross">
+            <img src="{% url 'planner_image' p.planner_id %}" class="thumb" alt="Post image">
+            <img src="{% url 'planner_image' p.planner_id %}" class="thumb-large" alt="Post image, enlarged">
         </div>
         {% else %}<span style="color:#aaa">—</span>{% endif %}
     </td>

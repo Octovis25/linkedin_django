@@ -1,28 +1,28 @@
-// editor.js – Fabric-Canvas: Objekte, Multi-Select, Snapping, Ausrichten,
-// Undo/Redo, Tastatursteuerung. Der stabile Kern des neuen Studios.
+// editor.js - the Fabric canvas: objects, multi-select, snapping, alignment,
+// undo/redo, keyboard control. The stable core of the new Studio.
 import { loadImage, toast } from './util.js';
 import { proxyUrl } from './config.js';
 
 export const fabric = window.fabric;
 if (!fabric) console.error('Fabric.js not loaded!');
 
-// Objekt-Caching global aus: verhindert grundsätzlich jedes "Verschmelzen"
-// von altem und neuem Bild beim Bearbeiten (immer direkt gerendert).
+// Object caching off globally: this rules out any "blending" of the old and
+// new image while editing (everything is rendered directly).
 if (fabric) fabric.Object.prototype.objectCaching = false;
 
-// Eigenschaften, die in den Snapshot/das Canvas-JSON serialisiert werden.
-// EINE Quelle der Wahrheit: io.js importiert diese Liste, damit Undo/Redo und
-// Speichern nie unterschiedliche Eigenschaften mitnehmen. Fehlt hier ein Eintrag,
-// geht die betreffende Bearbeitung beim Undo ODER beim Wiederöffnen verloren.
+// Properties that go into the snapshot and the canvas JSON.
+// ONE source of truth: io.js imports this list, so undo/redo and saving never
+// carry different properties. Leave an entry out and that particular edit is
+// lost either on undo OR on reopening.
 export const EXTRA_PROPS = [
   'srcUrl', 'originalUrl', 'bgRemoved', 'edited', 'anim', 'shapeKind', 'fx', 'fxDelay', 'startAt', 'svgPart',
   'tbHead', 'tbBody', 'tbWidth', 'tbSize', 'tbAlign', 'tbCheck', 'tbColor',
   'clItems', 'clWidth', 'clSize', 'clColor',
 ];
 
-// Obergrenze für die Undo-Historie in Bytes. Freigestellte/retuschierte Bilder
-// liegen als base64-data:-URL im JSON – ohne Budget wächst die Historie in den
-// Gigabyte-Bereich und der Browser-Tab stürzt ab.
+// Upper limit for the undo history, in bytes. Cut-out and retouched images sit
+// in the JSON as base64 data: URLs - without a budget the history grows into
+// gigabytes and the browser tab dies.
 const MAX_HISTORY_BYTES = 80e6;
 
 export class Editor {
@@ -47,9 +47,9 @@ export class Editor {
     this._locked = false;       // verhindert History-Aufzeichnung beim Restore
     this._maxHistory = 30;
     this._loadToken = 0;        // erkennt überholte Ladevorgänge (Doppelklick auf Vorlagen)
-    // Zählt JEDE Zustandsänderung, monoton steigend. Dient als „Stand" für die
-    // Rückfrage beim Verlassen. Die Länge der Historie taugt dafür nicht: die
-    // ist gedeckelt und bleibt ab einem gewissen Punkt konstant.
+    // Counts EVERY state change, only ever upwards. Serves as the "mark" for
+    // the prompt on leaving. The length of the history is no use for that: it
+    // is capped and stays constant past a certain point.
     this._rev = 0;
 
     this._snapLines = [];       // aktive Snapping-Hilfslinien
@@ -77,14 +77,14 @@ export class Editor {
     this.snapshot();            // Ausgangszustand
   }
 
-  // ---- Auf festen Rahmen einpassen (echtes Fabric-Zoom, kein Overflow) -----
-  // Skaliert die Anzeige so, dass das GANZE Bild in maxW×maxH passt. Der Canvas
-  // bleibt intern full-res (z.B. 1080²), nur die dargestellte Größe schrumpft –
-  // inkl. Fabric-Container, daher keine Scrollbalken mehr.
+  // ---- Fit into a fixed frame (real Fabric zoom, no overflow) --------------
+  // Scales the view so the WHOLE image fits into maxW x maxH. Internally the
+  // canvas stays at full resolution (1080² for instance), only the displayed
+  // size shrinks - Fabric container included, hence no more scrollbars.
   fitTo(maxW, maxH) {
-    // Schutz: Ist der Host-Container gerade unsichtbar/0 breit (CSS noch nicht
-    // geladen, Sidebar zugeklappt), kämen hier 0 oder negative Werte an. Eine
-    // negative Canvas-Breite wird vom Browser zu ~4,3 Mrd. Pixeln → Tab-Crash.
+    // Guard: if the host container is invisible or 0 wide just now (CSS not
+    // loaded yet, sidebar collapsed), zero or negative values would arrive. A
+    // negative canvas width becomes ~4.3 billion pixels to the browser - crash.
     const w = Math.max(1, Number(maxW) || 1);
     const h = Math.max(1, Number(maxH) || 1);
     this._baseScale = Math.max(0.05, Math.min(w / this.width, h / this.height, 1));
@@ -112,7 +112,7 @@ export class Editor {
     return this._userZoom;
   }
 
-  // Aktueller Vergrößerungsfaktor gegenüber der Einpassung (für Anzeige).
+  // Current magnification relative to the fit, for display.
   zoomFactor() { return this._userZoom || 1; }
 
   // Leert die gesamte Arbeitsfläche: alle Objekte + Hintergrund.
@@ -135,7 +135,7 @@ export class Editor {
     this.canvas.setDimensions({ width: w, height: h });
     if (this.gridOn) this._buildGrid();   // Raster an neue Größe anpassen
     this.snapshot();
-    // … dann wieder in den zuletzt bekannten Rahmen einpassen
+    // … then fit back into the last known frame
     if (this._lastFit) this.fitTo(this._lastFit.w, this._lastFit.h);
     this.canvas.requestRenderAll();
   }
@@ -148,7 +148,7 @@ export class Editor {
       crossOrigin: 'anonymous',
     });
     if (opts.fill) {
-      // Ganzen Canvas ausfüllen (z.B. beim Öffnen einer fertigen Ausgabe zum Bearbeiten)
+      // Fill the whole canvas (when opening a finished output to edit, say)
       const s = Math.max(this.width / img.width, this.height / img.height);
       img.scale(s);
     } else {
@@ -174,7 +174,7 @@ export class Editor {
     const weight = opts.fontWeight || 'bold';
     const family = 'Roboto, Arial, sans-serif';
 
-    // Breite an den Text anpassen statt starr 60 % der Canvas
+    // Fit the width to the text instead of a rigid 60 % of the canvas
     let w = opts.width;
     if (!w) {
       const probe = new fabric.Text(str, { fontSize: size, fontWeight: weight, fontFamily: family });
@@ -191,7 +191,7 @@ export class Editor {
       fontFamily: family,
       fill: opts.color || '#111111',
       textAlign: opts.align || 'center',
-      // Schatten nur auf Wunsch – auf hellem Grund macht er den Text schmutzig
+      // Shadow only on request - on a light ground it makes the text look dirty
       shadow: opts.shadow ? 'rgba(0,0,0,0.55) 0 2px 5px' : null,
       editable: true,
     });
@@ -305,10 +305,10 @@ export class Editor {
     this.canvas.requestRenderAll(); this.snapshot();
   }
   selectObj(o) { if (o) { this.canvas.setActiveObject(o); this.canvas.requestRenderAll(); } }
-  // Nur echte Objekte (ohne Snapping-Hilfslinien).
+  // Real objects only (without the snapping guides).
   realObjects() { return this.canvas.getObjects().filter(o => !o._snap && !o._grid); }
 
-  // Ausrichten relativ zum Canvas (oder zur Gruppe bei Multi-Select).
+  // Align relative to the canvas (or to the group on a multi-select).
   align(where) {
     const objs = this.activeAll();
     if (!objs.length) return;
@@ -352,8 +352,8 @@ export class Editor {
     const objEdgesX = [b.left, b.left + b.width / 2, b.left + b.width];
     const objEdgesY = [b.top, b.top + b.height / 2, b.top + b.height];
 
-    // Pro Achse nur EINEN – den am dichtesten liegenden – Treffer nehmen und
-    // genau eine Linie zeichnen. Sonst erscheinen mehrere „Fadenkreuze".
+    // Take only ONE hit per axis - the nearest - and draw exactly one line.
+    // Otherwise several "crosshairs" appear.
     const best = (targets, edges) => {
       let d = tol, shift = null, at = null;
       for (const t of targets) for (const e of edges) {
@@ -390,20 +390,20 @@ export class Editor {
     this._buildGrid();
     return this.gridOn;
   }
-  // PNG-Export: das Raster darf NICHT mit aufs Bild. toDataURL zeichnet die
-  // echten Pixel (excludeFromExport hilft nur bei JSON/SVG), also blenden wir
-  // die Rasterlinien für den Moment aus.
+  // PNG export: the grid must NOT end up in the image. toDataURL draws the
+  // real pixels (excludeFromExport only helps for JSON and SVG), so we hide
+  // the grid lines for the moment.
   exportDataURL(opts = {}) {
     const weg = this._grid.filter(l => l.visible !== false);
     weg.forEach(l => (l.visible = false));
     this.canvas.discardActiveObject();
-    // Zoom/Verschiebung fürs Bild neutralisieren, sonst wird der sichtbare
-    // (verschobene) Ausschnitt exportiert statt der ganzen Arbeitsfläche.
-    // WICHTIG: Die Anzeige-Canvas ist zum Einpassen verkleinert
-    // (setDimensions(width*scale) in _applyZoom). Bei Zoom 1 würde toDataURL
-    // sonst nur den kleinen linken oberen Ausschnitt erfassen. Deshalb schalten
-    // wir für den Export auf die volle Design-Auflösung und stellen danach die
-    // Anzeige exakt wieder her.
+    // Undo zoom and panning for the image, or the visible (shifted) cut-out is
+    // exported instead of the whole artboard.
+    // IMPORTANT: the display canvas is scaled down to fit
+    // (setDimensions(width*scale) in _applyZoom). At zoom 1, toDataURL would
+    // otherwise capture only the small top-left corner. So we switch to the
+    // full design resolution for the export and put the display back exactly
+    // as it was afterwards.
     const vpt   = this.canvas.viewportTransform ? this.canvas.viewportTransform.slice() : null;
     const dispW = this.canvas.getWidth();
     const dispH = this.canvas.getHeight();
@@ -452,14 +452,14 @@ export class Editor {
   _bindEvents() {
     const record = () => { if (!this._locked) this.snapshot(); };
     this.canvas.on('object:modified', record);
-    // Texteingaben feuern KEIN object:modified. Ohne diese beiden Zeilen landet
-    // getippter Text nie in der Historie und ein Strg+Z verwirft ihn ersatzlos.
+    // Text input fires NO object:modified. Without these two lines, typed text
+    // never reaches the history and a Ctrl+Z discards it with nothing to undo.
     this.canvas.on('editing:exited', record);
     this.canvas.on('text:changed', () => {
       clearTimeout(this._textTimer);
       this._textTimer = setTimeout(record, 500);
     });
-    // add/remove werden explizit in den add*-Methoden per snapshot() erfasst
+    // add/remove are recorded explicitly by snapshot() in the add* methods
   }
 
   snapshot() {
@@ -469,20 +469,20 @@ export class Editor {
       json = JSON.stringify(this.canvas.toJSON(EXTRA_PROPS));
     } catch (e) {
       console.warn('snapshot fehlgeschlagen', e);
-      // Trotzdem als Änderung zählen – sonst gilt der Entwurf fälschlich als
-      // gespeichert und die Rückfrage beim Verlassen bliebe aus.
+      // Count it as a change all the same - otherwise the design wrongly counts
+      // as saved and the prompt on leaving would not appear.
       this._rev++;
       return;                     // lieber keine History-Stufe als ein toter Editor
     }
     // Duplikate vermeiden
     if (this._history.length && this._history[this._history.length - 1] === json) return;
     this._history.push(json);
-    // Redo ZUERST verwerfen: sonst zählte sein Speicher gegen das Budget und
-    // riss die Historie auf zwei Einträge herunter – für Daten, die eine Zeile
-    // später ohnehin weggeworfen werden.
+    // Discard redo FIRST: its memory used to count against the budget and cut
+    // the history down to two entries - for data that is thrown away one line
+    // later anyway.
     this._redo = [];
-    // Nach Anzahl UND nach Speicherverbrauch begrenzen. Der zweite Teil ist der
-    // wichtige: ein einziges freigestelltes 3000er-Bild kann 13 MB pro Stufe sein.
+    // Limit by count AND by memory. The second part is the important one: a
+    // single cut-out 3000px image can be 13 MB per step.
     while (this._history.length > this._maxHistory ||
            (this._bytes() > MAX_HISTORY_BYTES && this._history.length > 2)) {
       this._history.shift();
@@ -491,10 +491,10 @@ export class Editor {
     this._emitChange();
   }
 
-  // Tatsächlicher Speicherverbrauch der Historie. Bewusst gemessen statt
-  // mitgezählt: ein mitgeführter Zähler driftete bei Undo/Redo nach oben
-  // (pop/push korrigierten ihn nicht) und warf irgendwann brauchbare
-  // Undo-Stufen weg, bis nur noch zwei übrig waren.
+  // The history's actual memory use. Measured on purpose rather than counted
+  // along the way: a running counter drifted upwards on undo/redo (pop and
+  // push did not correct it) and eventually threw away usable undo steps,
+  // until only two were left.
   _bytes() {
     let n = 0;
     for (const j of this._history) n += j.length;
@@ -502,9 +502,9 @@ export class Editor {
     return n;
   }
 
-  // Setzt die Historie auf genau einen Zustand zurück (nach dem Laden einer
-  // Datei/Vorlage). Sonst stünde als ältester Undo-Schritt der LEERE Canvas von
-  // vor dem Laden – ein versehentliches Strg+Z hätte alles gelöscht.
+  // Resets the history to exactly one state (after loading a file or template).
+  // Otherwise the oldest undo step would be the EMPTY canvas from before the
+  // load - and an accidental Ctrl+Z would have wiped everything.
   resetHistory() {
     this._history = [];
     this._redo = [];
@@ -528,9 +528,9 @@ export class Editor {
 
   _restore(json) {
     this._locked = true;
-    // Ohne Notausstieg bleibt _locked für immer true, wenn ein Bild im JSON nie
-    // lädt (z.B. gelöschte Nextcloud-Datei) – ab da zeichnet snapshot() nichts
-    // mehr auf und Undo/Redo sind für den Rest der Sitzung tot.
+    // Without an escape hatch _locked stays true forever when an image in the
+    // JSON never loads (a deleted Nextcloud file, say) - from then on snapshot()
+    // records nothing and undo/redo are dead for the rest of the session.
     let done = false;
     const finish = () => {
       if (done) return; done = true;
@@ -563,7 +563,7 @@ export class Editor {
     document.addEventListener('keydown', e => {
       const tag = (e.target.tagName || '').toLowerCase();
       const typing = tag === 'input' || tag === 'textarea' || e.target.isContentEditable;
-      // Undo/Redo auch beim Tippen erlauben? Nein – nur außerhalb von Feldern.
+      // Allow undo/redo while typing? No - only outside input fields.
       if (typing) return;
       const a = this.active();
 
@@ -584,7 +584,7 @@ export class Editor {
     });
   }
 
-  // Nudges bündeln, damit nicht jeder Pfeiltasten-Tick eine History-Stufe wird.
+  // Batch nudges, so not every arrow-key tick becomes a history step.
   _nudgeSnapshot() {
     clearTimeout(this._nudgeTimer);
     this._nudgeTimer = setTimeout(() => this.snapshot(), 400);

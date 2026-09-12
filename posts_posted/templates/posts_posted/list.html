@@ -1,5 +1,5 @@
 {% extends "core/base.html" %}
-{% block title %}Post-Datum-Zuordnung{% endblock %}
+{% block title %}Posted posts{% endblock %}
 {% block content %}
 <style>
 .post-title-cell {
@@ -19,7 +19,7 @@
 .actions-cell .btn { font-size: 0.75rem; padding: 0.25rem 0.6rem; }
 .no-date { color: #e74c3c; font-style: italic; }
 
-/* Thumbnail mit Hover-Zoom */
+/* Thumbnail with hover zoom */
 .thumb-wrap {
     position: relative;
     display: inline-block;
@@ -57,11 +57,16 @@
 <button type="button" id="fill-img-btn" class="btn btn-sm" style="background:var(--octo-petrol,#008591);color:#fff;border:none"
         onclick="fillImagesFromBuffer(this)">🖼️ Auto-fill images</button>
 <form style="display:flex;gap:.5rem;width:300px">
-<input type="text" name="q" value="{{ query }}" class="form-input" placeholder="Suche...">
+<input type="text" name="q" value="{{ query }}" class="form-input" placeholder="Search…">
 <button type="submit" class="btn btn-secondary btn-sm">Search</button>
 </form>
 </div>
 </div>
+<p style="margin:0 0 1rem;font-size:13px;color:#5a6b6b;background:#f3f8f8;border-left:3px solid var(--octo-petrol,#008591);padding:8px 12px;border-radius:0 6px 6px 0">
+  <strong>Reporting delay:</strong> LinkedIn provides data with a two-day lag.
+  Dates and figures are therefore complete only up to the day before yesterday;
+  posts published more recently may still appear without them.
+</p>
 <div id="fill-img-msg" style="display:none;font-size:13px;margin-bottom:1rem;padding:8px 12px;border-radius:6px"></div>
 
 <table>
@@ -69,7 +74,7 @@
     <th>Post-ID</th>
     <th>Post title</th>
     <th>Post-Link</th>
-    <th>Gepostet am</th>
+    <th>Posted on</th>
     <th>Image</th>
     <th>Actions</th>
 </tr></thead>
@@ -81,7 +86,7 @@
     <td>
         {% if p.post_url %}
         <a href="{{ p.post_url }}" target="_blank" title="{{ p.post_url }}">&#x1F517; LinkedIn</a>
-        <a href="#" class="copy-link-btn" title="Link kopieren" onclick="copyLink('{{ p.post_url }}', event)">&#x1F4CB;</a>
+        <a href="#" class="copy-link-btn" title="Copy link" onclick="copyLink('{{ p.post_url }}', event)">&#x1F4CB;</a>
         {% else %}-{% endif %}
     </td>
     <td>
@@ -94,8 +99,8 @@
     <td>
         {% if p.pp_id and p.post_image %}
         <div class="thumb-wrap">
-            <img src="{% url 'posts_posted:image_proxy' p.pp_id %}" class="thumb" alt="Post-Bild">
-            <img src="{% url 'posts_posted:image_proxy' p.pp_id %}" class="thumb-large" alt="Post-Bild gross">
+            <img src="{% url 'posts_posted:image_proxy' p.pp_id %}" class="thumb" alt="Post image">
+            <img src="{% url 'posts_posted:image_proxy' p.pp_id %}" class="thumb-large" alt="Post image, enlarged">
         </div>
         {% else %}
             <span style="color:#aaa">—</span>
@@ -136,7 +141,7 @@ function fillImagesFromBuffer(btn) {
     var msg = document.getElementById('fill-img-msg');
     btn.disabled = true;
     var orig = btn.textContent;
-    btn.textContent = '\u23f3 Bef\u00fclle Bilder\u2026';
+    btn.textContent = '\u23f3 Filling in images…';
     fetch('/data/posts/fill-images/', {
         method: 'POST',
         headers: { 'X-CSRFToken': csrfToken() }
@@ -147,17 +152,17 @@ function fillImagesFromBuffer(btn) {
         msg.style.display = 'block';
         if (d.ok) {
             msg.style.background = '#e1f5ee'; msg.style.color = '#0F6E56';
-            msg.textContent = '\u2705 ' + d.filled + ' Bild(er), ' + (d.dates_filled || 0) + ' Datum/Daten bef\u00fcllt und ' + (d.promoted || 0) + ' Post(s) auf \u201ePosted\u201c gesetzt' + (d.errors ? ' (Fehler: ' + d.errors + ')' : '') + '. Seite neu laden zum Anzeigen.';
+            msg.textContent = '\u2705 ' + d.filled + ' image(s) and ' + (d.dates_filled || 0) + ' date(s) filled in, ' + (d.promoted || 0) + ' post(s) set to \u201cPosted\u201d' + (d.errors ? ' (errors: ' + d.errors + ')' : '') + '. Reload the page to see them.';
         } else {
             msg.style.background = '#fdecea'; msg.style.color = '#b71c1c';
-            msg.textContent = '\u274c Fehler: ' + (d.error || 'unbekannt');
+            msg.textContent = '\u274c Error: ' + (d.error || 'unknown');
         }
     })
     .catch(function(){
         btn.disabled = false; btn.textContent = orig;
         msg.style.display = 'block';
         msg.style.background = '#fdecea'; msg.style.color = '#b71c1c';
-        msg.textContent = '\u274c Verbindungsfehler.';
+        msg.textContent = '\u274c Could not reach the server.';
     });
 }
 </script>

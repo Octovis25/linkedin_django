@@ -1,11 +1,11 @@
-// retouch.js – manuelle Pinsel-Korrektur für freigestellte Bilder:
-//   Radieren      = mit Pinsel transparent machen
-//   Wiederherstellen = Originalpixel per Pinsel zurückholen
-// Arbeitet auf einer Offscreen-Arbeitskopie in Bild-Auflösung.
+// retouch.js - manual brush corrections on cut-out images:
+//   erase   = make transparent with the brush
+//   restore = bring original pixels back with the brush
+// Works on an offscreen working copy at image resolution.
 import { loadImage, toast } from './util.js';
 import { proxyUrl } from './config.js';
 
-// Liefert (und initialisiert bei Bedarf) die Arbeits-Canvas eines fabric-Bildes.
+// Returns (and sets up if needed) the working canvas of a fabric image.
 export function getWork(obj) {
   if (obj._work) return obj._work;
   const el = obj._element;
@@ -19,9 +19,9 @@ export function getWork(obj) {
   return obj._work;
 }
 
-// Lädt das Originalbild (für Wiederherstellen) – gecacht am Objekt.
-// Gecacht wird die PROMISE, nicht erst das Ergebnis: sonst startete jeder
-// Mausbewegungs-Tick einen weiteren Download derselben Datei (40+ parallel).
+// Loads the original image (for restore) - cached on the object.
+// The PROMISE is cached, not just the result: otherwise every mouse-move tick
+// started another download of the same file (40 and more in parallel).
 export function getOriginal(obj) {
   if (obj._origImg) return Promise.resolve(obj._origImg);
   if (obj._origPromise) return obj._origPromise;
@@ -33,9 +33,9 @@ export function getOriginal(obj) {
   return obj._origPromise;
 }
 
-// Zeigt die Arbeits-Canvas direkt im fabric-Bild an – ohne PNG-Kodierung.
-// Für die Live-Anzeige während des Malens. Der teure commitWork() läuft erst
-// beim Loslassen der Maustaste.
+// Shows the working canvas directly in the fabric image, without PNG encoding.
+// For the live view while painting. The expensive commitWork() only runs when
+// the mouse button is released.
 export function showWork(obj) {
   if (!obj._work) return;
   obj.setElement(obj._work.canvas);
@@ -45,9 +45,9 @@ export function showWork(obj) {
   if (obj.canvas) obj.canvas.requestRenderAll();
 }
 
-// Pinsel-Aktion an Bildkoordinate (px,py).
-// mode: 'erase' (transparent) | 'restore' (Original zurück) | 'paint' (Farbe malen)
-// origImg wird bei 'restore' gebraucht, color (#rrggbb) bei 'paint'.
+// Brush action at image coordinate (px,py).
+// mode: 'erase' (transparent) | 'restore' (original back) | 'paint' (paint colour)
+// origImg is needed for 'restore', color (#rrggbb) for 'paint'.
 export function brushAt(obj, px, py, radius, mode, origImg, color) {
   const { ctx, W, H } = getWork(obj);
   ctx.save();
@@ -61,8 +61,8 @@ export function brushAt(obj, px, py, radius, mode, origImg, color) {
     ctx.clip();
     ctx.drawImage(origImg, 0, 0, W, H);
   } else if (mode === 'paint') {
-    // Nur dort malen, wo schon Deckung ist (Transparenz bleibt transparent),
-    // damit man den freigestellten Rand nicht wieder auffüllt.
+    // Paint only where there is already coverage (transparent stays transparent),
+    // so the cut-out edge is not filled back in.
     ctx.clip();
     ctx.globalCompositeOperation = 'source-atop';
     ctx.fillStyle = color || '#ffffff';
@@ -71,23 +71,23 @@ export function brushAt(obj, px, py, radius, mode, origImg, color) {
   ctx.restore();
 }
 
-// Tauscht das Bild eines fabric-Objekts sauber aus: setElement + Cache
-// invalidieren (dirty), sonst mischt Fabric altes und neues Bild ("verschmilzt").
+// Swaps a fabric object's image cleanly: setElement plus invalidating the cache
+// (dirty), otherwise Fabric mixes the old and new image - they "blend".
 export function replaceElement(obj, imgEl) {
   obj._maskPreview = false;
   obj.setElement(imgEl);
   obj.objectCaching = false;   // kein Cache → kein Verschwimmen von Alt/Neu
   obj.dirty = true;
-  // Pixel wurden verändert (Umfärben/Pinsel/Radierer). Der fertige Stand liegt
-  // jetzt in src – beim Speichern/Laden NICHT durch das Original ersetzen.
+  // Pixels have been changed (recolour, brush, eraser). The finished state now
+  // sits in src - do NOT replace it with the original when saving or loading.
   obj.edited = true;
   if (obj.canvas) obj.canvas.requestRenderAll();
 }
 
-// Überträgt die Arbeits-Canvas zurück ins fabric-Bild (echtes Bild, damit der
-// Stand exportiert und gespeichert werden kann).
-// Generationszähler: Kommen zwei Aufrufe verschränkt zurück, darf der ältere
-// den neueren nicht überschreiben – sonst „springen" Pinselstriche zurück.
+// Transfers the working canvas back into the fabric image (a real image, so the
+// state can be exported and saved).
+// Generation counter: when two calls come back interleaved, the older must not
+// overwrite the newer - otherwise brush strokes "jump" back.
 export function commitWork(obj) {
   if (!obj._work) return Promise.resolve();
   const gen = (obj._commitGen = (obj._commitGen || 0) + 1);
@@ -171,8 +171,8 @@ export function markRect(obj, x0, y0, x1, y1) {
   ctx.fillRect(x, y, Math.abs(x1 - x0), Math.abs(y1 - y0));
   obj._maskDirty = (Math.abs(x1 - x0) > 0 && Math.abs(y1 - y0) > 0);
 }
-// Früher wurde hier bei JEDEM Werkzeugwechsel die komplette Maske gescannt
-// (bei einem 24-Megapixel-Bild ~300 ms Ruckler pro Klick). Jetzt reicht ein Flag.
+// This used to scan the entire mask on EVERY tool change (about 300 ms of
+// stutter per click on a 24-megapixel image). A flag does the job now.
 export function hasMask(obj) {
   return !!(obj._mask && obj._maskDirty);
 }
@@ -181,9 +181,9 @@ export function hasMask(obj) {
 export function renderMaskPreview(obj) {
   const { canvas: work, W, H } = getWork(obj);
   const mask = getMask(obj);
-  // Die beiden Hilfs-Canvas einmal am Objekt behalten. Vorher entstanden pro
-  // Mausbewegung zwei neue Vollbild-Canvas (bei 12 MP je 48 MB) – der Browser
-  // kam mit dem Aufräumen nicht hinterher.
+  // Keep the two helper canvases on the object. Before, every mouse move made
+  // two new full-size canvases (48 MB each at 12 MP) - the browser could not
+  // clean up fast enough.
   if (!obj._prevCv || obj._prevCv.tmp.width !== W || obj._prevCv.tmp.height !== H) {
     const tmp = document.createElement('canvas'); tmp.width = W; tmp.height = H;
     const rc  = document.createElement('canvas'); rc.width  = W; rc.height  = H;
@@ -193,7 +193,7 @@ export function renderMaskPreview(obj) {
   tctx.clearRect(0, 0, W, H);
   tctx.globalAlpha = 1;
   tctx.drawImage(work, 0, 0);
-  // rote Fläche nur wo Maske gesetzt ist
+  // red area only where the mask is set
   rctx.clearRect(0, 0, W, H);
   rctx.globalCompositeOperation = 'source-over';
   rctx.fillStyle = '#ff3b30'; rctx.fillRect(0, 0, W, H);
@@ -206,10 +206,10 @@ export function renderMaskPreview(obj) {
   obj.dirty = true;
 }
 
-// Nimmt alle roten Markierungs-Vorschauen zurück. MUSS vor jedem Export laufen –
-// sonst landete die rote 50%-Fläche im gespeicherten PNG und im Entwurf.
-// Synchrone Notvariante: setzt nur die Anzeige zurück (Canvas als Element).
-// Für den Export reicht das, weil toDataURL die Anzeige rastert.
+// Takes back every red marking preview. MUST run before any export - otherwise
+// the red 50% area ended up in the saved PNG and in the design.
+// A synchronous emergency variant: resets the display only (canvas as element).
+// That is enough for the export, because toDataURL rasterises the display.
 export function beendeVorschauen(fabricCanvas) {
   if (!fabricCanvas) return;
   fabricCanvas.getObjects().forEach(o => {
@@ -221,10 +221,10 @@ export function beendeVorschauen(fabricCanvas) {
   fabricCanvas.requestRenderAll();
 }
 
-// Vor dem SPEICHERN aufrufen: macht aus allen Arbeits-Canvas wieder echte
-// Bilder. Ein <canvas> als Element eines fabric.Image lässt sich nicht
-// zuverlässig serialisieren – je nach Fabric-Version käme im canvas_json ein
-// riesiges base64-Bild oder gar kein src an (Bild beim Öffnen verloren).
+// Call before SAVING: turns every working canvas back into a real image.
+// A <canvas> as the element of a fabric.Image cannot be serialised reliably -
+// depending on the Fabric version, the canvas_json ended up with a huge base64
+// image or with no src at all (image lost on opening).
 export async function vorschauenUebernehmen(fabricCanvas) {
   if (!fabricCanvas) return;
   const offen = fabricCanvas.getObjects().filter(
@@ -249,8 +249,8 @@ export function applyMask(obj, mode, color) {
     clearMask(obj);
     return commitWork(obj);
   }
-  // recolor: nur innerhalb der Maske, SCHATTIERUNG erhalten (Helligkeit behalten,
-  // Farbton auf Zielfarbe setzen) – so bleiben Falten/Schatten der Bluse sichtbar.
+  // recolour: inside the mask only, keeping the SHADING (brightness stays, hue
+  // moves to the target colour) - so the folds and shadows of a blouse stay visible.
   const nr = parseInt((color || '#ffffff').slice(1, 3), 16);
   const ng = parseInt((color || '#ffffff').slice(3, 5), 16);
   const nb = parseInt((color || '#ffffff').slice(5, 7), 16);
@@ -260,7 +260,7 @@ export function applyMask(obj, mode, color) {
   for (let i = 0; i < d.length; i += 4) {
     if (m[i + 3] === 0 || d[i + 3] === 0) continue;        // nur maskiert + sichtbar
     const L = (0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2]) / 255; // Helligkeit 0..1
-    // Zielfarbe mit der Original-Helligkeit modulieren (Multiply-artig, plus Aufhellung)
+    // Modulate the target colour with the original brightness (multiply-like, plus a lift)
     const f = 0.4 + 0.9 * L;
     d[i]     = Math.min(255, nr * f);
     d[i + 1] = Math.min(255, ng * f);

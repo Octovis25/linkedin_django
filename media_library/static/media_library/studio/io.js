@@ -1,20 +1,20 @@
-// io.js – Speichern & Laden. Erzeugt PNG + canvas_json, spricht das bestehende
-// Django-Backend an (studio_save). Reload rekonstruiert exakt den Fabric-State.
+// io.js - saving and loading. Builds the PNG plus canvas_json and talks to the
+// existing Django backend (studio_save). A reload rebuilds the Fabric state exactly.
 import { URLS, POST_ID, CONFIG, getCookie, proxyUrl } from './config.js';
 import { toast, status, readJson } from './util.js';
 import { fabric, EXTRA_PROPS } from './editor.js';
 import { beendeVorschauen, vorschauenUebernehmen } from './retouch.js';
 import { vorschlagAusInhalt, vergebeneNamen, eindeutig, entschaerfe, frageNachNamen } from './namen.js';
 
-// Stellt sicher, dass ein eindeutiger Name feststeht, BEVOR gespeichert wird.
-// Der Name ist die Identität des Entwurfs – Bild, GIF und Video desselben
-// Designs teilen ihn sich. Deshalb wird er einmal abgefragt und bleibt dann.
+// Makes sure a unique name is settled BEFORE anything is saved.
+// The name is the design's identity - the image, GIF and video of one design
+// share it. So it is asked for once and then stays.
 //
-// Rückgabe: der Name, oder null wenn der Nutzer abgebrochen hat.
-// Merkt sich den Namen für diese Sitzung, auch wenn CONFIG.libData ihn nicht
-// führt. Nötig beim Arbeiten an einem Planner-Post: dort liefert der Server
-// keine libData, sodass jedes Speichern sonst wie ein Erstspeichern aussah –
-// und der Name bei jedem Mal ein _2, _3, _4 … bekam.
+// Returns: the name, or null if the user cancelled.
+// Remembers the name for this session even when CONFIG.libData does not carry
+// it. Needed while working on a planner post: there the server sends no
+// libData, so every save looked like a first save - and the name picked up a
+// _2, _3, _4 … every single time.
 let _festerName = null;
 export function merkeNamen(n) { _festerName = n || null; }
 
@@ -28,8 +28,8 @@ export async function nameSicherstellen(editor) {
   const schonGespeichert = !!(_festerName || CONFIG.libData?.item_id
                               || CONFIG.libData?.nc_path || (POST_ID && gespeicherterName));
 
-  // Titelfeld leer, aber es gibt schon einen Namen? Dann diesen behalten,
-  // statt den Entwurf unter einem neuen Namen ein zweites Mal anzulegen.
+  // Title field empty but a name already exists? Keep that one instead of
+  // creating the design a second time under a new name.
   if (schonGespeichert && !eingetippt && gespeicherterName) {
     const n = entschaerfe(gespeicherterName);
     if (feld) feld.value = n;
@@ -47,7 +47,7 @@ export async function nameSicherstellen(editor) {
   status('⏳ Checking names…');
   const belegt = await vergebeneNamen();
 
-  // Umbenennen einer bestehenden Ausgabe: nur prüfen, nicht neu fragen.
+  // Renaming an existing output: only check, do not ask again.
   if (schonGespeichert && eingetippt) {
     const sauber = entschaerfe(eingetippt);
     const eigenKlein = entschaerfe(gespeicherterName).toLowerCase();
@@ -68,11 +68,11 @@ export async function nameSicherstellen(editor) {
     return gewaehlt;
   }
 
-  // Erstes Speichern: nach dem Namen fragen, mit Vorschlag aus dem Inhalt.
+  // First save: ask for the name, suggesting one built from the content.
   let vorschlag = entschaerfe(eingetippt) || vorschlagAusInhalt(editor)
                   || entschaerfe(CONFIG.postData?.title || '');
   if (!vorschlag) {
-    // Kein Text im Entwurf und kein Post-Titel → durchnummerieren.
+    // No text in the design and no post title → fall back to numbering.
     let n = 1;
     while (belegt.has(('Draft_' + n).toLowerCase())) n++;
     vorschlag = 'Draft_' + n;
@@ -93,17 +93,17 @@ function _klassOk(type) {
   return !!(fabric && fabric[name] && typeof fabric[name].fromObject === 'function');
 }
 
-// Gleiche Liste wie Undo/Redo – früher standen hier zwei Listen, die
-// auseinandergelaufen sind (siehe editor.js).
+// The same list as undo/redo - there used to be two lists here, and they drifted
+// apart (see editor.js).
 const FABRIC_PROPS = EXTRA_PROPS;
 
-// Läuft gerade ein Speichervorgang? Verhindert, dass ein zweiter Klick auf
-// „Speichern" ein zweites Bibliotheks-Element und eine zweite Datei anlegt.
+// Is a save running right now? Stops a second click on "Save" from creating a
+// second library entry and a second file.
 let _saving = false;
 export function istAmSpeichern() { return _saving; }
 
-// Prüft, ob der Editor gerade eine Datei lädt. Speichern/Exportieren in diesem
-// Moment würde einen halb gefüllten Canvas über das Original schreiben.
+// Is the editor loading a file? Saving or exporting at that moment would write
+// a half-filled canvas over the original.
 function ladeGuard(editor) {
   if (editor._locked) {
     status('⏳ Still loading – please wait a moment', 'red');
@@ -113,15 +113,15 @@ function ladeGuard(editor) {
   return false;
 }
 
-// Einheitliche Antwortauswertung: ohne res.ok-Prüfung liefert ein 500er eine
-// HTML-Fehlerseite, an der res.json() scheitert – der Nutzer sah dann
-// „SyntaxError: Unexpected token '<'" statt einer verständlichen Meldung.
+// One way of reading a response: without checking res.ok, a 500 returns an HTML
+// error page that res.json() chokes on - the user then saw
+// "SyntaxError: Unexpected token '<'" instead of something they could act on.
 
-// Baut das canvas_json. Enthält:
-//   fabric        – vollständiger Fabric-State für exakten Reload
-//   objects[]     – flache Liste mit imgSrc, damit das Backend Bilder nach NC
-//                   auslagern kann (_optimize_canvas_json erwartet dieses Feld)
-//   previewDataUrl– Vorschau (bleibt im Hauptordner)
+// Builds the canvas_json. It holds:
+//   fabric         - the full Fabric state, for an exact reload
+//   objects[]      - a flat list with imgSrc, so the backend can move images out
+//                    to Nextcloud (_optimize_canvas_json expects this field)
+//   previewDataUrl - the preview (stays in the main folder)
 export function buildCanvasJson(editor, previewDataUrl) {
   const fabricState = editor.canvas.toJSON(FABRIC_PROPS);
   // _snap-Hilfslinien nicht mitspeichern
@@ -145,17 +145,17 @@ export function buildCanvasJson(editor, previewDataUrl) {
 export function exportPng(editor) {
   // Rote Markierungs-Vorschau zurücknehmen – die gehört nie ins Ergebnis.
   beendeVorschauen(editor.canvas);
-  // exportDataURL blendet das Ausricht-Raster für den Export aus.
+  // exportDataURL hides the alignment grid for the export.
   return editor.exportDataURL({ multiplier: 1 });
 }
 
-// Gibt true zurück, wenn wirklich gespeichert wurde – sonst false. Der Aufrufer
-// darf nur dann eine Erfolgsmeldung anzeigen. Vorher schrieb er unbedingt
-// „Gespeichert.", auch wenn hier abgebrochen wurde.
+// Returns true when something really was saved, false otherwise. Only then may
+// the caller show a success message. It used to write "Saved." unconditionally,
+// even when this function had given up.
 export async function saveImage(editor) {
   if (ladeGuard(editor)) return false;
-  // Der Entwurf konnte beim Öffnen nicht vollständig geladen werden. Jetzt über
-  // dieselbe Datei zu speichern würde das Original endgültig zerstören.
+  // The design could not be loaded in full when it was opened. Saving over that
+  // same file now would destroy the original for good.
   if (editor._ladefehler && (CONFIG.libData?.item_id || CONFIG.libData?.nc_path)) {
     const weiter = window.confirm(
       'Warning: this draft was not fully loaded when opened ' +
@@ -174,11 +174,11 @@ export async function saveImage(editor) {
 }
 
 async function _saveImage(editor) {
-  // Offene Pinsel-/Markierungsstände in echte Bilder umwandeln, BEVOR das JSON
-  // gebaut wird – ein Canvas als Bild-Element überlebt die Serialisierung nicht.
+  // Turn any open brush or selection state into real images BEFORE the JSON is
+  // built - a canvas as an image element does not survive serialisation.
   await vorschauenUebernehmen(editor.canvas);
-  // Eindeutigen Namen festlegen (fragt beim ersten Mal nach, prüft beim
-  // Umbenennen). Ohne Namen wird nicht gespeichert.
+  // Settle the unique name (asks on the first save, checks on a rename).
+  // Without a name, nothing is saved.
   const title = await nameSicherstellen(editor);
   if (!title) return false;
   status('💾 Speichert…');
@@ -193,9 +193,9 @@ async function _saveImage(editor) {
     return false;
   }
 
-  // Nur weiterbearbeiten, wenn wirklich ein BILD geöffnet ist. Hatte man ein GIF
-  // offen und speichert als PNG, wurde sonst der GIF-Eintrag zum Bild-Eintrag
-  // umgewidmet und die GIF-Datei war über keinen Eintrag mehr erreichbar.
+  // Only carry on editing when an IMAGE is really open. With a GIF open and a
+  // save as PNG, the GIF entry used to be repurposed as the image entry, and
+  // the GIF file was no longer reachable through any entry.
   const istBildOffen = (CONFIG.libData?.kind || 'image') === 'image';
   const body = {
     dataUrl, title,
@@ -216,8 +216,8 @@ async function _saveImage(editor) {
     const d = await readJson(res);
     if (d.ok) {
       if (d.warning) {
-        // Das Bild liegt, aber der bearbeitbare Entwurf konnte nicht mitgespeichert
-        // werden. Das muss der Nutzer wissen, bevor er die Seite schließt.
+        // The image is stored, but the editable design could not be saved with
+        // it. The user has to know that before closing the page.
         status('⚠️ ' + d.warning, 'red');
         toast('Image saved – draft not (details above)', 'err');
         window.alert('Achtung:\n\n' + d.warning);
@@ -225,8 +225,8 @@ async function _saveImage(editor) {
         status('✅ Image saved!', 'green');
         toast('Gespeichert', 'ok');
       }
-      // Merken, WAS gerade gespeichert wurde. Ohne das legt jedes weitere
-      // Speichern nach einer Titeländerung ein zusätzliches Duplikat an.
+      // Remember WHAT was just saved. Without it, every further save after a
+      // title change creates another duplicate.
       CONFIG.libData = { ...(CONFIG.libData || {}), item_id: d.lib_id ?? CONFIG.libData?.item_id ?? null,
                          title, nc_path: d.nc_path ?? CONFIG.libData?.nc_path ?? null, kind: 'image' };
       window.dispatchEvent(new CustomEvent('studio:output-changed', { detail: { tab: 'Images' } }));
@@ -245,12 +245,12 @@ async function _saveImage(editor) {
   }
 }
 
-// Speichert ein exportiertes bewegtes Bild (WebM/GIF) in „Meine Ausgaben"
-// – inkl. canvas_json, damit es später wieder im Editor geöffnet werden kann.
+// Saves an exported moving image (WebM/GIF) into "My outputs" - including the
+// canvas_json, so it can be opened in the editor again later.
 export async function saveAnimation(editor, blob, ext) {
   await vorschauenUebernehmen(editor.canvas);
-  // Denselben Namen wie das Bild verwenden: Bild, GIF und Video eines Entwurfs
-  // heißen gleich und gehören dadurch zusammen.
+  // Use the same name as the image: the image, GIF and video of one design are
+  // called the same and belong together through that.
   const title = await nameSicherstellen(editor);
   if (!title) return { ok: false, error: 'cancelled' };
   let preview = '';
@@ -262,11 +262,11 @@ export async function saveAnimation(editor, blob, ext) {
   fd.append('canvas_json', buildCanvasJson(editor, preview));
   const folder = document.getElementById('save-folder')?.value;
   if (folder) fd.append('folder_id', folder);
-  // lib_item_id NUR mitschicken, wenn die geöffnete Ausgabe dasselbe Format hat.
-  // Sonst wurde der Bild-Eintrag zum GIF-Eintrag umgewidmet: die PNG-Datei blieb
-  // liegen, war aber über keinen Eintrag mehr erreichbar und öffnete danach ohne
-  // Ebenen. Jetzt bekommt jedes Format seinen Eintrag – zusammengehalten über
-  // den gemeinsamen (eindeutigen) Namen.
+  // Send lib_item_id ONLY when the open output has the same format. Otherwise
+  // the image entry was repurposed as the GIF entry: the PNG file stayed where
+  // it was, but was no longer reachable through any entry and opened without
+  // its layers afterwards. Now every format gets its own entry - held together
+  // by the shared, unique name.
   const offenesFormat = CONFIG.libData?.kind;
   const diesesFormat = ext === '.gif' ? 'gif' : 'video';
   if (CONFIG.libData?.item_id && offenesFormat === diesesFormat) {
@@ -311,32 +311,32 @@ export function downloadImage(editor) {
   }
 }
 
-// ---- Laden ---------------------------------------------------------------
-// Stellt einen gespeicherten Canvas wieder her. Bild-URLs werden über den
-// Proxy geladen (crossOrigin), damit späteres Freistellen/Export klappt.
-// opts.frisch = true: die Historie wird auf den geladenen Zustand zurückgesetzt.
-// Das ist NUR beim Öffnen der Seite richtig. Beim Anwenden einer Vorlage mitten
-// in der Arbeit muss die Historie erhalten bleiben, sonst wäre alles Vorherige
-// per Strg+Z nicht mehr erreichbar.
+// ---- Loading --------------------------------------------------------------
+// Restores a saved canvas. Image URLs are loaded through the proxy
+// (crossOrigin), so cutting out and exporting still work afterwards.
+// opts.frisch = true resets the history to the loaded state. That is right
+// ONLY when opening the page. Applying a template in the middle of the work
+// must keep the history, otherwise everything done before would no longer be
+// reachable with Ctrl+Z.
 export function restoreCanvas(editor, canvasJsonStr, opts = {}) {
-  // Ab sofort ein Promise: Aufrufer können auf das FERTIGE Laden warten. Vorher
-  // lief z.B. „Vorlage speichern" direkt nach dem Öffnen auf einem noch leeren
-  // Canvas – und überschrieb damit die Vorlage mit einem leeren Bild.
+  // A promise from now on: callers can wait for the load to FINISH. Before
+  // this, "save template" straight after opening ran on a still empty canvas -
+  // and so overwrote the template with an empty image.
   let state;
   try {
     state = JSON.parse(canvasJsonStr);
   } catch (e) {
     console.warn('canvas_json parse', e);
-    // Nicht stillschweigend weitermachen: sonst hält der Nutzer den leeren
-    // Editor für seine Datei, baut neu und überschreibt das reparable Original.
+    // Do not carry on quietly: the user would take the empty editor for their
+    // file, build it again, and overwrite an original that could be repaired.
     editor._ladefehler = true;
     status('❌ Saved data unreadable – please do not overwrite', 'red');
     toast('Draft could not be read', 'err');
     return Promise.resolve(false);
   }
 
-  // Ein neuer Ladevorgang macht einen noch laufenden ungültig (Doppelklick auf
-  // zwei Vorlagen mischte sonst beide Layouts auf der Fläche).
+  // A new load invalidates one still running (double-clicking two templates
+  // used to mix both layouts onto the artboard).
   const token = ++editor._loadToken;
 
   editor._locked = true;   // VOR setSize: dessen snapshot() schrieb sonst den
@@ -344,26 +344,26 @@ export function restoreCanvas(editor, canvasJsonStr, opts = {}) {
   if (state.width && state.height) editor.setSize(state.width, state.height);
 
   const fabricState = state.fabric || state;   // v2 hat .fabric, sonst direkt
-  // Nur wiederherstellbare Objekte behalten – ein einziges unbekanntes Objekt
-  // ließ sonst das ganze loadFromJSON abstürzen (fromObject undefined).
+  // Keep only objects that can be restored - a single unknown object used to
+  // bring down the whole loadFromJSON (fromObject undefined).
   const before = (fabricState.objects || []).length;
   fabricState.objects = (fabricState.objects || []).filter(o => o && _klassOk(o.type));
   if (fabricState.objects.length < before) {
     console.warn(`restoreCanvas: ${before - fabricState.objects.length} unlesbare(s) Objekt(e) übersprungen`);
   }
-  // Beschädigte Text-Styles neutralisieren – sonst stürzt Fabric beim
-  // Serialisieren (stylesToArray) ab. Basisformatierung bleibt erhalten.
+  // Neutralise damaged text styles - otherwise Fabric crashes while
+  // serialising (stylesToArray). Basic formatting is kept.
   fabricState.objects.forEach(o => {
     if (['text', 'textbox', 'i-text'].includes(o.type)) {
       if (!o.styles || typeof o.styles !== 'object' || Array.isArray(o.styles)) o.styles = {};
       if (typeof o.text !== 'string') o.text = String(o.text || '');
     }
   });
-  // Bildquellen auf Proxy umschreiben + crossOrigin erzwingen.
-  // WICHTIG: Freigestellte (bgRemoved) UND pixelbearbeitete (edited, z.B. Logo
-  // umgefärbt) Bilder tragen ihren fertigen Stand direkt in src (data:/nc://) –
-  // die dürfen NICHT durch das Original (srcUrl) ersetzt werden, sonst sind
-  // Transparenz bzw. Umfärbung nach dem Öffnen weg.
+  // Rewrite image sources to the proxy and force crossOrigin.
+  // IMPORTANT: cut-out (bgRemoved) AND pixel-edited images (edited, a recoloured
+  // logo for instance) carry their finished state directly in src (data:/nc://)
+  // - those must NOT be replaced by the original (srcUrl), or the transparency
+  // and the recolouring are gone after opening.
   fabricState.objects.forEach(o => {
     if (o.type === 'image' && o.src) {
       o.src = (o.bgRemoved || o.edited) ? proxyUrl(o.src) : proxyUrl(o.srcUrl || o.src);
@@ -381,23 +381,23 @@ export function restoreCanvas(editor, canvasJsonStr, opts = {}) {
     const finish = (vollstaendig) => {
       if (done) return; done = true;
       clearTimeout(timer);
-      // Überholter Ladevorgang: Ergebnis verwerfen, damit der neuere gewinnt.
+      // A load that has been overtaken: drop the result so the newer one wins.
       if (token !== editor._loadToken) { resolve(false); return; }
       editor._locked = false;
       editor._ladefehler = !vollstaendig;
-      // Raster ist nicht Teil des gespeicherten Zustands – neu aufbauen,
-      // sonst zeigt der Raster-Knopf „an", während nichts zu sehen ist.
+      // The grid is not part of the saved state - rebuild it, or the grid button
+      // says "on" while there is nothing to see.
       editor._grid = [];
       if (editor.gridOn) editor._buildGrid();
       editor.canvas.requestRenderAll();
       if (opts.frisch) {
-        // Beim Öffnen: Historie auf den GELADENEN Zustand setzen. Vorher stand
-        // der leere Canvas als ältester Schritt darin – ein versehentliches
-        // Strg+Z löschte damit die ganze Datei.
+        // On opening: set the history to the LOADED state. The empty canvas used
+        // to sit in there as the oldest step - so an accidental Ctrl+Z wiped the
+        // whole file.
         editor.resetHistory();
       } else {
-        // Mitten in der Arbeit (z.B. Vorlage anwenden): anhängen, damit man den
-        // Schritt rückgängig machen kann.
+        // In the middle of the work (applying a template, say): append, so the
+        // step can be undone.
         editor.snapshot();
       }
       resolve(vollstaendig);
@@ -409,10 +409,10 @@ export function restoreCanvas(editor, canvasJsonStr, opts = {}) {
       status('❌ Draft could not be fully loaded', 'red');
       finish(false);
     }
-    // Sicherheitsnetz: falls ein fehlendes Bild den Callback blockiert, nach
-    // 20s trotzdem freigeben. Großzügiger als früher (4s), weil bei langsamer
-    // Verbindung sonst mitten im Laden entsperrt und ein halber Zustand als
-    // Undo-Basis festgeschrieben wurde.
+    // Safety net: should a missing image block the callback, release after 20s
+    // anyway. More generous than it used to be (4s), because on a slow
+    // connection it unlocked mid-load and wrote half a state down as the undo
+    // baseline.
     timer = setTimeout(() => {
       console.warn('restoreCanvas: Zeitüberschreitung beim Laden');
       status('⚠️ Not all images could be loaded', 'red');

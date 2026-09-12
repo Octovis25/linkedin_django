@@ -1,8 +1,8 @@
-// library.js – rechte Sidebar:
-//   OBEN: Upload nach Studio_Work/Upload (mit Vorschau + Löschen).
-//   MITTE: Assets aus Nextcloud als anhakbare Ordner-Struktur. Angehakte Ordner
-//          (auch Überordner rekursiv) zeigen ihre Bilder gesammelt im Raster.
-//   UNTEN: fertige Studio-Ausgaben Images / GIFs / Videos zum Weiterbearbeiten.
+// library.js - the right-hand sidebar:
+//   TOP:    upload into Studio_Work/Upload (with preview and delete).
+//   MIDDLE: assets from Nextcloud as a tickable folder tree. Ticked folders
+//           (parents recursively too) show their images together in the grid.
+//   BOTTOM: finished Studio outputs - images / GIFs / videos - to work on again.
 import { URLS, getCookie, CONFIG } from './config.js';
 import { toast, readJson } from './util.js';
 
@@ -14,7 +14,7 @@ const guard = (p, what) => Promise.resolve(p).catch(e => console.error('[library
 // Fehlermeldungen landen im DOM – nie ungeprüft.
 const esc = t => String(t).replace(/[<>&]/g, c => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' }[c]));
 
-// ── Kacheln erst laden, wenn man sie sieht ──────────────────────────────────
+// ── Load tiles only once they can be seen ──────────────────────────────────
 // A tile shows the full-size file: a saved output is a 1080x1080 PNG, an asset
 // can be larger still. Forty tiles in the grid meant forty full downloads and
 // forty full-size bitmaps in memory every time the Studio opened - before the
@@ -31,8 +31,8 @@ const _sichtbar = (typeof IntersectionObserver === 'function')
     }, { rootMargin: '400px' })
   : null;
 
-// Ohne IntersectionObserver (sehr alte Browser) wird sofort geladen - langsam,
-// aber nie leer.
+// Without IntersectionObserver (very old browsers) everything loads at once:
+// slow, but never blank.
 function spaetLaden(el, url) {
   if (!_sichtbar) { el.src = url; return; }
   el.loading = 'lazy';
@@ -41,11 +41,11 @@ function spaetLaden(el, url) {
   _sichtbar.observe(el);
 }
 
-// Gleichzeitige Ordnerabrufe begrenzen. Jeder geht über Django weiter an
-// Nextcloud; fünfzig auf einmal treffen einen Server mit wenigen
-// Arbeitsprozessen, und dann steht alles. Die Grenze gilt global und nicht je
-// Aufruf - ein verschachtelter Baum multipliziert sonst jede Ebene mit der
-// nächsten, und aus "sechs parallel" werden hundert.
+// Limit how many folder requests run at once. Each one goes through Django on
+// to Nextcloud; fifty at a time overwhelm a server with few worker processes
+// and everything stalls. The limit is global, not per call - otherwise a
+// nested tree multiplies every level by the next one and "six at a time"
+// quietly becomes a hundred.
 const GRENZE = 6;
 let _offen = 0;
 const _warteschlange = [];
@@ -57,28 +57,28 @@ function _weiter() {
   }
 }
 
-// Gibt ein Versprechen zurück, das sich auflöst, sobald ein Platz frei ist.
+// Returns a promise that resolves as soon as a slot is free.
 function _platz() {
   return new Promise(ok => { _warteschlange.push(ok); _weiter(); });
 }
 
 function _frei() { _offen--; _weiter(); }
 
-// Ruft `arbeit` für jeden Eintrag auf und behält die Reihenfolge der Ergebnisse
-// bei. Die Drosselung steckt in fetchFolder, nicht hier.
+// Calls `arbeit` for every entry and keeps the order of the results. The
+// throttling lives in fetchFolder, not here.
 function parallel(liste, arbeit) {
   return Promise.all(liste.map(arbeit));
 }
 
 let _editor = null;
 
-// SVGs müssen zerlegt eingefügt werden, nicht als flaches Bild.
-// Der Studio-Teil meldet dazu einen Handler an (siehe studio.js).
+// SVGs have to be inserted taken apart, not as one flat image.
+// The Studio side registers a handler for that (see studio.js).
 let _svgHandler = null;
 export function setSvgHandler(fn) { _svgHandler = fn; }
 const istSvg = (u) => /\.svg(\?|$)/i.test(String(u || ''));
 
-// Einfügen: bei SVG über den Import, sonst als Bild.
+// Insert: an SVG goes through the import, anything else as an image.
 async function einfuegen(item, opts) {
   const url = item.url || item;
   const name = item.name || url;
@@ -100,7 +100,7 @@ async function einfuegen(item, opts) {
   catch { toast('Image error', 'err'); }
 }
 
-// Angehakte Ordner-Pfade (relativ zu Octotrial_Assets) + aufgeklappte Ordner.
+// Ticked folder paths (relative to Octotrial_Assets) and expanded folders.
 const _checked = new Set();
 const _expanded = new Set();
 // Cache: Ordnerpfad → { subfolders:[names], items:[bilder] }. '' = oberste Ebene.
@@ -110,7 +110,7 @@ let _outputTab = 'Images';
 
 export function initLibrary(editor) {
   _editor = editor;
-  // Suche filtert die aktuell angezeigten Bilder (aus den angehakten Ordnern).
+  // The search box filters the images currently shown (from the ticked folders).
   const search = document.getElementById('lib-search');
   if (search) {
     let t;
@@ -124,8 +124,8 @@ export function initLibrary(editor) {
   guard(loadOutput(), 'output list');
   enableCanvasDrop();
   initUpload();
-  // Nach dem Speichern die Ausgaben-Liste auffrischen und auf den passenden
-  // Tab springen (Bild→Images, GIF→GIFs, Video→Videos).
+  // After a save, refresh the outputs list and jump to the matching tab
+  // (image → Images, GIF → GIFs, video → Videos).
   window.addEventListener('studio:output-changed', e => {
     const tab = e.detail?.tab;
     if (tab && ['Images', 'GIFs', 'Videos'].includes(tab)) {
@@ -212,10 +212,9 @@ async function loadUploads() {
           if (dd.ok) { wrap.remove(); if (!grid.querySelector('.lib-tile')) grid.innerHTML = '<span class="no-templates">Nothing uploaded yet.</span>'; }
           else { toast('Delete failed', 'err'); del.disabled = false; }
         } catch (err) {
-          // Den Grund zeigen, nicht "Error while deleting". Seit der Server
-          // sagt, WARUM eine Loeschung scheitert (gesperrte Datei, abgelehnte
-          // Anmeldung, Nextcloud nicht erreichbar), waere es Verschwendung,
-          // das hier wieder zu verschlucken.
+          // Show the reason, not "Error while deleting". Now that the server
+          // says WHY a deletion failed - locked file, refused sign-in, Nextcloud
+          // out of reach - it would be a waste to swallow it again here.
           toast(err?.message || 'Error while deleting', 'err');
           del.disabled = false;
         }
@@ -226,16 +225,16 @@ async function loadUploads() {
     });
   } catch (e) {
     // Grund zeigen statt „Fehler": readJson unterscheidet abgelaufene Sitzung,
-    // Serverfehler und unerwartete Antwort – genau das will man hier lesen.
+    // A server error and an unexpected answer - exactly what one wants to read.
     grid.innerHTML = '<span class="no-templates">' + esc(e?.message || 'Could not load.') + '</span>';
   }
 }
 
 // ── Assets: anhakbarer Ordnerbaum ───────────────────────────────────────────
 // Holt Inhalt eines Ordners (gecacht). path '' = oberste Ebene.
-// Läuft derselbe Ordner gerade schon? Seit die Unterordner gleichzeitig geholt
-// werden, fragen sonst mehrere Aufrufe denselben Pfad parallel ab und der
-// Cache greift bei keinem von ihnen.
+// Is this same folder already being fetched? Since subfolders are fetched at
+// the same time, several calls would otherwise ask for one path in parallel
+// and the cache would help none of them.
 const _laufend = new Map();
 
 async function fetchFolder(path) {
@@ -333,13 +332,12 @@ async function makeRow(name, path, depth) {
   return wrap;
 }
 
-// Sammelt rekursiv alle Bilder aus einem Ordner und seinen Unterordnern.
-// Die Unterordner einer Ebene werden gleichzeitig geholt, nicht nacheinander:
-// vorher war die Wartezeit die Summe aller Ordnerabrufe, und bei einem Baum mit
-// dreissig Ordnern kamen so schnell zwanzig Sekunden zusammen. Die Reihenfolge
-// im Raster bleibt dieselbe - erst der Ordner selbst, dann seine Unterordner
-// der Reihe nach - weil jede Ebene ihre Ergebnisse in der alten Ordnung
-// zusammensetzt.
+// Collects every image in a folder and its subfolders, recursively.
+// The subfolders of one level are fetched at the same time, not one after the
+// other: the wait used to be the sum of all folder requests, and a tree with
+// thirty folders added up to twenty seconds. The order in the grid stays the
+// same - the folder itself first, then its subfolders in turn - because every
+// level puts its results back together in the old order.
 async function gatherImages(path, seen, depth = 0) {
   if (depth > 6) return [];
   const d = await fetchFolder(path);
@@ -353,7 +351,7 @@ async function gatherImages(path, seen, depth = 0) {
   return eigene.concat(...kinder);
 }
 
-// Zeigt die Bilder aller angehakten Ordner (rekursiv) im Raster.
+// Shows the images of all ticked folders (recursively) in the grid.
 async function refreshImages() {
   const grid = document.getElementById('lib-grid');
   if (!grid) return;
@@ -378,11 +376,11 @@ function renderImages(grid, items) {
     img.onclick = () => einfuegen(item);
     img.addEventListener('dragstart', e => e.dataTransfer.setData('text/studio-url', item.url));
     grid.appendChild(img);
-    // Erst anhängen, dann laden - der Beobachter braucht das Element im Dokument,
-    // sonst schneidet er es nie.
-    // item.thumb ist das verkleinerte Bild vom Server (rund 15 KB statt 1,5 MB).
-    // Es gilt NUR für die Kachel: Beim Einfügen in den Canvas wird weiterhin
-    // item.url genommen, sonst läge plötzlich ein 240-Pixel-Bild auf der Fläche.
+    // Append first, then load - the observer needs the element in the document,
+    // otherwise it never intersects it.
+    // item.thumb is the scaled-down image from the server (about 15 KB instead
+    // of 1.5 MB). It is for the TILE only: inserting into the canvas still uses
+    // item.url, or a 240-pixel image would suddenly land on the artboard.
     spaetLaden(img, item.thumb || item.url);
   });
 }
@@ -393,25 +391,25 @@ function highlightOutput() {
     b.classList.toggle('primary', b.dataset.out === _outputTab));
 }
 
-// Ausgabe-Ordner in Nextcloud (relativ zu Octotrial_Assets). Nur noch der
-// Rückfall für alte Server, die den Sammel-Endpunkt nicht kennen.
+// Output folders in Nextcloud (relative to Octotrial_Assets). Only the fallback
+// now, for older servers that do not know the combined endpoint.
 const OUTPUT_FOLDERS = {
   Images: 'Studio_Work/Output/Images',
   GIFs:   'Studio_Work/Output/GIFs',
   Videos: 'Studio_Work/Output/Videos',
 };
 
-// Hängt man eine Ausgabe an einen Post, VERSCHIEBT der Server die Datei aus dem
-// Studio-Ordner in den Planner-Ordner. Diese Liste las bis September 2026 nur
-// den Studio-Ordner – jede Ausgabe, die einmal an einem Post hing, war hier
-// also verschwunden, obwohl es sie noch gab. Der Sammel-Endpunkt liest beide
-// Orte und führt sie zusammen.
+// When an output is attached to a post, the server MOVES the file out of the
+// Studio folder into the Planner folder. Until September 2026 this list read
+// only the Studio folder - so every output that had ever hung on a post had
+// vanished from here, although it still existed. The combined endpoint reads
+// both places and merges them.
 async function holeAusgaben() {
   if (URLS.apiOutputs) {
     const r = await fetch(URLS.apiOutputs + '?kind=' + encodeURIComponent(_outputTab));
     return await readJson(r);
   }
-  // Alter Server: wenigstens der Studio-Ordner.
+  // Older server: at least show the Studio folder.
   const folder = OUTPUT_FOLDERS[_outputTab] || OUTPUT_FOLDERS.Images;
   const r = await fetch(URLS.ncBrowse + '?folder=' + encodeURIComponent(folder));
   return await readJson(r);
@@ -429,12 +427,12 @@ async function loadOutput() {
     const dbList = _outputTab === 'Images' ? (db.images || [])
                  : _outputTab === 'GIFs'   ? (db.anim_images || [])
                  :                            (db.videos || []);
-    // Titel → DB-ID (zum Öffnen über den bewährten Weg).
-    // Vergleich normalisiert: Die Ordnerauflistung macht aus dem Dateinamen
-    // „Header_Q3.png" den Titel „Header Q3" (Unterstrich → Leerzeichen), der
-    // Datenbank-Titel heißt aber „Header_Q3". Ohne diese Angleichung fand kein
-    // einziger Name mit Unterstrich mehr seinen Eintrag – die Kachel öffnete
-    // dann über den Dateipfad und verlor den Bezug zur Ausgabe.
+    // Title → database id (the proven way to open an output).
+    // The comparison is normalised: the folder listing turns the file name
+    // "Header_Q3.png" into the title "Header Q3" (underscore → space), while
+    // the database title is "Header_Q3". Without lining the two up, no name
+    // with an underscore found its entry any more - the tile then opened via
+    // the file path and lost its link to the output.
     const norm = s => String(s || '').trim().toLowerCase().replace(/[\s_]+/g, '_');
     const idByTitle = {};
     dbList.forEach(it => { if (it.title) idByTitle[norm(it.title)] = it.id; });
@@ -447,13 +445,13 @@ async function loadOutput() {
     items.forEach(item => {
       const el = isVideo ? document.createElement('video') : document.createElement('img');
       el.className = 'lib-thumb';
-      // Videos laden sofort: sie holen mit preload="metadata" nur den Kopf der
-      // Datei, und es sind wenige. Bilder sind die Last - die werden gestundet,
-      // sobald die Kachel im Dokument haengt (weiter unten).
+      // Videos load straight away: with preload="metadata" they only fetch the
+      // head of the file, and there are few of them. Images are the load - those
+      // are deferred once the tile is in the document (further down).
       if (isVideo) el.src = item.url;
-      // „am Post" heißt: Die Datei liegt im Planner-Ordner, weil sie an einem
-      // Beitrag hängt. Das darf man sehen – sonst wundert man sich, warum sich
-      // manche Ausgaben anders verhalten.
+      // "on post" means: the file sits in the Planner folder because it hangs on
+      // a post. That is worth showing - otherwise one wonders why some outputs
+      // behave differently.
       el.title = (item.title || item.name || '') + (item.am_post ? ' · am Post' : '');
       // A thumbnail whose file will not load is greyed out instead of sitting
       // there looking healthy — for videos it used to stay a black rectangle.
@@ -474,14 +472,14 @@ async function loadOutput() {
         });
         el.addEventListener('mouseleave', () => { try { el.pause(); } catch (e) {} });
       }
-      // Öffnen: bevorzugt über die DB-ID (bewährter Weg, stellt Canvas wieder her),
-      // sonst über den NC-Pfad.
-      // Über den Dateinamen-Stamm suchen (nicht über den aufbereiteten Titel):
-      // der Stamm ist das, was auch in der Datenbank als Name steht.
+      // Opening: by database id where possible (the proven way, it restores the
+      // canvas), otherwise by Nextcloud path.
+      // Look it up by the file-name stem, not by the tidied-up title: the stem is
+      // what the database holds as the name.
       const stamm = String(item.name || '').replace(/\.[^.]+$/, '');
       const dbId = idByTitle[norm(stamm)] ?? idByTitle[norm(item.title)];
       el.onclick = () => {
-        // Nachfragen, bevor ungespeicherte Arbeit durch die Navigation verloren geht.
+        // Ask first, before navigating away loses unsaved work.
         if (typeof window.studioDarfVerlassen === 'function' && !window.studioDarfVerlassen()) return;
         location.href = dbId
           ? '/library/studio/?lib_item=' + dbId
@@ -489,7 +487,7 @@ async function loadOutput() {
       };
       // Kachel mit Löschen-Knopf
       const tile = document.createElement('div'); tile.className = 'lib-tile';
-      // aktuell im Editor geöffnete Ausgabe hervorheben (über NC-Pfad, sonst DB-ID)
+      // Highlight the output currently open in the editor (by NC path, else by id)
       const openNc = CONFIG.libData?.nc_path;
       if ((openNc && item.nc_path && openNc === item.nc_path) ||
           (CONFIG.libData?.item_id && dbId && String(CONFIG.libData.item_id) === String(dbId))) {
@@ -511,29 +509,27 @@ async function loadOutput() {
             if (!grid.querySelector('.lib-tile')) grid.innerHTML = '<span class="no-templates">Nothing saved.</span>';
           } else { toast(dd.error || 'Delete failed', 'err'); del.disabled = false; }
         } catch (err) {
-          // Den Grund zeigen, nicht "Error while deleting". Seit der Server
-          // sagt, WARUM eine Loeschung scheitert (gesperrte Datei, abgelehnte
-          // Anmeldung, Nextcloud nicht erreichbar), waere es Verschwendung,
-          // das hier wieder zu verschlucken.
+          // Show the reason, not "Error while deleting". Now that the server
+          // says WHY a deletion failed - locked file, refused sign-in, Nextcloud
+          // out of reach - it would be a waste to swallow it again here.
           toast(err?.message || 'Error while deleting', 'err');
           del.disabled = false;
         }
       };
       tile.appendChild(del);
       grid.appendChild(tile);
-      // Jetzt haengt die Kachel im Dokument - ab hier kann der Beobachter sie
-      // schneiden und das Bild holen, sobald sie in die Naehe des Sichtbereichs
-      // kommt.
+      // The tile hangs in the document now - from here the observer can see it
+      // and fetch the image as soon as it comes near the visible area.
       if (!isVideo) spaetLaden(el, item.thumb || item.url);
     });
   } catch (e) {
     // Grund zeigen statt „Fehler": readJson unterscheidet abgelaufene Sitzung,
-    // Serverfehler und unerwartete Antwort – genau das will man hier lesen.
+    // A server error and an unexpected answer - exactly what one wants to read.
     grid.innerHTML = '<span class="no-templates">' + esc(e?.message || 'Could not load.') + '</span>';
   }
 }
 
-// ── Drag & Drop auf den Canvas ──────────────────────────────────────────────
+// ── Drag and drop onto the canvas ──────────────────────────────────────────
 function enableCanvasDrop() {
   const wrap = document.getElementById('canvas-wrap');
   if (!wrap) return;
@@ -551,5 +547,5 @@ function enableCanvasDrop() {
   });
 }
 
-// Nach dem Speichern aufrufbar, um die Output-Auswahl zu aktualisieren.
+// Call after saving to refresh the outputs picker.
 export function refreshOutput() { guard(loadOutput(), 'output refresh'); }

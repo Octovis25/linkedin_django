@@ -1,15 +1,15 @@
-// namen.js – Vergabe eindeutiger, stabiler Namen für Ausgaben.
+// namen.js - handing out unique, stable names for outputs.
 //
-// Der Name ist die Identität eines Entwurfs: Er steckt im Dateinamen und ist
-// das, worüber Bild, GIF und Video desselben Designs zusammenfinden. Deshalb
-// muss er ohne Leerzeichen auskommen und darf nie doppelt vergeben werden.
+// The name is a design's identity: it sits in the file name and it is what
+// lets the image, GIF and video of one design find each other. So it has to
+// manage without spaces, and it must never be given out twice.
 //
-// Ablauf: Beim ersten Speichern fragt das Studio nach dem Namen und schlägt
-// dabei einen aus den Textinhalten des Entwurfs vor. Umbenennen ist jederzeit
-// möglich – die Eindeutigkeit wird dabei erneut geprüft.
+// How it goes: on the first save the Studio asks for the name and suggests one
+// built from the design's own text. Renaming is possible at any time - and
+// uniqueness is checked again when it happens.
 import { URLS } from './config.js';
 
-// Wörter, die in einer Abkürzung nichts verloren haben.
+// Words that have no business being in an abbreviation.
 const STOPP = new Set([
   'der', 'die', 'das', 'den', 'dem', 'des', 'ein', 'eine', 'einer', 'eines', 'einem', 'einen',
   'und', 'oder', 'aber', 'auch', 'noch', 'nur', 'schon', 'sehr', 'mehr', 'viel', 'viele',
@@ -19,8 +19,8 @@ const STOPP = new Set([
   'the', 'and', 'for', 'with', 'your', 'you', 'our',
 ]);
 
-// Umlaute und Sonderzeichen in etwas verwandeln, das in einem Dateinamen
-// nichts kaputt macht.
+// Turn accented and special characters into something that breaks nothing in a
+// file name.
 export function entschaerfe(text) {
   return String(text || '')
     .replace(/ä/g, 'ae').replace(/ö/g, 'oe').replace(/ü/g, 'ue')
@@ -32,14 +32,14 @@ export function entschaerfe(text) {
     .replace(/^[_-]+|[_-]+$/g, '');
 }
 
-// Ist der Name als Dateiname brauchbar? (keine Leerzeichen, nicht leer)
+// Is the name usable as a file name? (no spaces, not empty)
 export function nameOk(name) {
   const n = String(name || '').trim();
   return n.length >= 2 && n.length <= 80 && /^[A-Za-z0-9_-]+$/.test(n);
 }
 
-// Baut aus den Texten des Entwurfs einen Namensvorschlag.
-// „Studien für Ihre Praxis 2026" → „StudienPraxis2026"
+// Builds a suggested name from the design's own text.
+// "Studies for your practice 2026" → "StudiesPractice2026"
 export function vorschlagAusInhalt(editor) {
   const stuecke = [];
   try {
@@ -61,8 +61,8 @@ export function vorschlagAusInhalt(editor) {
     .filter(w => /[A-Za-zÄÖÜäöüß0-9]/.test(w));
 
   if (!woerter.length) return '';
-  // Höchstens drei Wörter, jedes auf 12 Zeichen gekürzt, in Großschreibung
-  // verbunden – ergibt kurze, lesbare Namen ohne Leerzeichen.
+  // At most three words, each cut to 12 characters, joined in title case -
+  // which gives short, readable names without spaces.
   const teile = woerter.slice(0, 3).map(w => {
     const s = entschaerfe(w).slice(0, 12);
     return s ? s.charAt(0).toUpperCase() + s.slice(1) : '';
@@ -70,8 +70,8 @@ export function vorschlagAusInhalt(editor) {
   return teile.join('').slice(0, 48);
 }
 
-// Holt alle bereits vergebenen Namen (Bilder, GIFs, Videos) vom Server.
-// Grundlage für die Eindeutigkeitsprüfung.
+// Fetches every name already in use (images, GIFs, videos) from the server.
+// The basis for the uniqueness check.
 export async function vergebeneNamen() {
   const namen = new Set();
   try {
@@ -80,8 +80,8 @@ export async function vergebeneNamen() {
       const d = await r.json();
       for (const gruppe of ['images', 'anim_images', 'videos']) {
         for (const it of (d[gruppe] || [])) {
-          // Bereinigt ablegen: Altbestand-Titel mit Leerzeichen („Header Q3")
-          // hätten sonst nie gegen einen bereinigten Kandidaten gematcht.
+          // Store them cleaned up: legacy titles with spaces ("Header Q3")
+          // would otherwise never match a cleaned-up candidate.
           if (it && it.title) {
             const n = entschaerfe(it.title).toLowerCase();
             if (n) namen.add(n);
@@ -90,8 +90,8 @@ export async function vergebeneNamen() {
       }
     }
   } catch (e) { /* offline: dann eben ohne Prüfung */ }
-  // Zusätzlich die tatsächlich vorhandenen Dateien – es kann Dateien ohne
-  // Datenbankeintrag geben (z.B. von Hand hochgeladen).
+  // Plus the files that are actually there - there can be files without a
+  // database entry (uploaded by hand, for instance).
   const ordner = ['Studio_Work/Output/Images', 'Studio_Work/Output/GIFs', 'Studio_Work/Output/Videos'];
   await Promise.all(ordner.map(async f => {
     try {
@@ -100,11 +100,11 @@ export async function vergebeneNamen() {
       const d = await r.json();
       for (const it of (d.items || [])) {
         const n = String(it.name || '').replace(/\.[^.]+$/, '');
-        // Nur die vom Studio selbst erzeugte Vorschaudatei ausblenden. Ein
-        // enger Filter ist wichtig: Würde hier ein echter Name durchrutschen,
-        // dürfte ein zweites Design denselben Namen nehmen und die Datei
-        // überschreiben. `_snap`/`_obj`/`_fab` liegen im Unterordner `_data`,
-        // den die Ordnerauflistung ohnehin auslässt.
+        // Hide only the preview file the Studio makes itself. A narrow filter
+        // matters here: were a real name to slip through, a second design
+        // could take that same name and overwrite the file. `_snap`/`_obj`/
+        // `_fab` live in the `_data` subfolder, which the folder listing
+        // leaves out anyway.
         if (!n || /_preview$/i.test(n)) continue;
         const sauber = entschaerfe(n).toLowerCase();
         if (sauber) namen.add(sauber);
@@ -114,13 +114,13 @@ export async function vergebeneNamen() {
   return namen;
 }
 
-// Macht einen Namen eindeutig, indem bei Bedarf _2, _3 … angehängt wird.
-// `eigener` ist der aktuell gehaltene Name – der gilt nicht als Kollision.
+// Makes a name unique by appending _2, _3 … when needed.
+// `eigener` is the name currently held - that one does not count as a clash.
 export function eindeutig(name, belegt, eigener) {
   const basis = entschaerfe(name) || 'Draft';
-  // Auch den eigenen Namen bereinigen: sonst gilt ein Altbestand-Titel mit
-  // Leerzeichen („Header Q3") nicht als der eigene und die Funktion hängt dem
-  // Namen unnötig ein _2 an.
+  // Clean up the own name too: otherwise a legacy title with spaces
+  // ("Header Q3") does not count as one's own, and the function appends an
+  // unnecessary _2.
   const eigenerKlein = entschaerfe(eigener).toLowerCase();
   if (!belegt.has(basis.toLowerCase()) || basis.toLowerCase() === eigenerKlein) return basis;
   for (let i = 2; i < 1000; i++) {
@@ -130,8 +130,8 @@ export function eindeutig(name, belegt, eigener) {
   return `${basis}_${Date.now()}`;
 }
 
-// Dialog zur Namenseingabe. Gibt den bestätigten Namen zurück oder null
-// (abgebrochen). Prüft live auf Eindeutigkeit und erlaubt keine Leerzeichen.
+// Dialog for entering a name. Returns the confirmed name, or null when
+// cancelled. Checks uniqueness as you type and allows no spaces.
 export function frageNachNamen({ vorschlag, belegt, eigener, titel, hinweis }) {
   return new Promise(resolve => {
     const bg = document.createElement('div');
@@ -161,7 +161,7 @@ export function frageNachNamen({ vorschlag, belegt, eigener, titel, hinweis }) {
     const info = box.querySelector('#nm-hinweis');
     const eigenerKlein = entschaerfe(eigener).toLowerCase();   // wie in eindeutig()
 
-    // Bewertet die Eingabe und meldet zurück, ob sie brauchbar ist.
+    // Judges the input and reports back whether it is usable.
     const pruefe = () => {
       const roh = feld.value;
       const sauber = entschaerfe(roh);
@@ -193,8 +193,8 @@ export function frageNachNamen({ vorschlag, belegt, eigener, titel, hinweis }) {
     const esc = e => {
       if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); zu(null); }
     };
-    // capture=true: der globale Escape-Handler des Studios soll nicht
-    // gleichzeitig das Werkzeug abschalten.
+    // capture=true: the Studio's global Escape handler must not switch the
+    // tool off at the same time.
     document.addEventListener('keydown', esc, true);
 
     feld.addEventListener('input', pruefe);

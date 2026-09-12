@@ -26,9 +26,9 @@ export function modal(title, text, buttons) {
     box.innerHTML = `<h4>${title}</h4>${text ? `<div style="font-size:.82rem;color:#555;margin-bottom:14px">${text}</div>` : ''}`;
     const btnWrap = document.createElement('div');
     btnWrap.className = 'modal-btns';
-    // Schließen über Button, Hintergrund-Klick ODER Escape. Ohne Escape-Ausweg
-    // blieb ein Dialog, der aus irgendeinem Grund unsichtbar war, für immer
-    // offen – und der darauf wartende Speichervorgang hing endlos.
+    // Close via the button, a click on the backdrop OR Escape. Without the
+    // Escape route a dialog that had gone invisible for whatever reason stayed
+    // open for good - and the save waiting behind it hung forever.
     const zu = (wert) => {
       document.removeEventListener('keydown', esc);
       if (bg.parentNode) bg.parentNode.removeChild(bg);
@@ -49,16 +49,16 @@ export function modal(title, text, buttons) {
   });
 }
 
-// Lädt ein Bild crossOrigin='anonymous' über den Proxy → nie getaintet.
-// Gibt Promise<HTMLImageElement> zurück.
+// Loads an image with crossOrigin='anonymous' through the proxy, so the canvas
+// is never tainted. Returns Promise<HTMLImageElement>.
 export function loadImage(url) {
   return new Promise((resolve, reject) => {
     if (!url) { reject(new Error('No image URL provided')); return; }
     const img = new Image();
     const ziel = proxyUrl(url);
     if (!ziel) { reject(new Error('Image URL could not be resolved')); return; }
-    // Bei data:/blob: kein crossOrigin setzen – manche Browser brechen das Laden
-    // dann komplett ab, statt das Bild einfach anzuzeigen.
+    // No crossOrigin for data:/blob: - some browsers abort the load altogether
+    // instead of simply showing the image.
     if (!/^(data:|blob:)/i.test(String(ziel))) img.crossOrigin = 'anonymous';
     img.onload = () => resolve(img);
     // Aussagekräftige Meldung statt eines nackten Event-Objekts – vorher stand
@@ -68,11 +68,11 @@ export function loadImage(url) {
   });
 }
 
-// Entfernt ein Element sicher aus dem Dokument.
-// Ein rohes el.remove() wirft, wenn der Browser gerade ein blur-Ereignis
-// desselben Elements abarbeitet („The node to be removed is no longer a child
-// of this node") – das passierte beim Öffnen eines zweiten Inline-Editors,
-// während der erste noch offen war.
+// Removes an element from the document safely.
+// A bare el.remove() throws while the browser is working through a blur event
+// of that same element ("The node to be removed is no longer a child of this
+// node"). It happened when a second inline editor was opened while the first
+// was still open.
 export function wegDamit(el) {
   if (!el) return;
   try { el.remove(); }
@@ -84,21 +84,21 @@ export function debounce(fn, ms) {
   return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); };
 }
 
-// Liest eine Server-Antwort als JSON – mit klarer Ursache statt „Fehler".
-// EINE Stelle für die ganze App: io.js und library.js benutzen dieselbe, damit
-// eine abgelaufene Sitzung überall gleich heißt und nicht in einem Modul als
-// „Fehler beim Laden" endet.
+// Reads a server response as JSON - naming the cause instead of "error".
+// ONE place for the whole app: io.js and library.js share this function, so an
+// expired session is called the same everywhere, instead of ending up as
+// "could not load" in one module and something else in another.
 export async function readJson(res) {
   if (!res.ok) {
-    // Diese drei sagen etwas ueber die Verbindung, nicht ueber den Vorgang -
-    // da ist unsere eigene Formulierung hilfreicher als alles, was der Server
+    // These three describe the connection, not the operation - our own wording
+    // is more useful here than anything the server writes about them.
     // dazu schreibt.
     if (res.status === 413) throw new Error('File too large for the server (413)');
     if (res.status === 403) throw new Error('Not signed in, or the session has expired (403)');
     if (res.status === 401) throw new Error('Not signed in (401)');
-    // Sonst: Wenn der Server selbst sagt, was schiefging, ist das immer besser
-    // als "Server error 502". Eine Loeschung, die an einer gesperrten Datei
-    // scheitert, soll das auch sagen duerfen.
+    // Otherwise: when the server itself says what went wrong, that beats
+    // "Server error 502". A deletion that fails on a locked file should be
+    // allowed to say so.
     let grund = '';
     try {
       const d = JSON.parse(await res.text());
@@ -109,7 +109,7 @@ export async function readJson(res) {
   const txt = await res.text();
   try { return JSON.parse(txt); }
   catch {
-    // Kein JSON: fast immer die Login-Seite nach Ablauf der Sitzung.
+    // Not JSON: nearly always the sign-in page after the session expired.
     if (/<\s*html/i.test(txt)) throw new Error('Session expired – please sign in again');
     throw new Error('Unexpected server response');
   }

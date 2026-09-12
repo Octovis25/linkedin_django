@@ -51,7 +51,7 @@ function wireModes() {
   if (!rail) return;
 
   rail.addEventListener('click', e => {
-    // Help schaltet keinen Modus um, es öffnet die Doku-Überlagerung.
+    // Help does not switch mode, it opens the documentation overlay.
     if (e.target.closest('[data-help]')) {
       const box = document.getElementById('studio-help');
       if (box) box.style.display = 'flex';

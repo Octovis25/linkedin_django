@@ -21,25 +21,25 @@ def _safe(cur, sql, params=None):
         return []
 
 
-# ── Schema-Pflege: einmal pro Prozess, nicht bei jedem Aufruf ───────────────
+# ── Schema upkeep: once per process, not on every call ──────────────────────
 _SCHEMA_GEPRUEFT = set()
 
 
 def einmal_pro_prozess(f):
-    """Laesst eine Schema-Pflege-Funktion nur beim ersten Aufruf arbeiten.
+    """Lets a schema-upkeep function do its work on the first call only.
 
-    Diese Funktionen legen fehlende Tabellen und Spalten an. Sie liefen bisher
-    bei JEDEM Seitenaufruf - die vier zusammen 29-mal ueber die Datei verteilt
-    aufgerufen -, jedes Mal mit CREATE TABLE IF NOT EXISTS und einer Reihe von
-    ALTER-Versuchen, die MySQL mit einem Fehler quittiert, den ein except
-    schluckt. Das kostet bei jedem Aufruf Zeit und laesst echte Schemaprobleme
+    These functions create missing tables and columns. Until now they ran on
+    EVERY page load - the four of them called from 29 places across this file -
+    each time with CREATE TABLE IF NOT EXISTS and a row of ALTER attempts that
+    MySQL answers with an error which an except swallows. That costs time on
+    every call and lets real schema problems disappear into the noise.
     im Rauschen untergehen.
 
-    Einmal pro Arbeitsprozess genuegt: Nach einem Deploy starten die Prozesse
-    neu, eine neue Spalte wird also weiterhin beim ersten Aufruf nachgetragen.
+    Once per worker process is enough: after a deploy the processes restart, so
+    a new column is still added on the first call.
 
-    Wirft die Funktion (Datenbank gerade nicht erreichbar), wird NICHTS
-    gemerkt - der naechste Aufruf versucht es erneut.
+    If the function throws (database out of reach just now), NOTHING is
+    remembered - the next call tries again.
     """
     @functools.wraps(f)
     def huelle(*args, **kwargs):
@@ -160,9 +160,9 @@ def _meta_options():
 
 @login_required
 def library_view(request):
-    """Die alte DB-Medienbibliothek wurde aufgeloest (Bilder liegen in Nextcloud
-    unter Studio_Work). Diese Route bleibt nur als Weiterleitung bestehen, damit
-    interne redirect('media_library:library')-Aufrufe weiter funktionieren."""
+    """The old database media library is gone (images live in Nextcloud under
+    Studio_Work). This route stays only as a redirect, so internal
+    redirect('media_library:library') calls keep working."""
     return redirect('media_library:studio')
 
 
@@ -294,11 +294,11 @@ def library_delete(request, item_id):
             or 'fetch' in request.headers.get('Sec-Fetch-Mode', ''))
     if rows:
         nc_path = rows[0][0]
-        # Erst die Datei, dann die Datenbankzeile - und nur weiter, wenn die
-        # Datei wirklich weg ist. Vorher wurde hier geloescht, ohne hinzusehen,
-        # und anschliessend bedingungslos "Image deleted." gemeldet: Der
-        # Eintrag verschwand aus der Bibliothek, die Datei blieb in Nextcloud
-        # liegen, und niemand konnte sie noch ueber die App erreichen.
+        # The file first, then the database row - and only carry on once the file
+        # really is gone. This used to delete without looking and then report
+        # "Image deleted." unconditionally: the entry vanished from the library,
+        # the file stayed in Nextcloud, and nobody could reach it through the app
+        # any more.
         ok, grund = _nc_delete_detail(nc_path)
         if not ok:
             if ajax:
@@ -321,7 +321,7 @@ def library_delete(request, item_id):
 
 @login_required
 def library_api(request):
-    """JSON API für das Modal-Picker im Edit-Post-Modal."""
+    """JSON API for the picker in the edit-post modal."""
     _ensure_table()
     f = {
         'person': request.GET.get('person', ''),
@@ -449,11 +449,11 @@ NC_STUDIO_LIBRARY_FOLDER   = "Marketing & Design/Octotrial_Assets/Studio_Work/Ou
 NC_STUDIO_VIDEOS_FOLDER    = "Marketing & Design/Octotrial_Assets/Studio_Work/Output/Videos"
 NC_STUDIO_GIFS_FOLDER      = "Marketing & Design/Octotrial_Assets/Studio_Work/Output/GIFs"
 
-# Zentrale Definition der App-eigenen Speicher-Wurzeln. Nur innerhalb dieser darf
-# gelöscht werden (Schutz vor Pfad-Traversal / Fremdlöschung). Eine Quelle der
-# Wahrheit statt verstreuter Ordner-Listen in einzelnen Views. „Marketing & Design"
-# ist der Marken-Ordner, unter dem ALLE App-Medien liegen (Octotrial_Assets,
-# LinkedIn/Planner, Bilder_Bibliothek …).
+# One central definition of the app's own storage roots. Deleting is allowed
+# only inside these (protection against path traversal and deleting other
+# people's files). One source of truth instead of folder lists scattered through
+# individual views. "Marketing & Design" is the brand folder that holds ALL the
+# app's media (Octotrial_Assets, LinkedIn/Planner, Bilder_Bibliothek …).
 NC_APP_ROOTS = (
     "Marketing & Design/",   # gesamter Marken-Ordner (alle App-Medien)
     "__local__/",            # lokaler Fallback (kein Nextcloud)
@@ -461,11 +461,11 @@ NC_APP_ROOTS = (
 
 
 def _within_app_folders(nc_path):
-    """True, wenn der Pfad zu einem App-eigenen Ordner gehört (löschbar).
+    """True when the path belongs to one of the app's own folders (deletable).
 
-    Traversal segmentweise prüfen: nur ein eigenständiger Pfadteil ".." ist
-    verboten. Ein Dateiname wie "foo..png" (doppelter Punkt) ist harmlos und
-    darf NICHT als Traversal missverstanden werden.
+    Traversal is checked segment by segment: only a path part that is exactly
+    ".." is forbidden. A file name such as "foo..png" (two dots) is harmless and
+    must NOT be mistaken for traversal.
     """
     if not nc_path:
         return False
@@ -475,8 +475,8 @@ def _within_app_folders(nc_path):
 
 
 def _post_media_to_cleanup(post_id):
-    """Aktuelle Medien-Pfade (Bild/GIF/Video) eines Posts merken – zum späteren
-    Löschen beim Ersetzen. Gepostete Beiträge werden geschont (leere Liste)."""
+    """Remember a post's current media paths (image/GIF/video) so they can be
+    deleted later when replaced. Published posts are spared (empty list)."""
     try:
         with connection.cursor() as c:
             try:
@@ -495,7 +495,7 @@ def _post_media_to_cleanup(post_id):
 
 
 def _cleanup_old_media(paths, keep=None):
-    """Alte Mediendateien in Nextcloud löschen (best effort), außer `keep`."""
+    """Delete old media files in Nextcloud (best effort), except `keep`."""
     if not paths:
         return
     for p in paths:
@@ -517,10 +517,10 @@ def _nc_delete_old_files(nc_folder, safe_prefix):
         from xml.etree import ElementTree
         auth = HTTPBasicAuth(username, password)
         base = f"{nc_url.rstrip('/')}/remote.php/dav/files/{username}"
-        # \d+ direkt nach dem Praefix traf auch fremde Titel: fuer "Header"
-        # matchte "Header_2_preview.png" - also die Datei der Ausgabe "Header 2".
-        # Deren Vorschau wurde bei jedem Speichern von "Header" mitgeloescht.
-        # Der Zeitstempel hat immer mindestens 10 Stellen, ein Titelzusatz nie.
+        # \d+ directly after the prefix also matched other titles: for "Header"
+        # it matched "Header_2_preview.png" - the file of the output "Header 2".
+        # Its preview was deleted along with every save of "Header". The
+        # timestamp always has at least 10 digits, a title suffix never does.
         pattern = _re.compile(rf'^{_re.escape(safe_prefix)}_\d{{10,}}_(preview|snap|obj|fab)')
         for folder in [nc_folder, f"{nc_folder}/_data"]:
             url = f"{base}/{quote(folder, safe='/')}"
@@ -559,10 +559,10 @@ def _optimize_canvas_json(canvas_json_str, nc_folder, title_prefix):
         safe = _re.sub(r'[^a-zA-Z0-9_-]', '_', title_prefix)
         data_folder = f"{nc_folder}/_data"
 
-        # Alte Timestamp-Dateien für diesen Titel löschen
+        # Delete the old timestamped files for this title
         _nc_delete_old_files(nc_folder, safe)
 
-        # Bestehende nc:// Refs löschen (werden durch neue ersetzt)
+        # Delete existing nc:// refs (they are replaced by new ones)
         old_refs = []
         for key in ('snapshotDataUrl', 'previewDataUrl'):
             v = state.get(key, '')
@@ -572,7 +572,7 @@ def _optimize_canvas_json(canvas_json_str, nc_folder, title_prefix):
             src = obj.get('imgSrc', '')
             if src and src.startswith('nc://'):
                 old_refs.append(src[5:])
-        # Alte nc://-Dateien löschen
+        # Delete the old nc:// files
         if old_refs:
             for ref in old_refs:
                 _nc_delete_aufraeumen(ref, 'alte nc://-Objektbilder')
@@ -607,31 +607,30 @@ def _optimize_canvas_json(canvas_json_str, nc_folder, title_prefix):
                 except Exception:
                     pass
 
-        # Die eigentlichen Bilddaten liegen im v2-Format NICHT in state['objects']
-        # (das ist nur eine flache Metadatenliste mit Proxy-URLs), sondern in
-        # state['fabric']['objects'][i]['src']. Ohne diese Schleife lief die
-        # ganze Auslagerung ins Leere: jedes freigestellte oder umgefaerbte Bild
-        # blieb als mehrere MB base64 im canvas_json stehen. Das sprengte bei
-        # groesseren Entwuerfen das Paketlimit der Datenbank - und genau dann
-        # griffen die stillen except-Zweige beim Speichern.
+        # In the v2 format the actual image data is NOT in state['objects']
+        # (that is only a flat metadata list with proxy URLs) but in
+        # state['fabric']['objects'][i]['src']. Without this loop the whole
+        # offloading came to nothing: every cut-out or recoloured image stayed
+        # in the canvas_json as several MB of base64. On larger designs that
+        # burst the database's packet limit - and that is exactly when the
+        # silent except branches around saving took over.
         import hashlib as _hl
 
         def _fab_auslagern(src, marke):
-            """Laedt ein data:-Bild nach Nextcloud und gibt die nc://-Referenz zurueck.
+            """Uploads a data: image to Nextcloud and returns the nc:// reference.
 
-            Der Dateiname enthaelt einen Inhalts-Hash statt nur Titel+Position.
-            Mit reinem Titel+Index haetten zwei gleichnamige Entwuerfe (oder
-            dasselbe Layout nach einer Umsortierung) per WebDAV-PUT auf denselben
-            Pfad geschrieben - ein aelterer Entwurf haette danach stillschweigend
-            ein fremdes Bild angezeigt.
+            The file name carries a content hash rather than just title and
+            position. With title plus index alone, two designs of the same name
+            (or the same layout after a reorder) would have written to the same
+            path by WebDAV PUT - and an older design would quietly have shown a
+            stranger's image afterwards.
 
-            Bewusst wird hier NICHT aufgeraeumt: alte Dateien zu loeschen waere
-            nur sicher, wenn man alle noch existierenden Entwuerfe kennt. Ein
-            unveraendertes Bild schickt der Client als Proxy-URL zurueck (nicht
-            als data:) und laedt es daher nicht neu hoch - ein Loeschlauf wuerde
-            dessen Datei entfernen und die Referenz ins Leere zeigen lassen.
-            Gleicher Inhalt ergibt denselben Hash, also entstehen beim
-            wiederholten Speichern desselben Bildes auch keine Dubletten.
+            Deliberately NO cleaning up here: deleting old files would only be
+            safe if one knew every design still in existence. The client sends an
+            unchanged image back as a proxy URL (not as data:) and so does not
+            upload it again - a cleanup run would remove its file and leave the
+            reference pointing at nothing. The same content gives the same hash,
+            so saving the same image repeatedly creates no duplicates either.
             """
             try:
                 ext = 'png' if 'png' in src.split(';')[0] else 'jpg'
@@ -643,20 +642,20 @@ def _optimize_canvas_json(canvas_json_str, nc_folder, title_prefix):
                 return None
 
         def _fab_durchlaufen(objekte, pfad='fab'):
-            """Laeuft rekursiv durch die Objektliste - auch in Gruppen hinein.
+            """Walks the object list recursively - into groups as well.
 
-            Ohne den Abstieg blieb ein freigestelltes Bild, das mit einem Textfeld
-            gruppiert wurde, als mehrere MB base64 im canvas_json stehen.
+            Without going in, a cut-out image grouped with a text field stayed in
+            the canvas_json as several MB of base64.
             """
             for i, obj in enumerate(objekte or []):
                 if not isinstance(obj, dict):
                     continue
                 src = obj.get('src', '')
                 if isinstance(src, str) and src.startswith('data:image'):
-                    # Nur auslagern, wenn der Client dieses src beim Laden auch
-                    # wirklich benutzt (siehe restoreCanvas in io.js: unbearbeitete
-                    # Bilder werden ueber srcUrl geladen). Sonst entstuenden
-                    # Dateien, die nie jemand abruft.
+                    # Only offload when the client really uses this src on load
+                    # (see restoreCanvas in io.js: unedited images are loaded
+                    # through srcUrl). Otherwise files would be created that
+                    # nobody ever fetches.
                     if obj.get('edited') or obj.get('bgRemoved') or not obj.get('srcUrl'):
                         ref = _fab_auslagern(src, f'{pfad}{i}')
                         if ref:
@@ -713,10 +712,10 @@ def _resolve_nc_refs_in_json(canvas_json_str):
             state['previewDataUrl'] = _proxy(state.get('previewDataUrl', ''))
         for obj in state.get('objects', []):
             obj['imgSrc'] = _proxy(obj.get('imgSrc', ''))
-        # Gegenstueck zur Auslagerung in _optimize_canvas_json: die ausgelagerten
-        # nc://-Referenzen stecken im fabric-Zweig. Ohne diese Zeilen kaeme dort
-        # ein nicht aufloesbares "nc://..." im Browser an - das Bild fehlte.
-        # Rekursiv, damit auch Bilder innerhalb von Gruppen erfasst werden.
+        # The counterpart to the offloading in _optimize_canvas_json: the
+        # offloaded nc:// references sit in the fabric branch. Without these
+        # lines an unresolvable "nc://…" would arrive in the browser and the
+        # image would be missing. Recursive, so images inside groups are covered.
         def _proxy_durchlaufen(objekte):
             for obj in (objekte or []):
                 if not isinstance(obj, dict):
@@ -786,12 +785,12 @@ def _nc_download(nc_path):
 
 
 def _nc_delete(nc_path):
-    """True, wenn die Datei danach weg ist.
+    """True when the file is gone afterwards.
 
-    Der Rueckgabewert ist nicht schmueckendes Beiwerk: Frueher hat diese
-    Funktion ihn verschluckt, und studio_output_delete meldete darum auch dann
-    Erfolg, wenn Nextcloud die Loeschung abgelehnt hatte. Die Kachel
-    verschwand, die Datei blieb, und beim naechsten Laden war sie wieder da.
+    The return value is not decoration: this function used to swallow it, which
+    is why studio_output_delete reported success even when Nextcloud had refused
+    the deletion. The tile vanished, the file stayed, and on the next load it
+    was back.
     """
     ok, _grund = _nc_delete_detail(nc_path)
     return ok
@@ -804,23 +803,22 @@ def _nc_delete_detail(nc_path):
 
 
 def _nc_delete_aufraeumen(nc_path, zweck):
-    """Loeschen, das scheitern DARF - alte Fassungen, Vorschauen, Reste.
+    """A deletion that MAY fail - old versions, previews, leftovers.
 
-    Der Unterschied zu einer nutzerseitigen Loeschung: Hier wartet niemand auf
-    eine Antwort, und ein Fehlschlag soll den eigentlichen Vorgang nicht
-    umwerfen. Er darf aber auch nicht spurlos verschwinden - sonst sammeln sich
-    Dateileichen an, und niemand weiss warum. Darum: weitermachen, aber
-    protokollieren.
+    The difference to a user-facing deletion: nobody is waiting for an answer
+    here, and a failure must not bring down the actual operation. But it must
+    not vanish without trace either - otherwise dead files pile up and nobody
+    knows why. So: carry on, but write it to the log.
     """
     if not nc_path:
         return False
     try:
         ok, grund = _nc_delete_detail(nc_path)
     except Exception as e:
-        print("Aufraeumen (%s) fehlgeschlagen: %s -- %s" % (zweck, nc_path, e))
+        print("Cleanup (%s) failed: %s -- %s" % (zweck, nc_path, e))
         return False
     if not ok:
-        print("Aufraeumen (%s) fehlgeschlagen: %s -- %s" % (zweck, nc_path, grund))
+        print("Cleanup (%s) failed: %s -- %s" % (zweck, nc_path, grund))
     return ok
 
 
@@ -839,13 +837,13 @@ def _ensure_brand_colors_table():
                 extra_colors TEXT DEFAULT NULL
             )""")
         except Exception: pass
-        # extra_colors Spalte nachrüsten falls Tabelle schon existiert
+        # Add the extra_colors column if the table already exists
         try:
             c.execute("SHOW COLUMNS FROM brand_colors LIKE 'extra_colors'")
             if not c.fetchone():
                 c.execute("ALTER TABLE brand_colors ADD COLUMN extra_colors TEXT DEFAULT NULL")
         except Exception: pass
-        # Sicherstellen dass immer genau eine Zeile existiert
+        # Make sure there is always exactly one row
         try:
             c.execute("SELECT COUNT(*) FROM brand_colors")
             if c.fetchone()[0] == 0:
@@ -854,11 +852,11 @@ def _ensure_brand_colors_table():
 
 
 def get_brand_colors():
-    """Gibt die aktuellen Brand-Farben als Dict zurück (inkl. extra_colors Liste).
+    """Returns the current brand colours as a dict (including the extra_colors list).
 
-    Robust gegen DB-Ausfaelle: Der ganze Zugriff (inkl. Tabellen-Setup) laeuft im
-    try. Bei einem DB-Problem werden Default-Farben zurueckgegeben, damit ein
-    Datenbank-Aussetzer nicht ueber diesen Context-Processor JEDE Seite auf 500 wirft.
+    Robust against database outages: the whole access, table setup included, runs
+    inside the try. On a database problem the default colours are returned, so a
+    hiccup does not turn EVERY page into a 500 through this context processor.
     """
     defaults = {'c1':'#ffffff','c2':'#F56E28','c3':'#008591','c4':'#61CEBC','c5':'#005F68','c6':'#161616','extra_colors':[]}
     try:
@@ -897,7 +895,7 @@ def _ensure_studio_tables():
         try:
             c.execute("ALTER TABLE studio_templates ADD COLUMN canvas_json LONGTEXT DEFAULT NULL")
         except Exception: pass
-        # Migration: aktiv/passiv – passive Vorlagen erscheinen nicht in der Studio-Auswahl.
+        # Migration: active/inactive - inactive templates do not appear in the Studio picker.
         try:
             c.execute("ALTER TABLE studio_templates ADD COLUMN active TINYINT DEFAULT 1")
         except Exception: pass
@@ -920,8 +918,8 @@ def _ensure_studio_tables():
         try:
             c.execute("ALTER TABLE studio_images MODIFY COLUMN canvas_json LONGTEXT")
         except Exception: pass
-        # Post-Medien: Bild (image) existiert schon; GIF + Video als eigene Spalten,
-        # damit an einem Post alle drei Dateien hängen und einzeln abrufbar sind.
+        # Post media: the image column already exists; GIF and video get their own
+        # columns, so all three files can hang on a post and be fetched separately.
         try:
             c.execute("ALTER TABLE planner_posts ADD COLUMN gif_nc_path VARCHAR(512) DEFAULT NULL")
         except Exception: pass
@@ -939,9 +937,9 @@ def studio_flowcharts_view(request):
     return render(request, 'media_library/flowcharts.html')
 
 
-# @login_required stand versehentlich doppelt auf studio_flowcharts_view und
-# fehlte hier komplett. studio_view rendert Post-Titel, Bibliotheksdaten und das
-# komplette canvas_json direkt ins HTML - das war ohne Anmeldung abrufbar.
+# @login_required was on studio_flowcharts_view twice by accident and missing
+# here entirely. studio_view renders post titles, library data and the complete
+# canvas_json straight into the HTML - that was reachable without signing in.
 @login_required
 def studio_view(request):
     _ensure_studio_tables()
@@ -958,14 +956,14 @@ def studio_view(request):
                     r = rows[0]
                     post_data = {'id': r[0], 'title': r[1] or '', 'image': r[2] or '', 'content': (r[3] or '')[:120],
                                  'gif': r[4] or '', 'video': r[5] or ''}
-                    # Abruf-URLs für die drei Dateien am Post (Auswahl im Banner).
+                    # Fetch URLs for the three files on the post (picked in the banner).
                     post_data['image_url'] = f"/library/studio/api/post-image/{r[0]}/" if post_data['image'] else ''
                     post_data['gif_url']   = ('/library/studio/nc-image/?p=' + _q(post_data['gif']))   if post_data['gif']   else ''
                     post_data['video_url'] = ('/library/studio/nc-image/?p=' + _q(post_data['video'])) if post_data['video'] else ''
-                # Design laden. Bevorzugt die Zeile, die zur AKTUELL am Post hängenden
-                # Datei (Bild/GIF/Video) gehört – das ist die zuletzt gespeicherte,
-                # vollständige Version. Danach erst die post_id-Zeile. So kommt nicht
-                # eine alte, leere Version (nur Hintergrund).
+                # Load the design. Prefer the row belonging to the file CURRENTLY
+                # attached to the post (image/GIF/video) - that is the last
+                # complete version saved. Only then the post_id row. This stops an
+                # old, empty version (background only) from being picked.
                 cand_media = ''
                 if post_data:
                     cand_media = post_data.get('image') or post_data.get('video') or post_data.get('gif') or ''
@@ -996,19 +994,19 @@ def studio_view(request):
                     nc_path = rows[0][0]
                     studio_rows = _safe(c, """SELECT canvas_json, template_id FROM studio_images
                                              WHERE nc_path=%s ORDER BY created_at DESC LIMIT 1""", [nc_path])
-                    # Fallback: Datei wurde evtl. verschoben (z. B. von Studio_Work/Output
-                    # nach Planner/Videos). Dann das bearbeitbare Design über den
-                    # Dateinamen wiederfinden, damit „🎨 Studio" das Layout lädt.
+                    # Fallback: the file may have been moved (from Studio_Work/Output
+                    # to Planner/Videos, say). Then find the editable design by its
+                    # file name, so "🎨 Studio" loads the layout.
                     if not (studio_rows and studio_rows[0][0]):
                         _fn = (nc_path or '').rsplit('/', 1)[-1]
                         if _fn:
                             studio_rows = _safe(c, """SELECT canvas_json, template_id FROM studio_images
                                                      WHERE nc_path LIKE %s ORDER BY id DESC LIMIT 1""", ['%/' + _fn])
-                    # Letzter Fallback: ueber den NAMEN. Ein Design kann als Bild,
-                    # GIF und Video vorliegen - der Entwurf gehoert zu allen dreien.
-                    # Ohne diesen Zweig oeffnete z.B. das PNG nach einem
-                    # GIF-Export ohne Ebenen, weil studio_images auf den
-                    # GIF-Pfad zeigte. Namen sind eindeutig (siehe namen.js),
+                    # Last fallback: by NAME. One design can exist as an image, a
+                    # GIF and a video - the design belongs to all three. Without
+                    # this branch the PNG opened without its layers after a GIF
+                    # export, because studio_images pointed at the GIF path. Names
+                    # are unique (see namen.js), so the lookup is reliable.
                     # deshalb ist die Suche zuverlaessig.
                     if not (studio_rows and studio_rows[0][0]) and rows[0][1]:
                         studio_rows = _safe(c, """SELECT canvas_json, template_id FROM studio_images
@@ -1025,8 +1023,8 @@ def studio_view(request):
         except Exception as e:
             print("Studio lib lookup:", e)
 
-    # Öffnen einer Ausgabe direkt über ihren Nextcloud-Pfad (Meine Ausgaben zeigt
-    # jetzt NC-Ordner direkt an). Canvas_json aus studio_images (falls vorhanden).
+    # Opening an output directly by its Nextcloud path (My outputs now shows the
+    # NC folders directly). The canvas_json comes from studio_images, if present.
     nc_open = request.GET.get('nc_path', '')
     if nc_open and not lib_data and not post_id:
         try:
@@ -1035,12 +1033,12 @@ def studio_view(request):
             with connection.cursor() as c:
                 si = _safe(c, "SELECT canvas_json FROM studio_images WHERE nc_path=%s ORDER BY id DESC LIMIT 1", [nc_open])
                 if not (si and si[0][0]):
-                    # Fallback: nach Dateiname suchen (falls Pfadpräfix minimal abweicht)
+                    # Fallback: search by file name (in case the path prefix differs slightly)
                     si = _safe(c, "SELECT canvas_json FROM studio_images WHERE nc_path LIKE %s ORDER BY id DESC LIMIT 1", ['%/' + _fname])
                 if not (si and si[0][0]):
-                    # Letzter Fallback ueber den NAMEN (= Dateiname ohne Endung):
-                    # Bild, GIF und Video eines Designs teilen sich den Namen und
-                    # damit denselben Entwurf.
+                    # Last fallback by NAME (the file name without its extension):
+                    # the image, GIF and video of one design share the name and
+                    # therefore the same design.
                     _name = _fname.rsplit('.', 1)[0]
                     if _name:
                         si = _safe(c, """SELECT canvas_json FROM studio_images
@@ -1058,7 +1056,7 @@ def studio_view(request):
         except Exception as e:
             print("Studio nc_path open:", e)
 
-    # Vorlage zum Bearbeiten öffnen (?template=<id>) → editierbares Layout laden.
+    # Open a template for editing (?template=<id>) → load the editable layout.
     tpl_data = None
     tpl_id_param = request.GET.get('template', '')
     if tpl_id_param and not post_id and not lib_data:
@@ -1081,7 +1079,7 @@ def studio_view(request):
         nc_url_val = ''
     brand = get_brand_colors()
 
-    # Canvas-JSON fuer post/lib mit same-origin Proxy-URLs aufloesen (kein CORS-Tainting)
+    # Resolve the canvas JSON for post/lib to same-origin proxy URLs (no CORS tainting)
     if post_data and post_data.get('canvas_json'):
         post_data['canvas_json'] = _resolve_nc_refs_in_json(post_data['canvas_json'])
     if lib_data and lib_data.get('canvas_json'):
@@ -1119,8 +1117,8 @@ def studio_view(request):
         },
     }
 
-    # „Zurück"-Ziel = Seite, von der man kam (Referrer). Nicht auf das Studio
-    # selbst zurückspringen; sonst Fallback auf die Übersicht.
+    # The "back" target is the page we came from (the referrer). Do not jump back
+    # into the Studio itself; fall back to the overview instead.
     back_url = request.META.get('HTTP_REFERER', '') or ''
     if not back_url or '/library/studio/' in back_url:
         back_url = '/planner/uebersicht/'
@@ -1221,7 +1219,7 @@ def studio_brand_colors_save(request):
     c4 = request.POST.get('c4', '#61CEBC')
     c5 = request.POST.get('c5', '#005F68')
     c6 = request.POST.get('c6', '#161616')
-    # Extra-Farben aus dem Formular sammeln
+    # Collect the extra colours from the form
     extra = [v for k, v in request.POST.items() if k.startswith('extra_') and v.startswith('#')]
     extra_json = json.dumps(extra) if extra else None
     try:
@@ -1275,8 +1273,8 @@ def studio_template_upload(request):
 
 @login_required
 def studio_template_save_from_canvas(request):
-    """Aktuelle Studio-Leinwand direkt als Vorlage speichern (kein Datei-Upload).
-    Erwartet JSON: {dataUrl, title, width, height, colors?}."""
+    """Save the current Studio artboard directly as a template (no file upload).
+    Expects JSON: {dataUrl, title, width, height, colors?}."""
     if request.method != 'POST':
         return JsonResponse({'ok': False, 'error': 'POST required'}, status=405)
     _ensure_studio_tables()
@@ -1310,16 +1308,16 @@ def studio_template_save_from_canvas(request):
     cols = data.get('colors') or []
     colors_json = _j.dumps([c for c in cols if c]) if cols else None
     canvas_json = data.get('canvasJson') or None   # Hintergrund + Logo + Textfelder
-    # Eingebettete base64-Bilder nach Nextcloud auslagern. Fuer Vorlagen lief das
-    # bisher gar nicht - ein Layout mit zwei freigestellten Bildern kam schnell
-    # auf zweistellige Megabyte und scheiterte am Paketlimit der Datenbank.
+    # Offload embedded base64 images to Nextcloud. For templates this did not
+    # happen at all until now - a layout with two cut-out images quickly reached
+    # double-digit megabytes and failed on the database's packet limit.
     if canvas_json:
         try:
             canvas_json = _optimize_canvas_json(canvas_json, NC_STUDIO_TEMPLATES_FOLDER, title)
         except Exception:
             pass
 
-    # Unterscheidet "Spalte canvas_json fehlt noch" (dafuer war der Fallback
+    # Tells "the canvas_json column is still missing" (which the fallback was
     # gedacht) von allen anderen Fehlern.
     def _fehlende_spalte(exc):
         t = str(exc).lower()
@@ -1329,17 +1327,17 @@ def studio_template_save_from_canvas(request):
     tpl_id = data.get('tplId') or None              # gesetzt → bestehende Vorlage aktualisieren
     with connection.cursor() as c:
         if tpl_id:
-            # Bestehende Vorlage überschreiben (Layout + Vorschau + Größe/Titel).
+            # Overwrite the existing template (layout, preview, size and title).
             try:
                 c.execute("""UPDATE studio_templates
                              SET nc_path=%s, title=%s, width=%s, height=%s, canvas_json=%s
                              WHERE id=%s""",
                           [nc_path, title, width, height, canvas_json, tpl_id])
             except Exception as e:
-                # Frueher fing dieser Zweig JEDEN Fehler ab und meldete danach
-                # Erfolg - obwohl das Layout gar nicht geschrieben wurde. Die
-                # Vorlage zeigte dann eine neue Vorschau ueber dem ALTEN Layout,
-                # und niemand konnte den Fehler bemerken.
+                # This branch used to catch EVERY error and then report success
+                # - although the layout had not been written at all. The
+                # template then showed a new preview over the OLD layout, and
+                # nobody could tell anything had gone wrong.
                 if not _fehlende_spalte(e):
                     return JsonResponse(
                         {'ok': False, 'error': f'Template could not be saved: {e}'},
@@ -1352,8 +1350,8 @@ def studio_template_save_from_canvas(request):
                          VALUES (%s,%s,%s,%s,%s,%s)""",
                       [nc_path, title, width, height, colors_json, canvas_json])
         except Exception as e:
-            # Ohne canvas_json waere die neue Vorlage nur ein flaches Bild -
-            # alle Textfelder und Ebenen waeren verloren, trotz Erfolgsmeldung.
+            # Without the canvas_json the new template would be a flat image -
+            # every text field and layer lost, despite a success message.
             if not _fehlende_spalte(e):
                 return JsonResponse(
                     {'ok': False, 'error': f'Template could not be created: {e}'},
@@ -1395,9 +1393,9 @@ def studio_template_delete(request, tpl_id):
     with connection.cursor() as c:
         rows = _safe(c, "SELECT nc_path FROM studio_templates WHERE id=%s", [tpl_id])
     if rows:
-        # Wie bei library_delete: nicht die Zeile loeschen, solange die Datei
-        # noch da ist - sonst ist die Vorlage aus der Liste verschwunden und die
-        # Datei ueber die App nicht mehr erreichbar.
+        # As in library_delete: do not delete the row while the file is still
+        # there - otherwise the template is gone from the list and the file is no
+        # longer reachable through the app.
         ok, grund = _nc_delete_detail(rows[0][0])
         if not ok:
             messages.error(request, grund or 'The template file could not be deleted.')
@@ -1466,7 +1464,7 @@ def _extract_canvas_tags(canvas_json_str):
         # Bild-Objekte
         if otype == 'img':
             tags.add('bild')
-    # Canvas-Größe / Elementanzahl
+    # Canvas size / number of elements
     if len(objects) > 0:
         tags.add(f'{len(objects)}-elemente')
     # Hintergrund
@@ -1478,11 +1476,11 @@ def _extract_canvas_tags(canvas_json_str):
 
 def _studio_bild_metadaten_schreiben(post_id, lib_item_id, old_nc_path, nc_path,
                                      title, canvas_json, template_id):
-    """Legt den studio_images-Eintrag an bzw. aktualisiert ihn. Gibt die ID zurueck.
+    """Creates or updates the studio_images entry. Returns its id.
 
-    Ausgelagert, damit der Aufrufer den Vorgang bei einem Fehler ein zweites Mal
-    ohne canvas_json versuchen kann - statt einen 500er zu werfen, obwohl Datei
-    und Bibliothekseintrag bereits geschrieben sind.
+    Pulled out so the caller can try the operation a second time without the
+    canvas_json on failure - rather than throwing a 500 although the file and
+    the library entry have already been written.
     """
     with connection.cursor() as c:
         if post_id:
@@ -1494,13 +1492,13 @@ def _studio_bild_metadaten_schreiben(post_id, lib_item_id, old_nc_path, nc_path,
             c.execute("""INSERT INTO studio_images (nc_path, title, canvas_json, template_id, post_id)
                          VALUES (%s,%s,%s,%s,%s)""", [nc_path, title, canvas_json or None, template_id, post_id])
             return c.lastrowid
-        # Der Entwurf gehoert zum DESIGN, nicht zu einer einzelnen Datei: Bild,
-        # GIF und Video mit demselben (eindeutigen) Namen teilen sich eine Zeile.
-        # Zuerst ueber den Namen suchen, damit ein zuvor als GIF gespeicherter
-        # Entwurf beim Speichern als Bild nicht ein zweites Mal angelegt wird.
-        # post_id ausschliessen: sonst koennte ein gleichnamiges neues Design den
-        # Entwurf eines Planner-Posts ueberschreiben (der Post-Zweig oben returned
-        # frueher, deshalb ist hier nie ein Post gemeint).
+        # The design belongs to the DESIGN, not to a single file: the image, GIF
+        # and video sharing one (unique) name share one row. Look it up by name
+        # first, so a design saved earlier as a GIF is not created a second time
+        # when it is saved as an image. Exclude post_id: otherwise a new design
+        # of the same name could overwrite the design of a planner post (the post
+        # branch above returns earlier, so a post is never meant here).
+        # branch above returns earlier, so a post is never meant here).
         rows = _safe(c, """SELECT id FROM studio_images WHERE title=%s
                           AND (post_id IS NULL OR post_id=0)
                           ORDER BY id DESC LIMIT 1""", [title])
@@ -1534,17 +1532,17 @@ def studio_save(request):
     template_id = data.get('templateId') or None
     folder_id   = data.get('folderId') or None
     lib_item_id = data.get('lib_item_id') or None   # gesetzt beim Weiterbearbeiten
-    open_nc     = data.get('openNcPath') or None    # geöffnete Ausgabe-Datei
+    open_nc     = data.get('openNcPath') or None    # the output file currently open
 
-    # Geöffnete Ausgabe → genau dieses Element wiederverwenden (überschreiben).
+    # An output is open → reuse exactly that entry (overwrite it).
     if not lib_item_id and not post_id and open_nc:
         with connection.cursor() as c:
             _r = _safe(c, "SELECT id FROM media_library_items WHERE nc_path=%s ORDER BY id DESC LIMIT 1", [open_nc])
             if _r:
                 lib_item_id = _r[0][0]
 
-    # „Immer überschreiben": Gibt es bereits ein Studio-Bild mit gleichem Titel,
-    # wird dieses aktualisiert statt ein Duplikat anzulegen.
+    # "Always overwrite": if a Studio image with the same title already exists,
+    # it is updated instead of creating a duplicate.
     if not lib_item_id and not post_id and title:
         with connection.cursor() as c:
             _dup = _safe(c, """SELECT id FROM media_library_items
@@ -1553,7 +1551,7 @@ def studio_save(request):
             if _dup:
                 lib_item_id = _dup[0][0]
 
-    # Alten nc_path holen (für Update + exaktes Überschreiben derselben Datei).
+    # Fetch the old nc_path (for the update and to overwrite exactly that file).
     old_nc_path = None
     if lib_item_id and not post_id:
         with connection.cursor() as c:
@@ -1572,9 +1570,9 @@ def studio_save(request):
     except Exception:
         return JsonResponse({'error': 'Invalid image data'}, status=400)
 
-    # Dateiname folgt dem Namen. Wurde umbenannt, bekommt die Datei den neuen
-    # Namen - vorher behielt sie stur den alten, sodass Datei und Anzeigename
-    # auseinanderliefen und Bild und GIF desselben Designs verschieden hiessen.
+    # The file name follows the name. After a rename the file gets the new name
+    # - before, it stubbornly kept the old one, so file and display name drifted
+    # apart and the image and GIF of one design ended up called different things.
     import re as _re_fn
     _safe_name = _re_fn.sub(r'[^a-zA-Z0-9_.-]', '', (title or 'studio').replace(' ', '_')) or 'studio'
     filename = _safe_name + '.png'
@@ -1599,8 +1597,8 @@ def studio_save(request):
     auto_tags = _extract_canvas_tags(canvas_json) if canvas_json else ''
     all_tags = ','.join(filter(None, ['studio', auto_tags]))
 
-    # Weiterbearbeitung: bestehendes Element aktualisieren (Name bleibt/aktualisiert,
-    # kein neues Bild). Sonst neu anlegen.
+    # Carrying on editing: update the existing entry (the name stays or is
+    # updated, no new image). Otherwise create a new one.
     with connection.cursor() as c:
         if lib_item_id and not post_id:
             c.execute("""UPDATE media_library_items SET nc_path=%s, title=%s, tags=%s WHERE id=%s""",
@@ -1616,12 +1614,12 @@ def studio_save(request):
         canvas_json = _optimize_canvas_json(canvas_json, NC_STUDIO_LIBRARY_FOLDER, title)
 
     # Save studio metadata (upsert per post_id if given)
-    # Diese Statements liefen frueher ungeschuetzt. Schlug hier etwas fehl (etwa
-    # weil canvas_json das Paketlimit sprengt), gab Django einen 500 zurueck -
-    # obwohl PNG und Bibliothekseintrag bereits geschrieben waren. Die Ausgabe
-    # tauchte danach als flaches Bild ohne Ebenen auf, und der Nutzer sah nur
-    # eine unverstaendliche Fehlermeldung. Jetzt: zweiter Versuch ohne
-    # canvas_json plus klare Warnung im Ergebnis.
+    # These statements used to run unprotected. If something failed here (because
+    # the canvas_json burst the packet limit, say), Django returned a 500 -
+    # although the PNG and the library entry had already been written. The output
+    # then turned up as a flat image without layers, and the user saw nothing but
+    # an incomprehensible error. Now: a second attempt without the canvas_json,
+    # plus a clear warning in the result.
     studio_image_id = None
     warnung = None
     try:
@@ -1638,9 +1636,9 @@ def studio_save(request):
             return JsonResponse({'ok': False,
                                  'error': f'Bild gespeichert, Entwurf nicht: {e2}'}, status=500)
 
-    # Attach to planner post if post_id given. WICHTIG: Das Anhängen muss IMMER
-    # passieren – Verschieben/Aufräumen sind nur „nice to have" und dürfen das
-    # Anhängen nie verhindern.
+    # Attach to planner post if post_id given. IMPORTANT: attaching must ALWAYS
+    # happen - moving and tidying up are nice to have and must never stop the
+    # attaching.
     if post_id:
         old_media = _post_media_to_cleanup(post_id)   # vor dem Überschreiben merken
         new_path = nc_path
@@ -1652,7 +1650,7 @@ def studio_save(request):
                 new_path = moved
         except Exception as e:
             print("Post move (best effort) error:", e)
-        # KRITISCH: am Post anhängen.
+        # CRITICAL: attach it to the post.
         try:
             with connection.cursor() as c:
                 try:
@@ -1665,11 +1663,11 @@ def studio_save(request):
             nc_path = new_path
         except Exception as e:
             print("Post attach error:", e)
-        _cleanup_old_media(old_media, keep=nc_path)   # alte Dateien löschen (best effort)
+        _cleanup_old_media(old_media, keep=nc_path)   # delete the old files (best effort)
 
-    # Umbenannt? Dann die Datei unter dem alten Namen entfernen. Sonst bliebe
-    # sie liegen, wuerde den alten Namen dauerhaft als "vergeben" blockieren und
-    # in "Meine Ausgaben" als Geisterkachel ohne Entwurf erscheinen.
+    # Renamed? Then remove the file under the old name. Otherwise it would stay
+    # there, block the old name as "taken" for good, and appear in "My outputs"
+    # as a ghost tile without a design.
     if umbenannt_von and umbenannt_von != nc_path:
         _nc_delete_aufraeumen(umbenannt_von, 'Datei unter dem alten Namen')
         try:
@@ -1732,11 +1730,11 @@ def studio_save_video(request):
     # Save to media_library_items — update if same title exists, else insert
     with connection.cursor() as c:
         tag = 'gif' if ext == '.gif' else 'video'
-        # Beim „Speichern" einer vorhandenen Ausgabe gezielt dieses Element überschreiben.
-        # Gesucht wird nach Titel UND passendem Format: vorher traf
-        # "(tags='video' OR tags='gif')" auch den Eintrag des jeweils ANDEREN
-        # Bewegtformats und widmete ihn um. Jedes Format bekommt seinen eigenen
-        # Eintrag; zusammengehalten werden sie ueber den (eindeutigen) Namen.
+        # When "saving" an existing output, overwrite that particular entry.
+        # It is looked up by title AND matching format: "(tags='video' OR
+        # tags='gif')" used to match the entry of the OTHER moving format and
+        # repurpose it. Every format gets its own entry; they are held together
+        # by the (unique) name.
         existing = ([[lib_item_id]] if lib_item_id else
                     _safe(c, "SELECT id FROM media_library_items WHERE title=%s AND tags=%s LIMIT 1", [title, tag]))
         if existing:
@@ -1752,11 +1750,11 @@ def studio_save_video(request):
     if canvas_json:
         canvas_json = _optimize_canvas_json(canvas_json, target_folder, title)
         with connection.cursor() as c:
-            # Der Entwurf gehoert zum DESIGN, nicht zu einer einzelnen Datei:
-            # Bild, GIF und Video mit demselben (eindeutigen) Namen teilen sich
-            # eine studio_images-Zeile. Vorher wurde die Zeile beim Formatwechsel
-            # auf den neuen Pfad umgehaengt - die Datei des alten Formats war
-            # danach ueber keinen Entwurf mehr erreichbar und oeffnete flach.
+            # The design belongs to the DESIGN, not to a single file: the image,
+            # GIF and video sharing one (unique) name share one studio_images
+            # row. On a format change the row used to be moved to the new path -
+            # the file of the old format was then reachable from no design at
+            # all and opened flat.
             existing_si = _safe(c, """SELECT id FROM studio_images
                                      WHERE title=%s AND (post_id IS NULL OR post_id=0)
                                      ORDER BY id DESC LIMIT 1""", [title])
@@ -1768,8 +1766,8 @@ def studio_save_video(request):
             else:
                 c.execute("""INSERT INTO studio_images (nc_path, title, canvas_json)
                              VALUES (%s, %s, %s)""", [nc_path, title, canvas_json])
-    # An den Post hängen: Bewegtbild (GIF/Video) → video_nc_path. Anhängen passiert
-    # IMMER; Verschieben/Aufräumen nur best effort (dürfen das Anhängen nie stoppen).
+    # Attach to the post: a moving image (GIF/video) → video_nc_path. Attaching
+    # ALWAYS happens; moving and tidying are best effort and must never stop it.
     if post_id:
         old_media = _post_media_to_cleanup(post_id)
         new_path = nc_path
@@ -1790,8 +1788,8 @@ def studio_save_video(request):
                 if new_path != nc_path:
                     c.execute("UPDATE studio_images SET nc_path=%s WHERE nc_path=%s", [new_path, nc_path])
                     c.execute("UPDATE media_library_items SET nc_path=%s WHERE nc_path=%s", [new_path, nc_path])
-                # WICHTIG: Design unter der post_id-Zeile speichern, damit „🎨 Bild"
-                # beim Öffnen die ZULETZT gespeicherte Version lädt (nicht die alte).
+                # IMPORTANT: save the design under the post_id row, so "🎨 Image"
+                # loads the LAST saved version on opening, not the old one.
                 if canvas_json:
                     _pr = _safe(c, "SELECT id FROM studio_images WHERE post_id=%s ORDER BY id DESC LIMIT 1", [post_id])
                     if _pr:
@@ -1811,7 +1809,7 @@ def studio_save_video(request):
 def studio_api_templates(request):
     _ensure_studio_tables()
     with connection.cursor() as c:
-        # Nur aktive Vorlagen in der Studio-Auswahl.
+        # Only active templates in the Studio picker.
         rows = _safe(c, "SELECT id, title, width, height, colors, canvas_json FROM studio_templates WHERE COALESCE(active,1)=1 ORDER BY created_at DESC") \
             or _safe(c, "SELECT id, title, width, height, colors FROM studio_templates ORDER BY created_at DESC")
     data = []
@@ -1940,9 +1938,9 @@ def studio_video_template_load(request, tpl_id):
     return JsonResponse({'ok': True, 'title': rows[0][0], 'canvas_json': canvas_json})
 
 
-# Medientyp nach Dateiendung. Die Endung ist die verlaesslichere Quelle:
-# Nextcloud meldet fuer .webm haeufig application/octet-stream, und ein
-# <video> mit octet-stream spielt in Chrome gar nicht erst an.
+# Media type by file extension. The extension is the more reliable source:
+# Nextcloud often reports application/octet-stream for .webm, and a <video>
+# with octet-stream will not even start in Chrome.
 MEDIENTYPEN = {
     '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg',
     '.gif': 'image/gif', '.webp': 'image/webp', '.avif': 'image/avif',
@@ -1955,9 +1953,9 @@ BEWEGTBILD = {'.webm', '.mp4', '.m4v', '.mov', '.ogv'}
 
 
 def medientyp(nc_path, vom_server=''):
-    """Medientyp einer Datei. Endung schlaegt Serverangabe; octet-stream zaehlt
-    als 'weiss nicht' und wird darum nie uebernommen, wenn die Endung etwas
-    hergibt."""
+    """A file's media type. The extension beats the server's word; octet-stream
+    counts as "don't know" and is therefore never taken when the extension says
+    something."""
     endung = os.path.splitext(str(nc_path or ''))[1].lower()
     if endung in MEDIENTYPEN:
         return MEDIENTYPEN[endung]
@@ -1968,12 +1966,12 @@ def medientyp(nc_path, vom_server=''):
 
 
 def bereich_lesen(kopfzeile, groesse):
-    """'bytes=100-499' + Dateigroesse -> (100, 499). None, wenn nichts oder
-    nichts Brauchbares dasteht; ('unerfuellbar', groesse) wenn der Anfang
-    hinter dem Dateiende liegt (dann gehoert sich 416).
+    """'bytes=100-499' plus the file size -> (100, 499). None when there is
+    nothing, or nothing usable; ('unerfuellbar', size) when the start lies past
+    the end of the file (in which case a 416 is due).
 
-    Nur die einfache Form mit EINEM Bereich - mehr fordert kein Browser fuer
-    Video an, und mehr zu koennen hiesse Multipart-Antworten zu bauen.
+    Only the simple form with ONE range - no browser asks for more for video,
+    and doing more would mean building multipart responses.
     """
     if not kopfzeile or groesse is None or groesse <= 0:
         return None
@@ -1981,7 +1979,7 @@ def bereich_lesen(kopfzeile, groesse):
     if '=' not in text or ',' in text:
         return None
     einheit, _, spanne = text.partition('=')
-    # Um das Gleichheitszeichen herum sind Leerzeichen erlaubt.
+    # Spaces around the equals sign are allowed.
     if einheit.strip().lower() != 'bytes':
         return None
     spanne = spanne.strip()
@@ -2011,19 +2009,19 @@ def bereich_lesen(kopfzeile, groesse):
         return None
 
 
-# Was sich verkleinern laesst. SVG bleibt draussen (Pillow liest es nicht, und
-# es ist ohnehin klein), Video ebenso - ein Einzelbild daraus braeuchte ffmpeg.
+# What can be scaled down. SVG stays out (Pillow does not read it, and it is
+# small anyway), video likewise - a still from it would need ffmpeg.
 VORSCHAU_FAEHIG = {'.png', '.jpg', '.jpeg', '.webp', '.gif', '.avif'}
 
-# Feste Stufen. Beliebige Breiten wuerden den Cache mit Fastduplikaten fluten.
+# Fixed steps. Arbitrary widths would flood the cache with near-duplicates.
 VORSCHAU_BREITEN = (240, 480)
 
 
 def _zeitstempel(getlastmodified):
-    """WebDAV-Datum -> Sekunden seit 1970. 0, wenn nichts Lesbares dasteht.
+    """A WebDAV date -> seconds since 1970. 0 when there is nothing readable.
 
-    Wird Teil der Vorschau-Adresse, nicht der Berechnung - eine 0 kostet also
-    nur den dauerhaften Cache, sie macht nichts kaputt.
+    It becomes part of the thumbnail address, not part of a calculation - so a 0
+    costs only the permanent caching, it breaks nothing.
     """
     if not getlastmodified:
         return 0
@@ -2035,10 +2033,10 @@ def _zeitstempel(getlastmodified):
 
 
 def vorschau_groesse(breite, hoehe, ziel):
-    """(Breite, Hoehe) fuer die Verkleinerung auf die Zielbreite, Seitenverhaeltnis
-    erhalten. Wird nie vergroessert: Ein 80 Pixel breites Bild auf 240 zu
-    strecken kostet Bandbreite und sieht schlechter aus als das Original.
-    Die Hoehe faellt nie unter 1."""
+    """(width, height) for scaling down to the target width, keeping the aspect
+    ratio. Never scales up: stretching an 80-pixel image to 240 costs bandwidth
+    and looks worse than the original. The height never falls below 1.
+    """
     if not breite or not hoehe or breite <= 0 or hoehe <= 0:
         return None
     if breite <= ziel:
@@ -2047,12 +2045,11 @@ def vorschau_groesse(breite, hoehe, ziel):
 
 
 def vorschau_schluessel(nc_path, stand, breite):
-    """Eindeutiger, kurzer Dateiname fuer das zwischengespeicherte Vorschaubild.
+    """A unique, short file name for the cached thumbnail.
 
-    Der Aenderungszeitpunkt gehoert in den Schluessel: Sonst zeigt ein Bild,
-    das unter demselben Pfad neu gespeichert wurde, weiter die alte Vorschau -
-    genau der Grund, warum beim Ausliefern der Originale ueberhaupt jedes
-    Caching abgeschaltet wurde.
+    The modification time belongs in the key: otherwise an image saved again
+    under the same path would keep showing the old thumbnail - which is exactly
+    why caching was switched off entirely when serving the originals.
     """
     import hashlib
     roh = '%s|%s|%s' % (nc_path, stand, breite)
@@ -2067,8 +2064,8 @@ def _vorschau_ordner():
 
 
 def _vorschau_cache_stutzen(ordner, hoechstens=4000):
-    """Aelteste Vorschaubilder wegwerfen, wenn es zu viele werden. Der Cache ist
-    jederzeit entbehrlich - jedes Bild laesst sich neu erzeugen."""
+    """Throw away the oldest thumbnails when there get to be too many. The cache
+    is expendable at any time - every image can be made again."""
     try:
         namen = os.listdir(ordner)
         if len(namen) <= hoechstens:
@@ -2087,24 +2084,24 @@ def _vorschau_cache_stutzen(ordner, hoechstens=4000):
             except OSError:
                 pass
     except Exception as e:
-        print("Vorschau-Cache stutzen:", e)
+        print("Trimming the thumbnail cache:", e)
 
 
 NC_PLANNER_IMAGES_FOLDER = "Marketing & Design/LinkedIn/Planner/Images"
 NC_PLANNER_VIDEOS_FOLDER = "Marketing & Design/LinkedIn/Planner/Videos"
 
-# Wo eine fertige Ausgabe liegen kann, und welche Endungen in den jeweiligen
+# Where a finished output can live, and which extensions belong in which tab.
 # Reiter gehoeren.
 #
-# Warum zwei Orte: Haengt man eine Ausgabe an einen Post, wird die Datei aus
-# dem Studio-Ordner in den Planner-Ordner VERSCHOBEN (keine Kopie - das ist so
-# gewollt, die Datei soll beim Post liegen). "Meine Ausgaben" hat aber nur den
-# Studio-Ordner gelesen. Folge: Sobald eine Ausgabe an einem Post hing, war sie
-# aus der Liste verschwunden, obwohl sie existierte. Darum werden jetzt beide
+# Why two places: when an output is attached to a post, the file is MOVED out of
+# the Studio folder into the Planner folder (not copied - that is deliberate,
+# the file should sit with the post). But "My outputs" only ever read the Studio
+# folder. The result: as soon as an output hung on a post it had vanished from
+# the list, although it existed. So both places are read now.
 # Orte gelesen.
 #
-# GIFs und Videos landen im selben Planner-Ordner - getrennt werden sie ueber
-# die Endung, sonst stuenden Videos im GIF-Reiter.
+# GIFs and videos end up in the same Planner folder - they are told apart by
+# extension, or videos would stand in the GIF tab.
 AUSGABE_ORTE = {
     'Images': ((NC_STUDIO_LIBRARY_FOLDER, NC_PLANNER_IMAGES_FOLDER),
                {'.png', '.jpg', '.jpeg', '.webp', '.svg', '.avif'}),
@@ -2114,18 +2111,18 @@ AUSGABE_ORTE = {
                {'.webm', '.mp4', '.m4v', '.mov', '.ogv'}),
 }
 
-# Vorschau-, Schnappschuss- und ausgelagerte Objektbilder sind Hilfsdateien.
+# Preview, snapshot and offloaded object images are helper files.
 import re as _re_hilfsdateien
 HILFSDATEI = _re_hilfsdateien.compile(r'_preview\.|_snap\.|_obj\d+\.|_fab\.', _re_hilfsdateien.I)
 
 
 def _nc_dateien(nc_folder, endungen=None):
-    """Dateien EINES Nextcloud-Ordners, nicht rekursiv. Liste von dicts mit
-    name, title, nc_path, url, thumb und mtime; leere Liste bei jedem Problem.
+    """The files of ONE Nextcloud folder, not recursive. A list of dicts with
+    name, title, nc_path, url, thumb and mtime; an empty list on any problem.
 
-    studio_nc_browse hat noch seine eigene Fassung davon - dort haengen die
-    Sonderfaelle '__all__' und die Unterordner-Auflistung mit dran, und die
-    laeuft. Neue Leser benutzen bitte diesen hier.
+    studio_nc_browse still has its own version of this - the '__all__' special
+    case and the subfolder listing hang off it there, and it works. New readers
+    please use this one.
     """
     from posts_posted.nc_storage import _get_nc_credentials
     from urllib.parse import quote, unquote
@@ -2143,7 +2140,7 @@ def _nc_dateien(nc_folder, endungen=None):
                          headers={'Depth': '1', 'Content-Type': 'application/xml'},
                          timeout=30)
         if r.status_code not in (200, 207):
-            # 404 ist normal: den Planner-Ordner gibt es erst, wenn dort etwas liegt.
+            # A 404 is normal: the Planner folder exists only once something is in it.
             if r.status_code != 404:
                 print("nc list %s: %s" % (nc_folder, r.status_code))
             return []
@@ -2188,12 +2185,12 @@ def _nc_dateien(nc_folder, endungen=None):
 
 
 def ausgaben_zusammenfuehren(aus_studio, aus_planner):
-    """Beide Fundorte zu einer Liste. Gleiche Dateinamen sind dieselbe Ausgabe -
-    die Datei wurde verschoben, nicht kopiert. Behalten wird der Planner-Stand,
-    denn dort liegt sie jetzt.
+    """Both places into one list. The same file name means the same output - the
+    file was moved, not copied. The Planner version is kept, because that is
+    where it lives now.
 
-    Sortiert nach Aenderungszeitpunkt, neueste zuerst - vorher kam heraus, was
-    Nextcloud gerade lieferte.
+    Sorted by modification time, newest first - before, whatever Nextcloud
+    happened to return came out.
     """
     nach_name = {}
     for eintrag in aus_studio:
@@ -2207,8 +2204,8 @@ def ausgaben_zusammenfuehren(aus_studio, aus_planner):
 
 @login_required
 def studio_output_list(request):
-    """Fertige Ausgaben eines Reiters - aus dem Studio-Ordner UND dem
-    Planner-Ordner. Siehe AUSGABE_ORTE, warum es zwei sind."""
+    """The finished outputs of one tab - from the Studio folder AND the Planner
+    folder. See AUSGABE_ORTE for why there are two."""
     reiter = (request.GET.get('kind') or 'Images').strip()
     if reiter not in AUSGABE_ORTE:
         return JsonResponse({'ok': False, 'error': 'Unknown kind', 'items': []}, status=400)
@@ -2222,17 +2219,16 @@ def studio_output_list(request):
 
 @login_required
 def studio_thumb(request):
-    """Verkleinertes Vorschaubild fuer die Kacheln in der Mediathek.
+    """A scaled-down thumbnail for the tiles in the media panel.
 
-    Warum es das gibt: Eine Kachel zeigte bisher die volle Datei. Eine
-    gespeicherte Ausgabe ist ein 1080x1080-PNG, ein Asset oft groesser. Bei
-    vierzig Kacheln lud der Browser vierzig volle Bilder und hielt vierzig
-    Vollbild-Bitmaps im Speicher - fuer Kacheln von 240 Pixeln Breite. Hier
-    kommen daraus rund 15 KB.
+    Why it exists: a tile used to show the full file. A saved output is a
+    1080x1080 PNG, an asset often larger. With forty tiles the browser loaded
+    forty full images and held forty full-size bitmaps in memory - for tiles 240
+    pixels wide. Here that comes to about 15 KB.
 
-    Der Aenderungszeitpunkt der Quelldatei steht in der Adresse (?t=). Damit
-    darf die Antwort dauerhaft gecacht werden, ohne dass je ein veraltetes Bild
-    erscheint: Aendert sich die Datei, aendert sich die Adresse.
+    The source file's modification time is in the address (?t=). So the answer
+    may be cached forever without a stale image ever appearing: change the file
+    and the address changes.
     """
     nc_path = (request.GET.get('p') or '').strip()
     if not nc_path or not _within_app_folders(nc_path):
@@ -2240,7 +2236,7 @@ def studio_thumb(request):
 
     endung = os.path.splitext(nc_path)[1].lower()
     if endung not in VORSCHAU_FAEHIG:
-        # SVG, Video und alles Unbekannte gehen unveraendert den normalen Weg.
+        # SVG, video and anything unknown go the normal way, unchanged.
         return studio_nc_image_proxy(request)
 
     try:
@@ -2258,8 +2254,8 @@ def studio_thumb(request):
         typ = 'image/png' if pfad.endswith('.png') else 'image/jpeg'
         resp = FileResponse(open(pfad, 'rb'), content_type=typ)
         resp['Content-Length'] = str(os.path.getsize(pfad))
-        # Die Adresse traegt den Aenderungszeitpunkt - dieselbe Adresse meint
-        # immer dasselbe Bild. Darum darf sie dauerhaft gecacht werden.
+        # The address carries the modification time - the same address always
+        # means the same image. So it may be cached permanently.
         resp['Cache-Control'] = 'private, max-age=31536000, immutable'
         return resp
 
@@ -2267,7 +2263,7 @@ def studio_thumb(request):
         if os.path.isfile(ziel + endung_cache):
             return _ausliefern(ziel + endung_cache)
 
-    # Noch nicht im Cache: Original holen und verkleinern.
+    # Not in the cache yet: fetch the original and scale it down.
     if nc_path.startswith('__local__/'):
         from django.conf import settings as _s
         quelle = os.path.join(_s.BASE_DIR, 'media', nc_path[len('__local__/'):])
@@ -2285,8 +2281,8 @@ def studio_thumb(request):
         from PIL import Image
         import io as _io
         bild = Image.open(_io.BytesIO(rohdaten))
-        # Bei GIF nur das erste Bild - eine bewegte Vorschau waere wieder so
-        # gross wie das Original.
+        # For a GIF only the first frame - a moving thumbnail would be as big as
+        # the original again.
         if getattr(bild, 'is_animated', False):
             bild.seek(0)
         masse = vorschau_groesse(bild.width, bild.height, breite)
@@ -2295,8 +2291,8 @@ def studio_thumb(request):
             bild = bild.resize(masse, Image.LANCZOS)
         else:
             bild = bild.convert('RGBA' if 'A' in bild.getbands() else 'RGB')
-        # Mit Transparenz PNG, sonst JPEG. Ein Logo auf durchsichtigem Grund
-        # wuerde als JPEG schwarz hinterlegt.
+        # PNG when there is transparency, JPEG otherwise. A logo on a transparent
+        # ground would get a black backing as a JPEG.
         if bild.mode == 'RGBA':
             pfad, format_, args = ziel + '.png', 'PNG', {'optimize': True}
         else:
@@ -2305,9 +2301,9 @@ def studio_thumb(request):
         bild.save(vorlaeufig, format_, **args)
         os.replace(vorlaeufig, pfad)   # erst umbenennen, wenn die Datei fertig ist
     except Exception as e:
-        # Kein Vorschaubild moeglich (kaputte Datei, fehlendes Pillow, exotisches
-        # Format): dann eben das Original. Langsam ist besser als leer.
-        print("Vorschau fehlgeschlagen fuer %s: %s" % (str(nc_path)[:120], e))
+        # No thumbnail possible (broken file, Pillow missing, exotic format):
+        # then the original. Slow is better than blank.
+        print("Thumbnail failed for %s: %s" % (str(nc_path)[:120], e))
         return studio_nc_image_proxy(request)
 
     _vorschau_cache_stutzen(ordner)
@@ -2316,27 +2312,27 @@ def studio_thumb(request):
 
 @login_required
 def studio_nc_image_proxy(request):
-    """Liefert Bilder UND Bewegtbild aus Nextcloud ueber Django aus - same-origin,
-    damit der Canvas nicht "tainted" wird.
+    """Serves images AND moving images from Nextcloud through Django -
+    same-origin, so the canvas is not tainted.
 
-    Vier Dinge, die hier fehlten und ohne die Video nicht zuverlaessig laeuft:
+    Four things were missing here, and without them video is not reliable:
 
-      * Der Medientyp kam von Nextcloud. Fuer .webm liefert Nextcloud oft
-        application/octet-stream, und damit spielt ein <video> in Chrome gar
-        nicht erst an. Jetzt entscheidet die Dateiendung.
-      * Range-Anfragen wurden ignoriert. Der Browser holt Video stueckweise;
-        ohne 206-Antwort laesst sich nicht springen, und groessere Dateien
-        starten oft ueberhaupt nicht.
-      * Die ganze Datei lag im Arbeitsspeicher, bevor das erste Byte rausging.
-      * __local__-Pfade - der Notnagel, wenn Nextcloud beim Speichern nicht
-        erreichbar war - wurden nicht erkannt. Solche Dateien waren ueber
-        diesen Weg gar nicht abrufbar, die Kachel blieb grau.
+      * The media type came from Nextcloud. For .webm, Nextcloud often says
+        application/octet-stream, and with that a <video> will not even start
+        in Chrome. The file extension decides now.
+      * Range requests were ignored. The browser fetches video in pieces;
+        without a 206 answer there is no seeking, and larger files often do not
+        start at all.
+      * The whole file sat in memory before the first byte went out.
+      * __local__ paths - the fallback for when Nextcloud was out of reach at
+        save time - were not recognised. Such files were not fetchable this way
+        at all, and the tile stayed grey.
     """
     nc_path = (request.GET.get('p') or '').strip()
     if not nc_path:
         raise Http404
-    # Dieselbe Schranke wie beim Loeschen: nur App-eigene Ordner. Sonst waere
-    # das hier ein Leseblick in das gesamte Nextcloud-Konto.
+    # The same limit as for deleting: the app's own folders only. Otherwise this
+    # would be a reading window into the entire Nextcloud account.
     if not _within_app_folders(nc_path):
         raise Http404
 
@@ -2346,15 +2342,15 @@ def studio_nc_image_proxy(request):
     bereich_kopf = request.META.get('HTTP_RANGE', '')
 
     def _fertig(resp):
-        # Bilder koennen sich unter demselben Pfad aendern (Bearbeiten und neu
-        # speichern) - die duerfen nie aus dem Cache kommen. Bei Bewegtbild
-        # reicht "no-cache": der Browser fragt nach, darf aber Teilstuecke
-        # behalten, was das Springen im Video ueberhaupt ertraeglich macht.
+        # Images can change under the same path (edit and save again) - those
+        # must never come from the cache. For moving images "no-cache" is
+        # enough: the browser checks back but may keep the pieces, which is what
+        # makes seeking in a video bearable at all.
         resp['Cache-Control'] = 'no-cache' if ist_bewegt else 'no-cache, no-store, must-revalidate'
         resp['Accept-Ranges'] = 'bytes'
         return resp
 
-    # ── Notnagel-Dateien auf der lokalen Platte ─────────────────────────────
+    # ── Fallback files on the local disk ────────────────────────────────────
     if nc_path.startswith('__local__/'):
         from django.conf import settings as _s
         pfad = os.path.join(_s.BASE_DIR, 'media', nc_path[len('__local__/'):])
@@ -2383,8 +2379,8 @@ def studio_nc_image_proxy(request):
     from posts_posted.nc_storage import stream_from_nextcloud
     antwort, grund = stream_from_nextcloud(nc_path, range_header=bereich_kopf or None)
     if antwort is None:
-        # Der Grund gehoert ins Log. Fuer den Browser bleibt es 404: Ein
-        # <img>/<video> kann mit einem Text nichts anfangen.
+        # The reason belongs in the log. For the browser it stays a 404: an
+        # <img> or <video> can do nothing with a piece of text.
         print("nc proxy:", grund, str(nc_path)[:120])
         raise Http404
 
@@ -2394,8 +2390,8 @@ def studio_nc_image_proxy(request):
         content_type=typ,
         status=antwort.status_code if antwort.status_code == 206 else 200,
     )
-    # Die Angaben von Nextcloud durchreichen, damit der Browser weiss, welches
-    # Stueck er bekommen hat und wie gross das Ganze ist.
+    # Pass Nextcloud's own headers through, so the browser knows which piece it
+    # got and how big the whole thing is.
     for kopf in ('Content-Range', 'Content-Length'):
         if antwort.headers.get(kopf):
             resp[kopf] = antwort.headers[kopf]
@@ -2480,7 +2476,7 @@ def studio_api_saved(request):
         except Exception:
             return False
 
-    # Nicht-animierte Studio-Bilder → Bilder-Sektion
+    # Non-animated Studio images → the images section
     images = [{'id': r[0], 'title': r[1] or '', 'url': f"/library/image/{r[0]}/"}
               for r in (img_rows or []) if not _has_anim(r[3])]
     # GIFs-Sektion: echte GIF-Dateien (Tag 'gif') + Legacy-animierte Studio-Bilder
@@ -2508,7 +2504,7 @@ def studio_api_library(request):
             filters['folder_id'] = folder_param
     items = _all_items(filters)
     folders = _all_folders()
-    # Studio-generierte Bilder/Videos aus Bibliotheks-Seitenleiste ausblenden
+    # Hide Studio-generated images and videos from the library sidebar
     STUDIO_TAGS = {'studio', 'video', 'video-bild'}
     def _is_studio(item):
         tags = {t.strip().lower() for t in (item.get('tags') or '').split(',') if t.strip()}
@@ -2521,8 +2517,8 @@ def studio_api_library(request):
 
 @login_required
 def studio_api_posts_with_images(request):
-    """Liste aller Posts, die ein Bild haben – für den Picker „Bild von anderem
-    Post übernehmen". Liefert id, Titel und eine same-origin-Thumbnail-URL."""
+    """A list of every post that has an image - for the picker "take an image
+    from another post". Returns id, title and a same-origin thumbnail URL."""
     posts = []
     with connection.cursor() as c:
         rows = _safe(c, """SELECT id, COALESCE(title,''), COALESCE(planned_date,'')
@@ -2609,7 +2605,7 @@ def studio_drawio_save(request):
                          'url': f"/library/image/{lib_id}/"})
 
 
-# ── NC-basierte Bibliothek (Ordner + Bilder aus Octotrial_Assets) ──
+# ── Nextcloud-based library (folders and images from Octotrial_Assets) ──
 
 NC_ASSETS_ROOT = "Marketing & Design/Octotrial_Assets"
 
@@ -2732,7 +2728,7 @@ def studio_nc_browse(request):
             name = decoded.rstrip('/').split('/')[-1]
             if name.startswith('.') or name in ('_data', 'Studio_Work', 'Studio_Output'):
                 continue
-            # Unterordner (bei __all__ überspringen, nur Bilder zeigen)
+            # Subfolders (skipped for __all__, which shows images only)
             if decoded.endswith('/'):
                 if not show_all:
                     subfolders.append({'name': name})
@@ -2750,12 +2746,11 @@ def studio_nc_browse(request):
                 nc_path = f"{nc_folder}/{name}"
             proxy_url = f"/library/studio/nc-image/?p={quote(nc_path, safe='/')}"
             title = os.path.splitext(name)[0].replace('_', ' ')
-            # Aenderungszeitpunkt mitgeben. Er steht ohnehin in der Antwort, die
-            # wir gerade auswerten, kostet also nichts - und er ist der
-            # Schluessel fuer das Vorschaubild: Steckt er in der Adresse, kann
-            # eine geaenderte Datei nie ein altes Vorschaubild aus dem Cache
-            # bekommen, und unveraenderte Dateien duerfen dauerhaft gecacht
-            # werden.
+            # Pass the modification time along. It is in the answer we are
+            # reading anyway, so it costs nothing - and it is the key for the
+            # thumbnail: with it in the address, a changed file can never get an
+            # old thumbnail from the cache, and unchanged files may be cached
+            # permanently.
             stand = _zeitstempel(resp_el.findtext('.//d:getlastmodified', '', ns))
             eintrag = {'name': name, 'title': title, 'url': proxy_url, 'nc_path': nc_path}
             if ext in VORSCHAU_FAEHIG:
@@ -2769,7 +2764,7 @@ def studio_nc_browse(request):
     return JsonResponse({'items': items, 'subfolders': subfolders})
 
 
-# ── Shared Assets (geteilter NC-Ordner für Bilderpool) ──
+# ── Shared assets (the shared NC folder for the image pool) ──
 
 NC_SHARED_ASSETS_FOLDER = "Marketing & Design/Bilder_Bibliothek"
 
@@ -2952,8 +2947,8 @@ NC_STUDIO_UPLOAD_FOLDER = "Marketing & Design/Octotrial_Assets/Studio_Work/Uploa
 
 @login_required
 def studio_upload(request):
-    """Lädt eine Datei nach Studio_Work/Upload in Nextcloud hoch und gibt die
-    Proxy-URL zurück (zum sofortigen Einfügen in den Canvas). Kein DB-Eintrag."""
+    """Uploads a file into Studio_Work/Upload on Nextcloud and returns the proxy
+    URL (to insert it into the canvas straight away). No database entry."""
     if request.method != 'POST':
         return JsonResponse({'error': 'POST required'}, status=405)
     from posts_posted.nc_storage import _get_nc_credentials
@@ -2968,11 +2963,11 @@ def studio_upload(request):
 
     filename = f.name.replace(' ', '_')
     content = f.read()
-    # Namenskollisionen vermeiden. Ein Upload mit gleichem Namen ueberschrieb die
-    # vorhandene Datei per WebDAV-PUT - und weil gespeicherte Entwuerfe nur den
-    # Pfad merken, zeigte ein alter Entwurf danach stillschweigend das NEUE Bild
-    # an der Stelle des alten. Ein kurzer Inhalts-Hash macht den Namen eindeutig,
-    # ohne bei identischem Inhalt Dubletten anzulegen.
+    # Avoid name collisions. An upload with the same name used to overwrite the
+    # existing file by WebDAV PUT - and because saved designs remember only the
+    # path, an older design then quietly showed the NEW image where the old one
+    # had been. A short content hash makes the name unique without creating
+    # duplicates when the content is identical.
     import hashlib as _hl
     _stamm, _punkt, _ext = filename.rpartition('.')
     if not _stamm:
@@ -2990,18 +2985,18 @@ def studio_upload(request):
 
 @login_required
 def studio_upload_delete(request):
-    """Loescht eine Datei aus Studio_Work/Upload. Nur innerhalb dieses Ordners
-    erlaubt (Sicherheit)."""
+    """Deletes a file from Studio_Work/Upload. Only inside that folder is
+    allowed (for safety)."""
     if request.method != 'POST':
         return JsonResponse({'error': 'POST required'}, status=405)
     nc_path = (request.POST.get('nc_path') or '').strip()
-    # Traversal segmentweise pruefen (kein Pfadteil ".."); doppelte Punkte im
-    # Dateinamen sind erlaubt. Zusaetzlich auf den Upload-Ordner beschraenken.
+    # Check traversal segment by segment (no path part ".."); two dots inside a
+    # file name are fine. On top of that, restrict it to the upload folder.
     if any(seg == '..' for seg in nc_path.split('/')) \
             or not nc_path.startswith(NC_STUDIO_UPLOAD_FOLDER + '/'):
         return JsonResponse({'error': 'Invalid path'}, status=400)
-    # Auch hier gilt: nicht "ok" melden, ohne hinzusehen. Die Kachel im
-    # Upload-Bereich verschwindet sonst, waehrend die Datei liegen bleibt.
+    # The same here: do not report "ok" without looking. Otherwise the tile in
+    # the upload area vanishes while the file stays where it is.
     ok, grund = _nc_delete_detail(nc_path)
     if not ok:
         return JsonResponse({'ok': False, 'error': grund or 'Deletion failed'}, status=502)
@@ -3010,36 +3005,36 @@ def studio_upload_delete(request):
 
 @login_required
 def studio_output_delete(request):
-    """Löscht eine fertige Ausgabe (Bild/GIF/Video) aus Studio_Work/Output/*
-    inklusive Vorschau und DB-Einträgen. Nur innerhalb der Output-Ordner erlaubt."""
+    """Deletes a finished output (image/GIF/video) from Studio_Work/Output/*,
+    preview and database entries included. Only inside the output folders."""
     if request.method != 'POST':
         return JsonResponse({'error': 'POST required'}, status=405)
     from urllib.parse import unquote
-    # Pfad normalisieren: fuehrende Slashes und URL-Kodierung tolerieren, damit der
-    # Whitelist-Vergleich nicht an Formalitaeten scheitert.
+    # Normalise the path: tolerate leading slashes and URL encoding, so the
+    # whitelist comparison does not fail on formalities.
     nc_path = unquote((request.POST.get('nc_path') or '').strip()).lstrip('/')
     if not _within_app_folders(nc_path):
         return JsonResponse({'ok': False, 'error': f'Invalid path: {nc_path}'}, status=400)
 
-    # Erst die Datei, dann die Datenbank - und nur weiter, wenn die Datei
-    # wirklich weg ist. Vorher stand hier "_nc_delete(nc_path)" ohne Abfrage und
-    # darunter ein bedingungsloses ok:True. Schlug die Loeschung fehl, sah der
-    # Nutzer trotzdem Erfolg: Die Kachel verschwand aus der Ansicht, die Datei
-    # blieb in Nextcloud liegen und war beim naechsten Laden wieder da. Genau so
-    # entsteht der Eindruck, man koenne etwas "nicht mehr loeschen".
+    # The file first, then the database - and only carry on once the file really
+    # is gone. This used to read "_nc_delete(nc_path)" with no check, and an
+    # unconditional ok:True underneath. When the deletion failed, the user saw
+    # success all the same: the tile vanished from the view, the file stayed in
+    # Nextcloud and was back on the next load. That is exactly how the
+    # impression arises that something "cannot be deleted any more".
     ok, grund = _nc_delete_detail(nc_path)
     if not ok:
         return JsonResponse({'ok': False, 'error': grund or 'Deletion failed'}, status=502)
 
-    # zugehörige Vorschau-Datei ebenfalls entfernen (best effort - ihr Fehlen
-    # macht die Loeschung nicht ungueltig)
+    # Remove the matching preview file too (best effort - its absence does not
+    # make the deletion invalid)
     try:
         folder, fname = nc_path.rsplit('/', 1)
         stem = fname.rsplit('.', 1)[0]
         _nc_delete_aufraeumen(f"{folder}/{stem}_preview.png", 'Vorschau der Ausgabe')
     except Exception:
         pass
-    # DB-Einträge entfernen
+    # Remove the database entries
     try:
         with connection.cursor() as c:
             c.execute("DELETE FROM studio_images WHERE nc_path=%s", [nc_path])
@@ -3058,8 +3053,8 @@ def studio_shared_assets_delete(request):
     if not nc_path or not nc_path.startswith(NC_SHARED_ASSETS_FOLDER):
         return JsonResponse({'error': 'Invalid path'}, status=400)
     from posts_posted.nc_storage import delete_image_from_nextcloud
-    # Geprueft wurde hier schon vorher - nur der Grund fehlte, und ohne Grund
-    # steht der Nutzer wieder vor einem stummen "hat nicht geklappt".
+    # This was checked here before - only the reason was missing, and without a
+    # reason the user is back to a mute "it did not work".
     ok, grund = _nc_delete_detail(nc_path)
     if not ok:
         return JsonResponse({'ok': False, 'error': grund or 'Deletion failed'}, status=502)

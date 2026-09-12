@@ -56,8 +56,8 @@ export function renderPalette(container, onPick) {
     picker.type = 'color';
     picker.style.position = 'fixed'; picker.style.opacity = '0';
     document.body.appendChild(picker);
-    // Aufräumen auch beim Abbrechen: 'change' feuert dann nicht, und der
-    // unsichtbare Input blieb samt Closure für immer im Dokument hängen.
+    // Clean up on cancel too: 'change' does not fire then, and the invisible
+    // input stayed in the document forever, closure and all.
     const weg = () => { if (picker.parentNode) picker.parentNode.removeChild(picker); };
     picker.onchange = () => { addCustomColor(picker.value); renderPalette(container, onPick); onPick(picker.value); weg(); };
     setTimeout(weg, 120000);
@@ -65,8 +65,8 @@ export function renderPalette(container, onPick) {
   };
   container.appendChild(add);
 
-  // Hellere Teal-Töne speziell für Video/GIF (gleichen die Verdunklung beim
-  // Export aus). Als eigene, markierte Gruppe „🎬 Video".
+  // Lighter teal shades made for video and GIF - they make up for the
+  // darkening on export. Kept as their own labelled group "🎬 Video".
   const vlabel = document.createElement('span');
   vlabel.textContent = '🎬 Video-Teal:';
   vlabel.title = 'Lighter teal tones for video/GIF – compensate for the darkening on export.';
@@ -84,10 +84,10 @@ export function renderPalette(container, onPick) {
   });
 }
 
-// ---- Hintergrund setzen ---------------------------------------------------
-// mode: 'cover'  = füllt den Canvas (schneidet ggf. über) – für beliebige Hintergründe
-//       'stretch'= legt das Bild exakt auf die Canvas-Maße (1:1) – für Templates,
-//                  damit Logo/Layout unbeschnitten und in richtiger Größe sitzen.
+// ---- Setting the background ----------------------------------------------
+// mode: 'cover'   = fills the canvas (may crop) - for any background
+//       'stretch' = lays the image exactly on the canvas size (1:1) - for
+//                   templates, so logo and layout sit uncropped and true to size.
 export async function setBackgroundImage(editor, url, mode = 'cover') {
   const imgEl = await loadImage(url);
   const fImg = new window.fabric.Image(imgEl, { crossOrigin: 'anonymous' });
@@ -110,8 +110,8 @@ export async function setBackgroundImage(editor, url, mode = 'cover') {
   updateBgInfo(editor);
 }
 
-// Ganze Fläche mit einer Farbe füllen. Ein (reines) Hintergrundbild wird
-// entfernt, damit die Farbe sichtbar wird. Logo/Text/Formen liegen darüber
+// Fill the whole area with one colour. A plain background image is removed so
+// the colour becomes visible. Logo, text and shapes sit on top and are kept.
 // und bleiben erhalten.
 export function setBackgroundColor(editor, hex) {
   editor.canvas.setBackgroundImage(null, editor.canvas.renderAll.bind(editor.canvas));
@@ -121,8 +121,8 @@ export function setBackgroundColor(editor, hex) {
 
 export function clearBackground(editor) {
   editor.canvas.setBackgroundImage(null, editor.canvas.renderAll.bind(editor.canvas));
-  // '' = transparent (Schachbrett). Vorher wurde hier dunkelblau gesetzt – die
-  // Fläche sah nach „🚫 BG weg" kaputt aus und das Blau landete im Export.
+  // '' = transparent (chequerboard). This used to set dark blue - the area
+  // looked broken after "🚫 BG off", and the blue ended up in the export.
   editor.canvas.setBackgroundColor('', editor.canvas.renderAll.bind(editor.canvas));
   editor.snapshot();
   updateBgInfo(editor);
@@ -204,8 +204,8 @@ export async function applyTemplate(editor, tpl) {
     nurHintergrund = (wahl === 'bg');
   }
   status('⏳ Loading template…');
-  // Neue Vorlagen tragen ein Layout (Hintergrund + Logo + Textfelder). Dann das
-  // ganze Layout laden, damit man nur noch die Texte ersetzen muss.
+  // Newer templates carry a layout (background + logo + text fields). Load the
+  // whole layout then, so only the text is left to replace.
   if (tpl.has_canvas) {
     try {
       const res = await fetch(`/library/studio/template/canvas/${tpl.id}/`, { credentials: 'same-origin' });
@@ -221,9 +221,9 @@ export async function applyTemplate(editor, tpl) {
         return;
       }
       if (d.ok && d.canvas_json) {
-        // await: ohne das lief der Rest hier auf einem noch LEEREN Canvas –
-        // die Erfolgsmeldung und die Elementzahl waren schlicht falsch, und der
-        // snapshot() verpuffte, weil der Editor noch gesperrt war.
+        // await: without it the rest of this ran on a still EMPTY canvas - the
+        // success message and the element count were simply wrong, and the
+        // snapshot() came to nothing because the editor was still locked.
         const vollstaendig = await restoreCanvas(editor, d.canvas_json);
         editor._templateId = tpl.id || null;
         updateBgInfo(editor);
@@ -234,8 +234,8 @@ export async function applyTemplate(editor, tpl) {
     } catch (e) { console.warn('Template-Layout-Fehler, nutze Hintergrundbild:', e); }
   }
   try {
-    // Canvas-Größe wird NICHT geändert – die bleibt fix und wird nur über
-    // "📐 Größe" explizit umgestellt. Das Template füllt die aktuelle Größe.
+    // The canvas size is NOT changed - it stays fixed and is only altered
+    // through "📐 Size". The template fills whatever size is set.
     const imgEl = await loadImage(tpl.url);
     const fImg = new window.fabric.Image(imgEl, { crossOrigin: 'anonymous' });
     fImg.set({ scaleX: editor.width / fImg.width, scaleY: editor.height / fImg.height,

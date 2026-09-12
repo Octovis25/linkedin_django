@@ -26,16 +26,34 @@ def _topics(c):
             for r in _q(c, "SELECT id, name, color FROM planner_topics ORDER BY name")]
 
 
-# ── Nachgeruestete Spalten ──────────────────────────────────────────────────
-# Aeltere Datenbanken kennen diese Spalten nicht. Bisher stand ueber die Datei
-# verteilt 17-mal ein ALTER-Versuch - allein "linkedin_posted" siebenmal -, und
-# jeder lief bei JEDEM Seitenaufruf. MySQL wirft dabei jedes Mal einen Fehler,
-# den ein except schluckt: Zeit, Log-Rauschen, und echte Schemaprobleme gehen
-# darin unter.
+# ── Display names for the statuses ──────────────────────────────────────────
+# The status bar used to call the "Review" stage "In Progress", while the
+# filter dropdown showed the stored name - two names for one thing, and you
+# could not find "In Progress" in the dropdown at all. Resolved the other way
+# round: the tab is now called "Review" as well, because "In Progress" reads
+# like a second word for "Draft".
 #
-# Jetzt steht die Liste an einer Stelle, und geprueft wird einmal pro Prozess.
-# Nach einem Deploy starten die Arbeitsprozesse neu, eine neue Spalte wird also
-# weiterhin beim ersten Aufruf nachgetragen.
+# The map stays (empty) on purpose. It is the one place to give a status a
+# different display name, should that ever be wanted again - and the templates
+# already go through it.
+STATUS_ANZEIGE = {}
+
+
+def status_anzeige(code):
+    """The name a person sees. Unmapped statuses keep their stored name."""
+    return STATUS_ANZEIGE.get(code, code)
+
+
+# ── Columns added after the fact ────────────────────────────────────────────
+# Older databases do not have these columns. Until now an ALTER attempt stood
+# in 17 places across this file - "linkedin_posted" alone seven times - and
+# every one of them ran on EVERY page load. MySQL answers each with an error
+# that an except swallows: time spent, noise in the log, and real schema
+# problems lost among it.
+#
+# Now the list is in one place, and it is checked once per process. After a
+# deploy the worker processes restart, so a new column is still added on the
+# first call.
 NACHGERUESTETE_SPALTEN = (
     ('planner_posts', 'video_nc_path',     'VARCHAR(512) DEFAULT NULL'),
     ('planner_posts', 'gif_nc_path',       'VARCHAR(512) DEFAULT NULL'),
@@ -48,10 +66,10 @@ _schema_geprueft = False
 
 
 def fehlende_spalten(vorhanden, erwartet=NACHGERUESTETE_SPALTEN):
-    """Welche Spalten fehlen noch? `vorhanden` ist {tabelle: {spaltennamen}}.
+    """Which columns are still missing? `vorhanden` is {table: {column names}}.
 
-    Getrennt vom Datenbankzugriff, damit die Auswahl pruefbar ist: Sie
-    entscheidet, ob ueberhaupt ein ALTER laeuft.
+    Kept apart from the database access so the choice can be tested: it decides
+    whether any ALTER runs at all.
     """
     fehlt = []
     for tabelle, spalte, art in erwartet:
@@ -64,11 +82,11 @@ def fehlende_spalten(vorhanden, erwartet=NACHGERUESTETE_SPALTEN):
 
 
 def schema_sicherstellen(erzwingen=False):
-    """Fehlende Spalten nachruesten - einmal pro Prozess.
+    """Add missing columns - once per process.
 
-    Erst LESEN, welche Spalten es gibt, dann nur die fehlenden anlegen. Das
-    vermeidet die Fehler-und-schlucken-Schleife: Im Normalfall (alles da) laeuft
-    genau eine harmlose Abfrage, und auch die nur beim ersten Aufruf.
+    READ first which columns exist, then create only the missing ones. That
+    avoids the throw-and-swallow loop: in the normal case (everything there)
+    exactly one harmless query runs, and only on the first call.
     """
     global _schema_geprueft
     if _schema_geprueft and not erzwingen:
@@ -77,12 +95,12 @@ def schema_sicherstellen(erzwingen=False):
     try:
         vorhanden = {}
         with connection.cursor() as c:
-            # Ueber information_schema statt "SHOW COLUMNS FROM x": Letzteres
-            # wirft bei einer unbekannten Tabelle, und ein geschluckter
-            # Datenbankfehler macht innerhalb eines atomaren Blocks die ganze
-            # Transaktion unbrauchbar. Diese Abfrage liefert fuer unbekannte
-            # Tabellen einfach keine Zeile - eine Abfrage fuer alle Tabellen,
-            # ohne einen einzigen Fehlerfall.
+            # Through information_schema rather than "SHOW COLUMNS FROM x": the
+            # latter throws on an unknown table, and a swallowed database error
+            # makes the whole transaction unusable inside an atomic block. This
+            # query simply returns no row for unknown tables - one query for all
+            # tables, without a single error case.
+            # tables, without a single error case.
             platzhalter = ','.join(['%s'] * len(tabellen))
             c.execute(
                 "SELECT TABLE_NAME, COLUMN_NAME FROM information_schema.COLUMNS "
@@ -93,13 +111,13 @@ def schema_sicherstellen(erzwingen=False):
             for tabelle, spalte, art in fehlende_spalten(vorhanden):
                 try:
                     c.execute("ALTER TABLE `%s` ADD COLUMN `%s` %s" % (tabelle, spalte, art))
-                    print("Spalte nachgeruestet: %s.%s" % (tabelle, spalte))
+                    print("Column added: %s.%s" % (tabelle, spalte))
                 except Exception as e:
-                    print("Spalte %s.%s nicht nachruestbar: %s" % (tabelle, spalte, e))
+                    print("Column %s.%s could not be added: %s" % (tabelle, spalte, e))
     except Exception as e:
-        # Datenbank gerade nicht erreichbar: NICHT als geprueft merken, damit
-        # der naechste Aufruf es erneut versucht.
-        print("Schemapruefung fehlgeschlagen:", e)
+        # Database out of reach just now: do NOT mark it as checked, so the next
+        # call tries again.
+        print("Schema check failed:", e)
         return
     _schema_geprueft = True
 
@@ -267,7 +285,7 @@ def planner_view(request):
                 'ideas': [{'id': r[0], 'text': r[1]} for r in ideas],
             })
 
-        # Posts ohne Topic (damit ueberall Angelegtes im Planner sichtbar bleibt)
+        # Posts without a topic (so anything created anywhere stays visible here)
         unc = _q(c, """SELECT id, title, content, status, planned_date, image, COALESCE(comment,'') as comment,
                               COALESCE(link,'') as link, planned_time
                        FROM planner_posts
@@ -277,7 +295,7 @@ def planner_view(request):
                           'status': r[3], 'planned_date': r[4], 'image': r[5] or '',
                           'comment': r[6] or '', 'link': r[7] or '', 'planned_time': r[8]} for r in unc]
 
-    # Status-Farbpalette (aus Overview uebernommen; 'Planned' = Planungsstufe vor Draft)
+    # Status colours (taken from the overview; 'Planned' is the stage before Draft)
     STATUS_STYLE = {
         'Planned': ('#E4F3F1', '#0E7C86'), 'Draft': ('#f5f5f5', '#6c757d'),
         'Review': ('#EEEDFE', '#3C3489'), 'Ready': ('#E1F5EE', '#0F6E56'),
@@ -286,7 +304,8 @@ def planner_view(request):
     }
     STATUS_ORDER = ['Planned', 'Draft', 'Review', 'Ready', 'Scheduled', 'Posted', 'Archive']
 
-    # Video-/Bild-Pfade + Status-Farben an alle Posts haengen (fuer Tabelle)
+    # Attach video and image paths plus status colours to every post (for the table)
+    # (Display names: see status_anzeige() further up in this file.)
     flat = []
     for t in topics_data:
         flat.extend(t['posts'])
@@ -297,7 +316,9 @@ def planner_view(request):
         p['status_bg'] = sb
         p['status_fg'] = sf
 
-    status_list = [{'code': s, 'bg': STATUS_STYLE[s][0], 'fg': STATUS_STYLE[s][1]} for s in STATUS_ORDER]
+    status_list = [{'code': s, 'label': status_anzeige(s),
+                    'bg': STATUS_STYLE[s][0], 'fg': STATUS_STYLE[s][1]}
+                   for s in STATUS_ORDER]
 
     return render(request, 'planner/planner.html', {
         'topics_data': topics_data,
@@ -305,6 +326,8 @@ def planner_view(request):
         'uncategorized': uncategorized,
         'statuses': STATUS_ORDER,
         'status_list': status_list,
+        # For the search results, which are put together in the browser.
+        'status_anzeige_json': json.dumps(STATUS_ANZEIGE),
         'tab': 'planner',
     })
 
@@ -384,7 +407,7 @@ def pipeline_view(request):
         })
 
     _attach_video_paths(posts_list)
-    return render(request, 'planner/pipeline.html', {'posts': posts_list, 'topics': topics, 'topic_filter': topic_filter, 'statuses': ['Draft', 'Review', 'Ready', 'Scheduled', 'Posted', 'Archive'], 'tab': 'pipeline', 'page_title': '→ Pipeline', 'posts_json': _posts_to_json(posts_list), 'allow_create': True})
+    return render(request, 'planner/pipeline.html', {'posts': posts_list, 'topics': topics, 'topic_filter': topic_filter, 'statuses': ['Draft', 'Review', 'Ready', 'Scheduled', 'Posted', 'Archive'], 'tab': 'pipeline', 'page_title': '→ Review', 'posts_json': _posts_to_json(posts_list), 'allow_create': True})
 
 
 @login_required
@@ -425,7 +448,7 @@ def scheduled_view(request):
     topic_filter = request.GET.get('topic', '')
     with connection.cursor() as c:
         topics = _topics(c)
-        # Spalten werden einmal pro Prozess geprueft, nicht hier bei jedem Aufruf.
+        # Columns are checked once per process, not here on every call.
         schema_sicherstellen()
         sql = """SELECT p.id, p.title, p.content, p.status, p.planned_date,
                         p.image, t.name, t.color, p.topic_id, p.comment,
@@ -546,12 +569,12 @@ def all_view(request):
 
 @login_required
 def uebersicht_view(request):
-    """Gesamtübersicht: alle Posts (vergangen, aktuell, zukünftig) in einer
-    durchsuchbaren, sortierbaren Liste. Reine Lese-Anzeige; Anlegen und
-    Status-Wechsel laufen über den bestehenden Endpunkt /planner/api/post/.
+    """Full overview: every post (past, current, future) in one searchable,
+    sortable list. Read-only; creating posts and changing status go through the
+    existing endpoint /planner/api/post/.
     """
-    # 'Planned' ist die Planungsstufe (Redaktionsplan): Slot eingeplant, Inhalt
-    # noch nicht erstellt. Steht bewusst vor 'Draft'.
+    # 'Planned' is the planning stage (editorial calendar): the slot is booked,
+    # the content not written yet. It deliberately comes before 'Draft'.
     STATUSES = ['Planned', 'Draft', 'Review', 'Ready', 'Scheduled', 'Posted', 'Archive']
     STATUS_LABEL = {s: s for s in STATUSES}
     STATUS_STYLE = {
@@ -571,8 +594,8 @@ def uebersicht_view(request):
                         WHERE COALESCE(p.is_oj,0) = 0
                         ORDER BY COALESCE(p.planned_date,'9999-12-31') DESC, p.created_at DESC""")
 
-        # Fallback-Bild + -Link aus den Buffer-Daten (über planner_post_id),
-        # falls der Post im Planner selbst kein Bild/keinen Link gespeichert hat.
+        # Fallback image and link from the Buffer data (via planner_post_id), in
+        # case the post itself has no image or link stored in the planner.
         buf = {}
         try:
             c.execute("""SELECT planner_post_id,
@@ -595,7 +618,7 @@ def uebersicht_view(request):
         pdate = r[4].strftime('%Y-%m-%d') if r[4] else ''
         ptime = r[10].strftime('%H:%M') if r[10] else ''
         bthumb, blink = buf.get(r[0], ('', ''))
-        # Bildquelle: Planner-Bild bevorzugt, sonst Buffer-Thumbnail.
+        # Image source: the planner image first, else the Buffer thumbnail.
         img_url = ('/planner/image/%d/' % r[0]) if r[5] else (bthumb or '')
         link = (r[12] or '') or blink
         posts.append({
@@ -607,8 +630,8 @@ def uebersicht_view(request):
             'topic_id': r[8] or '', 'planned_time': r[10],
             'has_video': bool(r[11]), 'link': link,
         })
-        # Vollstaendige Werte fuer die Inline-Bearbeitung (verhindert das
-        # Ueberschreiben nicht editierter Felder beim update).
+        # Full values for inline editing (stops fields that were not edited from
+        # being overwritten on update).
         edit_map[r[0]] = {
             'title': r[1] or '', 'content': r[2] or '', 'status': st,
             'planned_date': pdate, 'planned_time': ptime,
@@ -630,7 +653,7 @@ def uebersicht_view(request):
 def oj_view(request):
     with connection.cursor() as c:
         topics = _topics(c)
-        # Spalten werden einmal pro Prozess geprueft, nicht hier bei jedem Aufruf.
+        # Columns are checked once per process, not here on every call.
         schema_sicherstellen()
         try:
             posts = _q(c, """SELECT p.id, p.title, p.content, p.status, p.planned_date,
@@ -670,7 +693,7 @@ def oj_view(request):
 
 @login_required
 def planner_image(request, post_id):
-    """Proxy: lädt Planner-Bild von Nextcloud"""
+    """Proxy: loads a planner image from Nextcloud."""
     from django.http import HttpResponse, Http404
     from posts_posted.nc_storage import download_image_from_nextcloud
     with connection.cursor() as c:
@@ -686,7 +709,7 @@ def planner_image(request, post_id):
     if not content:
         raise Http404
     resp = HttpResponse(content, content_type=ct or 'image/jpeg')
-    # Nicht cachen: geändertes Post-Bild muss sofort frisch erscheinen.
+    # No caching: a changed post image has to show up fresh at once.
     resp['Cache-Control'] = 'no-cache, no-store, must-revalidate'
     return resp
 
@@ -741,7 +764,7 @@ def api_post(request):
             return JsonResponse({'ok': True})
         elif action == 'delete':
             pid = data.get('id')
-            # Falls der Post über Buffer geplant wurde: zuerst in Buffer löschen.
+            # If the post was scheduled through Buffer: delete it there first.
             buffer_deleted = None
             buffer_error = None
             buf_post_id = None
@@ -760,7 +783,7 @@ def api_post(request):
                 print("Buffer delete on post-delete error:", _be)
                 buffer_deleted = False
                 buffer_error = str(_be)
-            # Zugehörige Mediendateien mitlöschen (Posted-Beiträge werden geschont).
+            # Delete the media files that belong to it (posted entries are spared).
             try: _delete_post_media(c, pid, keep=None)
             except Exception as _me: print("media delete on post-delete:", _me)
             c.execute("DELETE FROM planner_posts WHERE id=%s", [pid])
@@ -774,8 +797,8 @@ def api_post(request):
                       [data.get('topic_id'), data.get('id')])
             return JsonResponse({'ok': True})
         elif action in ('delete_image', 'delete_video', 'delete_media'):
-            # Ein Medium pro Post: Datei(en) in Nextcloud löschen (Posted geschont)
-            # und alle drei Medien-Spalten leeren.
+            # One medium per post: delete the file(s) in Nextcloud (posted ones are
+            # spared) and clear all three media columns.
             _ensure_media_columns()
             _delete_post_media(c, data.get('id'), keep=None)
             try:
@@ -789,9 +812,9 @@ def api_post(request):
             nc_path = (data.get('video_nc_path') or '').strip()
             if not nc_path:
                 return JsonResponse({'ok': False, 'error': 'video_nc_path missing'}, status=400)
-            # Studio-Ausgabe → in den Planner/Videos-Ordner verschieben (keine Kopie).
+            # Studio output → move into the Planner/Videos folder (not a copy).
             nc_path = _move_studio_output_to_planner(nc_path, PLANNER_VIDEOS_FOLDER)
-            # Ein Medium pro Post: bisherige Medien (außer der neuen Datei) löschen.
+            # One medium per post: delete the previous media (except the new file).
             _delete_post_media(c, data.get('id'), keep=nc_path)
             c.execute(
                 "UPDATE planner_posts SET video_nc_path=%s, image=NULL, gif_nc_path=NULL WHERE id=%s",
@@ -799,14 +822,14 @@ def api_post(request):
             )
             return JsonResponse({'ok': True, 'nc_path': nc_path})
         elif action == 'set_image':
-            # Ein bestehendes Nextcloud-/Studio-Bild an den Post hängen (kein Upload).
+            # Attach an existing Nextcloud or Studio image to the post (no upload).
             _ensure_media_columns()
             nc_path = (data.get('image_nc_path') or '').strip()
             if not nc_path:
                 return JsonResponse({'ok': False, 'error': 'image_nc_path missing'}, status=400)
-            # Studio-Ausgabe → in den Planner/Images-Ordner verschieben (keine Kopie).
+            # Studio output → move into the Planner/Images folder (not a copy).
             nc_path = _move_studio_output_to_planner(nc_path, PLANNER_IMAGES_FOLDER)
-            # Ein Medium pro Post: bisherige Medien (außer der neuen Datei) löschen.
+            # One medium per post: delete the previous media (except the new file).
             _delete_post_media(c, data.get('id'), keep=nc_path)
             c.execute(
                 "UPDATE planner_posts SET image=%s, video_nc_path=NULL, gif_nc_path=NULL WHERE id=%s",
@@ -835,7 +858,7 @@ def api_post(request):
             return JsonResponse({'ok': True})
         elif action == 'cancel_linkedin':
             pid = data.get('id')
-            # Geplanten Post auch in Buffer löschen, sonst wird er trotzdem gepostet.
+            # Delete a scheduled post in Buffer too, or it goes out regardless.
             buffer_deleted = None
             buffer_error = None
             buf_post_id = None
@@ -854,7 +877,7 @@ def api_post(request):
                 print("Buffer delete on cancel error:", _be)
                 buffer_deleted = False
                 buffer_error = str(_be)
-            # Planung zurücksetzen + Buffer-ID entfernen (Post bleibt in Django).
+            # Reset the scheduling and drop the Buffer id (the post stays in Django).
             try:
                 c.execute("UPDATE planner_posts SET post_scheduled_at=NULL, buffer_update_id=NULL WHERE id=%s", [pid])
             except Exception:
@@ -1026,7 +1049,7 @@ def _get_video_nc_path(post_id):
         row = c.fetchone()
 
     if not row or not row[0]:
-        raise Exception("Kein Video für diesen Post gespeichert.")
+        raise Exception("No video stored for this post.")
 
     nc_path = row[0]
     if not nc_path.startswith("Marketing"):
@@ -1077,7 +1100,7 @@ def _prepare_temp_video(post_id):
                         f.write(chunk)
 
         if not os.path.exists(part_path) or os.path.getsize(part_path) <= 0:
-            raise Exception("Temporäre Videodatei ist leer.")
+            raise Exception("The temporary video file is empty.")
 
         os.replace(part_path, local_path)
         return local_path
@@ -1106,20 +1129,21 @@ def _upload_video_to_cloudinary(post_id):
     if not all([cloud_name, api_key, api_secret]):
         raise Exception("Cloudinary ist nicht konfiguriert (CLOUDINARY_CLOUD_NAME/API_KEY/API_SECRET fehlen).")
 
-    # 1) Video lokal aus Nextcloud holen (vorhandene Logik, WebDAV mit Login).
+    # 1) Fetch the video from Nextcloud locally (existing logic, WebDAV with login).
     local_path = _prepare_temp_video(post_id)
 
     # 2) Signierten Upload an Cloudinary vorbereiten.
     timestamp = str(int(_time.time()))
     # Eindeutiger Name je Upload → Cloudinary liefert nie eine alte, gecachte Version.
     public_id = f"linkedin_post_{post_id}_{timestamp}"
-    # Signatur: alle Parameter (außer file/api_key) alphabetisch, mit api_secret gehasht.
+    # Signature: every parameter except file and api_key, in alphabetical order,
+    # hashed with the api_secret.
     to_sign = f"public_id={public_id}&timestamp={timestamp}{api_secret}"
     signature = _hashlib.sha1(to_sign.encode("utf-8")).hexdigest()
 
-    # Cloudinary-Video-Upload akzeptiert KEIN GIF. Animierte GIFs daher über den
-    # Bild-Endpunkt hochladen und als MP4 ausliefern (Cloudinary konvertiert das
-    # animierte GIF on-the-fly), damit LinkedIn ein echtes Video bekommt.
+    # The Cloudinary video upload accepts NO GIF. So animated GIFs go through the
+    # image endpoint and are served as MP4 (Cloudinary converts the animated GIF
+    # on the fly), so LinkedIn gets a real video.
     is_gif = local_path.lower().endswith(".gif")
     endpoint = "image" if is_gif else "video"
     upload_url = f"https://api.cloudinary.com/v1_1/{cloud_name}/{endpoint}/upload"
@@ -1167,7 +1191,7 @@ def _upload_image_to_cloudinary(post_id):
         c.execute("SELECT image FROM planner_posts WHERE id=%s", [post_id])
         row = c.fetchone()
     if not row or not row[0]:
-        raise Exception("Kein Bild für diesen Post gespeichert.")
+        raise Exception("No image stored for this post.")
     nc_path = row[0]
     if not nc_path.startswith("Marketing"):
         filename = nc_path.split("/")[-1]
@@ -1325,7 +1349,7 @@ def api_studio_outputs(request):
         return JsonResponse({'ok': False, 'error': str(e)}, status=500)
 
 
-# Statische Studio-Bilder aus Studio_Work/Output/Images.
+# Static Studio images from Studio_Work/Output/Images.
 STUDIO_OUTPUT_IMAGES = "Marketing & Design/Octotrial_Assets/Studio_Work/Output/Images"
 
 
@@ -1376,8 +1400,8 @@ def _nc_move(src_nc_path, dst_nc_path):
 
 
 def _move_studio_output_to_planner(nc_path, dest_folder):
-    """Studio-Ausgaben aus Studio_Work/Output in den Planner-Ordner verschieben,
-    damit die Datei beim Post liegt (keine Kopie)."""
+    """Move Studio outputs from Studio_Work/Output into the Planner folder, so
+    the file sits with the post (not a copy)."""
     if not nc_path or not nc_path.startswith(STUDIO_OUTPUT_PREFIX):
         return nc_path
     fname = nc_path.rsplit('/', 1)[-1]
@@ -1386,12 +1410,12 @@ def _move_studio_output_to_planner(nc_path, dest_folder):
 
 
 def _nc_delete(nc_path):
-    """Eine Datei in Nextcloud löschen. True bei Erfolg/nicht vorhanden.
+    """Delete a file in Nextcloud. True on success or if it was not there.
 
-    Fuehrt das Loeschen nicht mehr selbst aus. Es gab drei Fassungen desselben
-    WebDAV-DELETE im Projekt - mit unterschiedlichen Zeitlimits und
-    unterschiedlicher Auffassung davon, welche Statuscodes als Erfolg gelten.
-    Jetzt gibt es eine, in posts_posted/nc_storage.py.
+    Does not carry out the deletion itself any more. There were three versions
+    of the same WebDAV DELETE in this project - with different timeouts and
+    different ideas about which status codes count as success. Now there is one,
+    in posts_posted/nc_storage.py.
     """
     if not nc_path:
         return False
@@ -1401,24 +1425,24 @@ def _nc_delete(nc_path):
 
 
 def _nc_delete_aufraeumen(nc_path, zweck):
-    """Loeschen, das scheitern darf - aber nicht lautlos. Siehe die gleichnamige
-    Funktion in media_library/views.py."""
+    """A deletion that may fail - but not silently. See the function of the same
+    name in media_library/views.py."""
     if not nc_path:
         return False
     from posts_posted.nc_storage import delete_from_nextcloud_detail
     try:
         ok, grund = delete_from_nextcloud_detail(nc_path)
     except Exception as e:
-        print("Aufraeumen (%s) fehlgeschlagen: %s -- %s" % (zweck, nc_path, e))
+        print("Cleanup (%s) failed: %s -- %s" % (zweck, nc_path, e))
         return False
     if not ok:
-        print("Aufraeumen (%s) fehlgeschlagen: %s -- %s" % (zweck, nc_path, grund))
+        print("Cleanup (%s) failed: %s -- %s" % (zweck, nc_path, grund))
     return ok
 
 
 def _delete_post_media(c, post_id, keep=None):
-    """Alle am Post hängenden Mediendateien (Bild/GIF/Video) aus Nextcloud löschen,
-    außer `keep`. Bereits gepostete Beiträge werden geschont (Dateien bleiben)."""
+    """Delete every media file hanging on the post (image/GIF/video) from
+    Nextcloud, except `keep`. Posts already published are spared."""
     _ensure_media_columns()
     try:
         c.execute("""SELECT COALESCE(image,''), COALESCE(gif_nc_path,''),
@@ -1431,7 +1455,7 @@ def _delete_post_media(c, post_id, keep=None):
         return
     img, gif, vid, status = row[0], row[1], row[2], row[3]
     if (status or '').lower() == 'posted':
-        return   # veröffentlichte Beiträge schonen
+        return   # spare posts that have already been published
     for p in (img, gif, vid):
         if p and p != keep:
             _nc_delete_aufraeumen(p, 'Medien eines geloeschten Posts')
@@ -1790,8 +1814,8 @@ _li_tabelle_geprueft = False
 
 
 def _li_ensure_table():
-    # Wie bei schema_sicherstellen(): einmal pro Prozess reicht. Vorher lief das
-    # CREATE-IF-NOT-EXISTS samt sieben ALTER-Versuchen bei jedem Aufruf.
+    # As with schema_sicherstellen(): once per process is enough. This used to
+    # run CREATE IF NOT EXISTS plus seven ALTER attempts on every call.
     global _li_tabelle_geprueft
     if _li_tabelle_geprueft:
         return
@@ -1917,8 +1941,8 @@ def _buffer_fetch_post_metrics(buf_token, org_id, first=50, all_pages=False, max
     """
     Fetch posts with their metrics from Buffer.
 
-    all_pages=True paginiert ueber alle verfuegbaren Posts (bis max_posts).
-    Liefert pro Post auch Text und Thumbnail (zur Erkennung im Tab).
+    all_pages=True pages through every available post (up to max_posts).
+    Returns text and thumbnail per post as well (to recognise it in the tab).
     """
     query = """
     query PostsMetrics($input: PostsInput!, $first: Int, $after: String) {
@@ -1978,9 +2002,9 @@ def _buffer_fetch_post_metrics(buf_token, org_id, first=50, all_pages=False, max
 
 def _buffer_fetch_posts_basic(buf_token, org_id, first=50, all_pages=True, max_posts=1000):
     """
-    Holt Buffer-Posts OHNE Metriken (kommt mit posts:read aus, kein insights:read noetig).
-    Liefert pro Post: Buffer-ID, Channel, Text, Status, Sende-Datum.
-    Bild + LinkedIn-Link werden spaeter ueber planner_posts (buffer_update_id) ergaenzt.
+    Fetches Buffer posts WITHOUT metrics (posts:read is enough, no insights:read).
+    Returns per post: Buffer id, channel, text, status, send date.
+    Image and LinkedIn link are added later through planner_posts (buffer_update_id).
     """
     query = """
     query PostsBasic($input: PostsInput!, $first: Int, $after: String) {
@@ -2054,7 +2078,7 @@ def _buffer_delete_post(buf_token, buffer_post_id):
     }
     """
     result = _buffer_graphql(buf_token, query, {"input": {"id": buffer_post_id}})
-    # _buffer_graphql wirft bereits bei GraphQL-Fehlern (errors-Feld) eine Exception.
+    # _buffer_graphql already raises on GraphQL errors (the errors field).
     return True
 
 
@@ -2107,9 +2131,9 @@ def _buffer_post(buf_token, profile_id, text, image_url=None, video_url=None, sc
         input_data["mode"] = "customScheduled"
         input_data["dueAt"] = scheduled_at.isoformat(timespec="milliseconds").replace("+00:00", "Z")
 
-    # Reihenfolge (eure Regel): Link → Video → Bild.
-    # Ein Link-Post zeigt auf LinkedIn die Link-Vorschau (z.B. Canva-Video),
-    # ohne dass wir Medien hochladen müssen (kein Render-/Timeout-Problem).
+    # Order (our rule): link → video → image.
+    # A link post shows the link preview on LinkedIn (a Canva video, say),
+    # without us having to upload media - no render or timeout trouble.
     if link_url:
         input_data["assets"] = [{"link": {"url": link_url}}]
     elif video_url:
@@ -2163,8 +2187,8 @@ def api_connect_view(request):
         buf_pname_person = request.POST.get('buffer_profile_name_person', '').strip()
         with connection.cursor() as c:
             try:
-                # Leere Felder NICHT ueberschreiben (COALESCE auf neuen Wert, sonst alt).
-                # So loescht das Eintragen des Insights-Tokens nicht den Posting-Token.
+                # Do NOT overwrite empty fields (COALESCE onto the new value, else
+                # the old). So entering the insights token does not wipe the posting token.
                 c.execute("""UPDATE planner_linkedin_tokens
                              SET buffer_token=COALESCE(%s, buffer_token),
                                  buffer_profile_id=COALESCE(%s, buffer_profile_id),
@@ -2412,8 +2436,8 @@ def _schedule_linkedin_video_post(post_id, text, scheduled_at):
     """Store a video post for the scheduled trigger path. No Buffer is involved."""
     _ensure_scheduled_at_column()
     with connection.cursor() as c:
-        # Spalten einmal pro Prozess, nicht bei jedem Aufruf (siehe
-        # NACHGERUESTETE_SPALTEN ganz oben).
+        # Columns once per process, not on every call (see NACHGERUESTETE_SPALTEN
+        # at the top of this file).
         schema_sicherstellen()
         c.execute("""
             UPDATE planner_posts
@@ -2474,7 +2498,7 @@ def _post_linkedin_video_now(token, post_id, text, target='org'):
     up_token = value.get('uploadToken')
 
     if not instrs or not vid_urn or not up_token:
-        raise Exception("LinkedIn initializeUpload lieferte keine vollständigen Upload-Daten.")
+        raise Exception("LinkedIn initializeUpload did not return complete upload data.")
 
     up_ids = []
     for instr in instrs:
@@ -2530,8 +2554,8 @@ def _post_linkedin_video_now(token, post_id, text, target='org'):
     post_urn = result.get('id', '') if isinstance(result, dict) else ''
 
     with connection.cursor() as c:
-        # Spalten einmal pro Prozess, nicht bei jedem Aufruf (siehe
-        # NACHGERUESTETE_SPALTEN ganz oben).
+        # Columns once per process, not on every call (see NACHGERUESTETE_SPALTEN
+        # at the top of this file).
         schema_sicherstellen()
         c.execute("""
             UPDATE planner_posts
@@ -2649,8 +2673,8 @@ def _linkedin_do_post_impl(request, post_id):
             video_url = None
             link_url = None
 
-            # Regel (per Ortrud): Hat der Post einen Link -> Link posten
-            # (LinkedIn zeigt die Link-Vorschau, z.B. Canva-Video). Kein Medien-Upload.
+            # Rule (from Ortrud): if the post has a link, post the link (LinkedIn
+            # shows the link preview, a Canva video for instance). No media upload.
             _ensure_media_columns()
             with connection.cursor() as c:
                 c.execute("SELECT COALESCE(link,'') FROM planner_posts WHERE id=%s", [post_id])
@@ -2664,8 +2688,8 @@ def _linkedin_do_post_impl(request, post_id):
                     c.execute("SELECT video_nc_path FROM planner_posts WHERE id=%s", [post_id])
                     vrow = c.fetchone()
                 if vrow and vrow[0]:
-                    # Cloudinary: dauerhaft öffentliche URL, die Buffer zuverlässig
-                    # erreichen kann (auch bei geplanten Posts Stunden später).
+                    # Cloudinary: a permanently public URL that Buffer can reach
+                    # reliably, including for posts scheduled hours later.
                     video_url = _upload_video_to_cloudinary(post_id)
                     print("BUFFER CLOUDINARY VIDEO URL:", video_url)
 
@@ -2674,8 +2698,8 @@ def _linkedin_do_post_impl(request, post_id):
                     c.execute("SELECT image FROM planner_posts WHERE id=%s", [post_id])
                     row = c.fetchone()
                 if row and row[0]:
-                    # Bild über Cloudinary (wie Video): Buffer erreicht die
-                    # Render-Proxy-URL nicht zuverlässig (403/Timeout).
+                    # Image through Cloudinary (like video): Buffer cannot reach
+                    # the Render proxy URL reliably (403 / timeout).
                     image_url = _upload_image_to_cloudinary(post_id)
                     print("BUFFER CLOUDINARY IMAGE URL:", image_url)
 
@@ -2704,8 +2728,8 @@ def _linkedin_do_post_impl(request, post_id):
                 buffer_update_id = None
 
             with connection.cursor() as c:
-                # Spalten einmal pro Prozess, nicht bei jedem Aufruf (siehe
-                # NACHGERUESTETE_SPALTEN ganz oben).
+                # Columns once per process, not on every call (see
+                # NACHGERUESTETE_SPALTEN at the top of this file).
                 schema_sicherstellen()
 
                 if scheduled_at:
@@ -2821,7 +2845,7 @@ def _linkedin_do_post_impl(request, post_id):
         post_urn = result.get('id', '') if isinstance(result, dict) else ''
 
         with connection.cursor() as c:
-            # Spalten werden einmal pro Prozess geprueft, nicht hier bei jedem Aufruf.
+            # Columns are checked once per process, not here on every call.
             schema_sicherstellen()
 
             c.execute("""
@@ -2926,8 +2950,8 @@ def linkedin_post_video(request, post_id):
             buffer_update_id = None
 
         with connection.cursor() as c:
-            # Spalten einmal pro Prozess, nicht bei jedem Aufruf (siehe
-            # NACHGERUESTETE_SPALTEN ganz oben).
+            # Columns once per process, not on every call (see
+            # NACHGERUESTETE_SPALTEN at the top of this file).
             schema_sicherstellen()
 
             if scheduled_at:
@@ -3010,7 +3034,7 @@ def api_trigger_scheduled(request):
 
     _ensure_scheduled_at_column()
     with connection.cursor() as c:
-        # Spalten werden einmal pro Prozess geprueft, nicht hier bei jedem Aufruf.
+        # Columns are checked once per process, not here on every call.
         schema_sicherstellen()
         c.execute("""SELECT id, content, image, video_nc_path
                      FROM planner_posts

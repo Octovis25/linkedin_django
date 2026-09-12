@@ -4,8 +4,8 @@ import { Editor, fabric } from './editor.js';
 import { toast, status, modal, wegDamit } from './util.js';
 import * as bg from './background.js';
 import * as io from './io.js';
-// Namensraum-Import: Fehlt ein Export (z. B. weil der Browser eine alte
-// library.js aus dem Cache hat), stirbt hier NICHT das ganze Modul.
+// Namespace import: if an export is missing (because the browser has an old
+// library.js in its cache, say), the whole module does NOT die here.
 import * as lib from './library.js';
 const { initLibrary, refreshOutput } = lib;
 import * as media from './media.js';
@@ -19,9 +19,9 @@ import { mountShell, initUi } from './ui.js';
 // id — every control the rest of this file talks to is created right here.
 mountShell();
 
-// Kapselt einen Initialisierungsschritt. Ohne das brach EIN Fehler irgendwo in
-// der langen Startsequenz alles Folgende ab – inklusive der Knopf-Verdrahtung.
-// Ergebnis war eine Seite, auf der schlicht nichts mehr reagierte.
+// Wraps one step of the start-up. Without this, ONE error anywhere in the long
+// start sequence broke everything after it - wiring up the buttons included.
+// The result was a page on which simply nothing responded any more.
 function boot(name, fn) {
   try { return fn(); }
   catch (e) {
@@ -34,9 +34,9 @@ function boot(name, fn) {
   }
 }
 
-// localStorage wirft in manchen Browser-/Datenschutzeinstellungen schon beim
-// bloßen Zugriff (Privatmodus, blockierte Cookies, eingebettete Seite). Das
-// legte früher die gesamte Seite still.
+// In some browser and privacy settings, localStorage throws on mere access
+// (private mode, blocked cookies, embedded page). That used to bring the whole
+// page to a standstill.
 const ls = {
   get(k) { try { return localStorage.getItem(k); } catch { return null; } },
   set(k, v) { try { localStorage.setItem(k, v); } catch { /* egal */ } },
@@ -58,30 +58,31 @@ window._studioEditor = editor;   // für Debugging in der Konsole
 function fit() {
   const host = document.querySelector('.canvas-host');
   if (!host) return;
-  // Untergrenze: Ist der Host gerade unsichtbar (clientWidth 0), kämen negative
-  // Maße heraus – der Browser macht daraus eine Milliarden-Pixel-Bitmap und der
-  // Tab stürzt ab.
+  // Lower bound: if the host is invisible just now (clientWidth 0), negative
+  // sizes would come out - the browser turns those into a billion-pixel bitmap
+  // and the tab crashes.
   const w = Math.max(120, host.clientWidth - 16);
   const h = Math.max(120, host.clientHeight - 16);
   editor._lastFit = { w, h };
   editor.fitTo(w, h);
-  // Fabric merkt sich die Canvas-Position. Verschiebt sich der Canvas (Leiste
-  // auf/zu, Scrollen), trafen Klicks mit Pipette/Rechteck sonst danebem.
+  // Fabric remembers where the canvas is. When the canvas moves (a panel opens
+  // or closes, the page scrolls), clicks with the eyedropper or rectangle
+  // would otherwise land beside their target.
   editor.canvas.calcOffset();
 }
 window.addEventListener('resize', fit);
 window.addEventListener('scroll', () => editor.canvas.calcOffset(), { passive: true });
 requestAnimationFrame(fit);
-// Reagiert auch dann, wenn sich die Größe ohne Fensteränderung ändert
-// (z.B. eingeklappte Leiste) – das rAF allein feuerte manchmal zu früh.
+// Reacts even when the size changes without the window changing (a collapsed
+// panel, say) - the rAF alone sometimes fired too early.
 if (window.ResizeObserver) {
   const _host = document.querySelector('.canvas-host');
   if (_host) {
-    // Über requestAnimationFrame entkoppeln: fit() ändert selbst die
-    // Canvas-Größe und würde den Beobachter sofort erneut auslösen. Der Browser
-    // meldet das als „ResizeObserver loop completed with undelivered
-    // notifications" – harmlos, aber es landete im Fehlerbanner und sah aus
-    // wie ein echter Fehler.
+    // Decouple through requestAnimationFrame: fit() changes the canvas size
+    // itself and would trigger the observer again straight away. The browser
+    // reports that as "ResizeObserver loop completed with undelivered
+    // notifications" - harmless, but it ended up in the error banner and
+    // looked like a real fault.
     let geplant = false;
     new ResizeObserver(() => {
       if (geplant) return;
@@ -91,7 +92,7 @@ if (window.ResizeObserver) {
   }
 }
 
-// Zoom-Stand kurz anzeigen (× über der Einpassung).
+// Briefly show the zoom level (x relative to the fit).
 function zeigeZoom(z) {
   const f = z || editor.zoomFactor();
   status(`Zoom ${Math.round(f * 100)} %`, '#888');
@@ -103,17 +104,17 @@ document.querySelectorAll('.sidebar-section h3').forEach(h => {
   h.addEventListener('click', () => h.parentElement.classList.toggle('collapsed'));
 });
 
-// ---- Canvas-Hintergrundfarbe ('' = transparent) --------------------------
-// EIN Weg für die Hintergrundfarbe. Früher gab es zwei Farbwähler mit derselben
-// id: einer setzte nur die Farbe, der andere löschte zusätzlich das
-// Hintergrundbild – für den Nutzer nicht unterscheidbar, und das Bild
-// verschwand unerwartet. Jetzt bleibt das Bild liegen; wenn es die Farbe
+// ---- Canvas background colour ('' = transparent) -------------------------
+// ONE way to set the background colour. There used to be two colour pickers
+// with the same id: one set only the colour, the other also deleted the
+// background image - indistinguishable to the user, and the image vanished
+// unexpectedly. Now the image stays; if it hides the colour, the Studio says so.
 // verdeckt, weist das Studio darauf hin.
 function setCanvasFarbe(farbe) {
-  // Nur die Hintergrund*farbe* setzen – ein vorhandenes Hintergrund*bild*
-  // (z. B. dein Teal-Template) NICHT anfassen, sonst verschwindet es unerwartet.
-  // Verdeckt das Bild die Farbe, weist das Studio darauf hin; entfernen kann man
-  // es bewusst über „🚫 Remove background image".
+  // Set the background *colour* only - do NOT touch an existing background
+  // *image* (your teal template, for instance), or it disappears unexpectedly.
+  // If the image hides the colour, the Studio points that out; removing it is
+  // a deliberate act through "🚫 Remove background image".
   editor.canvas.backgroundColor = farbe || '';
   editor.canvas.requestRenderAll();
   editor.snapshot();
@@ -130,7 +131,7 @@ function setCanvasFarbe(farbe) {
   if (pick) pick.oninput = () => setCanvasFarbe(pick.value);
 }
 
-// ---- Kleiner Dialog für eine frei eingegebene Canvas-Größe ---------------
+// ---- Small dialog for a freely entered canvas size -----------------------
 function askSize(w0, h0) {
   return new Promise(resolve => {
     const back = document.createElement('div');
@@ -169,9 +170,9 @@ function askSize(w0, h0) {
   });
 }
 
-// ---- Leisten ausklappen: Canvas voll, Werkzeuge auf Zuruf ----------------
-// Klick auf den Griff = Leiste dauerhaft weg / wieder fest.
-// Ist sie weg, schwebt sie beim Überfahren des Griffs über dem Canvas.
+// ---- Unpinning the panels: full canvas, tools on demand ------------------
+// Click on the handle = panel away for good / pinned again.
+// While it is away, it floats over the canvas when the handle is hovered.
 {
   const wrap = document.querySelector('.studio-wrap');
   const setup = (btnId, hideCls, peekCls, panelSel, pfeile) => {
@@ -198,7 +199,7 @@ function askSize(w0, h0) {
       setTimeout(() => window.dispatchEvent(new Event('resize')), 200);
     };
 
-    // Einblenden beim Überfahren des Griffs
+    // Show it when the handle is hovered
     btn.addEventListener('mouseenter', () => {
       if (wrap.classList.contains(hideCls)) wrap.classList.add(peekCls);
     });
@@ -219,7 +220,7 @@ function askSize(w0, h0) {
 let currentTextColor = document.getElementById('text-color')?.value || '#ffffff';
 let currentShapeColor = '#F56E28';
 
-// Eine gemeinsame Palette für Text UND Formen.
+// One shared palette for text AND shapes.
 bg.renderPalette(document.getElementById('palette-row'), col => {
   currentTextColor = col;
   currentShapeColor = col;
@@ -238,7 +239,7 @@ bg.renderPalette(document.getElementById('palette-row'), col => {
   else if (o && o.shapeKind) { o.set(o.fill ? 'fill' : 'stroke', col); editor.canvas.requestRenderAll(); editor.snapshot(); }
 });
 
-// (Der zweite Hintergrund-Farbwähler ist entfallen – siehe setCanvasFarbe.)
+// (The second background colour picker is gone - see setCanvasFarbe.)
 
 // Eigenes Textfarben-Feld: überschreibt die Palette für Text/Badge-Beschriftung
 {
@@ -253,16 +254,16 @@ bg.renderPalette(document.getElementById('palette-row'), col => {
   };
 }
 
-// Gemerktes Speicher-Format (image|gif|video). Nach der ersten Wahl wird nicht
-// mehr gefragt – der Knopf speichert still im gleichen Format.
-// Beim Öffnen einer vorhandenen Ausgabe das dort verwendete Format übernehmen.
+// The remembered save format (image|gif|video). After the first choice it does
+// not ask again - the button saves quietly in the same format.
+// When an existing output is opened, take over the format it used.
 let _saveKind = CONFIG.libData?.kind && CONFIG.libData.kind !== 'image'
                 ? CONFIG.libData.kind : null;
 let _speichertGerade = false;
 async function speichereAls(kind) {
-  // Ein zweiter Klick während des Speicherns öffnete einen zweiten
-  // Namensdialog und erzeugte zwei Ausgaben. Der Guard in io.saveImage deckt
-  // nur den Bild-Weg ab, GIF und Video liefen ungebremst.
+  // A second click during a save opened a second name dialog and produced two
+  // outputs. The guard in io.saveImage covers only the image path; GIF and
+  // video ran unchecked.
   if (_speichertGerade) { toast('Speichert bereits…', 'err'); return; }
   _speichertGerade = true;
   try {
@@ -278,12 +279,12 @@ async function _speichereAls(kind) {
   if (kind === 'gif')        ok = await media.exportGif(editor);
   else if (kind === 'video') ok = await media.exportVideo(editor);
   else { ok = await io.saveImage(editor); refreshOutput(); }
-  // Nichts gespeichert (lädt noch, abgebrochen, Fehler)? Dann auch keine
-  // Erfolgsmeldung – die überschrieb vorher sofort die eigentliche Begründung.
+  // Nothing saved (still loading, cancelled, failed)? Then no success message
+  // either - it used to overwrite the actual reason immediately.
   if (!ok) return;
-  // Knopf umbenennen, damit klar ist: ab jetzt wird direkt gespeichert.
-  // Beide möglichen Zustände suchen: sobald eine Ausgabe geöffnet ist, heißt
-  // das Attribut „save-existing" – der alte Selektor griff dann ins Leere.
+  // Rename the button, so it is clear: from now on it saves directly.
+  // Look for both possible states: as soon as an output is open the attribute
+  // is "save-existing" - the old selector then found nothing.
   const btn = document.querySelector('[data-act="save-as"], [data-act="save-existing"]');
   if (btn) {
     const lbl = kind === 'gif' ? '💾 GIF speichern' : kind === 'video' ? '💾 Video speichern' : '💾 Speichern';
@@ -307,7 +308,7 @@ const actions = {
       setTimeout(() => { if (titleEl) titleEl.style.border = ''; }, 2500);
       return;
     }
-    // Format nur beim ersten Mal (oder nach „als…") abfragen und merken.
+    // Ask for the format only the first time (or after "as…") and remember it.
     let kind = _saveKind;
     if (!kind) {
       kind = await modal('Save as…', 'What would you like to save?', [
@@ -325,8 +326,8 @@ const actions = {
   'save-existing': async () => {
     if (_speichertGerade) { toast('Speichert bereits…', 'err'); return; }
     let kind = _saveKind || CONFIG.libData?.kind || 'image';
-    // Animationen gesetzt, aber die Datei ist ein PNG? Vorher wurde still ein
-    // Standbild gespeichert und die Animationen waren im Ergebnis nicht drin.
+    // Animations set, but the file is a PNG? A still image used to be saved
+    // quietly, and the animations were not in the result.
     if (kind === 'image' && media.hasAnimations(editor)) {
       const wahl = await modal('Animationen erkannt',
         'This element has animations, but the opened file is an image. How to save?',
@@ -348,7 +349,7 @@ const actions = {
     }
   },
   download:    async () => {
-    // Gleiches Format wie beim Speichern (▾ Format). Noch nichts gewählt:
+    // The same format as for saving (▾ Format). Nothing chosen yet:
     // animiert → GIF, sonst → PNG.
     const kind = _saveKind || (media.hasAnimations(editor) ? 'gif' : 'image');
     if (kind === 'gif')        await media.downloadGif(editor);
@@ -362,9 +363,9 @@ const actions = {
     ]);
     if (!ok) return;
     editor.clearAll();
-    // Bindung an die zuvor geöffnete Ausgabe lösen: sonst hätte „Speichern"
-    // die alte Datei mit dem neuen, leeren Entwurf überschrieben – und die
-    // Warnung eines früheren Ladefehlers wäre weiter erschienen.
+    // Cut the tie to the output opened before: otherwise "save" would have
+    // overwritten the old file with the new, empty design - and the warning
+    // from an earlier load failure would have kept appearing.
     CONFIG.libData = null;
     io.merkeNamen(null);       // neuer Entwurf → auch der Name wird neu vergeben
     setTemplateId(null);
@@ -392,8 +393,8 @@ const actions = {
     if (!wrap) return;
     const gross = !wrap.classList.contains('maxi');
     wrap.classList.toggle('maxi', gross);
-    // Beide Leisten in den schwebenden Zustand bringen – die Randgriffe bleiben
-    // sichtbar, per Überfahren tauchen die Werkzeuge wieder auf.
+    // Put both panels into the floating state - the edge handles stay visible,
+    // and hovering brings the tools back.
     const tl = document.getElementById('toggle-left');
     const tr = document.getElementById('toggle-right');
     if (wrap.classList.contains('hide-left')  !== gross) tl?.click();
@@ -444,8 +445,8 @@ const actions = {
     status('Triple check inserted – double-click: one line per check. Scale at the corner.', '#198754');
   },
   'add-text':  () => {
-    // Alle Felder optional lesen: fehlt eines im Gerüst, soll trotzdem Text
-    // eingefügt werden statt die Aktion mit einem TypeError abzubrechen.
+    // Read every field optionally: if one is missing from the scaffold, text
+    // should still be inserted instead of the action dying on a TypeError.
     const inp = document.getElementById('text-input');
     editor.addText((inp?.value || '').trim() || 'Text', {
       fontSize: Math.max(6, +(document.getElementById('font-size')?.value) || 32),
@@ -528,11 +529,11 @@ const actions = {
   'post-bg':      () => CONFIG.postData?.id && bg.setBackgroundImage(editor, `/library/studio/api/post-image/${CONFIG.postData.id}/`),
   'post-overlay': () => CONFIG.postData?.id && editor.addImageUrl(`/library/studio/api/post-image/${CONFIG.postData.id}/`),
   'go-back': (btn) => {
-    // Immer im gleichen Tab zur Herkunftsseite navigieren. (Früher wurde
-    // window.close() versucht – das schloss den Tab und man landete außerhalb
-    // der Seite.) Bei ungespeicherten Änderungen greift der beforeunload-Schutz.
+    // Always navigate back to the page we came from, in the same tab.
+    // (window.close() used to be tried - that closed the tab and left the user
+    // outside the site.) Unsaved changes are caught by the beforeunload guard.
     let url = (btn && btn.getAttribute('data-back')) || '/planner/uebersicht/';
-    // Nur seiteneigene Ziele zulassen; sonst sichere Übersicht.
+    // Allow targets on this site only; otherwise fall back to the overview.
     if (!/^\//.test(url) || url.indexOf('/library/studio') !== -1) url = '/planner/uebersicht/';
     window.location.href = url;
   },
@@ -559,9 +560,9 @@ const actions = {
 
 // Aktuelle Leinwand als wiederverwendbare Vorlage speichern.
 async function saveAsTemplate() {
-  // Lädt der Editor noch? Dann wäre die Fläche halb leer – und ein „Vorlage
-  // aktualisieren" hätte die bestehende Vorlage mit dem leeren Stand
-  // überschrieben. Das war unwiederbringlich.
+  // Is the editor still loading? Then the artboard would be half empty - and an
+  // "update template" would have overwritten the existing template with that
+  // empty state. There was no getting it back.
   if (editor._locked) {
     status('⏳ Still loading – please wait a moment', 'red');
     toast('The template is still loading', 'err');
@@ -573,8 +574,8 @@ async function saveAsTemplate() {
       'Saving would replace the template with this incomplete state.\n\nSave anyway?');
     if (!weiter) return;
   }
-  // Eine Quelle der Wahrheit für die aktuell geladene Vorlage – egal ob sie über
-  // die Verwaltung (?template=…) oder per Klick auf eine Kachel geöffnet wurde.
+  // One source of truth for the template currently loaded - no matter whether
+  // it was opened from the management page (?template=…) or by clicking a tile.
   const boundId = currentTemplateId();
   let updateExisting = false;
   if (boundId) {
@@ -591,7 +592,7 @@ async function saveAsTemplate() {
   const title = window.prompt(updateExisting ? 'Template name (will be updated):'
                                              : 'Name of the new template:', vorschlag);
   if (title === null) return;                 // abgebrochen
-  // Doppelte Namen vermeiden (nur beim Neuanlegen).
+  // Avoid duplicate names (only when creating a new one).
   if (!updateExisting) {
     try {
       const r = await fetch(CONFIG.urls?.apiTemplates || '/library/studio/api/templates/');
@@ -607,8 +608,8 @@ async function saveAsTemplate() {
       }
     } catch (e) { /* Prüfung ist nur Komfort – bei Fehler normal weiter */ }
   }
-  // Offene Pinsel-/Markierungsstände in echte Bilder umwandeln – ein Canvas als
-  // Bild-Element überlebt die Serialisierung ins canvas_json nicht.
+  // Turn open brush and marking states into real images - a canvas as an image
+  // element does not survive serialisation into the canvas_json.
   await retouch.vorschauenUebernehmen(editor.canvas);
   let dataUrl, canvasJson;
   try {
@@ -617,8 +618,8 @@ async function saveAsTemplate() {
     dataUrl = editor.exportDataURL({ multiplier: 1 });     // Vorschau-PNG (ohne Raster)
     canvasJson = io.buildCanvasJson(editor, preview);      // Layout: Hintergrund + Logo + Textfelder
   } catch (e) { toast('Export fehlgeschlagen', 'err'); status('❌ Export fehlgeschlagen', 'red'); return; }
-  // Leere Fläche ist fast immer ein Versehen (z.B. zu früh geklickt) und würde
-  // eine funktionierende Vorlage durch nichts ersetzen.
+  // An empty artboard is nearly always a slip (clicked too early) and would
+  // replace a working template with nothing.
   if (updateExisting && !editor.realObjects().length && !editor.canvas.backgroundImage) {
     const weiter = window.confirm('The canvas is empty.\n\n' +
       'The existing template would be replaced by an empty one.\n\nReally continue?');
@@ -634,8 +635,8 @@ async function saveAsTemplate() {
                              tplId: updateExisting ? boundId : undefined }),
     });
     if (!res.ok) {
-      // Ohne diese Prüfung scheiterte res.json() an der HTML-Fehlerseite und der
-      // Nutzer sah „SyntaxError: Unexpected token '<'".
+      // Without this check, res.json() choked on the HTML error page and the
+      // user saw "SyntaxError: Unexpected token '<'".
       const grund = res.status === 413 ? 'Template too large for the server'
                   : res.status === 403 ? 'Sitzung abgelaufen – bitte neu anmelden'
                   : 'Server-Fehler ' + res.status;
@@ -646,8 +647,8 @@ async function saveAsTemplate() {
       setTemplateId(d.id);   // ab jetzt weiter dieselbe Vorlage aktualisieren
       toast(d.updated ? 'Template updated' : 'Template saved', 'ok');
       status(d.updated ? '✅ Template updated.' : '✅ Saved as template.', '#198754');
-      // Stand als gespeichert markieren – sonst fragte das Studio auch direkt
-      // nach dem Speichern einer Vorlage noch nach ungespeicherten Änderungen.
+      // Mark the state as saved - otherwise the Studio asked about unsaved
+      // changes even straight after saving a template.
       window.dispatchEvent(new CustomEvent('studio:vorlage-gespeichert'));
       bg.loadTemplateList(editor);
     } else { toast('Fehler: ' + (d.error || ''), 'err'); status('❌ ' + (d.error || 'Fehler'), 'red'); }
@@ -658,8 +659,8 @@ function _cookie(name) {
   return m ? decodeURIComponent(m.pop()) : '';
 }
 
-// Bestehendes Bild eines anderen Posts übernehmen. Es wird auf die Leinwand
-// gelegt; beim Speichern entsteht eine Kopie, die an DIESEN Post gehängt wird.
+// Take over an existing image from another post. It is placed on the artboard;
+// saving then creates a copy that is attached to THIS post.
 async function copyImageFromPost() {
   let posts = [];
   try {
@@ -724,8 +725,8 @@ document.addEventListener('click', e => {
   const btn = e.target.closest('[data-act]');
   if (btn && actions[btn.dataset.act]) {
     e.preventDefault();
-    // Die meisten Aktionen sind async. Ohne dieses catch blieb bei einem Fehler
-    // nur „💾 Speichert…" stehen – für den Nutzer sah das aus wie ein Hänger.
+    // Most actions are async. Without this catch, an error left only
+    // "💾 Saving…" on screen - which looked like a hang to the user.
     safely(() => actions[btn.dataset.act](btn), 'action “' + btn.dataset.act + '”');
   }
   const shape = e.target.closest('[data-shape]');
@@ -752,10 +753,10 @@ async function doCutout() {
   status('✂ Stelle frei…');
   try {
     const cleaned = await removeBackground(o._element, { tol: 55 });
-    // removeBackground schützt helle, farbneutrale Pixel bewusst (Weiß, Off-White,
-    // Hellgrau), damit weiße Bildinhalte wie Kittel oder Icons stehen bleiben.
-    // Bei weißem oder kariertem Hintergrund bleibt deshalb ALLES stehen – der
-    // Knopf sah dann aus, als täte er nichts. Jetzt sagt er, was los ist.
+    // removeBackground deliberately protects light, colour-neutral pixels
+    // (white, off-white, light grey), so white content such as a coat or icons
+    // stays. On a white or chequered background EVERYTHING therefore stays -
+    // and the button looked as if it did nothing. Now it says what is going on.
     const eckeOffen = (() => {
       try {
         const c = document.createElement('canvas');
@@ -792,9 +793,9 @@ let _recolorPickColor = null;   // beim Umfärben zuerst per Klick aufgenommene 
 let _painting = false;
 let _suppressClear = false;
 
-// Gibt das aktuelle Werkzeug-Ziel frei. Wichtig nach dem Laden einer Datei oder
-// nach Undo: die alten Objekte sind dann nicht mehr auf dem Canvas, halten aber
-// über _work/_mask/_origImg mehrere Vollbild-Canvas im Speicher fest.
+// Releases the current tool target. Important after loading a file or after an
+// undo: the old objects are no longer on the canvas, but they still hold
+// several full-size canvases in memory through _work/_mask/_origImg.
 function freeToolTarget() {
   const o = _toolTarget;
   _toolTarget = null;
@@ -807,9 +808,9 @@ function freeToolTarget() {
   o._work = null; o._mask = null; o._origImg = null; o._origPromise = null; o._prevCv = null;
 }
 
-// Gibt die Arbeitsfläche wieder frei: Objekte anklickbar, Auswahl möglich,
-// normaler Mauszeiger. Bleibt einer dieser Schalter hängen, wirkt das Studio
-// komplett eingefroren, obwohl technisch alles läuft.
+// Gives the artboard back: objects clickable, selection possible, normal mouse
+// pointer. If one of these switches stays stuck, the Studio feels completely
+// frozen although technically everything is running.
 function werkzeugFlagsZuruecksetzen() {
   editor.canvas.skipTargetFind = false;
   editor.canvas.selection = true;
@@ -824,7 +825,7 @@ function werkzeugFlagsZuruecksetzen() {
   editor.canvas.requestRenderAll();
 }
 
-// Zielbild bestimmen: aktives Bild, sonst das oberste Bild auf dem Canvas.
+// Work out the target image: the active image, else the topmost one on the canvas.
 function targetImage() {
   const a = editor.active();
   if (a && a.type === 'image') return a;
@@ -833,44 +834,44 @@ function targetImage() {
 }
 
 function setTool(tool) {
-  // Zeigt _toolTarget noch auf ein Objekt, das inzwischen ersetzt wurde
-  // (Vorlage geladen, Strg+Z)? Dann ist es verwaist: Werkzeuge taten anschließend
-  // still gar nichts mehr. Aufräumen und neu bestimmen.
+  // Is _toolTarget still pointing at an object that has since been replaced
+  // (template loaded, Ctrl+Z)? Then it is orphaned: the tools afterwards did
+  // nothing at all, quietly. Clear it and work it out again.
   if (_toolTarget && _toolTarget.canvas !== editor.canvas) freeToolTarget();
 
   const o = targetImage();
   if (tool !== 'off' && !o) {
-    // WICHTIG: erst die Arbeitsfläche entsperren, dann abbrechen. Vorher kehrte
-    // die Funktion hier zurück, während skipTargetFind/selection vom vorherigen
-    // Zieh-Werkzeug noch gesetzt waren – dann ließ sich gar nichts mehr
-    // anklicken, und jeder Rettungsversuch über einen anderen Werkzeug-Knopf
-    // lief in genau dieses return.
+    // IMPORTANT: unlock the artboard first, then give up. This used to return
+    // here while skipTargetFind/selection from the previous drag tool were
+    // still set - after that nothing could be clicked at all, and every
+    // attempt to rescue it through another tool button ran into this very
+    // return.
     werkzeugFlagsZuruecksetzen();
     _tool = 'off';
     toast('No image present – insert an image first', 'err');
     return;
   }
-  // Beim Verlassen des Markier-Modus offene (nicht angewendete) Markierung verwerfen.
+  // On leaving marking mode, discard an open (unapplied) marking.
   if ((_tool === 'mark' || _tool === 'rect') && _toolTarget && retouch.hasMask(_toolTarget)) {
     retouch.clearMask(_toolTarget);
     retouch.commitWork(_toolTarget).then(() => editor.canvas.requestRenderAll())
       .catch(e => console.warn('commitWork beim Werkzeugwechsel:', e));
   }
-  // Rote Markierungs-Vorschau beenden, sonst bleibt sie im Bild stehen.
+  // End the red marking preview, or it stays visible in the image.
   retouch.beendeVorschauen(editor.canvas);
   if (typeof clearSelRect === 'function') clearSelRect();
   _tool = tool;
   _toolTarget = tool === 'off' ? null : o;
   const active = tool !== 'off';
   editor.canvas.defaultCursor = active ? 'crosshair' : 'default';
-  // Nur ZIEH-Werkzeuge lassen den Canvas Objekte ignorieren (damit Ziehen malt
-  // statt verschiebt). Klick-Werkzeuge (Radierer/Umfärben) verhalten sich normal
-  // – Bild bleibt anklickbar, Auswahl + Leiste bleiben erhalten.
+  // Only DRAG tools make the canvas ignore objects (so dragging paints instead
+  // of moving). Click tools (eraser, recolour) behave normally - the image
+  // stays clickable, selection and toolbar are kept.
   const dragTool = ['mark', 'rect', 'paint', 'erase', 'restore'].includes(tool);
   editor.canvas.skipTargetFind = dragTool;
   editor.canvas.selection = !active;
-  // Zieh-Werkzeuge: aktives Objekt abwählen, sonst verschiebt das Ziehen das Bild
-  // statt ein Rechteck aufzuziehen. (Werkzeug bleibt an – siehe selection:cleared-Guard.)
+  // Drag tools: deselect the active object, or dragging moves the image instead
+  // of drawing a rectangle. (The tool stays on - see the selection:cleared guard.)
   if (dragTool) editor.canvas.discardActiveObject();
   editor.canvas.requestRenderAll();
   // Umfärb-Werkzeuge: beim Aktivieren Aufnahme-Zustand zurücksetzen (1. Klick = Farbe).
@@ -896,15 +897,15 @@ function setTool(tool) {
   if (colorRow) colorRow.style.display = (tool === 'paint' || isMark) ? 'flex' : 'none';
   const markRow = document.getElementById('mark-apply-row');
   if (markRow) markRow.style.display = isMark ? 'flex' : 'none';
-  // Pinselgröße nur bei den Werkzeugen zeigen, die sie auch benutzen.
+  // Show the brush size only for the tools that actually use it.
   const brushRow = document.getElementById('brush-row');
   if (brushRow) brushRow.style.display = ['paint', 'erase', 'restore', 'mark'].includes(tool) ? 'flex' : 'none';
-  // Aktives Werkzeug hervorheben – vorher war nicht erkennbar, welches an ist.
+  // Highlight the active tool - before, there was no telling which one was on.
   document.querySelectorAll('#retouch-body [data-tool]').forEach(b => {
     b.classList.toggle('primary', b.dataset.tool === tool && tool !== 'off');
   });
-  // Rechteck-Zeichenebene nur beim Rechteck-Werkzeug aktiv (Style direkt gesetzt,
-  // unabhängig von der CSS – cache-fest).
+  // The rectangle drawing layer is active only for the rectangle tool (style set
+  // directly, independent of the CSS - cache-proof).
   const ov = document.getElementById('rect-overlay');
   if (ov) ov.style.display = (tool === 'rect') ? 'block' : 'none';
   updateRetouchPanel();
@@ -915,7 +916,7 @@ function setToolStatus(msg) {
   if (el) el.textContent = msg;
 }
 
-// Klick-Koordinate → Bild-Pixel des Zielbildes (robust via Transform-Matrix).
+// Click coordinate → image pixel of the target image (robustly, via the transform matrix).
 function imgPixel(o, e) {
   const pointer = editor.canvas.getPointer(e);
   const inv = fabric.util.invertTransform(o.calcTransformMatrix());
@@ -954,21 +955,21 @@ async function doSwapAt(o, px, py) {
   } catch (e) { console.error('Farbtausch:', e); setToolStatus('❌ Fehler'); }
 }
 
-// doRecolorAt ist entfallen: die Funktion war bis auf die Toleranz identisch
-// mit doSwapAt (beide recolorRegion). Zwei Knöpfe für dieselbe Sache.
+// doRecolorAt is gone: apart from the tolerance the function was identical to
+// doSwapAt (both recolorRegion). Two buttons for one and the same thing.
 
-// Alle farbähnlichen Flächen im GANZEN Bild ab dem Klickpunkt umfärben
-// (z. B. alle roten Stellen auf einmal). Nutzt dieselbe gewählte Farbe wie
-// „Recolour area". Transparenz bleibt erhalten.
-// Pipette: nimmt die Farbe an der Klickstelle vom SICHTBAREN Canvas auf
-// (inkl. Hintergrundfarbe und beliebiger Bilder) und setzt sie als Umfärb-Farbe.
-// So wählt man die Zielfarbe per Klick statt über die Palette.
+// Recolour every similar-coloured area in the WHOLE image from the click point
+// (all the red places at once, for instance). Uses the same chosen colour as
+// "Recolour area". Transparency is kept.
+// Eyedropper: takes the colour at the click point from the VISIBLE canvas
+// (background colour and any images included) and sets it as the recolour
+// colour. So the target colour is picked by clicking instead of from the palette.
 function _showRecolorSwatch(hex) {
   const sw = document.getElementById('recolor-swatch');
   if (sw) { sw.style.background = hex || 'transparent'; sw.title = hex ? ('picked colour: ' + hex) : 'no colour picked'; }
 }
 
-// Einen einzelnen Pixel aus einem fabric-Bildobjekt an der Szenen-Position pt lesen.
+// Read a single pixel from a fabric image object at the scene position pt.
 function _samplePixelFromObject(o, pt) {
   try {
     const el = o._element; if (!el) return null;
@@ -986,8 +987,8 @@ function _samplePixelFromObject(o, pt) {
   } catch (_) { return null; }
 }
 
-// Farbe an der Klickstelle bestimmen – robust und ohne getaintete Gesamt-Canvas:
-// 1) Bild-Objekt unter dem Klick, 2) Hintergrundbild, 3) Hintergrundfarbe.
+// Work out the colour at the click point - robustly and without a tainted whole
+// canvas: 1) image object under the click, 2) background image, 3) background colour.
 function pickCanvasColor(e) {
   const canvas = editor.canvas;
   const pt = canvas.getPointer(e);
@@ -1001,8 +1002,8 @@ function pickCanvasColor(e) {
   return hex;
 }
 
-// Umfärben mit der zuvor aufgenommenen Farbe: entweder nur die zusammenhängende
-// Fläche (all=false) oder alle gleichfarbigen Flächen im Bild (all=true).
+// Recolour with the colour picked up earlier: either the connected area only
+// (all=false) or every area of that colour in the image (all=true).
 async function doRecolorWith(o, px, py, hex, all) {
   try {
     const out = all ? await recolorSimilarAll(o._element, px, py, hex, 45)
@@ -1022,12 +1023,12 @@ async function doSwapAllAt(o, px, py) {
   } catch (e) { console.error('Recolour all:', e); setToolStatus('❌ Error'); }
 }
 
-// Ein Pinselschritt. `endgueltig` nur beim Loslassen der Maustaste:
-// Vorher wurde bei JEDER Mausbewegung ein Vollauflösungs-PNG kodiert
-// (bei einem 12-Megapixel-Bild ~200 ms pro Tick, 60 Ticks pro Strich). Die
-// Aufrufe stapelten sich, der Browser stand minutenlang, und weil sie in
-// beliebiger Reihenfolge zurückkamen, verschwanden Striche wieder.
-// Während des Ziehens zeigen wir jetzt direkt die Arbeits-Canvas (kostenlos).
+// One brush step. `endgueltig` only when the mouse button is released:
+// a full-resolution PNG used to be encoded on EVERY mouse move (about 200 ms
+// per tick on a 12-megapixel image, 60 ticks per stroke). The calls piled up,
+// the browser stood still for minutes, and because they came back in any
+// order, strokes disappeared again.
+// While dragging we now show the working canvas directly, which costs nothing.
 async function paintAt(o, px, py, endgueltig = false) {
   if (_tool === 'mark') {
     retouch.markAt(o, px, py, _brush);
@@ -1147,9 +1148,9 @@ function clearSelRect() {
 
 editor.canvas.on('mouse:down', async (opt) => {
   if (_tool === 'off' || !_toolTarget) return;
-  // Kombiniertes Umfärben in EINEM Werkzeug: 1. Klick nimmt die Farbe auf
-  // (von irgendwo – z. B. dem Petrol-Hintergrund), danach färben Klicks die
-  // angeklickte Fläche im Bild um. Kein zweiter Knopf nötig.
+  // Combined recolouring in ONE tool: the first click picks up the colour
+  // (from anywhere - the petrol background, say), after that clicks recolour
+  // the area clicked in the image. No second button needed.
   if (_tool === 'recolorpick' || _tool === 'recolorpickall') {
     if (_recolorPickColor == null) {
       const hex = pickCanvasColor(opt.e);
@@ -1204,8 +1205,8 @@ editor.canvas.on('mouse:move', async (opt) => {
 editor.canvas.on('mouse:up', async () => {
   if (!_painting) return;
   _painting = false;
-  // Strich abgeschlossen: jetzt EINMAL den echten Bildstand erzeugen und eine
-  // Undo-Stufe setzen – nicht 60-mal während des Ziehens.
+  // Stroke finished: now build the real image state ONCE and set an undo step -
+  // not 60 times while dragging.
   if (_toolTarget && ['paint', 'erase', 'restore'].includes(_tool)) {
     try {
       await retouch.commitWork(_toolTarget);
@@ -1223,9 +1224,9 @@ function updateRetouchPanel() {
   const hint = document.getElementById('retouch-hint');
   const body = document.getElementById('retouch-body');
   if (!hint || !body) return;
-  // Werkzeuge immer anzeigen, aber ohne Bild sichtbar STILLLEGEN. Vorher waren
-  // sie voll bedienbar und jeder Klick lief in einen kurzen Toast – von außen
-  // sah das aus, als täten die Knöpfe schlicht nichts.
+  // Always show the tools, but visibly DISABLE them without an image. They used
+  // to be fully operable and every click ran into a brief toast - from outside
+  // that looked as if the buttons simply did nothing.
   body.style.display = 'block';
   body.classList.toggle('is-disabled', !isImg);
   hint.style.display = isImg ? 'none' : 'block';
@@ -1235,7 +1236,7 @@ function updateRetouchPanel() {
 
 // ---- Kreis/Banner mit Text (Füllfarbe = Palette, Textfarbe = Textfarben-Feld) ----
 const _hex = c => String(c || '').trim().toLowerCase();
-// Weiß oder Dunkelgrau – je nachdem, was auf der Füllfarbe lesbar ist
+// White or dark grey - whichever is readable on the fill colour
 function autoContrast(fill) {
   const m = /^#?([0-9a-f]{6})$/i.exec(_hex(fill));
   if (!m) return '#ffffff';
@@ -1261,7 +1262,7 @@ function buildBadge(kind, txt, fill, textColor) {
     const r = Math.max(36, Math.hypot(label.width, label.height) / 2 + 12);
     shape = new fabric.Circle({ radius: r, fill, originX: 'center', originY: 'center', left: 0, top: 0 });
   } else if (kind === 'hex') {
-    // Text muss in die schmalere Breite der Wabe passen -> Radius großzügiger
+    // The text has to fit the narrower width of the hexagon -> a more generous radius
     const r = Math.max(40, label.width / 1.55 + 16, label.height / 1.4 + 14);
     shape = new fabric.Polygon(hexPoints(r), { fill, originX: 'center', originY: 'center', left: 0, top: 0 });
   } else {
@@ -1300,7 +1301,7 @@ function buildTextblock(head, body, opts) {
   const check = !!opts.check;
   const align = opts.align || (check ? 'left' : 'center');
   const parts = [];
-  // Bei Haken den Text nach rechts einrücken, damit Platz für den Haken ist.
+  // With a tick, indent the text to the right to leave room for it.
   const r = size * 0.42;                 // Haken-Radius ~ Buchstabenhöhe
   const textLeft = check ? Math.round(2 * r + size * 0.22) : 0;   // kleiner Abstand Haken→Text
   let y = 0;
@@ -1542,11 +1543,11 @@ function startChecklistEdit(g) {
   }, 50);
 }
 
-// ---- SVG-Texte zu Textblöcken bündeln ------------------------------------
-// Fabric liest <tspan> nicht: mehrzeilige SVG-Texte müssen als einzelne
-// <text>-Elemente vorliegen. Sonst klebt alles in einer Zeile. Damit daraus
-// im Studio nicht pro Zeile ein Objekt wird, fassen wir untereinander
-// stehende Zeilen wieder zu EINEM Textblock zusammen (Doppelklick = ändern).
+// ---- Bundling SVG texts into text blocks ---------------------------------
+// Fabric does not read <tspan>: multi-line SVG text has to arrive as separate
+// <text> elements. Otherwise everything sticks together on one line. So that
+// this does not become one object per line in the Studio, we join lines that
+// sit under each other back into ONE text block (double-click to edit).
 function textZeilenBuendeln(texte) {
   const info = texte.map(o => {
     const c = o.getCenterPoint();
@@ -1583,8 +1584,8 @@ function textblockAusGruppe(g, s, offX, offY) {
 
   const kopfFs = (g.find(t => t.fett) || g[0]).fs;
   const textFs = (g.find(t => !t.fett) || g[0]).fs;
-  // buildTextblock rechnet den Fließtext als 0,74 × Größe. Ohne Überschrift
-  // muss die Größe also hochgerechnet werden, damit der Text stimmt.
+  // buildTextblock works out body text as 0.74 x size. Without a heading the
+  // size therefore has to be scaled up, so the text comes out right.
   const size = head ? kopfFs * s : (textFs * s) / 0.74;
   const breite = Math.max(...g.map(t => t.w)) * s;
 
@@ -1604,8 +1605,8 @@ function textblockAusGruppe(g, s, offX, offY) {
 
 // ---- SVG importieren: zerlegt in einzelne Ebenen -------------------------
 async function importSvgText(svgText, asGroup) {
-  // Liegt schon etwas auf der Fläche, würde sich der Import darüberstapeln
-  // (doppelte Bilder/Texte). Vorher fragen, ob geleert werden soll.
+  // If something is already on the artboard, the import would stack on top of
+  // it (duplicate images and texts). Ask first whether to clear it.
   if (editor.canvas.getObjects().length) {
     const leeren = await modal(
       'Clear the canvas first?',
@@ -1639,8 +1640,8 @@ async function importSvgText(svgText, asGroup) {
         editor.canvas.add(g);
         editor.canvas.setActiveObject(g);
       } else {
-        // Texte getrennt behandeln: untereinander stehende Zeilen werden zu
-        // EINEM Textblock gebündelt – ein Objekt pro Icon statt fünf.
+        // Handle texts separately: lines sitting under each other are bundled
+        // into ONE text block - one object per icon instead of five.
         const texte  = objs.filter(o => o.type === 'text' && (o.text || '').trim());
         const formen = objs.filter(o => !texte.includes(o));
 
@@ -1706,7 +1707,7 @@ async function importSvgText(svgText, asGroup) {
   }
 }
 
-// ---- Text direkt im Badge schreiben (Doppelklick oder direkt nach dem Anlegen) ----
+// ---- Writing text straight in the badge (double-click, or right after creating it) ----
 function isBadge(o) { return !!(o && typeof o.shapeKind === 'string' && o.shapeKind.startsWith('badge-')); }
 
 function rebuildBadge(g, txt) {
@@ -1769,8 +1770,8 @@ function startBadgeEdit(g) {
   inp.onblur = () => finish(true);
 }
 
-// Starrer SVG-Text -> editierbares Textfeld, erst wenn man ihn wirklich ändern will.
-// Alle Maße werden 1:1 übernommen, damit nichts verrutscht oder zusammenfällt.
+// Rigid SVG text -> an editable text field, only once it is really to be changed.
+// Every measurement is taken over 1:1, so nothing shifts or collapses.
 function textZuIText(o) {
   const t = new fabric.IText(o.text || '', {
     left: o.left, top: o.top,
@@ -1813,8 +1814,8 @@ document.addEventListener('click', e => {
   // failed retouch surfaces as an unhandled rejection, i.e. a red banner.
   if (mb) { e.preventDefault(); safely(() => applyMark(mb.dataset.mark), 'retouch “' + mb.dataset.mark + '”'); }
 });
-// Escape beendet das aktive Werkzeug – der schnelle Weg zurück, wenn sich die
-// Arbeitsfläche „festgefahren" anfühlt.
+// Escape ends the active tool - the quick way back when the artboard feels
+// "stuck".
 document.addEventListener('keydown', e => {
   if (e.key !== 'Escape' || _tool === 'off') return;
   const tag = (e.target.tagName || '').toLowerCase();
@@ -1826,10 +1827,10 @@ document.addEventListener('keydown', e => {
 });
 
 {
-  // Der Regler lief linear von 3 bis 120 px — damit lagen die feinen Größen auf
-  // den ersten Millimetern und waren praktisch nicht treffbar. Jetzt ist die
-  // Reglerstellung quadratisch auf die Pixelgröße abgebildet: die untere Hälfte
-  // des Wegs deckt 1–30 px ab, die obere den Rest bis 120.
+  // The slider ran linearly from 3 to 120 px - which put the fine sizes in the
+  // first few millimetres, practically impossible to hit. The slider position
+  // is now mapped to the pixel size quadratically: the lower half of the track
+  // covers 1-30 px, the upper half everything up to 120.
   const MIN_PX = 1, MAX_PX = 120;
   const zuPixel = (v) => Math.max(MIN_PX,
     Math.round(MIN_PX + Math.pow(v / 100, 2) * (MAX_PX - MIN_PX)));
@@ -1876,17 +1877,17 @@ function renderSelBar() {
   wireSizeFields();
 }
 
-// ---- Größe per Zahl setzen (bei Mehrfachauswahl: für alle) -----------------
-// Fabric packt eine Mehrfachauswahl in eine temporäre Gruppe; Änderungen an den
-// Kindern greifen darin nicht sauber. Deshalb: Auswahl lösen, ändern, neu setzen.
+// ---- Setting the size by number (with a multi-selection: for all) ---------
+// Fabric wraps a multi-selection in a temporary group; changes to the children
+// do not take cleanly inside it. So: break the selection, change, set it again.
 function mitAuswahl(fn) {
   const list = editor.activeAll();
   if (!list.length) return 0;
   const war = editor.active();
   const mehrere = war && war.type === 'activeSelection';
-  // Das kurzzeitige Ab- und Wiederanwählen löste drei komplette Neuaufbauten
-  // der Auswahlleiste aus – dabei wurde das Eingabefeld gelöscht, in dessen
-  // eigenem Handler wir gerade standen (Wert sprang zurück). Hier unterdrückt.
+  // Deselecting and reselecting briefly triggered three complete rebuilds of
+  // the selection bar - which deleted the very input field whose handler we
+  // were standing in (the value jumped back). Suppressed here.
   _suppressClear = true;
   try {
     if (mehrere) editor.canvas.discardActiveObject();
@@ -1977,7 +1978,7 @@ function wireSizeFields() {
     if (editor.activeAll().length < 2) { status('Select at least 2 elements.', '#dc3545'); return; }
     let ziel = 0;
     const n = mitAuswahl(list => {
-      // Vorbild = größtes Element, das ist berechenbar und unabhängig von der Klickreihenfolge
+      // The model is the largest element: predictable, and independent of click order
       const vorbild = list.reduce((a, b) => (b.getScaledWidth() > a.getScaledWidth() ? b : a), list[0]);
       const zW = vorbild.getScaledWidth(), zH = vorbild.getScaledHeight();
       ziel = zW;
@@ -2029,12 +2030,12 @@ function renderLayers() {
   });
 }
 
-// ---- Animations-Panel -----------------------------------------------------
-// Das frühere Seitenleisten-Panel „Animation" (#anim-panel) ist entfallen:
-// Die Leiste unter dem Canvas (renderAnimBar) bietet dasselbe – Bewegung,
-// Effekt, Tempo, Start – und das für jedes Element auf einen Blick.
-// Der Container #anim-panel existierte im Gerüst ohnehin nie, das Panel war
-// also toter Doppel-Code.
+// ---- Animation panel ------------------------------------------------------
+// The old sidebar panel "Animation" (#anim-panel) is gone: the bar under the
+// canvas (renderAnimBar) offers the same - motion, effect, speed, start - and
+// does so for every element at a glance.
+// The container #anim-panel never existed in the scaffold anyway, so the panel
+// was dead duplicate code.
 
 // ---- Animations-Leiste unter dem Canvas (pro Element ein Effekt) ----------
 function renderAnimBar() {
@@ -2075,9 +2076,9 @@ function renderAnimBar() {
     const th = document.createElement('img'); th.className = 'anim-thumb';
     th.title = layerLabel(o, idx + 1) + ' – select';
     th.onclick = () => editor.selectObj(o);
-    // Vorschaubild aus dem Cache. Ohne Cache wurde bei JEDEM Klick und jedem
-    // Verschieben jedes Element neu als PNG gerastert – bei 25 Elementen
-    // sekundenlange Hänger pro Mausklick.
+    // Preview image from the cache. Without it, every element was rasterised to
+    // a PNG again on EVERY click and every move - with 25 elements that meant
+    // seconds of hang per mouse click.
     try {
       if (!o.__thumb) {
         const dim = Math.max(o.getScaledWidth?.() || o.width || 1, o.getScaledHeight?.() || o.height || 1);
@@ -2155,8 +2156,8 @@ function renderAnimBar() {
   });
 }
 
-// ---- Schriftgröße nachträglich ändern ------------------------------------
-// Gilt für markierten Text: einfaches Textobjekt direkt, Textblock über Neubau.
+// ---- Changing the font size afterwards -----------------------------------
+// Applies to selected text: a plain text object directly, a text block by rebuild.
 function istTextObj(o) { return !!o && (o.type === 'text' || o.type === 'i-text' || o.type === 'textbox'); }
 
 function schriftGroesseAufAuswahl(size) {
@@ -2178,7 +2179,7 @@ function schriftGroesseAufAuswahl(size) {
   if (geaendert) { editor.canvas.requestRenderAll(); editor.snapshot(); }
 }
 
-// Auswahl geändert → aktuelles Feld mit der Größe des markierten Texts füllen.
+// Selection changed → fill the field with the size of the selected text.
 function syncFontSizeInput() {
   const fs = document.getElementById('font-size');
   if (!fs) return;
@@ -2191,13 +2192,13 @@ function syncFontSizeInput() {
 {
   const fs = document.getElementById('font-size');
   if (fs) fs.addEventListener('input', () => {
-    // Nur eingreifen, wenn gerade Text markiert ist – sonst gilt der Wert für neuen Text.
+    // Only step in while text is selected - otherwise the value applies to new text.
     const hatText = editor.activeAll().some(x => istTextObj(x) || isTextblock(x));
     if (hatText) schriftGroesseAufAuswahl(+fs.value);
   });
 }
 
-// Umschalt+Klick auf „Speichern" fragt das Format neu ab.
+// Shift+click on "Save" asks for the format again.
 {
   const sb = document.getElementById('save-btn');
   if (sb) sb.addEventListener('click', e => {
@@ -2213,9 +2214,9 @@ function syncFontSizeInput() {
 // ---- Selektion-Events koppeln --------------------------------------------
 ['selection:created', 'selection:updated', 'selection:cleared'].forEach(ev =>
   editor.canvas.on(ev, () => {
-    // _suppressClear schützt vor Umbauten, die selbst kurz die Auswahl
-    // aufheben (z.B. Breite/Höhe bei Mehrfachauswahl setzen). Ohne den Schutz
-    // schaltete sich das aktive Werkzeug beim Tippen in ein Zahlenfeld ab.
+    // _suppressClear guards against rebuilds that briefly clear the selection
+    // themselves (setting width or height on a multi-selection, say). Without
+    // it, the active tool switched itself off while typing into a number field.
     if (_suppressClear) return;
     if (ev === 'selection:cleared' && _tool !== 'off'
         && !['rect', 'mark', 'paint', 'erase', 'restore'].includes(_tool)) setTool('off');
@@ -2224,7 +2225,7 @@ function syncFontSizeInput() {
     if (ev !== 'selection:cleared') syncFontSizeInput();
   }));
 
-// Größen- und Positionsfelder mitführen, wenn per Maus geschoben/skaliert wird
+// Keep the size and position fields in step while dragging or scaling with the mouse
 ['object:modified', 'object:scaling', 'object:moving'].forEach(ev =>
   editor.canvas.on(ev, () => {
     const o = editor.activeAll()[0];
@@ -2244,14 +2245,14 @@ function syncFontSizeInput() {
     }
   }));
 
-// Vorschaubild eines Elements verwerfen, sobald es verändert wurde – nur dann
-// muss es neu gerastert werden.
+// Drop an element's preview image as soon as it changes - only then does it
+// have to be rasterised again.
 editor.canvas.on('object:modified', e => { if (e?.target) e.target.__thumb = null; });
 
-// ---- Undo/Redo-Buttons aktiv/inaktiv --------------------------------------
-// Die Neuaufbauten von Ebenen- und Animationsleiste werden gebündelt: Ein
-// einzelner Klick löste vorher mehrere komplette Neuaufbauten hintereinander
-// aus (Auswahl geleert → gesetzt → Snapshot).
+// ---- Undo/redo buttons enabled or disabled --------------------------------
+// The rebuilds of the layer bar and the animation bar are batched: a single
+// click used to trigger several complete rebuilds one after another
+// (selection cleared → set → snapshot).
 let _uiTimer = null;
 function planeUiAufbau() {
   if (_uiTimer) return;
@@ -2268,10 +2269,10 @@ editor.onChange(() => {
   if (u) u.disabled = !editor.canUndo();
   if (r) r.disabled = !editor.canRedo();
   bg.updateBgInfo(editor);
-  // Sicherheitsnetz: Ist das Zielbild des aktiven Werkzeugs verschwunden
-  // (Leeren, Strg+Z, Vorlage geladen), war die Arbeitsfläche danach gesperrt –
-  // nichts ließ sich mehr anklicken, und das Werkzeug malte unsichtbar auf ein
-  // totes Objekt weiter.
+  // Safety net: if the target image of the active tool has vanished (cleared,
+  // Ctrl+Z, template loaded), the artboard was locked afterwards - nothing
+  // could be clicked any more, and the tool went on painting invisibly onto a
+  // dead object.
   if (_tool !== 'off' && (!_toolTarget || _toolTarget.canvas !== editor.canvas)) {
     freeToolTarget();
     _tool = 'off';
@@ -2289,9 +2290,9 @@ editor.addImageUrl = async (url, opts) => {
     if (!opts?.silent && img && img._element && hasCheckerboardBorder(img._element)) {
       status('✨ Muster erkannt – entferne nur das Schachbrett…');
       const cleaned = await removeCheckerboard(img._element);   // nur Muster weg, Weiß bleibt
-      // null = es wurde nichts gefunden. Früher kam hier das unveränderte Bild
-      // zurück und wurde trotzdem als „bearbeitet" übernommen – ein 2-MB-JPEG
-      // wurde so zu ~25 MB base64 in jedem Undo-Schritt und im Entwurf.
+      // null = nothing was found. This used to return the unchanged image, which
+      // was taken as "edited" all the same - a 2 MB JPEG so became about 25 MB
+      // of base64 in every undo step and in the saved design.
       if (cleaned) {
         img.bgRemoved = true; img._work = null;
         retouch.replaceElement(img, cleaned); editor.snapshot();
@@ -2305,11 +2306,11 @@ editor.addImageUrl = async (url, opts) => {
 };
 
 // ---- Init -----------------------------------------------------------------
-// Jeder Schritt einzeln gekapselt: Ein Fehler in der Vorlagenliste darf nicht
-// mehr dazu führen, dass Bibliothek, Titel und das Laden der Datei ausfallen.
+// Every step wrapped on its own: an error in the template list must no longer
+// take down the library, the title and the loading of the file with it.
 boot('Template list', () => bg.loadTemplateList(editor));
-// Bibliothek erkennt SVGs selbst und schickt sie durch den Import statt sie
-// als flaches Bild einzusetzen.
+// The library recognises SVGs itself and sends them through the import instead
+// of placing them as a flat image.
 boot('SVG handler', () => {
   if (typeof lib.setSvgHandler === 'function') {
     lib.setSvgHandler((text, asGroup) => importSvgText(text, asGroup));
@@ -2323,14 +2324,15 @@ boot('Selection bar', () => renderSelBar());
 boot('Retouch panel', () => updateRetouchPanel());
 boot('Shell', () => initUi());
 
-// Aktuell geladene Vorlage – EINE Quelle der Wahrheit auf dem Editor-Objekt,
-// egal ob über die Verwaltung (?template=…) oder per Kachel-Klick (applyTemplate)
-// geöffnet. „Vorlage speichern" fragt dann, ob aktualisiert oder neu angelegt wird.
+// The template currently loaded - ONE source of truth on the editor object, no
+// matter whether it was opened from the management page (?template=…) or by
+// clicking a tile (applyTemplate). "Save template" then asks whether to update
+// an existing template or create a new one.
 function currentTemplateId() { return editor._templateId || null; }
 function setTemplateId(id)   { editor._templateId = id || null; }
 if (CONFIG.tplData?.id) setTemplateId(CONFIG.tplData.id);
 
-// Titel vorausfüllen (beim Weiterbearbeiten bleibt der Name erhalten).
+// Pre-fill the title (the name is kept when carrying on editing).
 {
   const t = CONFIG.libData?.title || CONFIG.postData?.title || CONFIG.tplData?.title || '';
   const ti = document.getElementById('title-input');
@@ -2346,9 +2348,9 @@ if (CONFIG.libData?.item_id || CONFIG.libData?.nc_path) {
 (async function restoreInitial() {
   try {
     const post = CONFIG.postData, libD = CONFIG.libData, tpl = CONFIG.tplData;
-    // frisch=true: die Historie beginnt beim GELADENEN Zustand. Ohne das wäre
-    // der leere Canvas von vor dem Laden der älteste Undo-Schritt – ein
-    // versehentliches Strg+Z hätte alles gelöscht.
+    // frisch=true: the history starts at the LOADED state. Without it, the empty
+    // canvas from before the load would be the oldest undo step - and an
+    // accidental Ctrl+Z would have wiped everything.
     if (tpl?.canvas_json) {
       if (tpl.width && tpl.height) { editor.setSize(tpl.width, tpl.height); fit(); }
       status('⏳ Loading template…');
@@ -2357,9 +2359,9 @@ if (CONFIG.libData?.item_id || CONFIG.libData?.nc_path) {
       }
       return;
     }
-    // Nur bei vollständigem Laden „Bereit." melden. Vorher überschrieb diese
-    // Meldung sofort jede rote Warnung („nicht alle Bilder geladen", „Daten
-    // unlesbar") – der Nutzer hielt den halbleeren Editor für seine Datei.
+    // Report "Ready." only on a complete load. This message used to overwrite
+    // any red warning immediately ("not all images loaded", "data unreadable")
+    // - and the user took the half-empty editor for their file.
     if (post?.canvas_json) {
       status('⏳ Loading draft…');
       if (await io.restoreCanvas(editor, post.canvas_json, { frisch: true })) status('Bereit.', '#888');
@@ -2371,9 +2373,9 @@ if (CONFIG.libData?.item_id || CONFIG.libData?.nc_path) {
       return;
     }
     if (libD?.image_url) {
-      // Schlägt das Laden fehl (Datei in Nextcloud gelöscht), blieb der Editor
-      // früher stumm leer – und der nächste „Speichern"-Klick überschrieb den
-      // Eintrag mit einem leeren Bild.
+      // When the load fails (file deleted in Nextcloud), the editor used to sit
+      // there silently empty - and the next click on "save" overwrote the entry
+      // with an empty image.
       try {
         await editor.addImageUrl(libD.image_url, { silent: true, fill: true });
         editor.resetHistory();
@@ -2392,17 +2394,17 @@ if (CONFIG.libData?.item_id || CONFIG.libData?.nc_path) {
     editor._ladefehler = true;
     status('❌ Draft could not be loaded', 'red');
   } finally {
-    // Der Stand direkt nach dem Öffnen gilt als „gespeichert".
+    // The state right after opening counts as "saved".
     window.dispatchEvent(new CustomEvent('studio:geladen'));
   }
 })();
 
-// Sicherstellen, dass Elemente normal anklickbar/auswählbar sind (kein Werkzeug/
-// keine Zeichenebene blockiert die Auswahl nach dem Laden).
-// ---- Zoomen mit Strg+Mausrad über der Arbeitsfläche ----------------------
-// Für feines Retuschieren: erst heranzoomen, dann mit kleinem Pinsel arbeiten.
-// Ohne Strg scrollt das Rad weiter die Seite — sonst bleibt man beim Scrollen
-// versehentlich im Bild hängen.
+// Make sure elements are normally clickable and selectable (no tool and no
+// drawing layer blocking the selection after a load).
+// ---- Zooming with Ctrl+wheel over the artboard ---------------------------
+// For fine retouching: zoom in first, then work with a small brush.
+// Without Ctrl the wheel still scrolls the page - otherwise scrolling keeps
+// getting caught in the image.
 boot('Wheel zoom', () => {
   const host = document.querySelector('.canvas-host');
   if (!host) return;
@@ -2422,40 +2424,40 @@ boot('Release selection', () => {
   editor.canvas.getObjects().forEach(o => { if (!o._snap) { o.selectable = true; o.evented = true; } });
   editor.canvas.requestRenderAll();
 });
-// Kein status('Bereit.') mehr an dieser Stelle: restoreInitial läuft async
-// weiter, und „Bereit." überschrieb dann sofort das „⏳ wird geladen…" –
-// obwohl Speichern in dem Moment noch abgelehnt wurde. Die Meldung setzt
-// jetzt restoreInitial selbst, wenn wirklich alles da ist.
+// No status('Ready.') here any more: restoreInitial carries on asynchronously,
+// and "Ready." then overwrote the "⏳ loading…" straight away - while saving
+// was still being refused at that moment. restoreInitial now sets the message
+// itself, once everything really is there.
 
-// ---- Schutz vor versehentlichem Verlassen --------------------------------
-// Ein Klick auf eine Kachel in der rechten Leiste navigierte sofort weg und
-// verwarf alles Ungespeicherte – ohne jede Rückfrage.
-// editor._rev zählt jede Änderung monoton hoch. Die Länge der Historie taugt
-// dafür nicht: die ist gedeckelt und steht ab ~30 Schritten still – danach hätte
-// die Rückfrage nie mehr ausgelöst.
+// ---- Guard against leaving by accident ------------------------------------
+// A click on a tile in the right-hand panel used to navigate away at once and
+// discard everything unsaved - without asking.
+// editor._rev counts every change, only ever upwards. The length of the history
+// is no use for that: it is capped and stands still past about 30 steps - after
+// which the prompt would never have fired again.
 let _gespeichertStand = editor._rev;
 function ungespeicherteAenderungen() {
   return editor._rev > 0 && editor._rev !== _gespeichertStand;
 }
 function alsGespeichertMerken() { _gespeichertStand = editor._rev; }
 window.addEventListener('studio:output-changed', alsGespeichertMerken);
-// Nach dem Laden einer Datei/Vorlage ist der Stand „wie gespeichert" – sonst
-// fragte das Studio direkt nach dem Öffnen nach ungespeicherten Änderungen.
+// After loading a file or template the state is "as saved" - otherwise the
+// Studio asked about unsaved changes right after opening.
 window.addEventListener('studio:geladen', alsGespeichertMerken);
-// Auch das Speichern einer Vorlage macht den Stand sauber.
+// Saving a template also makes the state clean.
 window.addEventListener('studio:vorlage-gespeichert', alsGespeichertMerken);
 window.addEventListener('beforeunload', e => {
   if (!ungespeicherteAenderungen()) return;
   e.preventDefault();
   e.returnValue = '';   // Browser zeigt seine Standard-Rückfrage
 });
-// Für Navigation innerhalb der Seite (Kachel-Klicks in library.js).
+// For navigation within the page (tile clicks in library.js).
 window.studioDarfVerlassen = function () {
   if (!ungespeicherteAenderungen()) return true;
   return window.confirm('There are unsaved changes.\n\n' +
                         'Really leave? The changes will be lost.');
 };
 
-// „Bereit." setzt ausschließlich restoreInitial – und nur, wenn wirklich alles
-// geladen ist. Diese Zeile überschrieb sonst rote Ladefehler-Meldungen
-// (auch bei einem Parse-Fehler, wo _locked nie gesetzt wird).
+// "Ready." is set by restoreInitial alone - and only when everything really is
+// loaded. This line used to overwrite red loading-error messages (including on
+// a parse error, where _locked is never set).

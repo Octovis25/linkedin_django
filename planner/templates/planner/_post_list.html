@@ -20,15 +20,26 @@
 #pe-lightbox img{max-width:90vw;max-height:88vh;border-radius:8px;object-fit:contain}
 #pe-lightbox-close{position:absolute;top:16px;right:20px;color:#fff;font-size:28px;cursor:pointer;opacity:.8;line-height:1}
 #pe-lightbox-close:hover{opacity:1}
+/* The post one has just arrived at (deep link from the Planner) is briefly
+   outlined - otherwise you land in a list and have to look for it. */
+@keyframes pe-angekommen { from { box-shadow:0 0 0 3px #008591; } to { box-shadow:0 0 0 3px rgba(0,133,145,0); } }
+.pe-card.pe-ziel { animation: pe-angekommen 2.4s ease-out 1; }
 </style>
 
 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1.25rem;flex-wrap:wrap;gap:8px">
   <h1 style="margin:0;font-size:1.4rem">{{ title }}</h1>
   <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
     {% if allow_create %}
-    <a href="/planner/?new=1"
+    {% comment %}
+    The new-post dialog lives in the Planner. Until now this link simply went
+    there and left you standing in the Planner afterwards - creating a draft
+    from the Draft tab meant finding your way back by hand. So the link now
+    carries two things: where it came from (back) and the status that fits this
+    tab. After saving, the Planner brings you back here.
+    {% endcomment %}
+    <a href="/planner/?new=1&amp;back={{ request.path|urlencode }}{% if tab == "draft" %}&amp;status=Draft{% elif tab == "pipeline" %}&amp;status=Review{% elif tab == "ready" %}&amp;status=Ready{% elif tab == "scheduled" %}&amp;status=Scheduled{% elif tab == "archive" %}&amp;status=Archive{% endif %}"
        style="font-size:13px;padding:4px 10px;border:0.5px solid #008080;border-radius:4px;background:#008080;color:#fff;cursor:pointer;white-space:nowrap;text-decoration:none;display:inline-block"
-       title="Create a new post (in the Planner)">＋ New post</a>
+       title="Create a new post - the dialog opens in the Planner and brings you back here">＋ New post</a>
     {% endif %}
     <a href="https://publish.buffer.com/" target="_blank" rel="noopener"
        style="font-size:13px;padding:4px 10px;border:0.5px solid #2c4bff;border-radius:4px;background:#fff;color:#2c4bff;text-decoration:none;white-space:nowrap"
@@ -96,7 +107,7 @@ word, so a published post that was later tidied away still counts as published.
 
 <div style="display:flex;flex-direction:column;gap:8px">
 {% for p in posts %}
-<div class="pe-card" data-ende="{% if p.linkedin_posted %}posted{% else %}dropped{% endif %}" style="background:#fff;border:0.5px solid #e0e0e0;border-radius:10px;padding:12px 14px">
+<div class="pe-card" id="post-{{ p.id }}" data-post-id="{{ p.id }}" data-ende="{% if p.linkedin_posted %}posted{% else %}dropped{% endif %}" style="background:#fff;border:0.5px solid #e0e0e0;border-radius:10px;padding:12px 14px">
   <div style="display:flex;gap:10px;align-items:center">
     {% if p.image %}
     <img src="/planner/image/{{ p.id }}/?v={% now 'U' %}" style="width:56px;height:56px;border-radius:6px;object-fit:cover;flex-shrink:0;cursor:zoom-in" onclick="peLightbox('/planner/image/{{ p.id }}/?v={% now 'U' %}')">
@@ -189,7 +200,7 @@ word, so a published post that was later tidied away still counts as published.
         {% for t in topics %}<option value="{{ t.id }}">{{ t.name }}</option>{% endfor %}
       </select>
       <select id="pe-status" style="font-size:13px;flex:1;padding:6px 8px;border:0.5px solid #ced4da;border-radius:4px">
-        <option>Draft</option><option>Review</option><option>Ready</option><option>Scheduled</option><option>Posted</option>
+        <option value="Draft">Draft</option><option value="Review">Review</option><option value="Ready">Ready</option><option value="Scheduled">Scheduled</option><option value="Posted">Posted</option>
       </select>
     </div>
     <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap">
@@ -419,8 +430,8 @@ function peShowVideoPreview(src) {
   if (src) {
     v.src = src;
     v.style.display = 'block';
-    // Auf einen aussagekräftigen Frame springen (nicht den schwarzen ersten):
-    // ~2 Sek, oder ein Viertel der Länge bei kürzeren Clips.
+    // Jump to a frame that says something (not the black first one):
+    // about 2 s, or a quarter of the length for shorter clips.
     v.onloadedmetadata = function() {
       try {
         const dur = isFinite(v.duration) ? v.duration : 0;
@@ -449,7 +460,7 @@ function peResetVideoUi() {
 }
 function peClearVideo() { peResetVideoUi(); }
 
-/* Studio-Button nur zeigen, wenn ein Nextcloud-Video gewählt ist */
+/* Show the Studio button only when a Nextcloud video is selected */
 function peUpdateStudioBtn() {
   const ncPath = document.getElementById('pe-video-nc-path').value;
   document.getElementById('pe-video-studio').style.display = ncPath ? 'inline-block' : 'none';
@@ -507,7 +518,7 @@ async function peReloadNcVideos() {
   try {
     const r = await fetch('/planner/api/nc-videos/').then(r => r.json());
     if (r.ok) addGroup('🎬 Planner-Videos', r.videos);
-  } catch (e) { /* Liste optional — PC-Upload bleibt möglich */ }
+  } catch (e) { /* the list is optional - uploading from the PC still works */ }
 }
 
 function peVideoNcSelect() {
@@ -590,6 +601,41 @@ function openEdit(id) {
 
 function closeEdit() { document.getElementById('post-edit-modal').style.display = 'none'; }
 
+/* ── Deep link: ?edit=<id> ─────────────────────────────────────────────────
+   A click on a post in the Planner leads here - to the tab that belongs to
+   its status - and opens that post straight away.
+
+   It can happen that the post is not on this page after all: Ready and
+   Scheduled additionally require in_pipeline, a published post moves to the
+   archive overnight, and the status may have been changed elsewhere in the
+   meantime. Then we do not leave the user in front of a list that silently
+   lacks their post, but send them on to All Posts, where every post is. The
+   `von=all` guard stops that from turning into a loop. */
+(function () {
+  try {
+    const params = new URLSearchParams(window.location.search);
+    const eid = params.get('edit');
+    if (!eid) return;
+    const p = PE_POSTS.find(x => String(x.id) === String(eid));
+    if (p) {
+      const zeile = document.getElementById('post-' + eid) ||
+                    document.querySelector('[data-post-id="' + eid + '"]');
+      if (zeile) {
+        if (zeile.scrollIntoView) zeile.scrollIntoView({ block: 'center' });
+        zeile.classList.add('pe-ziel');
+      }
+      setTimeout(() => openEdit(p.id), 120);
+      return;
+    }
+    if (params.get('von') !== 'all') {
+      window.location.replace('/planner/all/?edit=' + encodeURIComponent(eid) + '&von=all');
+    } else {
+      // Even All Posts does not have it - then say so instead of doing nothing.
+      alert('This post is no longer in the list (it may have been deleted).');
+    }
+  } catch (e) {}
+})();
+
 function peDropImg(e) {
   e.preventDefault();
   const file = e.dataTransfer.files[0];
@@ -603,7 +649,7 @@ function peDropImg(e) {
 function pePreviewImg(input) {
   const file = input.files ? input.files[0] : null;
   if (!file) return;
-  // PC-Bild gewählt → Studio-Auswahl verwerfen
+  // An image from the PC was chosen → drop the Studio selection
   document.getElementById('pe-img-nc-path').value = '';
   const ncs = document.getElementById('pe-img-nc'); if (ncs) ncs.value = '';
   const reader = new FileReader();
@@ -622,7 +668,7 @@ async function peReloadStudioImages() {
       opt.value = im.nc_path; opt.textContent = im.filename;
       sel.appendChild(opt);
     });
-  } catch (e) { /* optional — PC-Upload bleibt möglich */ }
+  } catch (e) { /* optional - uploading from the PC still works */ }
 }
 
 function peImgNcSelect() {
@@ -745,7 +791,7 @@ function liOpenPost(id) {
     }
   }
 
-  // Zugeordnetes Video anzeigen (Upload passiert in Edit, hier nur prüfen)
+  // Show the video that is attached (uploading happens in Edit, this only checks)
   const liVidInfo = document.getElementById('li-video-info');
   const liVidName = document.getElementById('li-video-name');
   const liVidPrev = document.getElementById('li-video-preview');
@@ -828,11 +874,11 @@ async function liDoPost() {
   res.style.display = 'none';
 
   // Video wird in Edit zugeordnet; hier kein Upload mehr.
-  // Ein zugeordnetes Video wird über den normalen /post/-Weg (include_video) gepostet.
+  // An attached video is posted the normal way, through /post/ (include_video).
   const liVidInfoEl = document.getElementById('li-video-info');
   const hasVideo = liVidInfoEl && liVidInfoEl.style.display !== 'none';
 
-  // ── Text / Image / Video route (alles über /post/) ──
+  // ── Text / image / video route (everything through /post/) ──
   const schedCheck  = document.getElementById('li-schedule-check');
   const isScheduled = schedCheck && schedCheck.checked;
   btn.textContent = isScheduled ? 'Scheduling…' : 'Posting…';

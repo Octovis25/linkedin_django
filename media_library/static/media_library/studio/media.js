@@ -1,9 +1,9 @@
-// media.js – Animationen + Export als bewegtes Bild (WebM-Video) und GIF.
-// Jedes Element kann eine Animation tragen: obj.anim = {type, dur} und/oder
-// einen Deko-Effekt obj.fx. Wann es losgeht, steht EINMAL in obj.startAt –
-// siehe startOf()/elapsedAt() weiter unten.
-// Beim Abspielen werden Opacity/Position/Skalierung/Winkel über die Zeit
-// interpoliert und der Canvas Frame für Frame gerendert.
+// media.js - animations plus export as moving image (WebM video) and GIF.
+// Every element can carry an animation: obj.anim = {type, dur} and/or a
+// decorative effect obj.fx. When it starts is written ONCE in obj.startAt -
+// see startOf()/elapsedAt() further down.
+// On playback, opacity, position, scale and angle are interpolated over time
+// and the canvas is rendered frame by frame.
 import { toast, status } from './util.js';
 import { saveAnimation } from './io.js';
 
@@ -54,7 +54,7 @@ export function setStart(o, ms) {
   return v;
 }
 
-// Setzt eine Animation auf das aktuell gewählte Element.
+// Puts an animation on the currently selected element.
 export function setAnim(editor, type, dur = 1200, delay = 0) {
   const o = editor.active();
   if (!o) { toast('Select an element first', 'err'); return; }
@@ -203,8 +203,8 @@ export function setEffect(editor, obj, fx, delay = 0) {
   editor.snapshot();
 }
 
-// Wendet den Animationszustand zum Zeitpunkt t (ms) auf ein Objekt an.
-// Speichert/wiederherstellt Originalwerte über _base.
+// Applies the animation state at time t (ms) to an object.
+// Keeps and restores the original values through _base.
 export function applyAt(o, t) {
   if (!o.anim) return;
   if (!o._base) o._base = { opacity: o.opacity, left: o.left, top: o.top, scaleX: o.scaleX, scaleY: o.scaleY, angle: o.angle };
@@ -225,7 +225,7 @@ export function applyAt(o, t) {
   // dur=1200 ⇒ sp=1 (unverändert); dur=2400 ⇒ halbe Geschwindigkeit.
   const tt = (elapsedAt(o, t) / 1000) * (1200 / Math.max(200, dur));
   switch (type) {
-    // — einmalige Effekte (über die Dauer) —
+    // - one-shot effects (over the duration) -
     case 'fadeIn':     o.set({ opacity: b.opacity * ease }); break;
     case 'fadeOut':    o.set({ opacity: b.opacity * (1 - ease) }); break;
     case 'slideLeft':  o.set({ left: b.left + 220 * (1 - ease), opacity: b.opacity * ease }); break;
@@ -254,8 +254,8 @@ function resetAnim(editor) {
   editor.canvas.requestRenderAll();
 }
 
-// Spielt die Animation über `total` ms und ruft onFrame() pro Frame.
-// Gibt Promise zurück, die nach Ablauf auflöst.
+// Plays the animation over `total` ms and calls onFrame() for each frame.
+// Returns a promise that resolves when it is done.
 function play(editor, total, onFrame) {
   ensureFxHook(editor);
   return new Promise(resolve => {
@@ -280,8 +280,8 @@ export function previewAnimation(editor) {
   play(editor, animDuration(editor)).catch(e => console.error('[media] preview:', e));
 }
 
-// Für Export: Canvas auf volle Auflösung setzen und Zoom + Verschiebung
-// neutralisieren, sonst wird der verschobene Ausschnitt aufgenommen.
+// For export: set the canvas to full resolution and undo zoom and panning,
+// otherwise the shifted cut-out is what gets recorded.
 function toFullRes(editor) {
   editor.canvas.setViewportTransform([1, 0, 0, 1, 0, 0]);
   editor.canvas.setDimensions({ width: editor.width, height: editor.height });
@@ -295,8 +295,8 @@ function animDuration(editor) {
   // Manueller Längen-Regler hat Vorrang (Sekunden). Leer/0 = automatisch.
   const el = document.getElementById('video-length');
   const secs = el ? parseFloat(el.value) : 0;
-  // Deckel bei 15 s: 30 s × 12 fps = 360 Frames à 2,5 MB Kopie = ~900 MB im
-  // Arbeitsspeicher, bevor die GIF-Kodierung überhaupt startet → Tab-Absturz.
+  // Capped at 15 s: 30 s x 12 fps = 360 frames at 2.5 MB per copy = around
+  // 900 MB in memory before the GIF encoding even starts, and the tab dies.
   if (secs && secs > 0) return Math.min(secs, 15) * 1000;
   let max = 1500, hasLoop = false;
   editor.canvas.getObjects().forEach(o => {
@@ -308,14 +308,14 @@ function animDuration(editor) {
     // begin at 2.5 s never appears in a 4 s export.
     if (o.fx && o.fx !== 'none') { hasLoop = true; max = Math.max(max, startOf(o) + 1500); }
   });
-  // Schleifen-Bewegungen/Effekte: mind. 4 s, sonst nur ein kurzer Hopser.
+  // Looping motion and effects: at least 4 s, otherwise it is a brief hop.
   if (hasLoop) max = Math.max(max, 4000);
   return Math.min(max, 8000);
 }
 
-// ---- Export als bewegtes Bild (WebM) -------------------------------------
+// ---- Export as a moving image (WebM) --------------------------------------
 export async function exportVideo(editor, onBlob) {
-  // Rueckgabe true/false: der Aufrufer darf nur bei true "Gespeichert" melden.
+  // Returns true/false: the caller may only report "saved" on true.
   if (!hasAnimations(editor)) { toast('No animations – nothing to export', 'err'); return false; }
   const canvasEl = editor.canvas.lowerCanvasEl;
   if (!canvasEl.captureStream) { toast('Browser does not support video capture', 'err'); return false; }
@@ -343,8 +343,8 @@ export async function exportVideo(editor, onBlob) {
     toast(e.message || 'Video capture failed', 'err');
     throw e;
   } finally {
-    // Ohne finally blieb der Canvas nach einem Fehler auf voller Auflösung
-    // stehen und das Raster unsichtbar – der Editor war bis zum Neuladen kaputt.
+    // Without the finally, an error left the canvas at full resolution and the
+    // grid invisible - the editor was broken until the page was reloaded.
     resetAnim(editor);
     restoreFit(editor);
     if (editor.gridOn) editor.setGridVisible(true);
@@ -353,7 +353,7 @@ export async function exportVideo(editor, onBlob) {
   const blob = new Blob(chunks, { type: 'video/webm' });
   if (!blob.size) { status('❌ Video is empty', 'red'); toast('Video capture returned no data', 'err'); return false; }
   if (typeof onBlob === 'function') { onBlob(blob); status('Bereit.'); return true; }
-  // Kein Auto-Download – nur in „Meine Ausgaben" speichern (mit canvas_json → editierbar).
+  // No auto-download - save to "My outputs" only (with canvas_json, so it stays editable).
   status('💾 Saving video…');
   const erg = await saveAnimation(editor, blob, '.webm');
   if (!erg?.ok) return false;
@@ -361,7 +361,7 @@ export async function exportVideo(editor, onBlob) {
   return true;
 }
 
-// Video erzeugen und direkt auf den Rechner herunterladen (statt in „Meine Ausgaben").
+// Make a video and download it straight to the computer (instead of "My outputs").
 export async function downloadVideo(editor) {
   await exportVideo(editor, blob => {
     const a = document.createElement('a');
@@ -373,8 +373,8 @@ export async function downloadVideo(editor) {
   });
 }
 
-// ---- Export als GIF -------------------------------------------------------
-// Nutzt gif.js (lokal ausgeliefert, lazy geladen). Rendert Frames aus der Animation.
+// ---- Export as GIF --------------------------------------------------------
+// Uses gif.js (served locally, loaded lazily). Renders frames from the animation.
 const VENDOR = window.STUDIO_VENDOR || '/static/media_library/studio/vendor/';
 let _gifLibPromise = null;
 function loadGifLib() {
@@ -395,8 +395,8 @@ export async function exportGif(editor, onBlob) {
     try {
       await loadGifLib();
     } catch (e) {
-      // Damit ein zweiter Versuch nach behobenem Problem möglich ist – vorher
-      // blieb die fehlgeschlagene Promise bis zum Neuladen der Seite gecacht.
+      // So a second attempt is possible once the problem is fixed - the failed
+      // promise used to stay cached until the page was reloaded.
       _gifLibPromise = null;
       throw new Error('GIF library could not be loaded (vendor/gif.js)');
     }
@@ -404,8 +404,9 @@ export async function exportGif(editor, onBlob) {
 
     const total = animDuration(editor);
     const fps = 12, frameMs = 1000 / fps;
-    // GIFs klein halten (Cloudinary/LinkedIn ~10 MB): max 800 px Kante + etwas
-    // stärkere Kompression. Video (WebM) bleibt für große/lange Clips die bessere Wahl.
+    // Keep GIFs small (Cloudinary/LinkedIn ~10 MB): 800 px longest edge and
+    // somewhat stronger compression. Video (WebM) remains the better choice
+    // for large or long clips.
     const scale = Math.min(1, 800 / Math.max(editor.width, editor.height));
     const gw = Math.round(editor.width * scale), gh = Math.round(editor.height * scale);
     const gif = new window.GIF({
@@ -432,27 +433,27 @@ export async function exportGif(editor, onBlob) {
         _tctx.drawImage(editor.canvas.lowerCanvasEl, 0, 0, gw, gh);
         gif.addFrame(_tmp, { copy: true, delay: frameMs });
         n++;
-        // Alle 12 Frames kurz an den Browser abgeben: sonst friert die Seite
-        // während der gesamten Frame-Schleife komplett ein (kein Repaint,
-        // kein Statustext) – für den Nutzer sah das aus wie ein Absturz.
+        // Hand control back to the browser every 12 frames: otherwise the page
+        // freezes completely for the whole frame loop - no repaint, no status
+        // text - and to the user that looks like a crash.
         if (n % 12 === 0) {
           status(`🎞 GIF wird erzeugt… ${Math.round(n / gesamtFrames * 100)} %`);
           await new Promise(r => setTimeout(r, 0));
         }
       }
     } finally {
-      // MUSS auch im Fehlerfall laufen. Fehlte das, blieb der Canvas auf voller
-      // Auflösung stehen, die Elemente in ihrer animierten Zwischenposition und
-      // die Effekt-Partikel dauerhaft an – ein anschließendes Speichern schrieb
-      // genau diesen kaputten Zustand als Bild fest.
+      // MUST run on failure too. Without it the canvas stayed at full
+      // resolution, the elements in their half-animated positions and the
+      // effect particles switched on for good - and a save afterwards wrote
+      // exactly that broken state into the image.
       _fxOn = false;
       resetAnim(editor);
       restoreFit(editor);
       if (editor.gridOn) editor.setGridVisible(true);
     }
 
-    // Auf das FERTIGE GIF warten. Vorher meldete das Studio „Gespeichert.",
-    // während die Kodierung noch lief – wer den Tab schloss, verlor alles.
+    // Wait for the FINISHED GIF. The Studio used to report "Saved." while the
+    // encoding was still running - close the tab and everything was lost.
     status('🎞 GIF wird komprimiert…');
     const blob = await new Promise((resolve, reject) => {
       const abbruch = setTimeout(() => reject(new Error('GIF generation is taking too long (worker file reachable?)')), 180000);
@@ -462,7 +463,7 @@ export async function exportGif(editor, onBlob) {
     });
 
     if (typeof onBlob === 'function') { onBlob(blob); status('Bereit.'); return true; }
-    // Kein Auto-Download – nur in „Meine Ausgaben" speichern.
+    // No auto-download - save to "My outputs" only.
     status('💾 Saving GIF…');
     const erg = await saveAnimation(editor, blob, '.gif');
     if (!erg?.ok) return false;
@@ -476,7 +477,7 @@ export async function exportGif(editor, onBlob) {
   }
 }
 
-// GIF erzeugen und direkt auf den Rechner herunterladen (statt in „Meine Ausgaben").
+// Make a GIF and download it straight to the computer (instead of "My outputs").
 export async function downloadGif(editor) {
   await exportGif(editor, blob => {
     const a = document.createElement('a');

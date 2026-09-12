@@ -1,13 +1,13 @@
-// cutout.js – Hintergrund freistellen. SAUBER: arbeitet nur auf same-origin
-// (proxy-geladenen) Bildern, daher wird der Canvas nie getaintet und
-// toDataURL() funktioniert zuverlässig. Das war die Kernursache dafür, dass
-// freigestellte Bilder vorher verschwanden bzw. nicht auf dem Hintergrund lagen.
+// cutout.js - removing the background. The clean way: it works only on
+// same-origin images (loaded through the proxy), so the canvas is never
+// tainted and toDataURL() works reliably. That was the root cause of cut-out
+// images vanishing before, or not sitting on the background.
 import { loadImage } from './util.js';
 
-// Prüft, ob ein fabric.Image bereits Transparenz hat (schon freigestellt).
-// Wichtig: bei Fehler geben wir FALSE zurück (Bild als NICHT freigestellt
-// behandeln) – die alte Logik nahm fälschlich TRUE an und übersprang das
-// Freistellen, wodurch Bilder mit Kasten auf dem Hintergrund landeten.
+// Checks whether a fabric.Image already has transparency (already cut out).
+// Important: on error we return FALSE (treat the image as NOT cut out) - the
+// old logic wrongly assumed TRUE and skipped the cut-out, which is how images
+// with a box around them ended up on the background.
 export function hasTransparency(imgEl) {
   try {
     const w = Math.min(imgEl.naturalWidth || imgEl.width, 200);
@@ -26,10 +26,10 @@ export function hasTransparency(imgEl) {
   }
 }
 
-// Entfernt den Hintergrund per RAND-FLOOD-FILL: startet an allen Randpixeln und
-// entfernt nur die vom Rand her ZUSAMMENHÄNGENDE Hintergrundfarbe. Eingeschlossene
-// Bereiche (weißer Kittel, Icons – auch wenn gleiche Farbe wie Rand) bleiben erhalten.
-// Gibt Promise<HTMLImageElement>.
+// Removes the background by an EDGE FLOOD FILL: starts at every edge pixel and
+// removes only the background colour CONNECTED to the edge. Enclosed areas (a
+// white coat, icons - even in the same colour as the edge) are kept.
+// Returns Promise<HTMLImageElement>.
 export function removeBackground(imgEl, { tol = 50, islandMaxPct = 0.6 } = {}) {
   const W = imgEl.naturalWidth || imgEl.width;
   const H = imgEl.naturalHeight || imgEl.height;
@@ -53,9 +53,9 @@ export function removeBackground(imgEl, { tol = 50, islandMaxPct = 0.6 } = {}) {
         const i = (y * W + x) * 4; r += d[i]; g += d[i + 1]; b += d[i + 2]; n++;
       }
   };
-  // Math.max(0,…): bei Bildern schmaler als 8 px startete die Schleife bei
-  // negativem x, las undefined und rechnete mit NaN – „Freigestellt" wurde
-  // gemeldet, entfernt wurde nichts.
+  // Math.max(0,…): on images narrower than 8 px the loop started at a negative
+  // x, read undefined and computed with NaN - "cut out" was reported while
+  // nothing had been removed.
   sample(0, 0); sample(Math.max(0, W - 8), 0);
   sample(0, Math.max(0, H - 8)); sample(Math.max(0, W - 8), Math.max(0, H - 8));
   if (!n) return Promise.reject(new Error('Image too small to cut out'));
@@ -79,11 +79,11 @@ export function removeBackground(imgEl, { tol = 50, islandMaxPct = 0.6 } = {}) {
   const done = new Uint8Array(total);   // schon bearbeitet (egal ob entfernt)
   const clear = (idx) => { d[idx * 4 + 3] = 0; };
 
-  // Ein zusammenhängendes Gebiet ab startIdx sammeln (nur near-Pixel).
-  // Der Stack ist eine vorallokierte Int32Array statt eines JS-Arrays, und
-  // `done` wird beim PUSHEN gesetzt statt beim Pop. Vorher landete jedes Pixel
-  // bis zu viermal im Stack – bei einem 24-Megapixel-Foto waren das zehn
-  // Millionen Einträge (~80 MB) und der Tab fror sekundenlang ein oder stürzte ab.
+  // Collect one connected area from startIdx (near pixels only).
+  // The stack is a pre-allocated Int32Array rather than a JS array, and `done`
+  // is set on PUSH instead of on pop. Before, every pixel landed on the stack
+  // up to four times - on a 24-megapixel photo that meant ten million entries
+  // (~80 MB), and the tab froze for seconds or crashed.
   const stack = new Int32Array(total);
   function collect(startIdx) {
     const region = [];
@@ -118,8 +118,8 @@ export function removeBackground(imgEl, { tol = 50, islandMaxPct = 0.6 } = {}) {
     collect(e).forEach(clear);
   }
 
-  // 2) Eingeschlossene Inseln: alle übrigen near-Gebiete sammeln; NUR kleine
-  //    (bis islandMaxPct % der Bildfläche) entfernen – große Flächen (Bluse) bleiben.
+  // 2) Enclosed islands: collect all remaining near areas; remove ONLY small
+  //    ones (up to islandMaxPct % of the image) - large areas (a blouse) stay.
   const maxIsland = total * (islandMaxPct / 100);
   for (let idx = 0; idx < total; idx++) {
     if (done[idx] || !near(idx * 4)) continue;
@@ -131,10 +131,10 @@ export function removeBackground(imgEl, { tol = 50, islandMaxPct = 0.6 } = {}) {
   return loadImage(c.toDataURL('image/png'));
 }
 
-// Entfernt ein helles, graustufiges "Transparenz-Schachbrett" (typisch für
-// KI-generierte "transparente" Bilder): alle hellen, farbarmen (grauen/weißen)
-// Pixel werden global transparent – egal ob zusammenhängend. Bunte/dunkle
-// Bildinhalte bleiben erhalten. Gibt Promise<HTMLImageElement>.
+// Removes a light, greyscale "transparency chequerboard" (typical of
+// AI-generated "transparent" images): every light, low-colour (grey or white)
+// pixel becomes transparent, connected or not. Colourful and dark content is
+// kept. Returns Promise<HTMLImageElement>.
 export function removeGrayBackground(imgEl, { minBright = 175, maxSat = 32 } = {}) {
   const W = imgEl.naturalWidth || imgEl.width;
   const H = imgEl.naturalHeight || imgEl.height;
@@ -159,10 +159,10 @@ export function removeGrayBackground(imgEl, { minBright = 175, maxSat = 32 } = {
 }
 
 
-// Entfernt NUR das eingebackene Schachbrett-/Rautenmuster: helle, farbneutrale
-// Pixel, die Teil eines abwechselnden Musters sind (hoher lokaler Kontrast zu
-// hellen Nachbarn). Gleichmäßig weiße Flächen (Bluse) haben KEIN Muster und
-// bleiben erhalten. Gibt Promise<HTMLImageElement>.
+// Removes ONLY the baked-in chequerboard or diamond pattern: light, neutral
+// pixels that are part of an alternating pattern (high local contrast against
+// light neighbours). Evenly white areas (a blouse) have NO pattern and are
+// kept. Returns Promise<HTMLImageElement>.
 export function removeCheckerboard(imgEl) {
   const W = imgEl.naturalWidth || imgEl.width;
   const H = imgEl.naturalHeight || imgEl.height;
@@ -189,17 +189,17 @@ export function removeCheckerboard(imgEl) {
   let peak = -1, peakVal = 0;
   for (let b = 150; b <= 234; b++) if (hist[b] > peakVal) { peakVal = hist[b]; peak = b; }
   if (peak < 0 || peakVal < N * 0.01) {
-    // Kein deutliches Karo-Grau → nichts tun. WICHTIG: null zurückgeben statt
-    // das unveränderte Bild. Vorher kam hier ein verlustfreies PNG des ganzen
-    // Fotos zurück, das der Aufrufer als „bearbeitet" übernahm – aus einem
-    // 2-MB-JPEG wurden 25 MB base64 in jedem Undo-Schritt und im Entwurf.
+    // No clear chequer grey → do nothing. IMPORTANT: return null rather than
+    // the unchanged image. This used to return a lossless PNG of the whole
+    // photo, which the caller took as "edited" - a 2 MB JPEG became 25 MB of
+    // base64 in every undo step and in the saved design.
     return Promise.resolve(null);
   }
 
   const isGray  = (i) => neutral(i) && Math.abs(bright(i) - peak) <= 10;   // exakter Karo-Grauton
   const isWhite = (i) => neutral(i) && bright(i) >= 235;
 
-  // 2) Karo-Grau immer entfernen; Weiß nur, wenn nahe an Karo-Grau (= weißes Karo).
+  // 2) Always remove chequer grey; white only when close to it (a white square).
   const remove = new Uint8Array(N);
   const R = 8;
   for (let y = 0; y < H; y++) {
@@ -227,9 +227,9 @@ export function removeCheckerboard(imgEl) {
   return loadImage(c.toDataURL('image/png'));
 }
 
-// Erkennt, ob das Bild ein eingebackenes „Transparenz-Rautenmuster" als
-// Hintergrund hat (typisch für KI-Bilder): Randpixel sind hell und bestehen
-// aus zwei Graustufen (Schachbrett). Gibt true/false.
+// Detects whether the image has a baked-in "transparency diamond pattern" as
+// its background (typical of AI images): edge pixels are light and made of two
+// shades of grey (a chequerboard). Returns true/false.
 export function hasCheckerboardBorder(imgEl) {
   try {
     const W = imgEl.naturalWidth || imgEl.width;
@@ -239,9 +239,9 @@ export function hasCheckerboardBorder(imgEl) {
     c.width = W; c.height = H;
     const ctx = c.getContext('2d');
     ctx.drawImage(imgEl, 0, 0, W, H);
-    // Nur die vier Randstreifen holen statt des ganzen Bildes. Vorher wurden für
-    // 400 Randpixel bei einem 24-Megapixel-Bild 96 MB ImageData kopiert – und das
-    // bei JEDEM Einfügen eines Bildes.
+    // Fetch only the four edge strips instead of the whole image. Before, 400
+    // edge pixels on a 24-megapixel image meant copying 96 MB of ImageData -
+    // and that on EVERY image insert.
     const oben  = ctx.getImageData(0, 0, W, 1).data;
     const unten = ctx.getImageData(0, H - 1, W, 1).data;
     const links = ctx.getImageData(0, 0, 1, H).data;
@@ -259,9 +259,9 @@ export function hasCheckerboardBorder(imgEl) {
         shades[Math.round(max / 10) * 10] = (shades[Math.round(max / 10) * 10] || 0) + 1;
       }
     };
-    // Eigene Schrittweite je Achse: vorher wurde die Breite auch für die
-    // senkrechten Kanten benutzt – bei einem 4000×200-Banner wurden dort nur
-    // 5 Pixel geprüft, das Ergebnis war reines Rauschen.
+    // Its own step size per axis: the width used to be used for the vertical
+    // edges too - on a 4000x200 banner only 5 pixels were checked there, and
+    // the result was pure noise.
     const stepX = Math.max(1, Math.floor(W / 100));
     const stepY = Math.max(1, Math.floor(H / 100));
     for (let x = 0; x < W; x += stepX) { check(oben, x); check(unten, x); }
@@ -274,9 +274,9 @@ export function hasCheckerboardBorder(imgEl) {
   } catch (e) { return false; }
 }
 
-// Umfärben mit Erkennung: erkennt ab dem Klickpunkt automatisch den
-// zusammenhängenden, farbähnlichen Bereich (Magic Wand) und färbt ihn in
-// hex (#rrggbb) um. Transparenz bleibt erhalten.
+// Recolour with detection: from the click point it finds the connected,
+// similar-coloured area (magic wand) and recolours it to hex (#rrggbb).
+// Transparency is kept.
 export function recolorRegion(imgEl, px, py, hex, tol = 40) {
   const W = imgEl.naturalWidth || imgEl.width;
   const H = imgEl.naturalHeight || imgEl.height;
@@ -292,7 +292,7 @@ export function recolorRegion(imgEl, px, py, hex, tol = 40) {
   if (px < 0 || py < 0 || px >= W || py >= H) return loadImage(c.toDataURL('image/png'));
 
   const nr = parseInt(hex.slice(1, 3), 16), ng = parseInt(hex.slice(3, 5), 16), nb = parseInt(hex.slice(5, 7), 16);
-  // Originalfarben (Kopie), damit Vergleich nicht durch die neue Farbe verfälscht wird.
+  // Original colours (a copy), so the comparison is not skewed by the new one.
   const orig = new Uint8ClampedArray(d);
   const seed = (py * W + px) * 4;
   const seR = orig[seed], seG = orig[seed + 1], seB = orig[seed + 2];
@@ -321,7 +321,7 @@ export function recolorRegion(imgEl, px, py, hex, tol = 40) {
       if (visited[nidx]) return;
       const np = nidx * 4;
       if (orig[np + 3] === 0) return;
-      // Nachbar ähnlich UND noch im erlaubten Abstand zum Start
+      // Neighbour is similar AND still within the allowed distance from the start
       if (near(np, p) && nearSeed(np)) { visited[nidx] = 1; stack.push(nidx); }
     };
     if (x > 0)     tryN(idx - 1);
@@ -333,9 +333,9 @@ export function recolorRegion(imgEl, px, py, hex, tol = 40) {
   return loadImage(c.toDataURL('image/png'));
 }
 
-// Pipette / Farb-Key: nimmt die Farbe am Klickpunkt und macht ALLE ähnlichen
-// Pixel im ganzen Bild transparent (idealer Hintergrund-Entferner bei
-// einfarbigem Hintergrund). Transparenz bleibt.
+// Eyedropper / colour key: takes the colour at the click point and makes ALL
+// similar pixels in the whole image transparent (the ideal background remover
+// for a single-colour background). Transparency is kept.
 export function removeColorGlobal(imgEl, px, py, tol = 40) {
   const W = imgEl.naturalWidth || imgEl.width;
   const H = imgEl.naturalHeight || imgEl.height;
@@ -349,8 +349,8 @@ export function removeColorGlobal(imgEl, px, py, tol = 40) {
   const d = imgData.data;
   px = Math.round(px); py = Math.round(py);
   if (px < 0 || py < 0 || px >= W || py >= H) return loadImage(c.toDataURL('image/png'));
-  // Größeres Feld um den Klick abtasten → Referenzfarben sammeln
-  // (Schachbrett = zwei Töne; einfarbig = einer). Deckt auch größere Kästchen ab.
+  // Sample a larger field around the click to collect reference colours
+  // (chequerboard = two shades; plain = one). Covers larger squares too.
   const refs = [];
   const R = 14;
   const neutralPx = (r, g, b) => (Math.max(r, g, b) - Math.min(r, g, b)) <= 24;
@@ -376,8 +376,8 @@ export function removeColorGlobal(imgEl, px, py, tol = 40) {
   }
   if (!refs.length) return loadImage(c.toDataURL('image/png'));
 
-  // Muster-Erkennung: fast alles im Feld ist farbneutral mit Helligkeits-Spanne
-  // → wie ein graues Schachbrett. Dann per Helligkeitsbereich entfernen.
+  // Pattern detection: nearly everything in the field is neutral with a spread
+  // of brightness → like a grey chequerboard. Then remove by brightness range.
   const looksPattern = allNeutral && neutralCount > sampleCount * 0.9 && (maxB - minB) >= 12;
   const tol2 = tol * tol, soft2 = (tol * 1.6) ** 2;
   const bandLo = minB - tol, bandHi = maxB + tol;
@@ -408,9 +408,9 @@ export function removeColorGlobal(imgEl, px, py, tol = 40) {
   return loadImage(c.toDataURL('image/png'));
 }
 
-// Farbtausch: nimmt die Farbe am Klickpunkt und ersetzt ALLE ähnlichen Pixel
-// im ganzen Bild durch hex (#rrggbb). Für flache Illustrationen ideal
-// (z.B. alle orangenen Flächen auf einmal umfärben). Transparenz bleibt.
+// Colour swap: takes the colour at the click point and replaces ALL similar
+// pixels in the whole image with hex (#rrggbb). Ideal for flat illustrations
+// (recolouring every orange area at once, say). Transparency is kept.
 export function recolorSimilarAll(imgEl, px, py, hex, tol = 45) {
   const W = imgEl.naturalWidth || imgEl.width;
   const H = imgEl.naturalHeight || imgEl.height;
@@ -438,8 +438,9 @@ export function recolorSimilarAll(imgEl, px, py, hex, tol = 45) {
   return loadImage(c.toDataURL('image/png'));
 }
 
-// zusammenhängenden, farbähnlichen Pixel transparent. Für weiße Reste, die
-// das Auto-Freistellen übrig gelassen hat. Gibt Promise<HTMLImageElement>.
+// Flood fill to transparent: from the click point, makes the
+// connected, similar-coloured pixels transparent. For the white remnants the
+// automatic cut-out leaves behind. Returns Promise<HTMLImageElement>.
 export function floodFillTransparent(imgEl, px, py, tol = 40) {
   const W = imgEl.naturalWidth || imgEl.width;
   const H = imgEl.naturalHeight || imgEl.height;

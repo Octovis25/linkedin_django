@@ -274,12 +274,12 @@
         <tr data-topic="{{ t.id }}" data-status="{{ p.status|lower }}" id="prow-{{ p.id }}">
           {% include 'planner/_planner_thumb.html' with p=p accent=t.accent %}
           <td class="pt-title" style="border-left:3px solid {{ t.accent }}"
-              title="{{ p.title|default:p.content|striptags|truncatechars:120 }}"
-              onclick="openEditModal({{ p.id }},'{{ p.title|escapejs }}','{{ p.content|escapejs }}','{{ p.status }}','{{ p.planned_date|date:"Y-m-d" }}','{{ p.comment|escapejs }}','{{ p.image|escapejs }}','{{ p.link|escapejs }}','{{ p.planned_time|time:"H:i" }}')">
+              title="Open this post in the tab of its status"
+              onclick="oeffnePostImReiter({{ p.id }},'{{ p.title|escapejs }}','{{ p.content|escapejs }}','{{ p.status }}','{{ p.planned_date|date:"Y-m-d" }}','{{ p.comment|escapejs }}','{{ p.image|escapejs }}','{{ p.link|escapejs }}','{{ p.planned_time|time:"H:i" }}')">
             {{ p.title|default:p.content|striptags|truncatechars:80 }}
           </td>
           <td><span class="cat-pill" style="background:{{ t.accent }}">{{ t.name }}</span></td>
-          <td><select class="pt-status" data-id="{{ p.id }}" onchange="setStatusInline(this,{{ p.id }})" onclick="event.stopPropagation()" style="background:{{ p.status_bg }};color:{{ p.status_fg }}">{% for s in status_list %}<option value="{{ s.code }}" {% if s.code == p.status %}selected{% endif %}>{{ s.code }}</option>{% endfor %}</select></td>
+          <td><select class="pt-status" data-id="{{ p.id }}" onchange="setStatusInline(this,{{ p.id }})" onclick="event.stopPropagation()" style="background:{{ p.status_bg }};color:{{ p.status_fg }}">{% for s in status_list %}<option value="{{ s.code }}" {% if s.code == p.status %}selected{% endif %}>{{ s.label }}</option>{% endfor %}</select></td>
           <td style="color:#6c757d">{% if p.planned_date %}{{ p.planned_date|date:"d.m.Y" }}{% else %}—{% endif %}</td>
           <td style="text-align:right;white-space:nowrap">
             <button class="pt-act" title="Edit"
@@ -292,12 +292,12 @@
         <tr data-topic="none" data-status="{{ p.status|lower }}" id="prow-{{ p.id }}">
           {% include 'planner/_planner_thumb.html' with p=p accent='#888780' %}
           <td class="pt-title" style="border-left:3px solid #888780"
-              title="{{ p.title|default:p.content|striptags|truncatechars:120 }}"
-              onclick="openEditModal({{ p.id }},'{{ p.title|escapejs }}','{{ p.content|escapejs }}','{{ p.status }}','{{ p.planned_date|date:"Y-m-d" }}','{{ p.comment|escapejs }}','{{ p.image|escapejs }}','{{ p.link|escapejs }}','{{ p.planned_time|time:"H:i" }}')">
+              title="Open this post in the tab of its status"
+              onclick="oeffnePostImReiter({{ p.id }},'{{ p.title|escapejs }}','{{ p.content|escapejs }}','{{ p.status }}','{{ p.planned_date|date:"Y-m-d" }}','{{ p.comment|escapejs }}','{{ p.image|escapejs }}','{{ p.link|escapejs }}','{{ p.planned_time|time:"H:i" }}')">
             {{ p.title|default:p.content|striptags|truncatechars:80 }}
           </td>
           <td><span class="cat-pill" style="background:#888780">Uncategorized</span></td>
-          <td><select class="pt-status" data-id="{{ p.id }}" onchange="setStatusInline(this,{{ p.id }})" onclick="event.stopPropagation()" style="background:{{ p.status_bg }};color:{{ p.status_fg }}">{% for s in status_list %}<option value="{{ s.code }}" {% if s.code == p.status %}selected{% endif %}>{{ s.code }}</option>{% endfor %}</select></td>
+          <td><select class="pt-status" data-id="{{ p.id }}" onchange="setStatusInline(this,{{ p.id }})" onclick="event.stopPropagation()" style="background:{{ p.status_bg }};color:{{ p.status_fg }}">{% for s in status_list %}<option value="{{ s.code }}" {% if s.code == p.status %}selected{% endif %}>{{ s.label }}</option>{% endfor %}</select></td>
           <td style="color:#6c757d">{% if p.planned_date %}{{ p.planned_date|date:"d.m.Y" }}{% else %}—{% endif %}</td>
           <td style="text-align:right;white-space:nowrap">
             <button class="pt-act" title="Edit"
@@ -359,7 +359,7 @@
         {% for t in topics %}<option value="{{ t.id }}">{{ t.name }}</option>{% endfor %}
       </select>
       <select id="m-status" class="fselect" style="flex:1">
-        {% for s in statuses %}<option>{{ s }}</option>{% endfor %}
+        {% for s in status_list %}<option value="{{ s.code }}">{{ s.label }}</option>{% endfor %}
       </select>
     </div>
     <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap">
@@ -429,7 +429,7 @@
     <input type="hidden" id="e-id">
     <div style="display:flex;gap:8px;margin-bottom:8px">
       <select id="e-status" class="fselect" style="flex:1">
-        {% for s in statuses %}<option>{{ s }}</option>{% endfor %}
+        {% for s in status_list %}<option value="{{ s.code }}">{{ s.label }}</option>{% endfor %}
       </select>
       <input type="date" id="e-date" class="fselect" style="flex:1">
       <label style="font-size:12px;color:#6c757d;white-space:nowrap">🕐</label>
@@ -666,6 +666,10 @@ async function saveIdeaModal() {
 document.addEventListener('DOMContentLoaded', applyFilters);
 
 /* Status-Farbpalette: Inline-Statuswechsel direkt in der Tabelle */
+// Display names come from planner/views.py so there is only one source.
+// The map is empty today - every status is shown under its stored name.
+const STATUS_ANZEIGE = {{ status_anzeige_json|safe }};
+const statusName = st => STATUS_ANZEIGE[st] || st;
 const STATUS_STYLE = {'Planned':['#E4F3F1','#0E7C86'],'Draft':['#f5f5f5','#6c757d'],'Review':['#EEEDFE','#3C3489'],'Ready':['#E1F5EE','#0F6E56'],'Scheduled':['#FAEEDA','#854F0B'],'Posted':['#E6F1FB','#185FA5'],'Archive':['#f5f5f5','#6c757d']};
 async function setStatusInline(sel, id) {
   const st = sel.value;
@@ -715,7 +719,7 @@ function doSearch(val) {
     ? hits.map(p => `<div class="sr-row" onclick='openEditModal(${p.id},${JSON.stringify(p.fullTitle)},${JSON.stringify(p.content)},${JSON.stringify(p.status)},${JSON.stringify(p.date)},${JSON.stringify(p.comment)},${JSON.stringify(p.image)})'>
         <div class="sr-dot" style="background:${p.topicColor}"></div>
         <span class="sr-title">${p.title}</span>
-        <span class="sbadge s-${p.status}" style="font-size:10px;padding:2px 7px;border-radius:99px;white-space:nowrap;margin:0 6px">${p.status}</span>
+        <span class="sbadge s-${p.status}" style="font-size:10px;padding:2px 7px;border-radius:99px;white-space:nowrap;margin:0 6px">${statusName(p.status)}</span>
         <span class="sr-topic">${p.topic}</span>
       </div>`).join('')
     : '<p style="font-size:12px;color:#aaa;padding:6px 0">No results found.</p>';
@@ -792,12 +796,12 @@ async function deletePostFromEdit() {
 /* ── Modal helpers ── */
 function closeModal(id) {
   document.getElementById(id).classList.remove('open');
-  // Aus der Übersicht geöffnet? Beim Schließen des Editors dorthin zurück.
-  if (id === 'edit-modal' && window.OV_RETURN) { window.location.href = '/planner/'; }
+  // Opened from the overview? Then go back there when the editor closes.
+  if (id === 'edit-modal' && window.OV_RETURN) { window.location.href = window.OV_RETURN; }
 }
 document.addEventListener('DOMContentLoaded', () => {
   document.querySelectorAll('.modal-bg').forEach(bg => {
-    bg.addEventListener('click', e => { if (e.target === bg) { const wasEdit = bg.id === 'edit-modal'; bg.classList.remove('open'); if (wasEdit && window.OV_RETURN) window.location.href = '/planner/'; } });
+    bg.addEventListener('click', e => { if (e.target === bg) { const wasEdit = bg.id === 'edit-modal'; bg.classList.remove('open'); if (wasEdit && window.OV_RETURN) window.location.href = window.OV_RETURN; } });
   });
 });
 
@@ -814,7 +818,7 @@ function openPostModal(topicId) {
   document.getElementById('m-comment').value = '';
   clearEditor('m');
   clearImgPreview('m');
-  // Video-Felder + Vorschau zurücksetzen
+  // Reset the video fields and the preview
   const mv = document.getElementById('m-vid-input'); if (mv) mv.value = '';
   const mvn = document.getElementById('m-vid-name'); if (mvn) mvn.textContent = '';
   const mvs = document.getElementById('m-vid-status'); if (mvs) mvs.textContent = '';
@@ -823,27 +827,62 @@ function openPostModal(topicId) {
   setTimeout(() => document.getElementById('m-title').focus(), 50);
 }
 
-/* Auto-open new-post modal when arriving via ?new=1 (e.g. from pipeline pages) */
+/* ── Where a post lives ────────────────────────────────────────────────────
+   Every status except 'Planned' has its own tab. The Planner is the place
+   where posts are created and sorted; the work on a post happens in its own
+   tab. A click on the title therefore goes there instead of opening the
+   dialog here - you land on the post in the surroundings that belong to it.
+   'Planned' has no tab of its own (the slot is booked, nothing written yet),
+   so that one opens here, where it belongs. */
+const STATUS_REITER = {
+  'Draft':     '/planner/draft/',
+  'Review':    '/planner/pipeline/',
+  'Ready':     '/planner/ready/',
+  'Scheduled': '/planner/scheduled/',
+  'Posted':    '/planner/archive/',
+  'Archive':   '/planner/archive/',
+};
+
+// Same arguments as openEditModal, so the table only had to swap the name.
+function oeffnePostImReiter(id, title, content, status, date, comment, image, link, time) {
+  const ziel = STATUS_REITER[status];
+  // No tab of its own ('Planned'): then edit right here.
+  if (!ziel) { openEditModal(id, title, content, status, date, comment, image, link, time); return; }
+  window.location.href = ziel + '?edit=' + encodeURIComponent(id);
+}
+
+/* Auto-open new-post modal when arriving via ?new=1 (e.g. from a status tab) */
 (function() {
   try {
     const params = new URLSearchParams(window.location.search);
+    // Where to return to after saving. Only our own paths - never a foreign
+    // address that happens to stand in the query string.
+    const zurueck = params.get('back') || '';
+    if (/^\/[a-z0-9\-_/]*$/i.test(zurueck)) window.OV_RETURN = zurueck;
     if (params.get('new') === '1') {
       const topic = params.get('topic') || '';
-      setTimeout(() => openPostModal(topic || undefined), 100);
+      const status = params.get('status') || '';
+      setTimeout(() => {
+        openPostModal(topic || undefined);
+        // Pre-select the status that fits the tab we came from: a post created
+        // from Draft is a draft, and it turns up there afterwards.
+        const feld = document.getElementById('m-status');
+        if (feld && status && [...feld.options].some(o => o.value === status)) feld.value = status;
+      }, 100);
     }
-    // Deep-Link aus der Übersicht: ?edit=<id> öffnet den Post-Editor direkt.
+    // Deep link: ?edit=<id> opens the post editor directly.
     const eid = params.get('edit');
     if (eid) {
-      window.OV_RETURN = true;   // nach Speichern/Löschen/Schließen zurück zur Übersicht
+      if (!window.OV_RETURN) window.OV_RETURN = '/planner/uebersicht/';
       const p = ALL_POSTS.find(x => String(x.id) === String(eid));
       if (p) setTimeout(() => openEditModal(p.id, p.fullTitle, p.content, p.status, p.date, p.comment, p.image, p.link, p.time), 150);
     }
   } catch (e) {}
 })();
 
-// Nach einer Aktion zurück zur Übersicht, falls von dort gekommen – sonst neu laden.
+// After an action: back where we came from, if we came from somewhere - else reload.
 function ovBack() {
-  if (window.OV_RETURN) window.location.href = '/planner/';
+  if (window.OV_RETURN) window.location.href = window.OV_RETURN;
   else location.reload();
 }
 

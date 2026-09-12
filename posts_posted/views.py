@@ -14,19 +14,19 @@ from .nc_storage import download_image_from_nextcloud
 
 
 def _norm_text(s):
-    """Normalisiert Text fuer den Match (Kleinbuchstaben, nur a-z0-9, erste 25)."""
+    """Normalise text for matching: lower case, a-z0-9 only, first 25 characters."""
     return re.sub(r'[^a-z0-9]', '', (s or '').lower())[:25]
 
 
 def fill_missing_post_images():
-    """Fuellt fehlende Overview-Bilder (linkedin_posts_posted.post_image) automatisch
-    mit dem passenden Buffer-Thumbnail (per Text-Match). Nur LEERE Bilder werden gesetzt.
-    Gibt (gefuellt, geprueft, fehler) zurueck."""
+    """Fill in missing overview images (linkedin_posts_posted.post_image)
+    from the matching Buffer thumbnail, matched on text. Only EMPTY images are set.
+    Returns (filled, checked, errors)."""
     from .nc_storage import upload_image_to_nextcloud
 
     filled, checked, errors, dates_filled = 0, 0, 0, 0
 
-    # --- Alle benoetigten Daten EINMAL laden ---
+    # --- Load everything we need ONCE ---
     with connection.cursor() as c:
         c.execute("""
             SELECT post_text, thumbnail_url, LEFT(sent_at,10) AS sd
@@ -43,7 +43,7 @@ def fill_missing_post_images():
             if sd:
                 buf_dates.append((k, sd))
 
-        # ALLE Posts (Titel + aktuelles Datum + Bildstatus).
+        # EVERY post (title + current date + whether it has an image).
         c.execute("""
             SELECT lp.post_id, lp.post_title, pp.id,
                    CAST(pp.post_date AS CHAR), pp.post_image
@@ -53,7 +53,7 @@ def fill_missing_post_images():
         """)
         rows = c.fetchall()
 
-    # --- 1) DATUM: Buffer-Datum hat Vorrang, ueberschreibt auch falsches ---
+    # --- 1) DATE: the Buffer date wins, and overwrites a wrong one too ---
     for post_id, title, pp_id, cur_date, _img in rows:
         key = _norm_text(title)
         if not key:
@@ -74,10 +74,10 @@ def fill_missing_post_images():
         except Exception:
             pass
 
-    # --- 2) BILD: nur LEERE Bilder mit Buffer-Thumbnail fuellen ---
+    # --- 2) IMAGE: only fill EMPTY images from the Buffer thumbnail ---
     for post_id, title, pp_id, _cur_date, post_image in rows:
         if post_image:
-            continue  # Bild vorhanden -> nicht anfassen
+            continue  # already has an image - leave it alone
         checked += 1
         key = _norm_text(title)
         if not key:
@@ -112,7 +112,7 @@ def fill_missing_post_images():
 
 
 def promote_scheduled_to_posted():
-    """Setzt Planner-Posts, die laut Buffer bereits gesendet wurden, von
+    """Move planner posts that Buffer says have already gone out from
     'Scheduled' auf 'Posted'.
 
     Grundlage ist die eindeutige Verknuepfung buffer_posts_posted.planner_post_id.
@@ -139,7 +139,7 @@ def promote_scheduled_to_posted():
 @login_required
 @require_POST
 def buffer_fill_images(request):
-    """Button-Aktion: fehlende Overview-Bilder + Daten automatisch aus Buffer befuellen.
+    """Button action: fill missing overview images and dates from Buffer.
     Setzt zusaetzlich gesendete Scheduled-Posts auf 'Posted'."""
     try:
         filled, checked, errors, dates_filled = fill_missing_post_images()
@@ -152,7 +152,7 @@ def buffer_fill_images(request):
 
 
 def _ensure_repost_column():
-    """Stellt sicher, dass buffer_posts_posted eine is_repost-Spalte hat."""
+    """Make sure buffer_posts_posted has an is_repost column."""
     with connection.cursor() as c:
         try:
             c.execute("ALTER TABLE buffer_posts_posted ADD COLUMN is_repost TINYINT DEFAULT 0")
@@ -163,7 +163,7 @@ def _ensure_repost_column():
 @login_required
 @require_POST
 def buffer_toggle_repost(request):
-    """Schaltet das Repost-Flag eines Buffer-Posts um (vom OJ-Tab aufgerufen)."""
+    """Toggle the repost flag of a Buffer post. Called from the OJ tab."""
     _ensure_repost_column()
     try:
         data = json.loads(request.body or '{}')
@@ -202,7 +202,7 @@ def post_list(request):
             SET pp.post_title = lp.post_title
             WHERE pp.post_title IS NULL OR pp.post_title = ''
         """)
-    # Auto-Sync: fehlende Posts aus linkedin_posts eintragen
+    # Keep in step: add posts that are in linkedin_posts but missing here
     from django.db import connection as _c
     with _c.cursor() as cur:
         cur.execute("""
@@ -214,7 +214,7 @@ def post_list(request):
               AND lp.post_id IS NOT NULL
               AND lp.post_url IS NOT NULL
         """)
-    """linkedin_posts ist die fuehrende Tabelle (alle Posts)."""
+    """linkedin_posts is the leading table - it holds every post."""
     query = request.GET.get("q", "").strip()
 
     sql = """
@@ -276,15 +276,15 @@ def post_list(request):
 @login_required
 def buffer_post_list(request):
     """
-    Tab 'Buffer Posts Posted': liest aus der Tabelle buffer_posts_posted,
-    die beim Upload und taeglich per Cron mit fetch_buffer_posts befuellt wird.
-    Spalten wie bei 'Posts Posted' (Text, Bild, ID, LinkedIn-Link), ohne Bearbeiten.
+    Tab 'Buffer Posts Posted': reads the buffer_posts_posted table, which is
+    filled on upload and once a day by the fetch_buffer_posts cron job.
+    Same columns as 'Posts Posted' (text, image, id, LinkedIn link), but read only.
     """
     error = None
     posts = []
     last_fetch = None
 
-    # Octovis-Firmenchannel aus dem Token holen (buffer_profile_id = Firma).
+    # The Octovis company channel comes from the token (buffer_profile_id = company).
     octovis_channel = None
     with connection.cursor() as c:
         try:
@@ -302,7 +302,7 @@ def buffer_post_list(request):
 
     with connection.cursor() as c:
         try:
-            # Nur Octovis-Firmenposts (channel) und nur ab 2023.
+            # Company posts on that channel only, and only from 2023 onwards.
             sql = """
                 SELECT buffer_post_id, post_text, status, sent_at,
                        planner_post_id, has_image, linkedin_url, thumbnail_url, updated_at
@@ -330,16 +330,16 @@ def buffer_post_list(request):
                     "link": link or '',
                 })
         except Exception as e:
-            # Tabelle existiert noch nicht -> Hinweis, dass der Abruf laufen muss.
+            # The table is not there yet - say what to run, not just "error".
             if 'buffer_posts_posted' in str(e):
-                error = ("Noch keine Buffer-Posts in der Datenbank. Bitte einmal "
-                         "'python manage.py fetch_buffer_posts' ausfuehren.")
+                error = ("No Buffer posts in the database yet. Run "
+                         "'python manage.py fetch_buffer_posts' once.")
             else:
-                error = "Fehler beim Lesen: {}".format(e)
+                error = "Could not read the data: {}".format(e)
 
     if not posts and not error:
-        error = ("Noch keine Buffer-Posts in der Datenbank. Bitte einmal "
-                 "'python manage.py fetch_buffer_posts' ausfuehren.")
+        error = ("No Buffer posts in the database yet. Run "
+                 "'python manage.py fetch_buffer_posts' once.")
 
     return render(request, "posts_posted/list_buffer.html", {
         "posts": posts,
@@ -372,14 +372,14 @@ def post_edit(request, pk):
         form = PostPostedForm(request.POST, request.FILES, instance=post)
         if form.is_valid():
             try:
-                # Datum direkt per SQL speichern (umgeht full_clean/post_url-Validierung)
+                # Save the date with plain SQL - this skips full_clean and the
                 new_date = form.cleaned_data.get('post_date')
                 with connection.cursor() as cur:
                     cur.execute(
                         'UPDATE linkedin_posts_posted SET post_date=%s WHERE id=%s',
                         [new_date, post.pk]
                     )
-                # Bild hochladen falls vorhanden
+                # Upload the image, if one was given
                 upload_file = request.FILES.get("upload_image")
                 if upload_file:
                     from .nc_storage import upload_image_to_nextcloud
@@ -425,14 +425,14 @@ def post_delete(request, pk):
 
 @login_required
 def post_image_proxy(request, pk):
-    """Proxy: Holt das Bild aus Nextcloud und liefert es aus."""
+    """Proxy: fetch the image from Nextcloud and serve it."""
     post = get_object_or_404(LinkedinPostPosted, pk=pk)
     if not post.post_image:
-        raise Http404("Kein Bild vorhanden")
+        raise Http404("No image on this post")
     nc_path = str(post.post_image)
     content, content_type = download_image_from_nextcloud(nc_path)
     if content is None:
-        raise Http404("Bild konnte nicht aus Nextcloud geladen werden")
+        raise Http404("The image could not be loaded from Nextcloud")
     response = HttpResponse(content, content_type=content_type)
     response['Cache-Control'] = 'public, max-age=86400'
     return response
@@ -440,7 +440,7 @@ def post_image_proxy(request, pk):
 
 @login_required
 def post_delete_image(request, pk):
-    """Löscht das Bild eines Posts (Nextcloud + DB)."""
+    """Delete a post's image, both in Nextcloud and in the database."""
     from django.db import connection as _conn
     from .nc_storage import delete_image_from_nextcloud
     with _conn.cursor() as cur:
