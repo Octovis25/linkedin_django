@@ -187,7 +187,8 @@ async function loadUploads() {
       wrap.className = 'lib-tile';
       const img = document.createElement('img');
       img.className = 'lib-thumb';
-      img.src = item.url;
+      // Kachel: verkleinerte Fassung. Eingefügt wird weiterhin item.url.
+      img.src = item.thumb || item.url;
       img.title = item.title || item.name || '';
       img.draggable = true;
       img.onerror = () => { img.style.opacity = .3; };
@@ -210,7 +211,14 @@ async function loadUploads() {
           const dd = await readJson(r);
           if (dd.ok) { wrap.remove(); if (!grid.querySelector('.lib-tile')) grid.innerHTML = '<span class="no-templates">Nothing uploaded yet.</span>'; }
           else { toast('Delete failed', 'err'); del.disabled = false; }
-        } catch (err) { toast('Error while deleting', 'err'); del.disabled = false; }
+        } catch (err) {
+          // Den Grund zeigen, nicht "Error while deleting". Seit der Server
+          // sagt, WARUM eine Loeschung scheitert (gesperrte Datei, abgelehnte
+          // Anmeldung, Nextcloud nicht erreichbar), waere es Verschwendung,
+          // das hier wieder zu verschlucken.
+          toast(err?.message || 'Error while deleting', 'err');
+          del.disabled = false;
+        }
       };
       wrap.appendChild(img);
       wrap.appendChild(del);
@@ -372,7 +380,10 @@ function renderImages(grid, items) {
     grid.appendChild(img);
     // Erst anhängen, dann laden - der Beobachter braucht das Element im Dokument,
     // sonst schneidet er es nie.
-    spaetLaden(img, item.url);
+    // item.thumb ist das verkleinerte Bild vom Server (rund 15 KB statt 1,5 MB).
+    // Es gilt NUR für die Kachel: Beim Einfügen in den Canvas wird weiterhin
+    // item.url genommen, sonst läge plötzlich ein 240-Pixel-Bild auf der Fläche.
+    spaetLaden(img, item.thumb || item.url);
   });
 }
 
@@ -382,24 +393,36 @@ function highlightOutput() {
     b.classList.toggle('primary', b.dataset.out === _outputTab));
 }
 
-// Ausgabe-Ordner in Nextcloud (relativ zu Octotrial_Assets) – wie die Assets
-// zeigen wir hier DIREKT den Ordnerinhalt an (nicht die DB), damit wirklich
-// alles auftaucht, was gespeichert wurde.
+// Ausgabe-Ordner in Nextcloud (relativ zu Octotrial_Assets). Nur noch der
+// Rückfall für alte Server, die den Sammel-Endpunkt nicht kennen.
 const OUTPUT_FOLDERS = {
   Images: 'Studio_Work/Output/Images',
   GIFs:   'Studio_Work/Output/GIFs',
   Videos: 'Studio_Work/Output/Videos',
 };
 
+// Hängt man eine Ausgabe an einen Post, VERSCHIEBT der Server die Datei aus dem
+// Studio-Ordner in den Planner-Ordner. Diese Liste las bis September 2026 nur
+// den Studio-Ordner – jede Ausgabe, die einmal an einem Post hing, war hier
+// also verschwunden, obwohl es sie noch gab. Der Sammel-Endpunkt liest beide
+// Orte und führt sie zusammen.
+async function holeAusgaben() {
+  if (URLS.apiOutputs) {
+    const r = await fetch(URLS.apiOutputs + '?kind=' + encodeURIComponent(_outputTab));
+    return await readJson(r);
+  }
+  // Alter Server: wenigstens der Studio-Ordner.
+  const folder = OUTPUT_FOLDERS[_outputTab] || OUTPUT_FOLDERS.Images;
+  const r = await fetch(URLS.ncBrowse + '?folder=' + encodeURIComponent(folder));
+  return await readJson(r);
+}
+
 async function loadOutput() {
   const grid = document.getElementById('output-grid');
   if (!grid) return;
   grid.innerHTML = '<span class="no-templates">Loading…</span>';
-  const folder = OUTPUT_FOLDERS[_outputTab] || OUTPUT_FOLDERS.Images;
   try {
-    // NC-Ordner (zeigt alles). Fehlschlag hier = echter Fehler.
-    const rNc = await fetch(URLS.ncBrowse + '?folder=' + encodeURIComponent(folder));
-    const d = await readJson(rNc);
+    const d = await holeAusgaben();
     // DB-Liste (liefert die bewährte lib_item-ID zum Öffnen). Fehlschlag ignorieren.
     let db = {};
     try { const rDb = await fetch(URLS.apiSaved); db = await readJson(rDb); } catch (e) { /* egal */ }
@@ -428,7 +451,10 @@ async function loadOutput() {
       // Datei, und es sind wenige. Bilder sind die Last - die werden gestundet,
       // sobald die Kachel im Dokument haengt (weiter unten).
       if (isVideo) el.src = item.url;
-      el.title = item.title || item.name || '';
+      // „am Post" heißt: Die Datei liegt im Planner-Ordner, weil sie an einem
+      // Beitrag hängt. Das darf man sehen – sonst wundert man sich, warum sich
+      // manche Ausgaben anders verhalten.
+      el.title = (item.title || item.name || '') + (item.am_post ? ' · am Post' : '');
       // A thumbnail whose file will not load is greyed out instead of sitting
       // there looking healthy — for videos it used to stay a black rectangle.
       el.onerror = () => {
@@ -484,14 +510,21 @@ async function loadOutput() {
             tile.remove();
             if (!grid.querySelector('.lib-tile')) grid.innerHTML = '<span class="no-templates">Nothing saved.</span>';
           } else { toast(dd.error || 'Delete failed', 'err'); del.disabled = false; }
-        } catch (err) { toast('Error while deleting', 'err'); del.disabled = false; }
+        } catch (err) {
+          // Den Grund zeigen, nicht "Error while deleting". Seit der Server
+          // sagt, WARUM eine Loeschung scheitert (gesperrte Datei, abgelehnte
+          // Anmeldung, Nextcloud nicht erreichbar), waere es Verschwendung,
+          // das hier wieder zu verschlucken.
+          toast(err?.message || 'Error while deleting', 'err');
+          del.disabled = false;
+        }
       };
       tile.appendChild(del);
       grid.appendChild(tile);
       // Jetzt haengt die Kachel im Dokument - ab hier kann der Beobachter sie
       // schneiden und das Bild holen, sobald sie in die Naehe des Sichtbereichs
       // kommt.
-      if (!isVideo) spaetLaden(el, item.url);
+      if (!isVideo) spaetLaden(el, item.thumb || item.url);
     });
   } catch (e) {
     // Grund zeigen statt „Fehler": readJson unterscheidet abgelaufene Sitzung,

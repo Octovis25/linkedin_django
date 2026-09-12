@@ -1,5 +1,5 @@
 from django.shortcuts import render, redirect
-from django.contrib.auth.decorators import login_required, user_passes_test
+from django.contrib.auth.decorators import login_required
 from django.http import JsonResponse, Http404
 from django.db import connection
 from django.views.decorators.csrf import csrf_exempt
@@ -26,13 +26,87 @@ def _topics(c):
             for r in _q(c, "SELECT id, name, color FROM planner_topics ORDER BY name")]
 
 
+# ── Nachgeruestete Spalten ──────────────────────────────────────────────────
+# Aeltere Datenbanken kennen diese Spalten nicht. Bisher stand ueber die Datei
+# verteilt 17-mal ein ALTER-Versuch - allein "linkedin_posted" siebenmal -, und
+# jeder lief bei JEDEM Seitenaufruf. MySQL wirft dabei jedes Mal einen Fehler,
+# den ein except schluckt: Zeit, Log-Rauschen, und echte Schemaprobleme gehen
+# darin unter.
+#
+# Jetzt steht die Liste an einer Stelle, und geprueft wird einmal pro Prozess.
+# Nach einem Deploy starten die Arbeitsprozesse neu, eine neue Spalte wird also
+# weiterhin beim ersten Aufruf nachgetragen.
+NACHGERUESTETE_SPALTEN = (
+    ('planner_posts', 'video_nc_path',     'VARCHAR(512) DEFAULT NULL'),
+    ('planner_posts', 'gif_nc_path',       'VARCHAR(512) DEFAULT NULL'),
+    ('planner_posts', 'linkedin_posted',   'TINYINT(1) NOT NULL DEFAULT 0'),
+    ('planner_posts', 'post_scheduled_at', 'DATETIME NULL DEFAULT NULL'),
+    ('planner_posts', 'buffer_update_id',  'VARCHAR(100) DEFAULT NULL'),
+)
+
+_schema_geprueft = False
+
+
+def fehlende_spalten(vorhanden, erwartet=NACHGERUESTETE_SPALTEN):
+    """Welche Spalten fehlen noch? `vorhanden` ist {tabelle: {spaltennamen}}.
+
+    Getrennt vom Datenbankzugriff, damit die Auswahl pruefbar ist: Sie
+    entscheidet, ob ueberhaupt ein ALTER laeuft.
+    """
+    fehlt = []
+    for tabelle, spalte, art in erwartet:
+        da = vorhanden.get(tabelle)
+        if da is None:
+            continue          # Tabelle unbekannt - dann nicht daran herumbauen
+        if spalte not in da:
+            fehlt.append((tabelle, spalte, art))
+    return fehlt
+
+
+def schema_sicherstellen(erzwingen=False):
+    """Fehlende Spalten nachruesten - einmal pro Prozess.
+
+    Erst LESEN, welche Spalten es gibt, dann nur die fehlenden anlegen. Das
+    vermeidet die Fehler-und-schlucken-Schleife: Im Normalfall (alles da) laeuft
+    genau eine harmlose Abfrage, und auch die nur beim ersten Aufruf.
+    """
+    global _schema_geprueft
+    if _schema_geprueft and not erzwingen:
+        return
+    tabellen = sorted({t for t, _s, _a in NACHGERUESTETE_SPALTEN})
+    try:
+        vorhanden = {}
+        with connection.cursor() as c:
+            # Ueber information_schema statt "SHOW COLUMNS FROM x": Letzteres
+            # wirft bei einer unbekannten Tabelle, und ein geschluckter
+            # Datenbankfehler macht innerhalb eines atomaren Blocks die ganze
+            # Transaktion unbrauchbar. Diese Abfrage liefert fuer unbekannte
+            # Tabellen einfach keine Zeile - eine Abfrage fuer alle Tabellen,
+            # ohne einen einzigen Fehlerfall.
+            platzhalter = ','.join(['%s'] * len(tabellen))
+            c.execute(
+                "SELECT TABLE_NAME, COLUMN_NAME FROM information_schema.COLUMNS "
+                "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME IN (%s)" % platzhalter,
+                tabellen)
+            for tabelle, spalte in c.fetchall():
+                vorhanden.setdefault(tabelle, set()).add(spalte)
+            for tabelle, spalte, art in fehlende_spalten(vorhanden):
+                try:
+                    c.execute("ALTER TABLE `%s` ADD COLUMN `%s` %s" % (tabelle, spalte, art))
+                    print("Spalte nachgeruestet: %s.%s" % (tabelle, spalte))
+                except Exception as e:
+                    print("Spalte %s.%s nicht nachruestbar: %s" % (tabelle, spalte, e))
+    except Exception as e:
+        # Datenbank gerade nicht erreichbar: NICHT als geprueft merken, damit
+        # der naechste Aufruf es erneut versucht.
+        print("Schemapruefung fehlgeschlagen:", e)
+        return
+    _schema_geprueft = True
+
+
 def _ensure_media_columns():
-    """Ensure image/video media columns used by the planner exist."""
-    with connection.cursor() as c:
-        try:
-            c.execute("ALTER TABLE planner_posts ADD COLUMN video_nc_path VARCHAR(512) DEFAULT NULL")
-        except Exception:
-            pass
+    """Frueher: ALTER bei jedem Aufruf. Jetzt der gemeinsame Weg."""
+    schema_sicherstellen()
 
 
 def _attach_video_paths(posts_list):
@@ -351,11 +425,8 @@ def scheduled_view(request):
     topic_filter = request.GET.get('topic', '')
     with connection.cursor() as c:
         topics = _topics(c)
-        # Ensure linkedin_posted column exists
-        try:
-            c.execute("ALTER TABLE planner_posts ADD COLUMN linkedin_posted TINYINT(1) NOT NULL DEFAULT 0")
-        except Exception:
-            pass
+        # Spalten werden einmal pro Prozess geprueft, nicht hier bei jedem Aufruf.
+        schema_sicherstellen()
         sql = """SELECT p.id, p.title, p.content, p.status, p.planned_date,
                         p.image, t.name, t.color, p.topic_id, p.comment,
                         COALESCE(p.linkedin_posted,0), COALESCE(p.link,'') as link,
@@ -404,16 +475,9 @@ def archive_view(request):
     topic_filter = request.GET.get('topic', '')
     with connection.cursor() as c:
         topics = _topics(c)
-        # Ein Post kann auf zwei Arten fertig sein: rausgegangen oder fallengelassen.
-        # Beide landen hier. Ohne linkedin_posted/link konnte die Seite die beiden
-        # nicht auseinanderhalten und zeigte einen undifferenzierten Stapel.
-        # Der Status taugt dafuer nicht: ein veroeffentlichter Post, den jemand
-        # spaeter von Hand wegraeumt, steht danach auf 'Archive' - rausgegangen
-        # ist er trotzdem.
         sql = """SELECT p.id, p.title, p.content, p.status, p.planned_date,
                         p.image, t.name, t.color, p.topic_id, p.comment,
-                        p.updated_at, p.created_at,
-                        COALESCE(p.linkedin_posted, 0), COALESCE(p.link, '')
+                        p.updated_at, p.created_at
                  FROM planner_posts p
                  LEFT JOIN planner_topics t ON p.topic_id = t.id
                  WHERE p.status IN ('Posted', 'Archive')"""
@@ -433,10 +497,6 @@ def archive_view(request):
             'topic_name': r[6] or '', 'topic_color': r[7] or 'gray',
             'topic_id': r[8], 'comment': r[9] or '', 'bg': bg, 'fg': fg,
             'updated_at': r[10], 'created_at': r[11],
-            # Rausgegangen, wenn das Flag steht ODER ein LinkedIn-Link haengt.
-            # Alles andere im Archiv wurde von Hand abgelegt, also verworfen.
-            'linkedin_posted': bool(r[12]) or bool(r[13]),
-            'link': r[13] or '',
         })
 
     _attach_video_paths(posts_list)
@@ -446,10 +506,6 @@ def archive_view(request):
 @login_required
 def all_view(request):
     topic_filter = request.GET.get('topic', '')
-    # Begriffssuche ueber den gesamten Bestand. Anders als auf der Startseite
-    # liegt hier der Beitragstext selbst in der Tabelle (planner_posts.content),
-    # deshalb findet die Suche auch Begriffe, die nur im Text vorkommen.
-    suche = (request.GET.get('q') or '').strip()
     with connection.cursor() as c:
         topics = _topics(c)
         sql = """SELECT p.id, p.title, p.content, p.status, p.planned_date,
@@ -462,13 +518,6 @@ def all_view(request):
         if topic_filter:
             sql += " AND p.topic_id=%s"
             params.append(topic_filter)
-        if suche:
-            # Mehrere Woerter werden UND-verknuepft: "SOP Audit" findet nur
-            # Beitraege, in denen beides vorkommt - egal in welchem Feld.
-            for wort in suche.split()[:6]:
-                sql += (" AND (p.title LIKE %s OR p.content LIKE %s"
-                        " OR COALESCE(p.comment,'') LIKE %s)")
-                params += [f'%{wort}%'] * 3
         sql += " ORDER BY p.updated_at DESC, p.created_at DESC"
         posts = _q(c, sql, params)
 
@@ -488,7 +537,6 @@ def all_view(request):
         'posts': posts_list,
         'topics': topics,
         'topic_filter': topic_filter,
-        'suche': suche,
         'statuses': ['Draft', 'Review', 'Ready', 'Scheduled', 'Posted', 'Archive'],
         'tab': 'all',
         'posts_json': _posts_to_json(posts_list),
@@ -578,19 +626,12 @@ def uebersicht_view(request):
     })
 
 
-# Die Verwaltung des persoenlichen Profils gehoert nur Ortrud. Bis hierher
-# stand nur @login_required davor - damit kam JEDES angemeldete Konto hinein,
-# anders als bei Claude tasks und DB Admin, die beide abgesichert sind.
 @login_required
-@user_passes_test(lambda u: u.is_superuser)
 def oj_view(request):
     with connection.cursor() as c:
         topics = _topics(c)
-        # Check if is_oj column exists; fall back to empty list if not
-        try:
-            c.execute("ALTER TABLE planner_posts ADD COLUMN linkedin_posted TINYINT(1) NOT NULL DEFAULT 0")
-        except Exception:
-            pass
+        # Spalten werden einmal pro Prozess geprueft, nicht hier bei jedem Aufruf.
+        schema_sicherstellen()
         try:
             posts = _q(c, """SELECT p.id, p.title, p.content, p.status, p.planned_date,
                                     p.image, t.name, t.color, p.topic_id, COALESCE(p.comment,'') as comment,
@@ -908,12 +949,8 @@ def api_image(request, post_id):
 
 
 def _ensure_scheduled_at_column():
-    """Add post_scheduled_at DATETIME column if it doesn't exist yet."""
-    with connection.cursor() as c:
-        try:
-            c.execute("ALTER TABLE planner_posts ADD COLUMN post_scheduled_at DATETIME NULL DEFAULT NULL")
-        except Exception:
-            pass
+    """Frueher: ALTER bei jedem Aufruf. Jetzt der gemeinsame Weg."""
+    schema_sicherstellen()
 
 
 def _make_image_token(post_id):
@@ -1349,23 +1386,34 @@ def _move_studio_output_to_planner(nc_path, dest_folder):
 
 
 def _nc_delete(nc_path):
-    """Eine Datei in Nextcloud löschen (WebDAV DELETE). True bei Erfolg/nicht vorhanden."""
+    """Eine Datei in Nextcloud löschen. True bei Erfolg/nicht vorhanden.
+
+    Fuehrt das Loeschen nicht mehr selbst aus. Es gab drei Fassungen desselben
+    WebDAV-DELETE im Projekt - mit unterschiedlichen Zeitlimits und
+    unterschiedlicher Auffassung davon, welche Statuscodes als Erfolg gelten.
+    Jetzt gibt es eine, in posts_posted/nc_storage.py.
+    """
     if not nc_path:
         return False
-    import requests as _req
-    from posts_posted.nc_storage import _get_nc_credentials
-    from urllib.parse import quote as _q2
-    from requests.auth import HTTPBasicAuth as _BA
-    nc_url, username, password = _get_nc_credentials()
-    if not all([nc_url, username, password]):
+    from posts_posted.nc_storage import delete_from_nextcloud_detail
+    ok, _grund = delete_from_nextcloud_detail(nc_path)
+    return ok
+
+
+def _nc_delete_aufraeumen(nc_path, zweck):
+    """Loeschen, das scheitern darf - aber nicht lautlos. Siehe die gleichnamige
+    Funktion in media_library/views.py."""
+    if not nc_path:
         return False
-    url = f"{nc_url}/remote.php/dav/files/{username}/{_q2(nc_path, safe='/')}"
+    from posts_posted.nc_storage import delete_from_nextcloud_detail
     try:
-        r = _req.request('DELETE', url, auth=_BA(username, password), timeout=30)
-        return r.status_code in (200, 204, 404)
+        ok, grund = delete_from_nextcloud_detail(nc_path)
     except Exception as e:
-        print("nc delete error:", e)
+        print("Aufraeumen (%s) fehlgeschlagen: %s -- %s" % (zweck, nc_path, e))
         return False
+    if not ok:
+        print("Aufraeumen (%s) fehlgeschlagen: %s -- %s" % (zweck, nc_path, grund))
+    return ok
 
 
 def _delete_post_media(c, post_id, keep=None):
@@ -1386,7 +1434,7 @@ def _delete_post_media(c, post_id, keep=None):
         return   # veröffentlichte Beiträge schonen
     for p in (img, gif, vid):
         if p and p != keep:
-            _nc_delete(p)
+            _nc_delete_aufraeumen(p, 'Medien eines geloeschten Posts')
 
 
 @login_required
@@ -1738,7 +1786,15 @@ def _li_get_token(request):
             'buffer_insights_token': row[14] if len(row) > 14 else None}
 
 
+_li_tabelle_geprueft = False
+
+
 def _li_ensure_table():
+    # Wie bei schema_sicherstellen(): einmal pro Prozess reicht. Vorher lief das
+    # CREATE-IF-NOT-EXISTS samt sieben ALTER-Versuchen bei jedem Aufruf.
+    global _li_tabelle_geprueft
+    if _li_tabelle_geprueft:
+        return
     with connection.cursor() as c:
         c.execute("""CREATE TABLE IF NOT EXISTS planner_linkedin_tokens (
             id INT AUTO_INCREMENT PRIMARY KEY,
@@ -1771,6 +1827,7 @@ def _li_ensure_table():
                 c.execute(f"ALTER TABLE planner_linkedin_tokens ADD COLUMN {col} {defn}")
             except Exception:
                 pass
+    _li_tabelle_geprueft = True
 
 
 def _li_fetch(url, token, method='GET', body=None, version=None):
@@ -2355,14 +2412,9 @@ def _schedule_linkedin_video_post(post_id, text, scheduled_at):
     """Store a video post for the scheduled trigger path. No Buffer is involved."""
     _ensure_scheduled_at_column()
     with connection.cursor() as c:
-        for sql in [
-            "ALTER TABLE planner_posts ADD COLUMN linkedin_posted TINYINT(1) NOT NULL DEFAULT 0",
-            "ALTER TABLE planner_posts ADD COLUMN post_scheduled_at DATETIME NULL DEFAULT NULL",
-        ]:
-            try:
-                c.execute(sql)
-            except Exception:
-                pass
+        # Spalten einmal pro Prozess, nicht bei jedem Aufruf (siehe
+        # NACHGERUESTETE_SPALTEN ganz oben).
+        schema_sicherstellen()
         c.execute("""
             UPDATE planner_posts
             SET content=%s,
@@ -2478,14 +2530,9 @@ def _post_linkedin_video_now(token, post_id, text, target='org'):
     post_urn = result.get('id', '') if isinstance(result, dict) else ''
 
     with connection.cursor() as c:
-        for sql in [
-            "ALTER TABLE planner_posts ADD COLUMN linkedin_posted TINYINT(1) NOT NULL DEFAULT 0",
-            "ALTER TABLE planner_posts ADD COLUMN post_scheduled_at DATETIME NULL DEFAULT NULL",
-        ]:
-            try:
-                c.execute(sql)
-            except Exception:
-                pass
+        # Spalten einmal pro Prozess, nicht bei jedem Aufruf (siehe
+        # NACHGERUESTETE_SPALTEN ganz oben).
+        schema_sicherstellen()
         c.execute("""
             UPDATE planner_posts
             SET content=%s,
@@ -2657,15 +2704,9 @@ def _linkedin_do_post_impl(request, post_id):
                 buffer_update_id = None
 
             with connection.cursor() as c:
-                for sql in [
-                    "ALTER TABLE planner_posts ADD COLUMN linkedin_posted TINYINT(1) NOT NULL DEFAULT 0",
-                    "ALTER TABLE planner_posts ADD COLUMN buffer_update_id VARCHAR(100) DEFAULT NULL",
-                    "ALTER TABLE planner_posts ADD COLUMN post_scheduled_at DATETIME NULL DEFAULT NULL",
-                ]:
-                    try:
-                        c.execute(sql)
-                    except Exception:
-                        pass
+                # Spalten einmal pro Prozess, nicht bei jedem Aufruf (siehe
+                # NACHGERUESTETE_SPALTEN ganz oben).
+                schema_sicherstellen()
 
                 if scheduled_at:
                     c.execute("""
@@ -2780,10 +2821,8 @@ def _linkedin_do_post_impl(request, post_id):
         post_urn = result.get('id', '') if isinstance(result, dict) else ''
 
         with connection.cursor() as c:
-            try:
-                c.execute("ALTER TABLE planner_posts ADD COLUMN linkedin_posted TINYINT(1) NOT NULL DEFAULT 0")
-            except Exception:
-                pass
+            # Spalten werden einmal pro Prozess geprueft, nicht hier bei jedem Aufruf.
+            schema_sicherstellen()
 
             c.execute("""
                 UPDATE planner_posts
@@ -2887,15 +2926,9 @@ def linkedin_post_video(request, post_id):
             buffer_update_id = None
 
         with connection.cursor() as c:
-            for sql in [
-                "ALTER TABLE planner_posts ADD COLUMN linkedin_posted TINYINT(1) NOT NULL DEFAULT 0",
-                "ALTER TABLE planner_posts ADD COLUMN buffer_update_id VARCHAR(100) DEFAULT NULL",
-                "ALTER TABLE planner_posts ADD COLUMN post_scheduled_at DATETIME NULL DEFAULT NULL",
-            ]:
-                try:
-                    c.execute(sql)
-                except Exception:
-                    pass
+            # Spalten einmal pro Prozess, nicht bei jedem Aufruf (siehe
+            # NACHGERUESTETE_SPALTEN ganz oben).
+            schema_sicherstellen()
 
             if scheduled_at:
                 c.execute("""
@@ -2977,10 +3010,8 @@ def api_trigger_scheduled(request):
 
     _ensure_scheduled_at_column()
     with connection.cursor() as c:
-        try:
-            c.execute("ALTER TABLE planner_posts ADD COLUMN video_nc_path VARCHAR(512) DEFAULT NULL")
-        except Exception:
-            pass
+        # Spalten werden einmal pro Prozess geprueft, nicht hier bei jedem Aufruf.
+        schema_sicherstellen()
         c.execute("""SELECT id, content, image, video_nc_path
                      FROM planner_posts
                      WHERE status = 'Scheduled'

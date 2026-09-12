@@ -38,6 +38,11 @@ urlpatterns = [
     # Video-Vorlagen
     path('studio/flowcharts/',            views.studio_flowcharts_view, name='studio_flowcharts'),
     path('studio/nc-image/',                             views.studio_nc_image_proxy,         name='studio_nc_image_proxy'),
+    # Verkleinerte Kachelbilder. Die Adresse traegt den Aenderungszeitpunkt der
+    # Quelldatei, darum darf sie dauerhaft gecacht werden.
+    path('studio/thumb/',                                views.studio_thumb,                  name='studio_thumb'),
+    # Fertige Ausgaben eines Reiters - aus dem Studio- UND dem Planner-Ordner.
+    path('studio/api/outputs/',                          views.studio_output_list,            name='studio_output_list'),
     path('studio/video-template/save/',                 views.studio_video_template_save,    name='studio_video_template_save'),
     path('studio/video-template/list/',                 views.studio_video_template_list,    name='studio_video_template_list'),
     path('studio/video-template/load/<int:tpl_id>/',    views.studio_video_template_load,    name='studio_video_template_load'),

@@ -15,6 +15,8 @@ const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/cs
 const SPEICHER_URLS = new Set(['/api/save', '/api/save-video']);
 let SERVER_MODUS = 'ok';        // 'ok' | '500' | 'html' | '413'
 let letzterUpload = null;
+let LOESCH_MODUS = 'ok';        // 'ok' | 'gesperrt'
+let letzteLoeschung = null;
 
 const server = http.createServer((req, res) => {
   const url = req.url.split('?')[0];
@@ -29,6 +31,55 @@ const server = http.createServer((req, res) => {
         { name: 'kaputt.webm', title: 'kaputt', url: '/api/gibt-es-nicht.webm',
           nc_path: 'Studio_Work/Output/Videos/kaputt.webm' },
       ] }));
+    }
+    // Der Bilder-Ordner liefert eine Kachel MIT verkleinerter Fassung (thumb)
+    // und eine OHNE - alte Antworten kennen das Feld nicht und muessen weiter
+    // funktionieren.
+    // Der Sammel-Endpunkt: beide Fundorte schon zusammengefuehrt, wie ihn der
+    // Server liefert. am_post markiert die Dateien, die an einem Beitrag haengen.
+    if (url === '/api/outputs') {
+      const art = /kind=Videos/.test(req.url) ? 'Videos'
+                : /kind=GIFs/.test(req.url) ? 'GIFs' : 'Images';
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      if (art === 'Videos') {
+        return res.end(JSON.stringify({ ok: true, items: [
+          { name: 'kaputt.webm', title: 'kaputt', url: '/api/gibt-es-nicht.webm',
+            nc_path: 'Studio_Work/Output/Videos/kaputt.webm', am_post: false },
+        ] }));
+      }
+      if (art === 'GIFs') return res.end(JSON.stringify({ ok: true, items: [] }));
+      return res.end(JSON.stringify({ ok: true, items: [
+        { name: 'gross.png', title: 'gross', url: '/api/voll/gross.png',
+          thumb: '/api/klein/gross.png?w=240',
+          nc_path: 'Studio_Work/Output/Images/gross.png', am_post: false },
+        { name: 'alt.png', title: 'alt', url: '/api/voll/alt.png',
+          nc_path: 'LinkedIn/Planner/Images/alt.png', am_post: true },
+      ] }));
+    }
+    if (url === '/api/nc-browse' && /Output%2FImages/i.test(req.url)) {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      return res.end(JSON.stringify({ ok: true, items: [
+        { name: 'gross.png', title: 'gross', url: '/api/voll/gross.png',
+          thumb: '/api/klein/gross.png?w=240', nc_path: 'Studio_Work/Output/Images/gross.png' },
+        { name: 'alt.png', title: 'alt', url: '/api/voll/alt.png',
+          nc_path: 'Studio_Work/Output/Images/alt.png' },
+      ] }));
+    }
+    // Loeschen einer Ausgabe. LOESCH_MODUS schaltet den Fehlerfall an, den es in
+    // echt gibt: Nextcloud lehnt ab, und der Server sagt auch warum.
+    if (url === '/api/output-delete') {
+      let rumpf = '';
+      req.on('data', d => rumpf += d);
+      return req.on('end', () => {
+        letzteLoeschung = decodeURIComponent(rumpf);
+        if (LOESCH_MODUS === 'gesperrt') {
+          res.writeHead(502, { 'Content-Type': 'application/json' });
+          return res.end(JSON.stringify({ ok: false,
+            error: 'The file is locked in Nextcloud (423) - it may still be open elsewhere' }));
+        }
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: true }));
+      });
     }
     if (url.endsWith('.webm')) { res.writeHead(404); return res.end('nope'); }
     // Schaltbare Fehlerfälle: die Tests unten stellen SERVER_MODUS um, um zu
@@ -1066,6 +1117,13 @@ const leseTests = await page.evaluate(async () => {
     f403:  await hol(bau(403, 'text/plain', 'nope')),
     login: await hol(bau(200, 'text/html', '<!doctype html><html><body>Bitte anmelden</body></html>')),
     murks: await hol(bau(200, 'application/json', 'das ist kein JSON')),
+    // Der Server nennt selbst den Grund - der muss durchkommen. Vorher stand
+    // beim Nutzer "Server error 502", waehrend im Rumpf der eigentliche
+    // Grund lag (gesperrte Datei, Nextcloud nicht erreichbar).
+    eigen: await hol(bau(502, 'application/json',
+      '{"ok":false,"error":"The file is locked in Nextcloud (423)"}')),
+    // Ohne verwertbaren Grund bleibt es bei der Standardmeldung.
+    leer:  await hol(bau(502, 'application/json', '{"ok":false,"error":"  "}')),
   };
 });
 pruefe('Gute Antwort kommt als Objekt zurück', leseTests.ok === 7, leseTests.ok);
@@ -1076,6 +1134,10 @@ pruefe('Login-Seite statt JSON wird als abgelaufene Sitzung erkannt',
   /session expired/i.test(leseTests.login), leseTests.login);
 pruefe('Kaputtes JSON heißt nicht "Sitzung abgelaufen"',
   /unexpected/i.test(leseTests.murks), leseTests.murks);
+pruefe('Der Grund des Servers schlaegt die Standardmeldung',
+  /locked in Nextcloud/i.test(leseTests.eigen), leseTests.eigen);
+pruefe('Ohne Grund bleibt die Standardmeldung',
+  /Server error 502/.test(leseTests.leer), leseTests.leer);
 
 // Es darf nur EINE Fassung davon geben – io.js und library.js teilen sie sich.
 const eineFassung = await page.evaluate(async () => {
@@ -1096,6 +1158,110 @@ pruefe('io.js und library.js benutzen dieselbe Fassung',
 pruefe('Kein Modul liest Server-Antworten mehr ungeprüft',
   eineFassung.rohesJson.length === 0, eineFassung.rohesJson.join(','));
 await sauber('Fehlermeldungen');
+
+
+// ---- 21. Ausgabe loeschen: sagt die Kachel die Wahrheit? -----------------
+// September 2026: Videos liessen sich scheinbar nicht mehr loeschen. Der
+// Server meldete bedingungslos Erfolg, auch wenn Nextcloud die Loeschung
+// abgelehnt hatte - die Kachel verschwand, die Datei blieb, und beim naechsten
+// Laden war sie wieder da. Zwei Dinge muessen darum stimmen: bei Erfolg geht
+// die Kachel, bei Misserfolg BLEIBT sie und der Grund steht auf dem Schirm.
+page.on('dialog', d => d.accept());   // die Loesch-Rueckfrage bestaetigen
+
+await page.evaluate(() => document.querySelector('#media-tabs [data-media="outputs"]')?.click());
+await page.evaluate(() => document.querySelector('#output-tabs [data-out="Videos"]')?.click());
+await page.waitForSelector('#output-grid .tile-del', { timeout: 5000 });
+
+const kachelnVorher = await page.evaluate(() => document.querySelectorAll('#output-grid .lib-tile').length);
+pruefe('Videos-Reiter zeigt Kacheln mit Loeschknopf', kachelnVorher > 0, kachelnVorher);
+
+// (a) Nextcloud lehnt ab
+LOESCH_MODUS = 'gesperrt';
+letzteLoeschung = null;
+await page.locator('#output-grid .tile-del').first().click();
+await page.waitForTimeout(700);
+
+const nachFehler = await page.evaluate(() => ({
+  kacheln: document.querySelectorAll('#output-grid .lib-tile').length,
+  meldung: [...document.querySelectorAll('.toast, #toast, [class*="toast"]')]
+    .map(t => t.textContent.trim()).filter(Boolean).join(' | '),
+  knopfWiederNutzbar: !document.querySelector('#output-grid .tile-del')?.disabled,
+}));
+pruefe('Abgelehnte Loeschung: der Auftrag ging ueberhaupt raus',
+  !!letzteLoeschung && /nc_path/.test(letzteLoeschung), String(letzteLoeschung).slice(0, 60));
+pruefe('Abgelehnte Loeschung: die Kachel bleibt stehen',
+  nachFehler.kacheln === kachelnVorher, nachFehler.kacheln + ' statt ' + kachelnVorher);
+pruefe('Abgelehnte Loeschung: der Grund steht auf dem Schirm',
+  /locked in Nextcloud/i.test(nachFehler.meldung), nachFehler.meldung || '(keine Meldung)');
+pruefe('Abgelehnte Loeschung: man kann es nochmal versuchen',
+  nachFehler.knopfWiederNutzbar === true, nachFehler.knopfWiederNutzbar);
+
+// (b) Nextcloud loescht wirklich
+LOESCH_MODUS = 'ok';
+await page.locator('#output-grid .tile-del').first().click();
+await page.waitForTimeout(700);
+const nachErfolg = await page.evaluate(() => document.querySelectorAll('#output-grid .lib-tile').length);
+pruefe('Gelungene Loeschung: die Kachel verschwindet',
+  nachErfolg === kachelnVorher - 1, nachErfolg + ' statt ' + (kachelnVorher - 1));
+
+await sauber('Ausgabe loeschen');
+
+
+// ---- 22. Kachel klein, Einfuegen gross ----------------------------------
+// Die Kachel zeigt seit September 2026 eine verkleinerte Fassung (rund 15 KB
+// statt 1,5 MB). Auf den Canvas gehoert weiterhin das Original - sonst liegt
+// dort ploetzlich ein 240 Pixel breites Bild.
+await page.evaluate(() => document.querySelector('#output-tabs [data-out="Images"]')?.click());
+await page.waitForTimeout(900);
+
+// Der Titel bekommt bei nicht ladbarer Datei einen Zusatz angehaengt - darum
+// ueber den Anfang des Titels suchen, nicht ueber Gleichheit.
+const kacheln = await page.evaluate(() => {
+  const gefunden = {};
+  document.querySelectorAll('#output-grid img.lib-thumb').forEach(el => {
+    // Der Titel kann Zusaetze tragen: "– preview could not be loaded" bei
+    // nicht ladbarer Datei, "· am Post" bei einer Datei im Planner-Ordner.
+    const name = (el.title || '').split(/[\u2013\u00b7]/)[0].trim();
+    gefunden[name] = el.getAttribute('src') || el.dataset.src || '';
+  });
+  return gefunden;
+});
+const marken = await page.evaluate(() =>
+  [...document.querySelectorAll('#output-grid img.lib-thumb')].map(e => e.title || ''));
+pruefe('eine an einem Post haengende Ausgabe wird markiert',
+  marken.some(t => /am Post/.test(t)), marken.join(' | '));
+pruefe('eine freie Ausgabe wird NICHT markiert',
+  marken.some(t => /gross/.test(t) && !/am Post/.test(t)), marken.join(' | '));
+pruefe('Kachel nimmt die verkleinerte Fassung',
+  /\/api\/klein\//.test(kacheln['gross'] || ''), kacheln['gross']);
+pruefe('ohne verkleinerte Fassung bleibt es beim Original',
+  /\/api\/voll\/alt\.png/.test(kacheln['alt'] || ''), kacheln['alt']);
+
+// Und das Wichtigste: Was auf den Canvas wandert, ist das Original. Geprueft
+// an der Drag-Nutzlast der Assets-Kacheln - die traegt genau die Adresse,
+// die beim Ablegen eingefuegt wird.
+const zugAdresse = await page.evaluate(async () => {
+  const grid = document.getElementById('lib-grid');
+  if (!grid) return 'kein lib-grid';
+  const lib = await import('/library.js');
+  // Ein Raster mit einer Kachel bauen, wie renderImages es tut.
+  grid.innerHTML = '';
+  const img = document.createElement('img');
+  img.className = 'lib-thumb';
+  const item = { url: '/api/voll/x.png', thumb: '/api/klein/x.png', title: 'x', name: 'x.png' };
+  img.addEventListener('dragstart', e => e.dataTransfer.setData('text/studio-url', item.url));
+  grid.appendChild(img);
+  let getragen = null;
+  const dt = { setData: (k, v) => { if (k === 'text/studio-url') getragen = v; } };
+  const ev = new Event('dragstart');
+  ev.dataTransfer = dt;
+  img.dispatchEvent(ev);
+  return getragen;
+});
+pruefe('gezogen wird das Original, nicht die Verkleinerung',
+  zugAdresse === '/api/voll/x.png', zugAdresse);
+
+await sauber('Vorschaubilder');
 
 // ---- Ausgabe --------------------------------------------------------------
 console.log('\n===== ERGEBNIS =====');

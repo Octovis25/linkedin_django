@@ -90,10 +90,21 @@ export function debounce(fn, ms) {
 // „Fehler beim Laden" endet.
 export async function readJson(res) {
   if (!res.ok) {
+    // Diese drei sagen etwas ueber die Verbindung, nicht ueber den Vorgang -
+    // da ist unsere eigene Formulierung hilfreicher als alles, was der Server
+    // dazu schreibt.
     if (res.status === 413) throw new Error('File too large for the server (413)');
     if (res.status === 403) throw new Error('Not signed in, or the session has expired (403)');
     if (res.status === 401) throw new Error('Not signed in (401)');
-    throw new Error(`Server error ${res.status}`);
+    // Sonst: Wenn der Server selbst sagt, was schiefging, ist das immer besser
+    // als "Server error 502". Eine Loeschung, die an einer gesperrten Datei
+    // scheitert, soll das auch sagen duerfen.
+    let grund = '';
+    try {
+      const d = JSON.parse(await res.text());
+      if (d && typeof d.error === 'string') grund = d.error.trim();
+    } catch { /* kein JSON - dann eben die Standardmeldung */ }
+    throw new Error(grund || `Server error ${res.status}`);
   }
   const txt = await res.text();
   try { return JSON.parse(txt); }

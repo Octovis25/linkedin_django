@@ -1,9 +1,11 @@
+import functools
 import os
 import json
 import tempfile
 from django.contrib.auth.decorators import login_required
 from django.shortcuts import render, redirect
-from django.http import JsonResponse, HttpResponse, Http404
+from django.http import (JsonResponse, HttpResponse, Http404,
+                         StreamingHttpResponse, FileResponse)
 from django.db import connection
 from django.contrib import messages
 
@@ -19,6 +21,38 @@ def _safe(cur, sql, params=None):
         return []
 
 
+# ── Schema-Pflege: einmal pro Prozess, nicht bei jedem Aufruf ───────────────
+_SCHEMA_GEPRUEFT = set()
+
+
+def einmal_pro_prozess(f):
+    """Laesst eine Schema-Pflege-Funktion nur beim ersten Aufruf arbeiten.
+
+    Diese Funktionen legen fehlende Tabellen und Spalten an. Sie liefen bisher
+    bei JEDEM Seitenaufruf - die vier zusammen 29-mal ueber die Datei verteilt
+    aufgerufen -, jedes Mal mit CREATE TABLE IF NOT EXISTS und einer Reihe von
+    ALTER-Versuchen, die MySQL mit einem Fehler quittiert, den ein except
+    schluckt. Das kostet bei jedem Aufruf Zeit und laesst echte Schemaprobleme
+    im Rauschen untergehen.
+
+    Einmal pro Arbeitsprozess genuegt: Nach einem Deploy starten die Prozesse
+    neu, eine neue Spalte wird also weiterhin beim ersten Aufruf nachgetragen.
+
+    Wirft die Funktion (Datenbank gerade nicht erreichbar), wird NICHTS
+    gemerkt - der naechste Aufruf versucht es erneut.
+    """
+    @functools.wraps(f)
+    def huelle(*args, **kwargs):
+        if f.__name__ in _SCHEMA_GEPRUEFT:
+            return None
+        ergebnis = f(*args, **kwargs)
+        _SCHEMA_GEPRUEFT.add(f.__name__)
+        return ergebnis
+    huelle.ungepuffert = f       # fuer Tests und den Notfall
+    return huelle
+
+
+@einmal_pro_prozess
 def _ensure_table():
     with connection.cursor() as c:
         try:
@@ -256,10 +290,21 @@ def library_delete(request, item_id):
         return redirect('media_library:library')
     with connection.cursor() as c:
         rows = _safe(c, "SELECT nc_path FROM media_library_items WHERE id=%s", [item_id])
+    ajax = (request.headers.get('X-Requested-With') == 'XMLHttpRequest'
+            or 'fetch' in request.headers.get('Sec-Fetch-Mode', ''))
     if rows:
         nc_path = rows[0][0]
-        from posts_posted.nc_storage import delete_image_from_nextcloud
-        delete_image_from_nextcloud(nc_path)
+        # Erst die Datei, dann die Datenbankzeile - und nur weiter, wenn die
+        # Datei wirklich weg ist. Vorher wurde hier geloescht, ohne hinzusehen,
+        # und anschliessend bedingungslos "Image deleted." gemeldet: Der
+        # Eintrag verschwand aus der Bibliothek, die Datei blieb in Nextcloud
+        # liegen, und niemand konnte sie noch ueber die App erreichen.
+        ok, grund = _nc_delete_detail(nc_path)
+        if not ok:
+            if ajax:
+                return JsonResponse({'ok': False, 'error': grund or 'Deletion failed'}, status=502)
+            messages.error(request, grund or 'The image could not be deleted.')
+            return redirect('media_library:library')
         with connection.cursor() as c:
             c.execute("DELETE FROM media_library_items WHERE id=%s", [item_id])
             # Clean up linked studio data
@@ -268,7 +313,7 @@ def library_delete(request, item_id):
             try: c.execute("DELETE FROM studio_video_templates WHERE preview_nc_path=%s", [nc_path])
             except Exception: pass
     # AJAX request → JSON response
-    if request.headers.get('X-Requested-With') == 'XMLHttpRequest' or 'fetch' in request.headers.get('Sec-Fetch-Mode', ''):
+    if ajax:
         return JsonResponse({'ok': True})
     messages.success(request, 'Image deleted.')
     return redirect('media_library:library')
@@ -453,14 +498,9 @@ def _cleanup_old_media(paths, keep=None):
     """Alte Mediendateien in Nextcloud löschen (best effort), außer `keep`."""
     if not paths:
         return
-    try:
-        from planner.views import _nc_delete
-    except Exception:
-        return
     for p in paths:
         if p and p != keep:
-            try: _nc_delete(p)
-            except Exception: pass
+            _nc_delete_aufraeumen(p, 'ersetzte Post-Medien')
 
 
 def _nc_delete_old_files(nc_folder, safe_prefix):
@@ -534,12 +574,8 @@ def _optimize_canvas_json(canvas_json_str, nc_folder, title_prefix):
                 old_refs.append(src[5:])
         # Alte nc://-Dateien löschen
         if old_refs:
-            try:
-                from posts_posted.nc_storage import _get_nc_credentials, delete_image_from_nextcloud
-                for ref in old_refs:
-                    delete_image_from_nextcloud(ref)
-            except Exception:
-                pass
+            for ref in old_refs:
+                _nc_delete_aufraeumen(ref, 'alte nc://-Objektbilder')
 
         snap = state.get('snapshotDataUrl', '')
         if snap and snap.startswith('data:image'):
@@ -750,10 +786,45 @@ def _nc_download(nc_path):
 
 
 def _nc_delete(nc_path):
-    from posts_posted.nc_storage import delete_image_from_nextcloud
-    delete_image_from_nextcloud(nc_path)
+    """True, wenn die Datei danach weg ist.
+
+    Der Rueckgabewert ist nicht schmueckendes Beiwerk: Frueher hat diese
+    Funktion ihn verschluckt, und studio_output_delete meldete darum auch dann
+    Erfolg, wenn Nextcloud die Loeschung abgelehnt hatte. Die Kachel
+    verschwand, die Datei blieb, und beim naechsten Laden war sie wieder da.
+    """
+    ok, _grund = _nc_delete_detail(nc_path)
+    return ok
 
 
+def _nc_delete_detail(nc_path):
+    """(ok, Grund) - fuer jede Stelle, die dem Nutzer sagt, ob es geklappt hat."""
+    from posts_posted.nc_storage import delete_from_nextcloud_detail
+    return delete_from_nextcloud_detail(nc_path)
+
+
+def _nc_delete_aufraeumen(nc_path, zweck):
+    """Loeschen, das scheitern DARF - alte Fassungen, Vorschauen, Reste.
+
+    Der Unterschied zu einer nutzerseitigen Loeschung: Hier wartet niemand auf
+    eine Antwort, und ein Fehlschlag soll den eigentlichen Vorgang nicht
+    umwerfen. Er darf aber auch nicht spurlos verschwinden - sonst sammeln sich
+    Dateileichen an, und niemand weiss warum. Darum: weitermachen, aber
+    protokollieren.
+    """
+    if not nc_path:
+        return False
+    try:
+        ok, grund = _nc_delete_detail(nc_path)
+    except Exception as e:
+        print("Aufraeumen (%s) fehlgeschlagen: %s -- %s" % (zweck, nc_path, e))
+        return False
+    if not ok:
+        print("Aufraeumen (%s) fehlgeschlagen: %s -- %s" % (zweck, nc_path, grund))
+    return ok
+
+
+@einmal_pro_prozess
 def _ensure_brand_colors_table():
     with connection.cursor() as c:
         try:
@@ -804,6 +875,7 @@ def get_brand_colors():
     return defaults
 
 
+@einmal_pro_prozess
 def _ensure_studio_tables():
     with connection.cursor() as c:
         try:
@@ -1035,6 +1107,7 @@ def studio_view(request):
             'apiTemplates':  '/library/studio/api/templates/',
             'apiLibrary':    '/library/studio/api/library/',
             'apiSaved':      '/library/studio/api/saved/',
+            'apiOutputs':    '/library/studio/api/outputs/',
             'ncFolders':     '/library/studio/api/nc-folders/',
             'ncBrowse':      '/library/studio/api/nc-browse/',
             'ncImage':       '/library/studio/nc-image/',
@@ -1322,7 +1395,13 @@ def studio_template_delete(request, tpl_id):
     with connection.cursor() as c:
         rows = _safe(c, "SELECT nc_path FROM studio_templates WHERE id=%s", [tpl_id])
     if rows:
-        _nc_delete(rows[0][0])
+        # Wie bei library_delete: nicht die Zeile loeschen, solange die Datei
+        # noch da ist - sonst ist die Vorlage aus der Liste verschwunden und die
+        # Datei ueber die App nicht mehr erreichbar.
+        ok, grund = _nc_delete_detail(rows[0][0])
+        if not ok:
+            messages.error(request, grund or 'The template file could not be deleted.')
+            return redirect('media_library:studio_templates')
         with connection.cursor() as c:
             c.execute("DELETE FROM studio_templates WHERE id=%s", [tpl_id])
     messages.success(request, 'Template deleted.')
@@ -1592,14 +1671,14 @@ def studio_save(request):
     # sie liegen, wuerde den alten Namen dauerhaft als "vergeben" blockieren und
     # in "Meine Ausgaben" als Geisterkachel ohne Entwurf erscheinen.
     if umbenannt_von and umbenannt_von != nc_path:
+        _nc_delete_aufraeumen(umbenannt_von, 'Datei unter dem alten Namen')
         try:
-            from posts_posted.nc_storage import delete_image_from_nextcloud
-            delete_image_from_nextcloud(umbenannt_von)
             _alt_stamm = umbenannt_von.rsplit('/', 1)[-1].rsplit('.', 1)[0]
             _alt_ordner = umbenannt_von.rsplit('/', 1)[0]
-            delete_image_from_nextcloud(f"{_alt_ordner}/{_alt_stamm}_preview.png")
+            _nc_delete_aufraeumen(f"{_alt_ordner}/{_alt_stamm}_preview.png",
+                                  'Vorschau unter dem alten Namen')
         except Exception as e:
-            print("Umbenennen: alte Datei nicht geloescht:", e)
+            print("Umbenennen: alter Vorschaupfad nicht bestimmbar:", e)
 
     image_url = f"/library/image/{lib_id}/"
     antwort = {'ok': True, 'lib_id': lib_id, 'image_url': image_url, 'nc_path': nc_path}
@@ -1752,6 +1831,7 @@ def studio_api_templates(request):
 NC_STUDIO_VIDEO_TEMPLATES_FOLDER = "Marketing & Design/Octotrial_Assets/Studio_Work/Bewegte_Bilder"
 
 
+@einmal_pro_prozess
 def _ensure_video_template_table():
     with connection.cursor() as c:
         try:
@@ -1860,24 +1940,466 @@ def studio_video_template_load(request, tpl_id):
     return JsonResponse({'ok': True, 'title': rows[0][0], 'canvas_json': canvas_json})
 
 
+# Medientyp nach Dateiendung. Die Endung ist die verlaesslichere Quelle:
+# Nextcloud meldet fuer .webm haeufig application/octet-stream, und ein
+# <video> mit octet-stream spielt in Chrome gar nicht erst an.
+MEDIENTYPEN = {
+    '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg',
+    '.gif': 'image/gif', '.webp': 'image/webp', '.avif': 'image/avif',
+    '.svg': 'image/svg+xml',
+    '.webm': 'video/webm', '.mp4': 'video/mp4', '.m4v': 'video/x-m4v',
+    '.mov': 'video/quicktime', '.ogv': 'video/ogg',
+}
+
+BEWEGTBILD = {'.webm', '.mp4', '.m4v', '.mov', '.ogv'}
+
+
+def medientyp(nc_path, vom_server=''):
+    """Medientyp einer Datei. Endung schlaegt Serverangabe; octet-stream zaehlt
+    als 'weiss nicht' und wird darum nie uebernommen, wenn die Endung etwas
+    hergibt."""
+    endung = os.path.splitext(str(nc_path or ''))[1].lower()
+    if endung in MEDIENTYPEN:
+        return MEDIENTYPEN[endung]
+    vom_server = (vom_server or '').split(';')[0].strip()
+    if vom_server and vom_server != 'application/octet-stream':
+        return vom_server
+    return 'application/octet-stream'
+
+
+def bereich_lesen(kopfzeile, groesse):
+    """'bytes=100-499' + Dateigroesse -> (100, 499). None, wenn nichts oder
+    nichts Brauchbares dasteht; ('unerfuellbar', groesse) wenn der Anfang
+    hinter dem Dateiende liegt (dann gehoert sich 416).
+
+    Nur die einfache Form mit EINEM Bereich - mehr fordert kein Browser fuer
+    Video an, und mehr zu koennen hiesse Multipart-Antworten zu bauen.
+    """
+    if not kopfzeile or groesse is None or groesse <= 0:
+        return None
+    text = str(kopfzeile).strip()
+    if '=' not in text or ',' in text:
+        return None
+    einheit, _, spanne = text.partition('=')
+    # Um das Gleichheitszeichen herum sind Leerzeichen erlaubt.
+    if einheit.strip().lower() != 'bytes':
+        return None
+    spanne = spanne.strip()
+    if '-' not in spanne:
+        return None
+    von, _, bis = spanne.partition('-')
+    von, bis = von.strip(), bis.strip()
+    try:
+        if not von:
+            # 'bytes=-500' = die letzten 500 Bytes
+            if not bis:
+                return None
+            laenge = int(bis)
+            if laenge <= 0:
+                return None
+            return (max(0, groesse - laenge), groesse - 1)
+        anfang = int(von)
+        if anfang < 0:
+            return None
+        if anfang >= groesse:
+            return ('unerfuellbar', groesse)
+        ende = int(bis) if bis else groesse - 1
+        if ende < anfang:
+            return None
+        return (anfang, min(ende, groesse - 1))
+    except ValueError:
+        return None
+
+
+# Was sich verkleinern laesst. SVG bleibt draussen (Pillow liest es nicht, und
+# es ist ohnehin klein), Video ebenso - ein Einzelbild daraus braeuchte ffmpeg.
+VORSCHAU_FAEHIG = {'.png', '.jpg', '.jpeg', '.webp', '.gif', '.avif'}
+
+# Feste Stufen. Beliebige Breiten wuerden den Cache mit Fastduplikaten fluten.
+VORSCHAU_BREITEN = (240, 480)
+
+
+def _zeitstempel(getlastmodified):
+    """WebDAV-Datum -> Sekunden seit 1970. 0, wenn nichts Lesbares dasteht.
+
+    Wird Teil der Vorschau-Adresse, nicht der Berechnung - eine 0 kostet also
+    nur den dauerhaften Cache, sie macht nichts kaputt.
+    """
+    if not getlastmodified:
+        return 0
+    try:
+        from email.utils import parsedate_to_datetime
+        return int(parsedate_to_datetime(getlastmodified).timestamp())
+    except Exception:
+        return 0
+
+
+def vorschau_groesse(breite, hoehe, ziel):
+    """(Breite, Hoehe) fuer die Verkleinerung auf die Zielbreite, Seitenverhaeltnis
+    erhalten. Wird nie vergroessert: Ein 80 Pixel breites Bild auf 240 zu
+    strecken kostet Bandbreite und sieht schlechter aus als das Original.
+    Die Hoehe faellt nie unter 1."""
+    if not breite or not hoehe or breite <= 0 or hoehe <= 0:
+        return None
+    if breite <= ziel:
+        return None
+    return (ziel, max(1, round(hoehe * ziel / breite)))
+
+
+def vorschau_schluessel(nc_path, stand, breite):
+    """Eindeutiger, kurzer Dateiname fuer das zwischengespeicherte Vorschaubild.
+
+    Der Aenderungszeitpunkt gehoert in den Schluessel: Sonst zeigt ein Bild,
+    das unter demselben Pfad neu gespeichert wurde, weiter die alte Vorschau -
+    genau der Grund, warum beim Ausliefern der Originale ueberhaupt jedes
+    Caching abgeschaltet wurde.
+    """
+    import hashlib
+    roh = '%s|%s|%s' % (nc_path, stand, breite)
+    return hashlib.sha1(roh.encode('utf-8')).hexdigest()
+
+
+def _vorschau_ordner():
+    from django.conf import settings as _s
+    pfad = os.path.join(_s.BASE_DIR, 'media', '_thumbs')
+    os.makedirs(pfad, exist_ok=True)
+    return pfad
+
+
+def _vorschau_cache_stutzen(ordner, hoechstens=4000):
+    """Aelteste Vorschaubilder wegwerfen, wenn es zu viele werden. Der Cache ist
+    jederzeit entbehrlich - jedes Bild laesst sich neu erzeugen."""
+    try:
+        namen = os.listdir(ordner)
+        if len(namen) <= hoechstens:
+            return
+        mit_alter = []
+        for n in namen:
+            p = os.path.join(ordner, n)
+            try:
+                mit_alter.append((os.path.getmtime(p), p))
+            except OSError:
+                pass
+        mit_alter.sort()
+        for _, p in mit_alter[:len(mit_alter) - hoechstens + 500]:
+            try:
+                os.remove(p)
+            except OSError:
+                pass
+    except Exception as e:
+        print("Vorschau-Cache stutzen:", e)
+
+
+NC_PLANNER_IMAGES_FOLDER = "Marketing & Design/LinkedIn/Planner/Images"
+NC_PLANNER_VIDEOS_FOLDER = "Marketing & Design/LinkedIn/Planner/Videos"
+
+# Wo eine fertige Ausgabe liegen kann, und welche Endungen in den jeweiligen
+# Reiter gehoeren.
+#
+# Warum zwei Orte: Haengt man eine Ausgabe an einen Post, wird die Datei aus
+# dem Studio-Ordner in den Planner-Ordner VERSCHOBEN (keine Kopie - das ist so
+# gewollt, die Datei soll beim Post liegen). "Meine Ausgaben" hat aber nur den
+# Studio-Ordner gelesen. Folge: Sobald eine Ausgabe an einem Post hing, war sie
+# aus der Liste verschwunden, obwohl sie existierte. Darum werden jetzt beide
+# Orte gelesen.
+#
+# GIFs und Videos landen im selben Planner-Ordner - getrennt werden sie ueber
+# die Endung, sonst stuenden Videos im GIF-Reiter.
+AUSGABE_ORTE = {
+    'Images': ((NC_STUDIO_LIBRARY_FOLDER, NC_PLANNER_IMAGES_FOLDER),
+               {'.png', '.jpg', '.jpeg', '.webp', '.svg', '.avif'}),
+    'GIFs':   ((NC_STUDIO_GIFS_FOLDER, NC_PLANNER_VIDEOS_FOLDER),
+               {'.gif'}),
+    'Videos': ((NC_STUDIO_VIDEOS_FOLDER, NC_PLANNER_VIDEOS_FOLDER),
+               {'.webm', '.mp4', '.m4v', '.mov', '.ogv'}),
+}
+
+# Vorschau-, Schnappschuss- und ausgelagerte Objektbilder sind Hilfsdateien.
+import re as _re_hilfsdateien
+HILFSDATEI = _re_hilfsdateien.compile(r'_preview\.|_snap\.|_obj\d+\.|_fab\.', _re_hilfsdateien.I)
+
+
+def _nc_dateien(nc_folder, endungen=None):
+    """Dateien EINES Nextcloud-Ordners, nicht rekursiv. Liste von dicts mit
+    name, title, nc_path, url, thumb und mtime; leere Liste bei jedem Problem.
+
+    studio_nc_browse hat noch seine eigene Fassung davon - dort haengen die
+    Sonderfaelle '__all__' und die Unterordner-Auflistung mit dran, und die
+    laeuft. Neue Leser benutzen bitte diesen hier.
+    """
+    from posts_posted.nc_storage import _get_nc_credentials
+    from urllib.parse import quote, unquote
+    import xml.etree.ElementTree as ET
+    import requests as _req
+    from requests.auth import HTTPBasicAuth
+
+    nc_url, username, password = _get_nc_credentials()
+    if not all([nc_url, username, password]) or '..' in nc_folder:
+        return []
+    url = "{}/remote.php/dav/files/{}/{}".format(
+        nc_url.rstrip('/'), username, quote(nc_folder, safe='/'))
+    try:
+        r = _req.request('PROPFIND', url, auth=HTTPBasicAuth(username, password),
+                         headers={'Depth': '1', 'Content-Type': 'application/xml'},
+                         timeout=30)
+        if r.status_code not in (200, 207):
+            # 404 ist normal: den Planner-Ordner gibt es erst, wenn dort etwas liegt.
+            if r.status_code != 404:
+                print("nc list %s: %s" % (nc_folder, r.status_code))
+            return []
+    except Exception as e:
+        print("nc list %s: %s" % (nc_folder, e))
+        return []
+
+    ergebnis = []
+    ns = {'d': 'DAV:'}
+    basis = "/remote.php/dav/files/%s/" % username
+    wurzel = (basis + quote(nc_folder, safe='/') + '/')
+    try:
+        baum = ET.fromstring(r.text)
+    except Exception as e:
+        print("nc list %s: XML %s" % (nc_folder, e))
+        return []
+    for el in baum.findall('.//d:response', ns):
+        href = unquote(el.findtext('d:href', '', ns))
+        if href.endswith('/') or href.rstrip('/') == unquote(wurzel).rstrip('/'):
+            continue
+        name = href.rstrip('/').split('/')[-1]
+        if name.startswith('.') or HILFSDATEI.search(name):
+            continue
+        endung = os.path.splitext(name)[1].lower()
+        if endungen is not None and endung not in endungen:
+            continue
+        stelle = href.find(basis)
+        nc_path = href[stelle + len(basis):] if stelle >= 0 else "%s/%s" % (nc_folder, name)
+        stand = _zeitstempel(el.findtext('.//d:getlastmodified', '', ns))
+        eintrag = {
+            'name': name,
+            'title': os.path.splitext(name)[0].replace('_', ' '),
+            'nc_path': nc_path,
+            'url': "/library/studio/nc-image/?p=%s" % quote(nc_path, safe='/'),
+            'mtime': stand,
+        }
+        if endung in VORSCHAU_FAEHIG:
+            eintrag['thumb'] = "/library/studio/thumb/?p=%s&t=%d&w=%d" % (
+                quote(nc_path, safe='/'), stand, VORSCHAU_BREITEN[0])
+        ergebnis.append(eintrag)
+    return ergebnis
+
+
+def ausgaben_zusammenfuehren(aus_studio, aus_planner):
+    """Beide Fundorte zu einer Liste. Gleiche Dateinamen sind dieselbe Ausgabe -
+    die Datei wurde verschoben, nicht kopiert. Behalten wird der Planner-Stand,
+    denn dort liegt sie jetzt.
+
+    Sortiert nach Aenderungszeitpunkt, neueste zuerst - vorher kam heraus, was
+    Nextcloud gerade lieferte.
+    """
+    nach_name = {}
+    for eintrag in aus_studio:
+        nach_name[eintrag['name'].lower()] = dict(eintrag, am_post=False)
+    for eintrag in aus_planner:
+        nach_name[eintrag['name'].lower()] = dict(eintrag, am_post=True)
+    zusammen = list(nach_name.values())
+    zusammen.sort(key=lambda e: e.get('mtime') or 0, reverse=True)
+    return zusammen
+
+
+@login_required
+def studio_output_list(request):
+    """Fertige Ausgaben eines Reiters - aus dem Studio-Ordner UND dem
+    Planner-Ordner. Siehe AUSGABE_ORTE, warum es zwei sind."""
+    reiter = (request.GET.get('kind') or 'Images').strip()
+    if reiter not in AUSGABE_ORTE:
+        return JsonResponse({'ok': False, 'error': 'Unknown kind', 'items': []}, status=400)
+    (studio_ordner, planner_ordner), endungen = AUSGABE_ORTE[reiter]
+    items = ausgaben_zusammenfuehren(
+        _nc_dateien(studio_ordner, endungen),
+        _nc_dateien(planner_ordner, endungen),
+    )
+    return JsonResponse({'ok': True, 'items': items})
+
+
+@login_required
+def studio_thumb(request):
+    """Verkleinertes Vorschaubild fuer die Kacheln in der Mediathek.
+
+    Warum es das gibt: Eine Kachel zeigte bisher die volle Datei. Eine
+    gespeicherte Ausgabe ist ein 1080x1080-PNG, ein Asset oft groesser. Bei
+    vierzig Kacheln lud der Browser vierzig volle Bilder und hielt vierzig
+    Vollbild-Bitmaps im Speicher - fuer Kacheln von 240 Pixeln Breite. Hier
+    kommen daraus rund 15 KB.
+
+    Der Aenderungszeitpunkt der Quelldatei steht in der Adresse (?t=). Damit
+    darf die Antwort dauerhaft gecacht werden, ohne dass je ein veraltetes Bild
+    erscheint: Aendert sich die Datei, aendert sich die Adresse.
+    """
+    nc_path = (request.GET.get('p') or '').strip()
+    if not nc_path or not _within_app_folders(nc_path):
+        raise Http404
+
+    endung = os.path.splitext(nc_path)[1].lower()
+    if endung not in VORSCHAU_FAEHIG:
+        # SVG, Video und alles Unbekannte gehen unveraendert den normalen Weg.
+        return studio_nc_image_proxy(request)
+
+    try:
+        breite = int(request.GET.get('w') or VORSCHAU_BREITEN[0])
+    except ValueError:
+        breite = VORSCHAU_BREITEN[0]
+    if breite not in VORSCHAU_BREITEN:
+        breite = VORSCHAU_BREITEN[0]
+    stand = (request.GET.get('t') or '0').strip()[:20]
+
+    ordner = _vorschau_ordner()
+    ziel = os.path.join(ordner, vorschau_schluessel(nc_path, stand, breite))
+
+    def _ausliefern(pfad):
+        typ = 'image/png' if pfad.endswith('.png') else 'image/jpeg'
+        resp = FileResponse(open(pfad, 'rb'), content_type=typ)
+        resp['Content-Length'] = str(os.path.getsize(pfad))
+        # Die Adresse traegt den Aenderungszeitpunkt - dieselbe Adresse meint
+        # immer dasselbe Bild. Darum darf sie dauerhaft gecacht werden.
+        resp['Cache-Control'] = 'private, max-age=31536000, immutable'
+        return resp
+
+    for endung_cache in ('.png', '.jpg'):
+        if os.path.isfile(ziel + endung_cache):
+            return _ausliefern(ziel + endung_cache)
+
+    # Noch nicht im Cache: Original holen und verkleinern.
+    if nc_path.startswith('__local__/'):
+        from django.conf import settings as _s
+        quelle = os.path.join(_s.BASE_DIR, 'media', nc_path[len('__local__/'):])
+        if not os.path.isfile(quelle):
+            raise Http404
+        with open(quelle, 'rb') as f:
+            rohdaten = f.read()
+    else:
+        from posts_posted.nc_storage import download_image_from_nextcloud
+        rohdaten, _ct = download_image_from_nextcloud(nc_path)
+        if not rohdaten:
+            raise Http404
+
+    try:
+        from PIL import Image
+        import io as _io
+        bild = Image.open(_io.BytesIO(rohdaten))
+        # Bei GIF nur das erste Bild - eine bewegte Vorschau waere wieder so
+        # gross wie das Original.
+        if getattr(bild, 'is_animated', False):
+            bild.seek(0)
+        masse = vorschau_groesse(bild.width, bild.height, breite)
+        if masse:
+            bild = bild.convert('RGBA' if 'A' in bild.getbands() else 'RGB')
+            bild = bild.resize(masse, Image.LANCZOS)
+        else:
+            bild = bild.convert('RGBA' if 'A' in bild.getbands() else 'RGB')
+        # Mit Transparenz PNG, sonst JPEG. Ein Logo auf durchsichtigem Grund
+        # wuerde als JPEG schwarz hinterlegt.
+        if bild.mode == 'RGBA':
+            pfad, format_, args = ziel + '.png', 'PNG', {'optimize': True}
+        else:
+            pfad, format_, args = ziel + '.jpg', 'JPEG', {'quality': 82, 'optimize': True}
+        vorlaeufig = pfad + '.teil'
+        bild.save(vorlaeufig, format_, **args)
+        os.replace(vorlaeufig, pfad)   # erst umbenennen, wenn die Datei fertig ist
+    except Exception as e:
+        # Kein Vorschaubild moeglich (kaputte Datei, fehlendes Pillow, exotisches
+        # Format): dann eben das Original. Langsam ist besser als leer.
+        print("Vorschau fehlgeschlagen fuer %s: %s" % (str(nc_path)[:120], e))
+        return studio_nc_image_proxy(request)
+
+    _vorschau_cache_stutzen(ordner)
+    return _ausliefern(pfad)
+
+
 @login_required
 def studio_nc_image_proxy(request):
-    """Proxy Nextcloud images through Django so they're same-origin (no CORS tainting)."""
-    nc_path = request.GET.get('p', '')
+    """Liefert Bilder UND Bewegtbild aus Nextcloud ueber Django aus - same-origin,
+    damit der Canvas nicht "tainted" wird.
+
+    Vier Dinge, die hier fehlten und ohne die Video nicht zuverlaessig laeuft:
+
+      * Der Medientyp kam von Nextcloud. Fuer .webm liefert Nextcloud oft
+        application/octet-stream, und damit spielt ein <video> in Chrome gar
+        nicht erst an. Jetzt entscheidet die Dateiendung.
+      * Range-Anfragen wurden ignoriert. Der Browser holt Video stueckweise;
+        ohne 206-Antwort laesst sich nicht springen, und groessere Dateien
+        starten oft ueberhaupt nicht.
+      * Die ganze Datei lag im Arbeitsspeicher, bevor das erste Byte rausging.
+      * __local__-Pfade - der Notnagel, wenn Nextcloud beim Speichern nicht
+        erreichbar war - wurden nicht erkannt. Solche Dateien waren ueber
+        diesen Weg gar nicht abrufbar, die Kachel blieb grau.
+    """
+    nc_path = (request.GET.get('p') or '').strip()
     if not nc_path:
         raise Http404
-    from posts_posted.nc_storage import download_image_from_nextcloud
-    content, ct = download_image_from_nextcloud(nc_path)
-    if not content:
+    # Dieselbe Schranke wie beim Loeschen: nur App-eigene Ordner. Sonst waere
+    # das hier ein Leseblick in das gesamte Nextcloud-Konto.
+    if not _within_app_folders(nc_path):
         raise Http404
-    # Nextcloud meldet den Typ nicht immer korrekt. Bei SVG ist das fatal:
-    # als image/png ausgeliefert kann der Browser die Datei nicht lesen.
-    if nc_path.lower().endswith('.svg'):
-        ct = 'image/svg+xml'
-    resp = HttpResponse(content, content_type=ct or 'image/png')
-    # Nicht cachen: geänderte Bilder (gleicher Pfad) müssen sofort frisch erscheinen.
-    resp['Cache-Control'] = 'no-cache, no-store, must-revalidate'
-    return resp
+
+    endung = os.path.splitext(nc_path)[1].lower()
+    typ = medientyp(nc_path)
+    ist_bewegt = endung in BEWEGTBILD
+    bereich_kopf = request.META.get('HTTP_RANGE', '')
+
+    def _fertig(resp):
+        # Bilder koennen sich unter demselben Pfad aendern (Bearbeiten und neu
+        # speichern) - die duerfen nie aus dem Cache kommen. Bei Bewegtbild
+        # reicht "no-cache": der Browser fragt nach, darf aber Teilstuecke
+        # behalten, was das Springen im Video ueberhaupt ertraeglich macht.
+        resp['Cache-Control'] = 'no-cache' if ist_bewegt else 'no-cache, no-store, must-revalidate'
+        resp['Accept-Ranges'] = 'bytes'
+        return resp
+
+    # ── Notnagel-Dateien auf der lokalen Platte ─────────────────────────────
+    if nc_path.startswith('__local__/'):
+        from django.conf import settings as _s
+        pfad = os.path.join(_s.BASE_DIR, 'media', nc_path[len('__local__/'):])
+        if not os.path.isfile(pfad):
+            raise Http404
+        groesse = os.path.getsize(pfad)
+        bereich = bereich_lesen(bereich_kopf, groesse)
+        if bereich and bereich[0] == 'unerfuellbar':
+            resp = HttpResponse(status=416)
+            resp['Content-Range'] = 'bytes */%d' % groesse
+            return _fertig(resp)
+        if bereich:
+            anfang, ende = bereich
+            with open(pfad, 'rb') as f:
+                f.seek(anfang)
+                stueck = f.read(ende - anfang + 1)
+            resp = HttpResponse(stueck, content_type=typ, status=206)
+            resp['Content-Range'] = 'bytes %d-%d/%d' % (anfang, ende, groesse)
+            resp['Content-Length'] = str(len(stueck))
+            return _fertig(resp)
+        resp = FileResponse(open(pfad, 'rb'), content_type=typ)
+        resp['Content-Length'] = str(groesse)
+        return _fertig(resp)
+
+    # ── Nextcloud ──────────────────────────────────────────────────────────
+    from posts_posted.nc_storage import stream_from_nextcloud
+    antwort, grund = stream_from_nextcloud(nc_path, range_header=bereich_kopf or None)
+    if antwort is None:
+        # Der Grund gehoert ins Log. Fuer den Browser bleibt es 404: Ein
+        # <img>/<video> kann mit einem Text nichts anfangen.
+        print("nc proxy:", grund, str(nc_path)[:120])
+        raise Http404
+
+    typ = medientyp(nc_path, antwort.headers.get('Content-Type', ''))
+    resp = StreamingHttpResponse(
+        antwort.iter_content(chunk_size=64 * 1024),
+        content_type=typ,
+        status=antwort.status_code if antwort.status_code == 206 else 200,
+    )
+    # Die Angaben von Nextcloud durchreichen, damit der Browser weiss, welches
+    # Stueck er bekommen hat und wie gross das Ganze ist.
+    for kopf in ('Content-Range', 'Content-Length'):
+        if antwort.headers.get(kopf):
+            resp[kopf] = antwort.headers[kopf]
+    return _fertig(resp)
 
 
 @login_required
@@ -2228,7 +2750,18 @@ def studio_nc_browse(request):
                 nc_path = f"{nc_folder}/{name}"
             proxy_url = f"/library/studio/nc-image/?p={quote(nc_path, safe='/')}"
             title = os.path.splitext(name)[0].replace('_', ' ')
-            items.append({'name': name, 'title': title, 'url': proxy_url, 'nc_path': nc_path})
+            # Aenderungszeitpunkt mitgeben. Er steht ohnehin in der Antwort, die
+            # wir gerade auswerten, kostet also nichts - und er ist der
+            # Schluessel fuer das Vorschaubild: Steckt er in der Adresse, kann
+            # eine geaenderte Datei nie ein altes Vorschaubild aus dem Cache
+            # bekommen, und unveraenderte Dateien duerfen dauerhaft gecacht
+            # werden.
+            stand = _zeitstempel(resp_el.findtext('.//d:getlastmodified', '', ns))
+            eintrag = {'name': name, 'title': title, 'url': proxy_url, 'nc_path': nc_path}
+            if ext in VORSCHAU_FAEHIG:
+                eintrag['thumb'] = "/library/studio/thumb/?p=%s&t=%d&w=%d" % (
+                    quote(nc_path, safe='/'), stand, VORSCHAU_BREITEN[0])
+            items.append(eintrag)
     except Exception as e:
         return JsonResponse({'items': [], 'subfolders': [], 'error': f'XML: {e}'})
 
@@ -2467,7 +3000,11 @@ def studio_upload_delete(request):
     if any(seg == '..' for seg in nc_path.split('/')) \
             or not nc_path.startswith(NC_STUDIO_UPLOAD_FOLDER + '/'):
         return JsonResponse({'error': 'Invalid path'}, status=400)
-    _nc_delete(nc_path)
+    # Auch hier gilt: nicht "ok" melden, ohne hinzusehen. Die Kachel im
+    # Upload-Bereich verschwindet sonst, waehrend die Datei liegen bleibt.
+    ok, grund = _nc_delete_detail(nc_path)
+    if not ok:
+        return JsonResponse({'ok': False, 'error': grund or 'Deletion failed'}, status=502)
     return JsonResponse({'ok': True})
 
 
@@ -2483,12 +3020,23 @@ def studio_output_delete(request):
     nc_path = unquote((request.POST.get('nc_path') or '').strip()).lstrip('/')
     if not _within_app_folders(nc_path):
         return JsonResponse({'ok': False, 'error': f'Invalid path: {nc_path}'}, status=400)
-    _nc_delete(nc_path)
-    # zugehörige Vorschau-Datei ebenfalls entfernen (best effort)
+
+    # Erst die Datei, dann die Datenbank - und nur weiter, wenn die Datei
+    # wirklich weg ist. Vorher stand hier "_nc_delete(nc_path)" ohne Abfrage und
+    # darunter ein bedingungsloses ok:True. Schlug die Loeschung fehl, sah der
+    # Nutzer trotzdem Erfolg: Die Kachel verschwand aus der Ansicht, die Datei
+    # blieb in Nextcloud liegen und war beim naechsten Laden wieder da. Genau so
+    # entsteht der Eindruck, man koenne etwas "nicht mehr loeschen".
+    ok, grund = _nc_delete_detail(nc_path)
+    if not ok:
+        return JsonResponse({'ok': False, 'error': grund or 'Deletion failed'}, status=502)
+
+    # zugehörige Vorschau-Datei ebenfalls entfernen (best effort - ihr Fehlen
+    # macht die Loeschung nicht ungueltig)
     try:
         folder, fname = nc_path.rsplit('/', 1)
         stem = fname.rsplit('.', 1)[0]
-        _nc_delete(f"{folder}/{stem}_preview.png")
+        _nc_delete_aufraeumen(f"{folder}/{stem}_preview.png", 'Vorschau der Ausgabe')
     except Exception:
         pass
     # DB-Einträge entfernen
@@ -2510,8 +3058,12 @@ def studio_shared_assets_delete(request):
     if not nc_path or not nc_path.startswith(NC_SHARED_ASSETS_FOLDER):
         return JsonResponse({'error': 'Invalid path'}, status=400)
     from posts_posted.nc_storage import delete_image_from_nextcloud
-    ok = delete_image_from_nextcloud(nc_path)
-    return JsonResponse({'ok': ok})
+    # Geprueft wurde hier schon vorher - nur der Grund fehlte, und ohne Grund
+    # steht der Nutzer wieder vor einem stummen "hat nicht geklappt".
+    ok, grund = _nc_delete_detail(nc_path)
+    if not ok:
+        return JsonResponse({'ok': False, 'error': grund or 'Deletion failed'}, status=502)
+    return JsonResponse({'ok': True})
 
 
 NC_STUDIO_ELEMENTE_NC_FOLDER = "Marketing & Design/Octotrial_Assets/Studio_Elemente"
