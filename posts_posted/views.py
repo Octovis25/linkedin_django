@@ -29,7 +29,8 @@ def fill_missing_post_images():
     # --- Load everything we need ONCE ---
     with connection.cursor() as c:
         c.execute("""
-            SELECT post_text, thumbnail_url, LEFT(sent_at,10) AS sd
+            SELECT post_text, thumbnail_url,
+                   LEFT(COALESCE(sent_at, due_at),10) AS sd
             FROM buffer_posts_posted
             WHERE post_text IS NOT NULL AND post_text<>''
         """)
@@ -112,13 +113,20 @@ def fill_missing_post_images():
 
 
 def promote_scheduled_to_posted():
-    """Move planner posts that Buffer says have already gone out from
-    'Scheduled' auf 'Posted'.
+    """Move planner posts that Buffer reports as sent from 'Scheduled' to
+    'Posted'.
 
-    Grundlage ist die eindeutige Verknuepfung buffer_posts_posted.planner_post_id.
-    Ein Buffer-Post gilt als gesendet, wenn status='sent' ist oder ein sent_at
-    vorliegt. Nur Posts im Status 'Scheduled' werden angefasst – manuell gesetzte
-    Status bleiben unberuehrt. Gibt die Anzahl umgestellter Posts zurueck.
+    The link between the two worlds is buffer_posts_posted.planner_post_id.
+    Only posts sitting in 'Scheduled' are touched, so a status set by hand
+    stays untouched. Returns how many posts were moved.
+
+    A post counts as sent when Buffer says status='sent', or when a sent_at is
+    on record. That second half was a trap until September 2026: the sync wrote
+    Buffer's dueAt - the PLANNED time - into sent_at whenever no sentAt existed
+    yet. Every queued post therefore carried a timestamp, the condition below
+    read it as proof of publication, and a post planned for next Tuesday was
+    archived at the next sync - days before it went out. The two timestamps now
+    live in two columns, so sent_at means what its name says.
     """
     with connection.cursor() as c:
         try:
@@ -304,16 +312,20 @@ def buffer_post_list(request):
         try:
             # Company posts on that channel only, and only from 2023 onwards.
             sql = """
-                SELECT buffer_post_id, post_text, status, sent_at,
+                -- COALESCE, so a post still in the queue keeps showing its
+                -- planned date: sent_at stays empty until Buffer sent it.
+                SELECT buffer_post_id, post_text, status,
+                       COALESCE(sent_at, due_at),
                        planner_post_id, has_image, linkedin_url, thumbnail_url, updated_at
                 FROM buffer_posts_posted
-                WHERE (sent_at IS NULL OR sent_at >= '2023-01-01')
+                WHERE (COALESCE(sent_at, due_at) IS NULL
+                       OR COALESCE(sent_at, due_at) >= '2023-01-01')
             """
             params = []
             if octovis_channel:
                 sql += " AND channel_id = %s"
                 params.append(octovis_channel)
-            sql += " ORDER BY sent_at DESC, id DESC"
+            sql += " ORDER BY COALESCE(sent_at, due_at) DESC, id DESC"
             c.execute(sql, params)
             for bpid, text, status, sent_at, pid, has_image, link, thumb, updated in c.fetchall():
                 if updated and (last_fetch is None or updated > last_fetch):

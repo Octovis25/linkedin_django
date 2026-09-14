@@ -24,6 +24,7 @@ def _ensure_table():
                 post_text TEXT,
                 status VARCHAR(50),
                 sent_at VARCHAR(64),
+                due_at VARCHAR(64),
                 planner_post_id INT DEFAULT NULL,
                 has_image TINYINT DEFAULT 0,
                 linkedin_url TEXT,
@@ -32,11 +33,19 @@ def _ensure_table():
                 updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
             )
         """)
-        # Migration: Spalte ergaenzen falls Tabelle schon ohne sie existiert.
-        try:
-            c.execute("ALTER TABLE buffer_posts_posted ADD COLUMN thumbnail_url TEXT")
-        except Exception:
-            pass
+        # Retrofit columns on a table that predates them.
+        #
+        # due_at is the reason this command was changed in September 2026.
+        # Until then the planned time was written into sent_at, and
+        # promote_scheduled_to_posted() read a filled sent_at as proof that
+        # the post had gone out. A post merely sitting in the queue was
+        # therefore archived on the next sync - days before it was published.
+        # The two timestamps now live in two columns and mean two things.
+        for spalte in ("thumbnail_url TEXT", "due_at VARCHAR(64)"):
+            try:
+                c.execute("ALTER TABLE buffer_posts_posted ADD COLUMN " + spalte)
+            except Exception:
+                pass  # already there
 
 
 def _get_buffer_token():
@@ -120,20 +129,22 @@ class Command(BaseCommand):
                 c.execute("""
                     INSERT INTO buffer_posts_posted
                         (buffer_post_id, channel_id, post_text, status, sent_at,
-                         planner_post_id, has_image, linkedin_url, thumbnail_url)
-                    VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                         due_at, planner_post_id, has_image, linkedin_url,
+                         thumbnail_url)
+                    VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
                     ON DUPLICATE KEY UPDATE
                         channel_id=VALUES(channel_id),
                         post_text=VALUES(post_text),
                         status=VALUES(status),
                         sent_at=VALUES(sent_at),
+                        due_at=VALUES(due_at),
                         planner_post_id=VALUES(planner_post_id),
                         has_image=VALUES(has_image),
                         linkedin_url=VALUES(linkedin_url),
                         thumbnail_url=VALUES(thumbnail_url)
                 """, [
                     bpid, p.get('channel_id'), (p.get('text') or '')[:5000],
-                    p.get('status'), p.get('sent_at'),
+                    p.get('status'), p.get('sent_at'), p.get('due_at'),
                     pid, has_image, link, thumb,
                 ])
                 written += 1
