@@ -74,6 +74,73 @@ TEMPLATES = [{
     ]}
 }]
 
+# ── Database: TLS towards Host Europe ───────────────────────────────────────
+# From 15 September 2026 Host Europe rejects unencrypted external MySQL
+# connections. Note what the driver did BEFORE this block existed: libmysql
+# defaults to ssl_mode=PREFERRED, so the connection was most likely already
+# encrypted - but nothing was verified, and PREFERRED falls back to plain text
+# without a word if the handshake fails. Encrypted, unverified and not
+# guaranteed is not the same as compliant.
+#
+# VERIFY_IDENTITY checks two things: the certificate chain against the CA
+# bundle, and that the certificate really belongs to the host we dialled. The
+# second half is why MYSQL_HOST must be the hostname (wpXXXXXXX.server-he.de):
+# a certificate carries the name, not the IP address, so an IP is rejected -
+# this was measured, not assumed.
+#
+# No certificate of our own has to be deployed: Host Europe uses publicly
+# trusted authorities, which are in the system bundle.
+MYSQL_SSL_MODE = os.getenv("MYSQL_SSL_MODE", "VERIFY_IDENTITY").upper()
+
+# Where the system keeps its CA bundle. MYSQL_SSL_CA overrides it.
+CA_BUENDEL = (
+    "/etc/ssl/certs/ca-certificates.crt",    # Debian/Ubuntu - and Render
+    "/etc/pki/tls/certs/ca-bundle.crt",      # RHEL/Fedora
+    "/etc/ssl/cert.pem",                     # Alpine, macOS
+)
+
+
+def _ca_pfad():
+    gesetzt = os.getenv("MYSQL_SSL_CA")
+    if gesetzt:
+        return gesetzt
+    for pfad in CA_BUENDEL:
+        if os.path.exists(pfad):
+            return pfad
+    # Windows keeps no bundle in the file system. certifi ships one and
+    # arrives with requests, so a development machine needs no
+    # configuration of its own - without this, Django would refuse to
+    # start there.
+    try:
+        import certifi
+        return certifi.where()
+    except ImportError:
+        return None
+
+
+_mysql_optionen = {
+    "charset": "utf8mb4",
+    "init_command": "SET sql_mode='STRICT_TRANS_TABLES'",
+}
+
+if MYSQL_SSL_MODE == "DISABLED":
+    # Pass it on, so the name tells the truth: without this the driver would
+    # fall back to its own default PREFERRED and encrypt opportunistically -
+    # "DISABLED" would then mean the opposite of what it says.
+    _mysql_optionen["ssl_mode"] = "DISABLED"
+else:
+    _ca = _ca_pfad()
+    if not _ca:
+        # Deliberately loud. Carrying on without a CA would mean carrying on
+        # unverified - and that is the state we are leaving behind here.
+        from django.core.exceptions import ImproperlyConfigured
+        raise ImproperlyConfigured(
+            "No CA bundle found for the MySQL TLS connection. Looked in: %s. "
+            "Set MYSQL_SSL_CA to the bundle, or MYSQL_SSL_MODE=DISABLED for a "
+            "local database without certificates." % ", ".join(CA_BUENDEL))
+    _mysql_optionen["ssl_mode"] = MYSQL_SSL_MODE
+    _mysql_optionen["ssl"] = {"ca": _ca}
+
 DATABASES = {"default": {
     "ENGINE": "django.db.backends.mysql",
     "HOST": os.getenv("MYSQL_HOST"),
@@ -81,10 +148,7 @@ DATABASES = {"default": {
     "NAME": os.getenv("MYSQL_DATABASE"),
     "USER": os.getenv("MYSQL_USER"),
     "PASSWORD": os.getenv("MYSQL_PASSWORD"),
-    "OPTIONS": {
-        "charset": "utf8mb4",
-        "init_command": "SET sql_mode='STRICT_TRANS_TABLES'"
-    }
+    "OPTIONS": _mysql_optionen,
 }}
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
