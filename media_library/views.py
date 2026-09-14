@@ -504,7 +504,7 @@ def _cleanup_old_media(paths, keep=None):
 
 
 def _nc_delete_old_files(nc_folder, safe_prefix):
-    """Delete old timestamp-based files for this title prefix from NC.
+    r"""Delete old timestamp-based files for this title prefix from NC.
     Removes files matching pattern: {safe_prefix}_\d+_(preview|snap|obj).* """
     import re as _re
     try:
