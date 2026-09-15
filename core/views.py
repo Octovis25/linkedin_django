@@ -195,7 +195,16 @@ def upload_import_view(request):
                             stats = import_to_db(file_path, file_type)
                             if stats:
                                 archive_path = os.path.join(ARCHIVE_DIR, filename)
-                                shutil.move(file_path, archive_path)
+                                # The file can already be gone: two import
+                                # clicks race each other and the first move
+                                # wins. That is not a failure - the import
+                                # itself went through. Crashing here threw a
+                                # FileNotFoundError over a finished import.
+                                os.makedirs(ARCHIVE_DIR, exist_ok=True)
+                                try:
+                                    shutil.move(file_path, archive_path)
+                                except (FileNotFoundError, shutil.Error) as mv_err:
+                                    print(f"Move skipped for {filename}: {mv_err}")
                                 results.append({
                                     'file': filename,
                                     'type': file_type,
