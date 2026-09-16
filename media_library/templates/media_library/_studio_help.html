@@ -208,7 +208,9 @@
             <b>Cut out &amp; retouch → Remove background automatically</b>. Touch up with
             <b>Erase</b> / <b>Restore</b>, or recolour an area with <b>Recolour area</b>.</li>
         <li><b>Add text.</b> <b>+ Text block</b> for a heading + body, or <b>✓✓✓ Triple check</b>
-            for a checklist. Double-click to edit; change the colour in the <b>Colour</b> panel.</li>
+            for a checklist. Double-click to edit – one line per check, Enter adds a line,
+            Ctrl+Enter is done, so a list can have four or five checks just as well.
+            Change the colour in the <b>Colour</b> panel.</li>
         <li><b>Add shapes/badges (optional).</b> From <b>Shapes</b>: an arrow, a
             <b>Circle + text</b>, or a <b>Banner + text</b> to highlight something.</li>
         <li><b>Animate (optional).</b> Select an element; in the bar under the canvas choose a
@@ -251,6 +253,12 @@
             <i>Spin</i>…): until its Start is reached the element simply rests. Give three
             similar elements 0, 600 and 1200 and they come in one after another instead of
             moving in lockstep.</li>
+        <li><b>Too fast? Use the tempo.</b> <b>🐢 Tempo</b>, top right in the same bar,
+            stretches <i>every</i> Speed and <i>every</i> Start at once – <b>1×</b> as set,
+            <b>3×</b> three times as slow. Set the choreography with the relative spacing
+            first, then slow the whole piece down without touching a single element.
+            The automatic length grows with it. It is <b>not</b> saved with the drawing:
+            reopening starts at 1× again.</li>
         <li><b>Preview.</b> Click <b>▶ Preview</b> to play it on the canvas.</li>
         <li><b>Length.</b> Set <b>Video length</b> (seconds) in the bar; empty = automatic.
             Looping effects run a few seconds.</li>
@@ -261,6 +269,31 @@
             under <b>My outputs → GIFs / Videos</b>.</li>
       </ol>
     </div>
+
+    <h3 style="color:#0e7c86;margin-bottom:.2rem">Let a checklist arrive line by line</h3>
+    <p style="margin:.2rem 0 .5rem">A checklist is <b>one</b> element: one circle, one tick and
+      one text per row, glued together. That is handy while writing – and it means the list can
+      only ever fly in as a block, because one element carries one Motion and one Start.</p>
+    <ol style="margin:.4rem 0 .6rem 1.2rem;padding:0">
+      <li><b>Write the text first.</b> Double-click the list, one line per check, Ctrl+Enter.
+          Add the fourth and fifth line now – see the next paragraph for why.</li>
+      <li><b>Split it.</b> Select the list; in the bar above the canvas a button
+          <b>↕ Split rows</b> appears. One click turns every line into an element of its
+          own. Nothing moves: each row stays exactly where it sat.</li>
+      <li><b>Give each row its own Start.</b> In the animation bar every row now has its own
+          slider. With three rows: 0, 600, 1200. With five: 0, 400, 800, 1200, 1600.</li>
+      <li><b>Check the length.</b> The last row needs its second, so the video has to run
+          longer than its Start – or use <b>🐢 Tempo</b>, which stretches both together.</li>
+    </ol>
+    <p style="margin:.2rem 0 .5rem"><b>Why the text comes first.</b> After splitting, every row
+      is a checklist of its own with a single line. Double-click still edits it, but Enter then
+      adds a check <i>inside that row</i> rather than a new line underneath. A sixth check is a
+      new element from then on.</p>
+    <p style="margin:.2rem 0 .8rem"><b>One motion per element.</b> A row can fade in <i>or</i>
+      pulse, not one after the other. An element on a loop (<i>Pulse</i>, <i>Float</i>…) is
+      visible from the first frame and merely starts moving at its Start – it does not appear.
+      For a checklist that ticks itself off, pick <i>Fade in</i>, <i>Zoom in</i> or
+      <i>In from left</i>.</p>
 
     <h3 style="color:#0e7c86;margin-bottom:.2rem">Cut out &amp; retouch — mode <b>Image</b></h3>
     <p style="margin:.2rem 0 .5rem">Select an image on the canvas, then switch to <b>Image</b>.

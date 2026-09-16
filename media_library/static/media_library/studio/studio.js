@@ -2130,9 +2130,29 @@ function renderAnimBar() {
   const title = document.createElement('span');
   title.className = 'anim-bar-title'; title.textContent = '🎬 Animation je Element';
 
+  // Tempo - stretches every Speed and every Start at once, so a piece can be
+  // slowed down without dragging every element's slider again.
+  const tempoWrap = document.createElement('label');
+  tempoWrap.style.cssText = 'display:flex;align-items:center;gap:6px;font-size:.75rem;color:#555;margin-left:auto';
+  tempoWrap.appendChild(document.createTextNode('\u{1F422} Tempo'));
+  const tempoInp = document.createElement('input');
+  tempoInp.type = 'range'; tempoInp.id = 'anim-tempo';
+  tempoInp.min = 0.5; tempoInp.max = 6; tempoInp.step = 0.25;
+  tempoInp.value = window._animTempo != null ? window._animTempo : 1;
+  tempoInp.style.cssText = 'width:104px';
+  tempoInp.title = 'Stretches every Speed and every Start together. 1x = as set, 3x = three times as slow.';
+  const tempoOut = document.createElement('span');
+  tempoOut.style.cssText = 'min-width:32px;text-align:right;font-variant-numeric:tabular-nums';
+  const showTempo = () => {
+    tempoOut.textContent = String(+tempoInp.value).replace(/\.0+$/, '') + '\u00d7';
+  };
+  showTempo();
+  tempoInp.oninput = () => { window._animTempo = tempoInp.value; showTempo(); };
+  tempoWrap.appendChild(tempoInp); tempoWrap.appendChild(tempoOut);
+
   // Videolänge – gilt fürs ganze GIF/Video (nicht pro Element).
   const lenWrap = document.createElement('label');
-  lenWrap.style.cssText = 'display:flex;align-items:center;gap:6px;font-size:.75rem;color:#555;margin-left:auto';
+  lenWrap.style.cssText = 'display:flex;align-items:center;gap:6px;font-size:.75rem;color:#555;margin-left:14px';
   lenWrap.appendChild(document.createTextNode('🎬 Video length'));
   const lenInp = document.createElement('input');
   lenInp.type = 'number'; lenInp.id = 'video-length'; lenInp.min = 0; lenInp.max = 15; lenInp.step = 0.5;
@@ -2148,7 +2168,8 @@ function renderAnimBar() {
   prevTop.className = 'tbtn primary'; prevTop.textContent = '▶ Preview';
   prevTop.style.marginLeft = '10px';
   prevTop.onclick = () => media.previewAnimation(editor);
-  head.appendChild(title); head.appendChild(lenWrap); head.appendChild(prevTop);
+  head.appendChild(title); head.appendChild(tempoWrap); head.appendChild(lenWrap);
+  head.appendChild(prevTop);
   bar.appendChild(head);
 
   objs.forEach((o, idx) => {

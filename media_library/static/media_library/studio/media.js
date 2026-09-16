@@ -39,11 +39,33 @@ export const LOOP_TYPES = new Set(['pulse', 'float', 'spin', 'flash', 'wobble', 
    this change: those carry the value inside `anim.delay` or `fxDelay`, and they
    must keep working untouched.
    --------------------------------------------------------------------------- */
+
+/* Tempo - one factor for the whole piece ------------------------------------
+   Stretches every Speed and every Start at once. Choreograph with the
+   relative timings, then slow the whole thing down without touching a single
+   element. 1 = as set, 3 = three times as slow.
+
+   It is read from the toolbar, the way the video length is, because it belongs
+   to the piece and not to an element - but only ONCE per playback. A DOM lookup
+   sixty times a second for every element is what turns a smooth preview into a
+   slideshow.
+
+   It is not stored with the drawing: reopening starts at 1x again.
+--------------------------------------------------------------------------- */
+let _tempo = 1;
+export function tempo() { return _tempo; }
+export function readTempo() {
+  const el = document.getElementById('anim-tempo');
+  const v = el ? parseFloat(el.value) : 1;
+  _tempo = v > 0 ? Math.min(8, Math.max(0.25, v)) : 1;
+  return _tempo;
+}
+
 export function startOf(o) {
   return (o?.startAt ?? o?.anim?.delay ?? o?.fxDelay ?? 0) || 0;
 }
-export function hasStarted(o, t) { return t >= startOf(o); }
-export function elapsedAt(o, t) { return Math.max(0, t - startOf(o)); }
+export function hasStarted(o, t) { return t >= startOf(o) * _tempo; }
+export function elapsedAt(o, t) { return Math.max(0, t - startOf(o) * _tempo); }
 // Writes the start in the one place that counts. The two legacy fields are kept
 // in step so a draft saved now still opens on an older deployment.
 export function setStart(o, ms) {
@@ -88,7 +110,9 @@ function _drawEffects(ctx, editor) {
     // effect was drawn from frame zero, so three elements with different start
     // times all began together.
     if (!hasStarted(o, _fxTime)) return;
-    const t = elapsedAt(o, _fxTime);
+    // Divided by the tempo, so the effect does not merely start later but
+    // actually runs slower.
+    const t = elapsedAt(o, _fxTime) / _tempo;
     const b = o.getBoundingRect(true);
     const L = b.left * z, T = b.top * z, W = b.width * z, H = b.height * z;
     const cx = L + W / 2, cy = T + H / 2, R = Math.max(W, H) / 2;
@@ -209,8 +233,9 @@ export function applyAt(o, t) {
   if (!o.anim) return;
   if (!o._base) o._base = { opacity: o.opacity, left: o.left, top: o.top, scaleX: o.scaleX, scaleY: o.scaleY, angle: o.angle };
   const b = o._base;
-  const { type, dur } = o.anim;
-  const delay = startOf(o);
+  const { type } = o.anim;
+  const dur = (o.anim.dur || 1200) * _tempo;
+  const delay = startOf(o) * _tempo;
   let p = (t - delay) / dur;               // Fortschritt 0..1
   p = Math.max(0, Math.min(1, p));
   const ease = 1 - Math.pow(1 - p, 3);     // easeOutCubic
@@ -258,6 +283,7 @@ function resetAnim(editor) {
 // Returns a promise that resolves when it is done.
 function play(editor, total, onFrame) {
   ensureFxHook(editor);
+  readTempo();
   return new Promise(resolve => {
     const start = performance.now();
     _fxOn = true;
@@ -298,19 +324,22 @@ function animDuration(editor) {
   // Capped at 15 s: 30 s x 12 fps = 360 frames at 2.5 MB per copy = around
   // 900 MB in memory before the GIF encoding even starts, and the tab dies.
   if (secs && secs > 0) return Math.min(secs, 15) * 1000;
+  readTempo();
   let max = 1500, hasLoop = false;
   editor.canvas.getObjects().forEach(o => {
     if (o.anim) {
-      max = Math.max(max, startOf(o) + (o.anim.dur || 1200) + 300);
+      max = Math.max(max, (startOf(o) + (o.anim.dur || 1200)) * _tempo + 300);
       if (LOOP_TYPES.has(o.anim.type)) hasLoop = true;
     }
     // A late effect needs room after its Start, otherwise an effect set to
     // begin at 2.5 s never appears in a 4 s export.
-    if (o.fx && o.fx !== 'none') { hasLoop = true; max = Math.max(max, startOf(o) + 1500); }
+    if (o.fx && o.fx !== 'none') { hasLoop = true; max = Math.max(max, startOf(o) * _tempo + 1500); }
   });
   // Looping motion and effects: at least 4 s, otherwise it is a brief hop.
-  if (hasLoop) max = Math.max(max, 4000);
-  return Math.min(max, 8000);
+  if (hasLoop) max = Math.max(max, 4000 * _tempo);
+  // The ceiling grows with the tempo, otherwise a slowed piece is cut off -
+  // but never past 15 s, which is where the GIF encoder runs out of memory.
+  return Math.min(max, Math.min(8000 * _tempo, 15000));
 }
 
 // ---- Export as a moving image (WebM) --------------------------------------
