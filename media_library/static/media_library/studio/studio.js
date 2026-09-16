@@ -431,6 +431,10 @@ const actions = {
     editor.snapshot();
     status('Check + text inserted – double-click to edit, scale at the corner.', '#198754');
   },
+  'split-checklist': () => {
+    const rows = splitChecklist(editor.active());
+    if (rows) status(rows.length + ' rows - each one now has its own Motion and Start.', '#198754');
+  },
   'add-checklist': () => {
     const g = buildCheckList(['First line', 'Second line', 'Third line'], {
       width: +(document.getElementById('tb-width')?.value || 300),
@@ -1474,6 +1478,82 @@ function buildCheckList(items, opts) {
   return g;
 }
 
+
+// ---- Splitting a checklist into one element per row ----------------------
+// The list is ONE group: per row a circle, a tick and a textbox. A group
+// carries a single Motion and a single Start, so the rows can only ever fly in
+// together. Splitting hands each row its own timing.
+//
+// Each row becomes a checklist again - with a single item. That keeps
+// double-click editing, the size and the colour; only editing all rows at once
+// is gone. So: write the text first, split second, animate third.
+//
+// The geometry is the delicate part. A row must land exactly where it sat
+// inside the group, or the list jumps on splitting and the user has to
+// rearrange by hand. The centre is therefore taken in the group's own
+// coordinates and put through the group matrix - that carries rotation and
+// scaling along without doing the trigonometry here.
+function circleCentre(circle, matrix) {
+  // The circle carries originX/originY = 'center', so its left/top IS its
+  // centre in the group's own coordinates. Through the group matrix that
+  // becomes an absolute point - rotation and scaling included.
+  return fabric.util.transformPoint(new fabric.Point(circle.left, circle.top), matrix);
+}
+
+function splitChecklist(g) {
+  if (!isChecklist(g)) { toast('Select a checklist first', 'err'); return null; }
+  const items = (g.clItems || []).filter(Boolean);
+  if (items.length < 2) { toast('This list has a single row - nothing to split', 'err'); return null; }
+  const parts = g._objects || [];
+  if (parts.length !== items.length * 3) {
+    // buildCheckList pushes exactly circle, tick, textbox per row. If that no
+    // longer holds, the rows cannot be told apart and splitting would scatter
+    // the list - better to refuse than to wreck the layout.
+    toast('This list cannot be split - it was not built row by row', 'err');
+    return null;
+  }
+
+  const opts = { width: g.clWidth || 300, size: g.clSize || 22, color: g.clColor || '#161616' };
+  const matrix = g.calcTransformMatrix();
+  const idx = editor.canvas.getObjects().indexOf(g);
+  const rows = [];
+
+  items.forEach((text, i) => {
+    const ziel = circleCentre(parts[i * 3], matrix);
+    const ng = buildCheckList([text], opts);
+    if (!ng) return;
+    ng.set({
+      left: ziel.x, top: ziel.y,
+      angle: g.angle, scaleX: g.scaleX, scaleY: g.scaleY,
+      // The timing travels along, so a motion already set is not lost. The
+      // start is then staggered per row - that is the whole point.
+      anim: g.anim ? { ...g.anim } : null, fx: g.fx,
+      fxDelay: g.fxDelay, startAt: g.startAt,
+    });
+    // Measure instead of trusting the arithmetic: the new row is placed
+    // roughly, then shifted so that ITS circle sits exactly where the old one
+    // sat. Everything else in a row is fixed relative to that circle, so one
+    // anchor point aligns the whole row - and no assumption about matching
+    // bounding boxes has to hold.
+    ng.setCoords();
+    const ist = circleCentre(ng._objects[0], ng.calcTransformMatrix());
+    ng.set({ left: ng.left + (ziel.x - ist.x), top: ng.top + (ziel.y - ist.y) });
+    ng.setCoords();
+    rows.push(ng);
+  });
+  if (!rows.length) return null;
+
+  editor.canvas.remove(g);
+  rows.forEach((ng, i) => {
+    editor.canvas.add(ng);
+    if (idx >= 0) ng.moveTo(idx + i);
+  });
+  editor.canvas.setActiveObject(rows[0]);
+  editor.canvas.requestRenderAll();
+  editor.snapshot();
+  return rows;
+}
+
 function rebuildChecklist(g, items, over = {}) {
   const c = g.getCenterPoint();
   const ng = buildCheckList(items, {
@@ -1863,6 +1943,8 @@ function renderSelBar() {
     count:     objs.length,
     isImg:     objs.length === 1 && objs[0].type === 'image',
     isGroup:   editor.isGroup(),
+    isChecklist: objs.length === 1 && isChecklist(objs[0])
+                 && (objs[0].clItems || []).length > 1,
     label:     !objs.length ? ''
                : (objs.length > 1 ? objs.length + ' elements'
                   : layerLabel(objs[0], editor.realObjects().indexOf(objs[0]) + 1)),

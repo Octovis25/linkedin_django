@@ -443,6 +443,9 @@ export const CONTEXT = [
 
   { id: 'group',   when: s => s.count > 1,
     items: [{ t: 'btn', act: 'group', icon: '🔗', label: 'Group', title: 'Glue selected parts into a group' }] },
+  { id: 'split-checklist', when: s => s.isChecklist,
+    items: [{ t: 'btn', act: 'split-checklist', icon: '↕', label: 'Split rows',
+              title: 'Turn every line of the checklist into an element of its own, so each can fly in at its own time. Positions stay put.' }] },
   { id: 'ungroup', when: s => s.isGroup,
     items: [{ t: 'btn', act: 'ungroup', icon: '✂', label: 'Ungroup', title: 'Ungroup again' }] },
 
