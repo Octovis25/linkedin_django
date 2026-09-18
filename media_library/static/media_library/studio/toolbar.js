@@ -425,6 +425,19 @@ export const CONTEXT = [
       Y <input type="number" id="sel-y" class="sel-num" step="1" value="${esc(s.y)}">
     </span>` },
 
+  // The Normal/Bold field under Insert > Text decides what the NEXT text will
+  // look like. To change text that is already on the canvas, the control has
+  // to be where the selection is - here. It shows for plain text only: in a
+  // text block or a checklist the weight is part of how the element is built,
+  // and a single checklist row can be had through "Split rows".
+  { id: 'weight', when: s => s.isText, html: s => `
+    <span class="bar-sep"></span>
+    <select id="sel-font-weight" class="field" style="width:76px"
+            title="Font weight of the selected text">
+      <option value="normal"${s.fontWeight === 'normal' ? ' selected' : ''}>Normal</option>
+      <option value="bold"${s.fontWeight === 'normal' ? '' : ' selected'}>Bold</option>
+    </select>` },
+
   { id: 'distribute', when: s => s.count > 1, html: () => `
     <span class="sel-size" title="Match and distribute">
       <button type="button" class="tbtn" id="same-size" title="Make all the size of the first selected">⧉</button>

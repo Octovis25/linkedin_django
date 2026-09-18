@@ -1945,6 +1945,10 @@ function renderSelBar() {
     isGroup:   editor.isGroup(),
     isChecklist: objs.length === 1 && isChecklist(objs[0])
                  && (objs[0].clItems || []).length > 1,
+    // Plain text only. A text block or a checklist keeps its weight: it is
+    // part of how those are built, and their text is not in activeAll().
+    isText:    objs.some(istTextObj),
+    fontWeight: gewichtVon(objs.find(istTextObj)),
     label:     !objs.length ? ''
                : (objs.length > 1 ? objs.length + ' elements'
                   : layerLabel(objs[0], editor.realObjects().indexOf(objs[0]) + 1)),
@@ -1957,6 +1961,14 @@ function renderSelBar() {
     maxi:      !!document.querySelector('.studio-wrap')?.classList.contains('maxi'),
   });
   wireSizeFields();
+  wireWeightField();
+}
+
+// The bar is rebuilt on every change of selection, so the handler is attached
+// anew each time - the old element is gone by then.
+function wireWeightField() {
+  const fw = document.getElementById('sel-font-weight');
+  if (fw) fw.onchange = () => schriftStaerkeAufAuswahl(fw.value);
 }
 
 // ---- Setting the size by number (with a multi-selection: for all) ---------
@@ -2282,6 +2294,61 @@ function schriftGroesseAufAuswahl(size) {
   if (geaendert) { editor.canvas.requestRenderAll(); editor.snapshot(); }
 }
 
+
+// ---- Changing the font weight afterwards ---------------------------------
+// The Normal/Bold field used to be read in exactly one place: when a NEW text
+// was created. Switching it with something selected did nothing at all, so
+// text stayed bold however often one tried - and since 'bold' is the default
+// for new text, "it is always bold" was the whole experience.
+//
+// This deliberately touches plain text only, not text blocks or checklists.
+// In those the weight is part of how they are built - a text block's heading
+// is bold so it reads as a heading - and changing the object as a whole would
+// flatten that. A single row of a checklist can be had through the
+// "Split rows" button, which turns each row into an element of its own.
+function schriftStaerkeAufAuswahl(gewicht) {
+  gewicht = (gewicht === 'normal') ? 'normal' : 'bold';
+  let geaendert = 0;
+  editor.activeAll().forEach(o => {
+    // Children of a group are not in activeAll(), so a block or a list is
+    // passed over here without needing a check of its own.
+    if (istTextObj(o)) {
+      o.set('fontWeight', gewicht);
+      o.setCoords();
+      geaendert++;
+    }
+  });
+  if (geaendert) { editor.canvas.requestRenderAll(); editor.snapshot(); }
+  return geaendert;
+}
+
+// Bold or not? The templates carry the number 700, hand-made text carries the
+// word - both have to read as Bold, or the field would tell a different story
+// than the canvas.
+function gewichtVon(o) {
+  const gew = String((o && o.fontWeight) || 'normal');
+  return (gew === 'bold' || parseInt(gew, 10) >= 600) ? 'bold' : 'normal';
+}
+
+// Selection changed -> show the weight the selected text actually has, instead
+// of whatever was picked last.
+function syncFontWeightInput() {
+  const fw = document.getElementById('font-weight');
+  if (!fw) return;
+  const o = editor.activeAll().find(istTextObj);
+  if (!o) return;
+  fw.value = gewichtVon(o);
+}
+
+{
+  const fw = document.getElementById('font-weight');
+  if (fw) fw.addEventListener('change', () => {
+    // With nothing selected the field keeps its old meaning: it is the setting
+    // for the next text that gets created.
+    if (editor.activeAll().some(istTextObj)) schriftStaerkeAufAuswahl(fw.value);
+  });
+}
+
 // Selection changed → fill the field with the size of the selected text.
 function syncFontSizeInput() {
   const fs = document.getElementById('font-size');
@@ -2325,7 +2392,7 @@ function syncFontSizeInput() {
         && !['rect', 'mark', 'paint', 'erase', 'restore'].includes(_tool)) setTool('off');
     renderSelBar(); updateRetouchPanel();
     planeUiAufbau();                      // Ebenen + Animationsleiste gebündelt
-    if (ev !== 'selection:cleared') syncFontSizeInput();
+    if (ev !== 'selection:cleared') { syncFontSizeInput(); syncFontWeightInput(); }
   }));
 
 // Keep the size and position fields in step while dragging or scaling with the mouse
