@@ -532,13 +532,35 @@ const actions = {
   },
   'post-bg':      () => CONFIG.postData?.id && bg.setBackgroundImage(editor, `/library/studio/api/post-image/${CONFIG.postData.id}/`),
   'post-overlay': () => CONFIG.postData?.id && editor.addImageUrl(`/library/studio/api/post-image/${CONFIG.postData.id}/`),
-  'go-back': (btn) => {
+  'go-back': async (btn) => {
     // Always navigate back to the page we came from, in the same tab.
     // (window.close() used to be tried - that closed the tab and left the user
     // outside the site.) Unsaved changes are caught by the beforeunload guard.
-    let url = (btn && btn.getAttribute('data-back')) || '/planner/uebersicht/';
-    // Allow targets on this site only; otherwise fall back to the overview.
-    if (!/^\//.test(url) || url.indexOf('/library/studio') !== -1) url = '/planner/uebersicht/';
+    // The planner is where posts are worked on, so that is where leaving the
+    // Studio leads. The full overview lists everything including what is long
+    // published - a strange place to land after drawing.
+    let url = (btn && btn.getAttribute('data-back')) || '/planner/';
+    // Allow targets on this site only; otherwise fall back to the planner.
+    if (!/^\//.test(url) || url.indexOf('/library/studio') !== -1) url = '/planner/';
+    const postId = CONFIG.postId || (CONFIG.postData && CONFIG.postData.id);
+    if (postId) {
+      // With a post attached, "back" has two meanings and only the user knows
+      // which one: to the post this belongs to, or away from it - an empty
+      // canvas that is tied to nothing. Following the referrer answered
+      // neither: the Studio opens in a tab of its own, so it landed on a second
+      // copy of the very page the post is already open in.
+      const wahl = await modal('Leave the Studio', 'Where do you want to go?', [
+        { label: '\u2190 To post #' + postId, value: 'post' },
+        { label: '\ud83c\udd95 Empty canvas', value: 'blank' },
+        { label: 'Stay here', value: false },
+      ]);
+      if (!wahl) return;
+      // The empty canvas is also the only way to let go of the post: without
+      // post_id in the address nothing is attached any more, and the next save
+      // goes to the library.
+      url = (wahl === 'post') ? ('/planner/?edit=' + encodeURIComponent(postId))
+                              : '/library/studio/';
+    }
     window.location.href = url;
   },
   'copy-from-post': () => copyImageFromPost(),
@@ -2535,6 +2557,24 @@ if (CONFIG.libData?.item_id || CONFIG.libData?.nc_path) {
     if (post?.canvas_json) {
       status('⏳ Loading draft…');
       if (await io.restoreCanvas(editor, post.canvas_json, { frisch: true })) status('Bereit.', '#888');
+      return;
+    }
+    // No design saved for this post - but the picture hanging on it can still
+    // be put on the canvas. Opening the Studio from a post and finding an empty
+    // board is the one thing nobody expects; it happens whenever the image was
+    // attached in the post rather than built here. A GIF or a video is left to
+    // the buttons in the banner: flattening either one onto the canvas and
+    // saving over it would cost the animation.
+    if (post?.image_url) {
+      try {
+        await editor.addImageUrl(post.image_url, { silent: true, fill: true });
+        editor.resetHistory();
+        status('Image from the post – edit and save.', '#888');
+      } catch (e) {
+        editor._ladefehler = true;
+        status('❌ Image could not be loaded – file may be missing in Nextcloud', 'red');
+        toast('Image not found', 'err');
+      }
       return;
     }
     if (libD?.canvas_json) {

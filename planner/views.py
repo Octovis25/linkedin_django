@@ -811,9 +811,9 @@ def api_post(request):
                 print("Buffer delete on post-delete error:", _be)
                 buffer_deleted = False
                 buffer_error = str(_be)
-            # Delete the media files that belong to it (posted entries are spared).
-            try: _delete_post_media(c, pid, keep=None)
-            except Exception as _me: print("media delete on post-delete:", _me)
+            # Its media travel back to the outputs (posted entries are left alone).
+            try: _release_post_media(c, pid, keep=None)
+            except Exception as _me: print("media release on post-delete:", _me)
             c.execute("DELETE FROM planner_posts WHERE id=%s", [pid])
             return JsonResponse({'ok': True, 'buffer_deleted': buffer_deleted,
                                  'buffer_error': buffer_error, 'had_buffer_id': bool(buf_post_id)})
@@ -825,10 +825,11 @@ def api_post(request):
                       [data.get('topic_id'), data.get('id')])
             return JsonResponse({'ok': True})
         elif action in ('delete_image', 'delete_video', 'delete_media'):
-            # One medium per post: delete the file(s) in Nextcloud (posted ones are
-            # spared) and clear all three media columns.
+            # One medium per post: the file goes back to the Studio outputs
+            # (posted ones are left alone) and all three columns are cleared.
+            # Removing is not destroying - it turns up under "My outputs" again.
             _ensure_media_columns()
-            _delete_post_media(c, data.get('id'), keep=None)
+            _release_post_media(c, data.get('id'), keep=None)
             try:
                 c.execute("UPDATE planner_posts SET image=NULL, gif_nc_path=NULL, video_nc_path=NULL WHERE id=%s", [data.get('id')])
             except Exception:
@@ -842,8 +843,8 @@ def api_post(request):
                 return JsonResponse({'ok': False, 'error': 'video_nc_path missing'}, status=400)
             # Studio output → move into the Planner/Videos folder (not a copy).
             nc_path = _move_studio_output_to_planner(nc_path, PLANNER_VIDEOS_FOLDER)
-            # One medium per post: delete the previous media (except the new file).
-            _delete_post_media(c, data.get('id'), keep=nc_path)
+            # One medium per post: the previous one goes back to the outputs.
+            _release_post_media(c, data.get('id'), keep=nc_path)
             c.execute(
                 "UPDATE planner_posts SET video_nc_path=%s, image=NULL, gif_nc_path=NULL WHERE id=%s",
                 [nc_path, data.get('id')]
@@ -857,8 +858,8 @@ def api_post(request):
                 return JsonResponse({'ok': False, 'error': 'image_nc_path missing'}, status=400)
             # Studio output → move into the Planner/Images folder (not a copy).
             nc_path = _move_studio_output_to_planner(nc_path, PLANNER_IMAGES_FOLDER)
-            # One medium per post: delete the previous media (except the new file).
-            _delete_post_media(c, data.get('id'), keep=nc_path)
+            # One medium per post: the previous one goes back to the outputs.
+            _release_post_media(c, data.get('id'), keep=nc_path)
             c.execute(
                 "UPDATE planner_posts SET image=%s, video_nc_path=NULL, gif_nc_path=NULL WHERE id=%s",
                 [nc_path, data.get('id')]
@@ -1404,8 +1405,15 @@ PLANNER_IMAGES_FOLDER = "Marketing & Design/LinkedIn/Planner/Images"
 PLANNER_VIDEOS_FOLDER = "Marketing & Design/LinkedIn/Planner/Videos"
 
 
-def _nc_move(src_nc_path, dst_nc_path):
-    """WebDAV MOVE a file within Nextcloud. Returns dst_nc_path on success, else None."""
+def _nc_move(src_nc_path, dst_nc_path, overwrite=True):
+    """WebDAV MOVE a file within Nextcloud. Returns dst_nc_path on success.
+
+    With overwrite=False a destination that is already taken is not a failure
+    but an answer: MOVE reports it as 412 and False comes back, so the caller
+    can try the next name without a second request asking what is there.
+    Everything else - no credentials, no network, a refusal - returns None.
+    Both are falsy, so callers that only ask "did it work" are unaffected.
+    """
     import requests as _req
     from posts_posted.nc_storage import _get_nc_credentials
     from urllib.parse import quote as _q2
@@ -1418,9 +1426,12 @@ def _nc_move(src_nc_path, dst_nc_path):
     dst = base + _q2(dst_nc_path, safe='/')
     try:
         r = _req.request('MOVE', src, auth=_BA(username, password),
-                         headers={'Destination': dst, 'Overwrite': 'T'}, timeout=30)
+                         headers={'Destination': dst,
+                                  'Overwrite': 'T' if overwrite else 'F'}, timeout=30)
         if r.status_code in (200, 201, 204):
             return dst_nc_path
+        if not overwrite and r.status_code == 412:
+            return False          # the name is taken - the caller picks another
         print("nc move failed", r.status_code, r.text[:200])
     except Exception as e:
         print("nc move error", e)
@@ -1435,6 +1446,63 @@ def _move_studio_output_to_planner(nc_path, dest_folder):
     fname = nc_path.rsplit('/', 1)[-1]
     moved = _nc_move(nc_path, f"{dest_folder}/{fname}")
     return moved or nc_path
+
+
+def _carry_path_over(old_path, new_path, c=None):
+    """A moved file keeps its entries.
+
+    The library row and the Studio design both point at the path. Without this
+    they would point at a file that is no longer there, and the Studio would
+    find the design only through its file-name fallback - after a rename, not
+    at all.
+    """
+    if not old_path or not new_path or old_path == new_path:
+        return
+    def _tun(cur):
+        cur.execute("UPDATE media_library_items SET nc_path=%s WHERE nc_path=%s",
+                    [new_path, old_path])
+        cur.execute("UPDATE studio_images SET nc_path=%s WHERE nc_path=%s",
+                    [new_path, old_path])
+    try:
+        if c is not None:
+            _tun(c)
+        else:
+            with connection.cursor() as cur:
+                _tun(cur)
+    except Exception as e:
+        print("carry path over:", e)
+
+
+def _move_replaced_media_to_outputs(nc_path, c=None):
+    """A medium that comes off a post travels back to the Studio outputs.
+
+    Replacing used to mean losing: the file was deleted in Nextcloud without
+    asking, so swapping a video for a picture destroyed the video. Now it turns
+    up under "My outputs" again and can be hung on the next post.
+
+    This holds without exception. A video uploaded from a PC was never in the
+    Output folder and still goes there, because a rule with a special case is
+    one nobody can remember.
+
+    Returns the new path, or the old one if nothing could be moved - never an
+    empty value, so a caller can always keep pointing at a real file.
+    """
+    if not nc_path or nc_path.startswith(STUDIO_OUTPUT_PREFIX):
+        return nc_path
+    fname = nc_path.rsplit('/', 1)[-1]
+    stem, dot, ext = fname.rpartition('.')
+    if not dot:
+        stem, dot, ext = fname, '', ''
+    for versuch in range(1, 21):
+        name = fname if versuch == 1 else f"{stem}_{versuch}{dot}{ext}"
+        ziel = _nc_move(nc_path, STUDIO_OUTPUT_PREFIX + name, overwrite=False)
+        if ziel:
+            _carry_path_over(nc_path, ziel, c)
+            return ziel
+        if ziel is None:
+            break      # not "name taken" but a real failure - stop trying
+    print("move back to outputs failed:", nc_path)
+    return nc_path
 
 
 def _nc_delete(nc_path):
@@ -1468,9 +1536,14 @@ def _nc_delete_aufraeumen(nc_path, zweck):
     return ok
 
 
-def _delete_post_media(c, post_id, keep=None):
-    """Delete every media file hanging on the post (image/GIF/video) from
-    Nextcloud, except `keep`. Posts already published are spared."""
+def _release_post_media(c, post_id, keep=None):
+    """Take the media off a post without destroying them.
+
+    Every file hanging on the post (image/GIF/video) except `keep` travels back
+    to the Studio outputs. This used to delete them, which is why replacing a
+    medium quietly cost the old one. Posts already published are left alone:
+    they are out the door, nothing there gets moved.
+    """
     _ensure_media_columns()
     try:
         c.execute("""SELECT COALESCE(image,''), COALESCE(gif_nc_path,''),
@@ -1486,7 +1559,7 @@ def _delete_post_media(c, post_id, keep=None):
         return   # spare posts that have already been published
     for p in (img, gif, vid):
         if p and p != keep:
-            _nc_delete_aufraeumen(p, 'Medien eines geloeschten Posts')
+            _move_replaced_media_to_outputs(p, c)
 
 
 @login_required

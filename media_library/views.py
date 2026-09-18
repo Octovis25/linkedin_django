@@ -503,6 +503,23 @@ def _cleanup_old_media(paths, keep=None):
             _nc_delete_aufraeumen(p, 'ersetzte Post-Medien')
 
 
+def _release_old_media(paths, keep=None):
+    """Replaced post media go back to the Studio outputs instead of being
+    deleted - saving a picture over a post must not cost the video that hung
+    there. The move itself lives in planner.views, next to the other Nextcloud
+    moves, so there is one place that knows where the outputs are.
+    """
+    if not paths:
+        return
+    from planner.views import _move_replaced_media_to_outputs
+    for p in paths:
+        if p and p != keep:
+            try:
+                _move_replaced_media_to_outputs(p)
+            except Exception as e:
+                print("move back to outputs:", e)
+
+
 def _nc_delete_old_files(nc_folder, safe_prefix):
     r"""Delete old timestamp-based files for this title prefix from NC.
     Removes files matching pattern: {safe_prefix}_\d+_(preview|snap|obj).* """
@@ -1663,7 +1680,7 @@ def studio_save(request):
             nc_path = new_path
         except Exception as e:
             print("Post attach error:", e)
-        _cleanup_old_media(old_media, keep=nc_path)   # delete the old files (best effort)
+        _release_old_media(old_media, keep=nc_path)   # back to the outputs, not deleted
 
     # Renamed? Then remove the file under the old name. Otherwise it would stay
     # there, block the old name as "taken" for good, and appear in "My outputs"
@@ -1801,7 +1818,7 @@ def studio_save_video(request):
             nc_path = new_path
         except Exception as e:
             print("save-video post attach:", e)
-        _cleanup_old_media(old_media, keep=nc_path)
+        _release_old_media(old_media, keep=nc_path)   # back to the outputs, not deleted
     return JsonResponse({'ok': True, 'nc_path': nc_path, 'filename': filename, 'lib_id': lib_id})
 
 
