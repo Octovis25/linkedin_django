@@ -417,7 +417,8 @@
     <ul style="margin:.2rem 0 .9rem 1.1rem;padding:0">
       <li><b>💾 Save as…</b> attaches the image to the open post.</li>
       <li><b>▾ Format</b> – save as image (PNG), GIF or video.</li>
-      <li>Each post holds one medium – a new one replaces the old.</li>
+      <li>Each post holds one medium – a new one replaces the old, and the old one
+          goes back to <b>My outputs</b>. Nothing is deleted. See the pictures below.</li>
     </ul>
 
     <h3 style="color:#0e7c86;margin-bottom:.2rem">Connect a Studio image with a post’s text</h3>
@@ -433,6 +434,159 @@
           linked to it. When you <b>💾 Save as…</b>, the image attaches to that post
           automatically – no picking needed.</li>
     </ul>
+
+    <h3 style="color:#0e7c86;margin-bottom:.2rem">One post, one medium — in pictures</h3>
+    <p style="margin:.2rem 0 .6rem">There are two ways a picture or a video ends up on a
+      post, and they do different things. The <b>post editor picks</b> something that is
+      already finished. The <b>Studio builds</b> something new. Both end at the same post —
+      but only one of them is the right way for a file you already have.</p>
+
+    <style>
+      .pm-fig{display:block;width:100%;margin:.4rem 0 .2rem;border:1px solid #e2e5e8;
+              border-radius:10px;background:#fbfdfd}
+      .pm-cap{font-size:13px;color:#6b7b7d;margin:.1rem 0 1rem}
+      .pm-box{fill:#ffffff;stroke:#0e4a52;stroke-width:1.3}
+      .pm-slot{fill:none;stroke:#d7dfe0;stroke-width:1.1;stroke-dasharray:3 3}
+      .pm-slot-on{fill:#e4f3f1;stroke:#0e7c86;stroke-width:1.3}
+      .pm-slot-off{fill:#fdeee3;stroke:#b5531a;stroke-width:1.3}
+      .pm-flow{fill:none;stroke:#0e4a52;stroke-width:1.3}
+      .pm-mono{font:12px "Roboto Mono",Consolas,monospace;fill:#1f2d2f}
+      .pm-on{fill:#0e7c86}
+      .pm-bad{fill:#b5531a}
+      .pm-good{fill:#ffffff;stroke:#0e7c86;stroke-width:1.3}
+    </style>
+
+    <svg viewBox="0 0 820 300" class="pm-fig" xmlns="http://www.w3.org/2000/svg" role="img"
+         aria-label="Two ways a medium reaches a post: the post editor picks a finished file, the Studio builds a new one and attaches it on save.">
+      <defs>
+        <marker id="pm-a" viewBox="0 0 9 9" refX="8" refY="4.5" markerWidth="7" markerHeight="7" orient="auto">
+          <path d="M0,0 L9,4.5 L0,9 z" fill="#0e4a52"/>
+        </marker>
+      </defs>
+
+      <rect class="pm-box" x="14" y="30" width="212" height="78" rx="6"/>
+      <text x="30" y="54" class="sec">Finished medium</text>
+      <text x="30" y="74" class="cap">Studio output, Planner video</text>
+      <text x="30" y="92" class="cap">or a file from your PC</text>
+
+      <rect class="pm-box" x="14" y="190" width="212" height="78" rx="6"/>
+      <text x="30" y="214" class="sec">Studio</text>
+      <text x="30" y="234" class="cap">canvas: built new, or the</text>
+      <text x="30" y="252" class="cap">existing one edited</text>
+
+      <rect class="pm-box" x="290" y="30" width="196" height="78" rx="6"/>
+      <text x="306" y="54" class="sec">Post editor</text>
+      <text x="306" y="74" class="cap">the dropdown on the post</text>
+      <text x="306" y="93" class="pm-mono" style="font-size:11px">📷 from Studio…</text>
+
+      <rect class="pm-box" x="290" y="190" width="196" height="78" rx="6"/>
+      <text x="306" y="214" class="sec">💾 Save as…</text>
+      <text x="306" y="234" class="cap">the button in the Studio</text>
+      <text x="306" y="252" class="cap">attaches what you built</text>
+
+      <rect class="pm-box" x="580" y="58" width="226" height="182" rx="6"/>
+      <text x="596" y="82" class="hd">Post #42</text>
+      <rect class="pm-slot" x="596" y="92" width="194" height="30" rx="4"/>
+      <text x="610" y="112" class="pm-mono">image</text>
+      <rect class="pm-slot" x="596" y="130" width="194" height="30" rx="4"/>
+      <text x="610" y="150" class="pm-mono">gif</text>
+      <rect class="pm-slot" x="596" y="168" width="194" height="30" rx="4"/>
+      <text x="610" y="188" class="pm-mono">video</text>
+      <text x="596" y="222" class="cap">only ever one of them is filled</text>
+
+      <line class="pm-flow" x1="226" y1="68" x2="282" y2="68" marker-end="url(#pm-a)"/>
+      <text x="254" y="58" class="cap" text-anchor="middle">you pick</text>
+      <line class="pm-flow" x1="226" y1="228" x2="282" y2="228" marker-end="url(#pm-a)"/>
+      <text x="254" y="218" class="cap" text-anchor="middle">you build</text>
+      <polyline class="pm-flow" points="486,68 532,68 532,107 572,107" marker-end="url(#pm-a)"/>
+      <text x="532" y="58" class="cap" text-anchor="middle">attaches</text>
+      <polyline class="pm-flow" points="486,228 532,228 532,183 572,183" marker-end="url(#pm-a)"/>
+      <text x="532" y="248" class="cap" text-anchor="middle">attaches</text>
+    </svg>
+    <p class="pm-cap">A finished video belongs on the post through the <b>post editor</b> — the
+      Studio cannot pick one. If the file sits in <b>My outputs</b>, attaching it <i>moves</i> it
+      into the Planner folder; it is no longer in its old place.</p>
+
+    <svg viewBox="0 0 820 300" class="pm-fig" xmlns="http://www.w3.org/2000/svg" role="img"
+         aria-label="Saving a picture onto a post that carries a video: the video slot is cleared and the video file moves back to My outputs.">
+      <rect class="pm-box" x="14" y="24" width="244" height="196" rx="6"/>
+      <text x="30" y="48" class="hd">Before</text>
+      <rect class="pm-slot" x="30" y="60" width="212" height="32" rx="4"/>
+      <text x="44" y="81" class="cap">image — empty</text>
+      <rect class="pm-slot" x="30" y="100" width="212" height="32" rx="4"/>
+      <text x="44" y="121" class="cap">gif — empty</text>
+      <rect class="pm-slot-on" x="30" y="140" width="212" height="32" rx="4"/>
+      <text x="44" y="161" class="pm-mono pm-on">video</text>
+      <text x="30" y="198" class="cap">the file sits in Planner/Videos</text>
+
+      <line class="pm-flow" x1="272" y1="122" x2="540" y2="122" marker-end="url(#pm-a)"/>
+      <text x="406" y="108" class="sec" text-anchor="middle">💾 Save a picture on this post</text>
+      <text x="406" y="144" class="cap" text-anchor="middle">one post, one medium</text>
+
+      <rect class="pm-box" x="556" y="24" width="244" height="196" rx="6"/>
+      <text x="572" y="48" class="hd">After</text>
+      <rect class="pm-slot-on" x="572" y="60" width="212" height="32" rx="4"/>
+      <text x="586" y="81" class="pm-mono pm-on">image</text>
+      <rect class="pm-slot" x="572" y="100" width="212" height="32" rx="4"/>
+      <text x="586" y="121" class="cap">gif — empty</text>
+      <rect class="pm-slot-off" x="572" y="140" width="212" height="32" rx="4"/>
+      <text x="586" y="161" class="pm-mono pm-bad">video</text>
+      <line x1="582" y1="157" x2="700" y2="157" stroke="#b5531a" stroke-width="1.3"/>
+      <text x="572" y="198" class="note">slot cleared</text>
+
+      <line class="pm-flow" x1="678" y1="220" x2="678" y2="240" marker-end="url(#pm-a)"/>
+      <rect x="556" y="246" width="244" height="44" rx="6" fill="#e4f3f1" stroke="#0e7c86" stroke-width="1.3"/>
+      <text x="572" y="268" class="sec">the video goes back to</text>
+      <text x="572" y="284" class="sec">My outputs — nothing is deleted</text>
+    </svg>
+    <p class="pm-cap">Replacing never destroys. Whatever comes off a post — because you
+      replaced it, removed it, or deleted the whole post — travels back to <b>My outputs</b> and
+      can be hung on the next post. This holds for a file you once uploaded from your PC too.
+      The one exception: a post whose status is <b>Posted</b> is left untouched.</p>
+
+    <svg viewBox="0 0 820 220" class="pm-fig" xmlns="http://www.w3.org/2000/svg" role="img"
+         aria-label="Leaving the Studio when it was opened from a post: Exit offers going to the post or starting an empty canvas.">
+      <rect class="pm-box" x="14" y="56" width="200" height="76" rx="6"/>
+      <text x="30" y="80" class="sec">Post #42</text>
+      <text x="30" y="100" class="cap">in Create Posts</text>
+
+      <rect class="pm-box" x="300" y="56" width="200" height="76" rx="6"/>
+      <text x="316" y="80" class="sec">Studio</text>
+      <text x="316" y="100" class="cap">opens in a tab of its own</text>
+
+      <rect class="pm-good" x="580" y="14" width="224" height="70" rx="6"/>
+      <text x="596" y="38" class="sec">← To the post</text>
+      <text x="596" y="58" class="cap">opens it for editing again</text>
+
+      <rect class="pm-good" x="580" y="130" width="224" height="70" rx="6"/>
+      <text x="596" y="154" class="sec">🆕 Empty canvas</text>
+      <text x="596" y="174" class="cap">no longer tied to the post</text>
+
+      <line class="pm-flow" x1="214" y1="94" x2="292" y2="94" marker-end="url(#pm-a)"/>
+      <text x="253" y="84" class="cap" text-anchor="middle">Open Studio</text>
+      <polyline class="pm-flow" points="500,80 540,80 540,49 572,49" marker-end="url(#pm-a)"/>
+      <polyline class="pm-flow" points="500,108 540,108 540,165 572,165" marker-end="url(#pm-a)"/>
+      <text x="540" y="100" class="note" text-anchor="middle">← Exit asks</text>
+    </svg>
+    <p class="pm-cap">The Studio opens in a tab of its own, so “back” has two meanings. With a
+      post attached, <b>← Exit</b> asks which one you mean. The empty canvas is also the way to
+      <b>let go of the post</b>: from then on saving goes to your outputs instead of onto it.
+      Without a post attached, Exit simply leaves and asks nothing.</p>
+
+    <h3 style="color:#0e7c86;margin-bottom:.2rem">What appears when you open the Studio from a post</h3>
+    <p style="margin:.2rem 0 .4rem">In this order, and the first one that applies wins:</p>
+    <ol style="margin:.2rem 0 .9rem 1.2rem;padding:0">
+      <li>The <b>saved layout</b> of that post — everything still separate and editable.</li>
+      <li>No layout, but a <b>picture</b> on the post: the picture goes on the canvas.</li>
+      <li>No layout, but a <b>GIF</b>: its first frame goes on the canvas, with a warning. Saving
+          as an image replaces the GIF — the animation then goes back to My outputs.</li>
+      <li>A <b>video</b>: nothing is put on the canvas. Flattening it and saving over it would
+          cost the animation. Use the buttons in the post banner instead.</li>
+    </ol>
+    <p style="margin:.2rem 0 .9rem">If a layout points at a picture that no longer exists, the
+      status line says so — <b>do not save over it</b>, or you replace a file that could still be
+      repaired. An empty canvas with nothing in the status line means there is genuinely nothing
+      saved for that post.</p>
 
     <h3 style="color:#0e7c86;margin-bottom:.2rem">Troubleshooting</h3>
     <ul style="margin:.2rem 0 0 1.1rem;padding:0">
