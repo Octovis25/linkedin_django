@@ -2537,6 +2537,15 @@ if (CONFIG.libData?.item_id || CONFIG.libData?.nc_path) {
   if (b) { b.textContent = '💾 Save'; b.dataset.act = 'save-existing'; b.title = 'Overwrite the existing output in the same format'; }
 }
 
+// Fabric builds an image object even when its source answers 404: the element
+// is on the artboard, the picture is not, and the result looks exactly like an
+// empty draft. Counting them is the only way to tell those two apart - and the
+// difference decides whether the user should rebuild or go looking for a file.
+function fehlendeBilder() {
+  return editor.realObjects().filter(o => o && o.type === 'image'
+    && !(o._element && o._element.naturalWidth > 0)).length;
+}
+
 (async function restoreInitial() {
   try {
     const post = CONFIG.postData, libD = CONFIG.libData, tpl = CONFIG.tplData;
@@ -2556,7 +2565,12 @@ if (CONFIG.libData?.item_id || CONFIG.libData?.nc_path) {
     // - and the user took the half-empty editor for their file.
     if (post?.canvas_json) {
       status('⏳ Loading draft…');
-      if (await io.restoreCanvas(editor, post.canvas_json, { frisch: true })) status('Bereit.', '#888');
+      if (await io.restoreCanvas(editor, post.canvas_json, { frisch: true })) {
+        const fehlen = fehlendeBilder();
+        status(fehlen
+          ? '⚠️ ' + fehlen + ' image(s) in this draft point at a file that is no longer there.'
+          : 'Bereit.', fehlen ? '#854F0B' : '#888');
+      }
       return;
     }
     // No design saved for this post - but the picture hanging on it can still
@@ -2574,6 +2588,30 @@ if (CONFIG.libData?.item_id || CONFIG.libData?.nc_path) {
         editor._ladefehler = true;
         status('❌ Image could not be loaded – file may be missing in Nextcloud', 'red');
         toast('Image not found', 'err');
+      }
+      return;
+    }
+    // Nothing was built here, but something hangs on the post. A GIF can at
+    // least be shown: addImageUrl takes its first frame. A video cannot, so
+    // there the line below is all there is - still better than a blank artboard
+    // that explains nothing.
+    const animDatei = (post && (post.gif || post.video)) || '';
+    const animUrl = (post && (post.gif ? post.gif_url : post.video_url)) || '';
+    if (animDatei && animUrl) {
+      if (/\.gif$/i.test(animDatei)) {
+        try {
+          await editor.addImageUrl(animUrl, { silent: true, fill: true });
+          editor.resetHistory();
+          status('⚠️ Still frame of the animated file on this post. Saving as an '
+               + 'image replaces it – the animation goes back to your outputs.', '#854F0B');
+        } catch (e) {
+          editor._ladefehler = true;
+          status('❌ The file on this post could not be loaded', 'red');
+          toast('File not found', 'err');
+        }
+      } else {
+        status('This post carries a video that was not built here. '
+             + 'Open it from the banner above.', '#854F0B');
       }
       return;
     }

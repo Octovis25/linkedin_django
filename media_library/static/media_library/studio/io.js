@@ -122,14 +122,47 @@ function ladeGuard(editor) {
 //   objects[]      - a flat list with imgSrc, so the backend can move images out
 //                    to Nextcloud (_optimize_canvas_json expects this field)
 //   previewDataUrl - the preview (stays in the main folder)
+// An absolute address ties a design to the machine it was saved on. Fabric
+// turns a relative image source into a full URL while loading, so a draft saved
+// on the development server carried http://127.0.0.1:8000/... - and opened on
+// Render as an empty artboard, because that host does not exist there. Nobody
+// could see why. Addresses on our own server are therefore stored as paths.
+export function alsPfadSpeichern(url) {
+  if (typeof url !== 'string' || !url) return url;
+  const eigen = window.location.origin;
+  return url.startsWith(eigen + '/') ? url.slice(eigen.length) : url;
+}
+
+// The same in reverse, and more forgiving: a draft that already carries a
+// foreign host is repaired on opening, whatever host that was, as long as what
+// follows is a path of this app.
+export function alsPfadLesen(url) {
+  if (typeof url !== 'string' || !url) return url;
+  const t = url.match(/^https?:\/\/[^/]+(\/(?:library|planner|media|static)\/.*)$/i);
+  return t ? t[1] : url;
+}
+
+function pfadeEinebnen(zustand, fn) {
+  (zustand.objects || []).forEach(o => {
+    if (!o) return;
+    ['src', 'srcUrl', 'originalUrl'].forEach(k => { if (o[k]) o[k] = fn(o[k]); });
+    if (Array.isArray(o.objects)) pfadeEinebnen(o, fn);   // Gruppen
+  });
+  if (zustand.backgroundImage && zustand.backgroundImage.src) {
+    zustand.backgroundImage.src = fn(zustand.backgroundImage.src);
+  }
+}
+
 export function buildCanvasJson(editor, previewDataUrl) {
   const fabricState = editor.canvas.toJSON(FABRIC_PROPS);
   // _snap-Hilfslinien nicht mitspeichern
   fabricState.objects = (fabricState.objects || []).filter(o => !o._snap);
+  pfadeEinebnen(fabricState, alsPfadSpeichern);
 
   const objects = editor.canvas.getObjects()
     .filter(o => o.type === 'image' && !o._snap)
-    .map(o => ({ imgSrc: o.srcUrl || o.getSrc?.() || '', originalUrl: o.originalUrl || '' }));
+    .map(o => ({ imgSrc: alsPfadSpeichern(o.srcUrl || o.getSrc?.() || ''),
+                 originalUrl: alsPfadSpeichern(o.originalUrl || '') }));
 
   return JSON.stringify({
     version: 2,
@@ -364,6 +397,10 @@ export function restoreCanvas(editor, canvasJsonStr, opts = {}) {
   // logo for instance) carry their finished state directly in src (data:/nc://)
   // - those must NOT be replaced by the original (srcUrl), or the transparency
   // and the recolouring are gone after opening.
+  // Repair drafts that still carry the host they were saved on (see
+  // alsPfadLesen): without this they keep pointing at a machine that is not
+  // this one, and the artboard comes up empty.
+  pfadeEinebnen(fabricState, alsPfadLesen);
   fabricState.objects.forEach(o => {
     if (o.type === 'image' && o.src) {
       o.src = (o.bgRemoved || o.edited) ? proxyUrl(o.src) : proxyUrl(o.srcUrl || o.src);

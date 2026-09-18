@@ -973,6 +973,12 @@ def studio_view(request):
                     r = rows[0]
                     post_data = {'id': r[0], 'title': r[1] or '', 'image': r[2] or '', 'content': (r[3] or '')[:120],
                                  'gif': r[4] or '', 'video': r[5] or ''}
+                    # What a file is, the file decides - not the column it sits
+                    # in. A .gif parked in video_nc_path was announced as
+                    # "Video" and as "no GIF" in the same breath, and the button
+                    # that puts it on the canvas never appeared.
+                    if post_data['video'].lower().endswith('.gif') and not post_data['gif']:
+                        post_data['gif'], post_data['video'] = post_data['video'], ''
                     # Fetch URLs for the three files on the post (picked in the banner).
                     post_data['image_url'] = f"/library/studio/api/post-image/{r[0]}/" if post_data['image'] else ''
                     post_data['gif_url']   = ('/library/studio/nc-image/?p=' + _q(post_data['gif']))   if post_data['gif']   else ''
