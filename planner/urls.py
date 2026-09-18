@@ -36,4 +36,5 @@ urlpatterns = [
     path('linkedin/post-video/<int:post_id>/', views.linkedin_post_video, name='linkedin_post_video'),
     path('api/video/<int:post_id>/', views.api_video, name='api_video'),
     path('api/linkedin-diag/', views.linkedin_diag, name='linkedin_diag'),
+    path('api/buffer-sync/', views.api_buffer_sync, name='api_buffer_sync'),
 ]

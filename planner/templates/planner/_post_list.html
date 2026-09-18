@@ -20,26 +20,15 @@
 #pe-lightbox img{max-width:90vw;max-height:88vh;border-radius:8px;object-fit:contain}
 #pe-lightbox-close{position:absolute;top:16px;right:20px;color:#fff;font-size:28px;cursor:pointer;opacity:.8;line-height:1}
 #pe-lightbox-close:hover{opacity:1}
-/* The post one has just arrived at (deep link from the Planner) is briefly
-   outlined - otherwise you land in a list and have to look for it. */
-@keyframes pe-angekommen { from { box-shadow:0 0 0 3px #008591; } to { box-shadow:0 0 0 3px rgba(0,133,145,0); } }
-.pe-card.pe-ziel { animation: pe-angekommen 2.4s ease-out 1; }
 </style>
 
 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1.25rem;flex-wrap:wrap;gap:8px">
   <h1 style="margin:0;font-size:1.4rem">{{ title }}</h1>
   <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
     {% if allow_create %}
-    {% comment %}
-    The new-post dialog lives in the Planner. Until now this link simply went
-    there and left you standing in the Planner afterwards - creating a draft
-    from the Draft tab meant finding your way back by hand. So the link now
-    carries two things: where it came from (back) and the status that fits this
-    tab. After saving, the Planner brings you back here.
-    {% endcomment %}
-    <a href="/planner/?new=1&amp;back={{ request.path|urlencode }}{% if tab == "draft" %}&amp;status=Draft{% elif tab == "pipeline" %}&amp;status=Review{% elif tab == "ready" %}&amp;status=Ready{% elif tab == "scheduled" %}&amp;status=Scheduled{% elif tab == "archive" %}&amp;status=Archive{% endif %}"
+    <a href="/planner/?new=1"
        style="font-size:13px;padding:4px 10px;border:0.5px solid #008080;border-radius:4px;background:#008080;color:#fff;cursor:pointer;white-space:nowrap;text-decoration:none;display:inline-block"
-       title="Create a new post - the dialog opens in the Planner and brings you back here">＋ New post</a>
+       title="Create a new post (in the Planner)">＋ New post</a>
     {% endif %}
     <a href="https://publish.buffer.com/" target="_blank" rel="noopener"
        style="font-size:13px;padding:4px 10px;border:0.5px solid #2c4bff;border-radius:4px;background:#fff;color:#2c4bff;text-decoration:none;white-space:nowrap"
@@ -67,17 +56,62 @@
 
 {% if tab == "scheduled" %}
 {% comment %}
-Why a post can still sit here although it is already live on LinkedIn: the
-Buffer sync is a once-a-day cron job (render.yaml, service buffer-posts-daily).
-It runs at 12:00 UTC = 14:00 German summer time, i.e. AFTER the usual 08:00
-posting slot, and only then are sent posts moved to Posted / Archive by
-promote_scheduled_to_posted(). Before this note existed it looked broken.
+Why a post can still sit here although it is already live on LinkedIn: nothing
+notices on its own until the app asks Buffer. This note used to promise a daily
+cron job at 14:00 (render.yaml, service buffer-posts-daily) - but that service
+was never created on Render, so the sync it described never ran. Posts only
+left Scheduled as a side effect of an Excel import, which happens to call
+fetch_buffer_posts too.
+
+Now the app does it itself: posts_posted/buffer_sync.py runs one sync in the
+background the first time this page is opened each day, and the button below
+runs one on demand. The text says what actually happens, including when it
+last happened - a note that promises a schedule nobody kept is worse than no
+note at all.
 {% endcomment %}
-<p style="font-size:12px;color:#6c757d;background:#f4fafa;border:1px solid #e0eded;border-radius:8px;padding:8px 12px;margin:-.4rem 0 1rem">
-  ℹ️ Posts that have already gone out on LinkedIn move to <b>Archive</b>
-  automatically – but only after the daily Buffer sync at <b>14:00</b>. Until then a
-  post that is already published still shows up here. Nothing is wrong.
+<p style="font-size:12px;color:#6c757d;background:#f4fafa;border:1px solid #e0eded;border-radius:8px;padding:8px 12px;margin:-.4rem 0 1rem;display:flex;flex-wrap:wrap;align-items:center;gap:8px">
+  <span style="flex:1 1 320px">
+    ℹ️ A post that is already live on LinkedIn moves to <b>Archive</b> once the
+    app has asked Buffer about it. That happens by itself the first time this page
+    is opened each day, and what it finds shows on your next visit.
+    {% if buffer_sync_at %}Last checked <b>{{ buffer_sync_at }}</b>.{% else %}Not checked yet.{% endif %}
+  </span>
+  <button type="button" id="pe-buffer-sync"
+          style="font-size:12px;padding:4px 10px;border:1px solid #0e7c86;background:#fff;color:#0e7c86;border-radius:6px;cursor:pointer;white-space:nowrap">
+    🔄 Check now</button>
 </p>
+<script>
+(function () {
+  var knopf = document.getElementById('pe-buffer-sync');
+  if (!knopf) return;
+  knopf.addEventListener('click', function () {
+    var vorher = knopf.textContent;
+    knopf.disabled = true;
+    knopf.textContent = 'Asking Buffer\u2026';
+    fetch('/planner/api/buffer-sync/', {
+      method: 'POST',
+      headers: { 'X-CSRFToken': '{{ csrf_token }}' }
+    }).then(function (a) { return a.json(); }).then(function (d) {
+      if (!d.ok) {
+        knopf.textContent = 'Failed';
+        knopf.title = d.error || '';
+        knopf.disabled = false;
+        return;
+      }
+      // Reload either way: a post that moved has to disappear from this list,
+      // and 'Last checked' is now a different time.
+      knopf.textContent = d.promoted
+        ? d.promoted + ' moved to Archive'
+        : 'Nothing new';
+      setTimeout(function () { location.reload(); }, 900);
+    }).catch(function (fehler) {
+      knopf.textContent = vorher;
+      knopf.title = String(fehler);
+      knopf.disabled = false;
+    });
+  });
+}());
+</script>
 {% endif %}
 
 {% if tab == "archive" %}
@@ -107,7 +141,7 @@ word, so a published post that was later tidied away still counts as published.
 
 <div style="display:flex;flex-direction:column;gap:8px">
 {% for p in posts %}
-<div class="pe-card" id="post-{{ p.id }}" data-post-id="{{ p.id }}" data-ende="{% if p.linkedin_posted %}posted{% else %}dropped{% endif %}" style="background:#fff;border:0.5px solid #e0e0e0;border-radius:10px;padding:12px 14px">
+<div class="pe-card" data-ende="{% if p.linkedin_posted %}posted{% else %}dropped{% endif %}" style="background:#fff;border:0.5px solid #e0e0e0;border-radius:10px;padding:12px 14px">
   <div style="display:flex;gap:10px;align-items:center">
     {% if p.image %}
     <img src="/planner/image/{{ p.id }}/?v={% now 'U' %}" style="width:56px;height:56px;border-radius:6px;object-fit:cover;flex-shrink:0;cursor:zoom-in" onclick="peLightbox('/planner/image/{{ p.id }}/?v={% now 'U' %}')">
@@ -200,7 +234,7 @@ word, so a published post that was later tidied away still counts as published.
         {% for t in topics %}<option value="{{ t.id }}">{{ t.name }}</option>{% endfor %}
       </select>
       <select id="pe-status" style="font-size:13px;flex:1;padding:6px 8px;border:0.5px solid #ced4da;border-radius:4px">
-        <option value="Draft">Draft</option><option value="Review">Review</option><option value="Ready">Ready</option><option value="Scheduled">Scheduled</option><option value="Posted">Posted</option>
+        <option>Draft</option><option>Review</option><option>Ready</option><option>Scheduled</option><option>Posted</option>
       </select>
     </div>
     <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap">
@@ -430,8 +464,8 @@ function peShowVideoPreview(src) {
   if (src) {
     v.src = src;
     v.style.display = 'block';
-    // Jump to a frame that says something (not the black first one):
-    // about 2 s, or a quarter of the length for shorter clips.
+    // Auf einen aussagekräftigen Frame springen (nicht den schwarzen ersten):
+    // ~2 Sek, oder ein Viertel der Länge bei kürzeren Clips.
     v.onloadedmetadata = function() {
       try {
         const dur = isFinite(v.duration) ? v.duration : 0;
@@ -460,7 +494,7 @@ function peResetVideoUi() {
 }
 function peClearVideo() { peResetVideoUi(); }
 
-/* Show the Studio button only when a Nextcloud video is selected */
+/* Studio-Button nur zeigen, wenn ein Nextcloud-Video gewählt ist */
 function peUpdateStudioBtn() {
   const ncPath = document.getElementById('pe-video-nc-path').value;
   document.getElementById('pe-video-studio').style.display = ncPath ? 'inline-block' : 'none';
@@ -518,7 +552,7 @@ async function peReloadNcVideos() {
   try {
     const r = await fetch('/planner/api/nc-videos/').then(r => r.json());
     if (r.ok) addGroup('🎬 Planner-Videos', r.videos);
-  } catch (e) { /* the list is optional - uploading from the PC still works */ }
+  } catch (e) { /* Liste optional — PC-Upload bleibt möglich */ }
 }
 
 function peVideoNcSelect() {
@@ -601,41 +635,6 @@ function openEdit(id) {
 
 function closeEdit() { document.getElementById('post-edit-modal').style.display = 'none'; }
 
-/* ── Deep link: ?edit=<id> ─────────────────────────────────────────────────
-   A click on a post in the Planner leads here - to the tab that belongs to
-   its status - and opens that post straight away.
-
-   It can happen that the post is not on this page after all: Ready and
-   Scheduled additionally require in_pipeline, a published post moves to the
-   archive overnight, and the status may have been changed elsewhere in the
-   meantime. Then we do not leave the user in front of a list that silently
-   lacks their post, but send them on to All Posts, where every post is. The
-   `von=all` guard stops that from turning into a loop. */
-(function () {
-  try {
-    const params = new URLSearchParams(window.location.search);
-    const eid = params.get('edit');
-    if (!eid) return;
-    const p = PE_POSTS.find(x => String(x.id) === String(eid));
-    if (p) {
-      const zeile = document.getElementById('post-' + eid) ||
-                    document.querySelector('[data-post-id="' + eid + '"]');
-      if (zeile) {
-        if (zeile.scrollIntoView) zeile.scrollIntoView({ block: 'center' });
-        zeile.classList.add('pe-ziel');
-      }
-      setTimeout(() => openEdit(p.id), 120);
-      return;
-    }
-    if (params.get('von') !== 'all') {
-      window.location.replace('/planner/all/?edit=' + encodeURIComponent(eid) + '&von=all');
-    } else {
-      // Even All Posts does not have it - then say so instead of doing nothing.
-      alert('This post is no longer in the list (it may have been deleted).');
-    }
-  } catch (e) {}
-})();
-
 function peDropImg(e) {
   e.preventDefault();
   const file = e.dataTransfer.files[0];
@@ -649,7 +648,7 @@ function peDropImg(e) {
 function pePreviewImg(input) {
   const file = input.files ? input.files[0] : null;
   if (!file) return;
-  // An image from the PC was chosen → drop the Studio selection
+  // PC-Bild gewählt → Studio-Auswahl verwerfen
   document.getElementById('pe-img-nc-path').value = '';
   const ncs = document.getElementById('pe-img-nc'); if (ncs) ncs.value = '';
   const reader = new FileReader();
@@ -668,7 +667,7 @@ async function peReloadStudioImages() {
       opt.value = im.nc_path; opt.textContent = im.filename;
       sel.appendChild(opt);
     });
-  } catch (e) { /* optional - uploading from the PC still works */ }
+  } catch (e) { /* optional — PC-Upload bleibt möglich */ }
 }
 
 function peImgNcSelect() {
@@ -791,7 +790,7 @@ function liOpenPost(id) {
     }
   }
 
-  // Show the video that is attached (uploading happens in Edit, this only checks)
+  // Zugeordnetes Video anzeigen (Upload passiert in Edit, hier nur prüfen)
   const liVidInfo = document.getElementById('li-video-info');
   const liVidName = document.getElementById('li-video-name');
   const liVidPrev = document.getElementById('li-video-preview');
@@ -874,11 +873,11 @@ async function liDoPost() {
   res.style.display = 'none';
 
   // Video wird in Edit zugeordnet; hier kein Upload mehr.
-  // An attached video is posted the normal way, through /post/ (include_video).
+  // Ein zugeordnetes Video wird über den normalen /post/-Weg (include_video) gepostet.
   const liVidInfoEl = document.getElementById('li-video-info');
   const hasVideo = liVidInfoEl && liVidInfoEl.style.display !== 'none';
 
-  // ── Text / image / video route (everything through /post/) ──
+  // ── Text / Image / Video route (alles über /post/) ──
   const schedCheck  = document.getElementById('li-schedule-check');
   const isScheduled = schedCheck && schedCheck.checked;
   btn.textContent = isScheduled ? 'Scheduling…' : 'Posting…';

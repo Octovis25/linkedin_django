@@ -490,7 +490,35 @@ def scheduled_view(request):
         })
     li_token = _li_get_superuser_token()
     _attach_video_paths(posts_list)
-    return render(request, 'planner/scheduled.html', {'posts': posts_list, 'topics': topics, 'topic_filter': topic_filter, 'statuses': ['Draft', 'Review', 'Ready', 'Scheduled', 'Posted', 'Archive'], 'tab': 'scheduled', 'page_title': '📅 Scheduled', 'posts_json': _posts_to_json(posts_list), 'li_connected': bool(li_token), 'li_org': li_token.get('org_name','') if li_token else '', 'allow_create': True})
+    # There is no cron job - see posts_posted/buffer_sync.py. Opening this
+    # page is the moment to catch up: once a day, in a thread, so nobody
+    # waits on Buffer's API. What it finds shows on the next visit.
+    try:
+        from posts_posted.buffer_sync import sync_in_background, letzter_lauf
+        sync_in_background()
+        _lauf = letzter_lauf()
+    except Exception as _sync_fehler:
+        # The note at the top of the list is a convenience; the list of
+        # posts is the page. Never let the former take the latter down.
+        print('buffer sync on page load skipped:', _sync_fehler)
+        _lauf = None
+    return render(request, 'planner/scheduled.html', {'posts': posts_list,
+        'buffer_sync_at': _lauf[0].strftime('%d.%m.%Y %H:%M') if _lauf else '',
+        'buffer_sync_ok': bool(_lauf and _lauf[1]), 'topics': topics, 'topic_filter': topic_filter, 'statuses': ['Draft', 'Review', 'Ready', 'Scheduled', 'Posted', 'Archive'], 'tab': 'scheduled', 'page_title': '📅 Scheduled', 'posts_json': _posts_to_json(posts_list), 'li_connected': bool(li_token), 'li_org': li_token.get('org_name','') if li_token else '', 'allow_create': True})
+
+
+@login_required
+def api_buffer_sync(request):
+    """The "Sync now" button on the Scheduled page.
+
+    Runs to completion rather than in a thread: whoever pressed it is
+    waiting for the answer, and an answer that arrives on the next page
+    load would not be one.
+    """
+    if request.method != 'POST':
+        return JsonResponse({'ok': False, 'error': 'POST expected'}, status=405)
+    from posts_posted.buffer_sync import sync_now
+    return JsonResponse(sync_now())
 
 
 @login_required
@@ -1953,7 +1981,6 @@ def _buffer_fetch_post_metrics(buf_token, org_id, first=50, all_pages=False, max
             id
             channelId
             dueAt
-            sentAt
             status
             text
             metricsUpdatedAt
@@ -1985,8 +2012,7 @@ def _buffer_fetch_post_metrics(buf_token, org_id, first=50, all_pages=False, max
             out.append({
                 'buffer_post_id': node.get('id'),
                 'channel_id': node.get('channelId'),
-                'sent_at': node.get('sentAt'),
-                'due_at': node.get('dueAt'),
+                'sent_at': node.get('dueAt'),
                 'status': node.get('status'),
                 'text': node.get('text') or '',
                 'thumbnail_url': _thumb(node),
@@ -2053,11 +2079,7 @@ def _buffer_fetch_posts_basic(buf_token, org_id, first=50, all_pages=True, max_p
             out.append({
                 'buffer_post_id': node.get('id'),
                 'channel_id': node.get('channelId'),
-                # sent_at means sent. The planned time travels as due_at:
-                # writing it into sent_at made every queued post look
-                # published, and the sync archived it days too early.
-                'sent_at': node.get('sentAt'),
-                'due_at': node.get('dueAt'),
+                'sent_at': node.get('sentAt') or node.get('dueAt'),
                 'status': node.get('status'),
                 'text': node.get('text') or '',
                 'external_link': node.get('externalLink') or '',
