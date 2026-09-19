@@ -46,6 +46,23 @@ urlpatterns = [
     path("db-admin/", include("db_admin.urls")),
     path("change-password/", auth_views.PasswordChangeView.as_view(
         template_name="core/change_password.html", success_url="/"), name="change_password"),
+
+    # Forgotten password: Django's own four-step flow, with our own pages. The
+    # mail goes out over the same SMTP settings the invitation mail already
+    # uses. Whether an address exists here is deliberately never revealed -
+    # every request answers the same way.
+    path("password-reset/", auth_views.PasswordResetView.as_view(
+        template_name="core/password_reset.html",
+        email_template_name="core/password_reset_email.txt",
+        subject_template_name="core/password_reset_subject.txt",
+        success_url="/password-reset/sent/"), name="password_reset"),
+    path("password-reset/sent/", auth_views.PasswordResetDoneView.as_view(
+        template_name="core/password_reset_done.html"), name="password_reset_done"),
+    path("reset/<uidb64>/<token>/", auth_views.PasswordResetConfirmView.as_view(
+        template_name="core/password_reset_confirm.html",
+        success_url="/reset/done/"), name="password_reset_confirm"),
+    path("reset/done/", auth_views.PasswordResetCompleteView.as_view(
+        template_name="core/password_reset_complete.html"), name="password_reset_complete"),
 ]
 
 if settings.DEBUG:

@@ -1,0 +1,37 @@
+<!--
+  Shared shell for the password-reset pages. Same card as the login page, so
+  the four steps do not look like a different application. login.html keeps its
+  own copy on purpose: it is the one page that must still work if anything here
+  is changed.
+-->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>{% block title %}LinkedIn Dashboard{% endblock %}</title>
+  <style>
+    :root { --octo-petrol: #008591; --octo-orange: #F56E28; --octo-white: #FFFFFF; --octo-light-gray: #F9F7F0; }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: 'Roboto', Arial, sans-serif; background: var(--octo-light-gray); display: flex; justify-content: center; align-items: center; min-height: 100vh; padding: 1rem; }
+    .login-card { background: var(--octo-white); padding: 2rem; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); width: 100%; max-width: 400px; }
+    h1 { color: var(--octo-petrol); text-align: center; margin-bottom: 1rem; font-size: 1.5rem; }
+    p.lead { color: #555; font-size: 0.92rem; margin-bottom: 1.2rem; line-height: 1.5; }
+    .form-group { margin-bottom: 1rem; }
+    label { display: block; color: var(--octo-petrol); font-weight: 500; margin-bottom: 0.3rem; }
+    input { width: 100%; padding: 0.6rem; border: 2px solid var(--octo-light-gray); border-radius: 6px; font-size: 1rem; }
+    input:focus { outline: none; border-color: var(--octo-orange); }
+    button { width: 100%; padding: 0.7rem; background: var(--octo-petrol); color: var(--octo-white); border: none; border-radius: 6px; font-size: 1rem; font-weight: 500; cursor: pointer; margin-top: 0.5rem; }
+    button:hover { background: #005F68; }
+    .error { color: #dc3545; margin-bottom: 1rem; font-size: 0.9rem; }
+    .error ul { margin: 0 0 0 1rem; }
+    .back { display: block; text-align: center; margin-top: 1rem; font-size: 0.88rem; color: var(--octo-petrol); }
+    .back:hover { color: var(--octo-orange); }
+  </style>
+</head>
+<body>
+<div class="login-card">
+  {% block body %}{% endblock %}
+</div>
+</body>
+</html>
