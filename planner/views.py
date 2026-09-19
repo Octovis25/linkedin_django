@@ -1141,6 +1141,49 @@ def _prepare_temp_video(post_id):
             pass
 
 
+def _verified_mp4_url(url, versuche=4, pause=4):
+    """Hand Buffer an MP4 that really exists.
+
+    The Studio records in the browser, and a browser records WebM - a format
+    LinkedIn does not take. The post then goes out with an empty video and
+    nothing anywhere says why. Cloudinary converts on request: the same asset
+    with a .mp4 extension.
+
+    But the first request is what starts that conversion, so asking for the
+    address and passing it on in the same breath can hand Buffer something that
+    is not there yet. So we fetch it ourselves and pass on only what we have
+    seen arrive - and if it never arrives, we raise. An error somebody reads
+    beats a post that goes out empty and says nothing.
+    """
+    import requests as _req
+    import time as _t
+
+    stamm, punkt, endung = url.rpartition('.')
+    mp4 = url if (punkt and endung.lower() == 'mp4') else ((stamm or url) + '.mp4')
+
+    letzter = 'no attempt'
+    for nr in range(versuche):
+        try:
+            r = _req.get(mp4, stream=True, timeout=(10, 120))
+            art = (r.headers.get('Content-Type') or '').lower()
+            # Read one chunk: a body that never starts is not a video either.
+            erste = b''
+            for stueck in r.iter_content(chunk_size=65536):
+                erste = stueck
+                break
+            r.close()
+            if r.status_code == 200 and 'mp4' in art and erste:
+                return mp4
+            letzter = 'HTTP %s, type %s' % (r.status_code, art or '(none)')
+        except Exception as fehler:
+            letzter = str(fehler)
+        if nr < versuche - 1:
+            _t.sleep(pause)
+
+    raise Exception('Cloudinary delivers no MP4 for %s (%s). The post was NOT sent - '
+                    'sending it would have gone out with an empty video.' % (mp4, letzter))
+
+
 def _upload_video_to_cloudinary(post_id):
     """
     Copy the post's video from Nextcloud to a local temp file, then upload it to
@@ -1193,10 +1236,11 @@ def _upload_video_to_cloudinary(post_id):
     secure_url = result.get("secure_url")
     if not secure_url:
         raise Exception("Cloudinary lieferte keine URL: " + json.dumps(result)[:300])
-    # Animiertes GIF → als MP4 ausliefern (Dateiendung tauschen).
-    if is_gif and secure_url.lower().endswith(".gif"):
-        secure_url = secure_url[:-4] + ".mp4"
-    return secure_url
+    # Whatever we uploaded, Buffer gets an MP4. A Studio recording is WebM and
+    # LinkedIn does not take WebM; an animated GIF is not a video at all. Both
+    # come back as MP4 from the same address with the extension swapped - and
+    # _verified_mp4_url waits until it is really there.
+    return _verified_mp4_url(secure_url)
 
 
 def _upload_image_to_cloudinary(post_id):
