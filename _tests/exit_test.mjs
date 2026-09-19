@@ -80,7 +80,10 @@ console.log('\n=== With a post attached, Exit asks ===');
   check('a dialog appears', Array.isArray(zustand.gefragt), zustand.gefragt);
   check('and it offers the post by number',
         (zustand.gefragt || []).some(l => l.includes('42')), zustand.gefragt);
-  check('"to post" opens the post editor', zustand.ziel === '/planner/?edit=42', zustand.ziel);
+  check('"to post" opens the post editor',
+        zustand.ziel.startsWith('/planner/?edit=42'), zustand.ziel);
+  check('and carries the list we came from',
+        zustand.ziel.includes('back=' + encodeURIComponent('/planner/')), zustand.ziel);
 }
 {
   const { fn, zustand } = baue({ postId: 42 }, 'blank');
@@ -97,7 +100,34 @@ console.log('\n=== With a post attached, Exit asks ===');
   // The banner knows the post even when postId is not set separately.
   const { fn, zustand } = baue({ postData: { id: 7 } }, 'post');
   await fn(knopf('/planner/'));
-  check('the post from the banner counts too', zustand.ziel === '/planner/?edit=7', zustand.ziel);
+  check('the post from the banner counts too',
+        zustand.ziel.startsWith('/planner/?edit=7'), zustand.ziel);
+}
+
+console.log('\n=== Back to the list you came from ===');
+{
+  // The sub-tabs are what people work in. Coming back to a different list
+  // means hunting for the post again.
+  const { fn, zustand } = baue({ postId: 42 }, 'post');
+  await fn(knopf('/planner/scheduled/'));
+  check('Scheduled brings you back to Scheduled',
+        zustand.ziel.includes('back=' + encodeURIComponent('/planner/scheduled/')), zustand.ziel);
+}
+{
+  // The full overview is sorted newest first, so it opens on what is already
+  // published - never the place to land after drawing.
+  const { fn, zustand } = baue({ postId: 42 }, 'post');
+  await fn(knopf('/planner/uebersicht/'));
+  check('but the full overview is refused as an origin',
+        zustand.ziel.includes('back=' + encodeURIComponent('/planner/')), zustand.ziel);
+  check('and it really is not in there',
+        !zustand.ziel.includes('uebersicht'), zustand.ziel);
+}
+{
+  const { fn, zustand } = baue({ postId: 42 }, 'post');
+  await fn(knopf('/library/studio/?post_id=9'));
+  check('an origin outside the planner falls back to the planner',
+        zustand.ziel.includes('back=' + encodeURIComponent('/planner/')), zustand.ziel);
 }
 
 console.log('\n=== Without a post there is nothing to decide ===');
@@ -131,6 +161,10 @@ console.log('\n=== The other side still has the door ===');
     path.join(HERE, '..', 'planner', 'templates', 'planner', 'planner.html'), 'utf8');
   check('planner.html still understands ?edit=<id>',
         /params\.get\('edit'\)/.test(planner) && /openEditModal\(/.test(planner));
+  // Without this, the post page falls back to the full overview and the whole
+  // point of carrying the origin along is lost - silently.
+  check('and it still reads the origin we send with it',
+        /params\.get\('back'\)/.test(planner));
 }
 
 console.log('\n' + good + ' ok, ' + bad + ' failed');

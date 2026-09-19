@@ -555,11 +555,20 @@ const actions = {
         { label: 'Stay here', value: false },
       ]);
       if (!wahl) return;
+      // Back to the post means back to the list you came from. Without a
+      // `back` the post page falls back to the full overview - which is sorted
+      // newest first, so it opens on what is already published. That is never
+      // where someone who was just drawing wants to end up, so the overview is
+      // the one origin we refuse; anything else in the planner is kept.
+      const ueberblick = /\/planner\/uebersicht\//i.test(url);
+      const herkunft = (!ueberblick && /^\/planner\//i.test(url)) ? url : '/planner/';
       // The empty canvas is also the only way to let go of the post: without
       // post_id in the address nothing is attached any more, and the next save
       // goes to the library.
-      url = (wahl === 'post') ? ('/planner/?edit=' + encodeURIComponent(postId))
-                              : '/library/studio/';
+      url = (wahl === 'post')
+        ? ('/planner/?edit=' + encodeURIComponent(postId)
+           + '&back=' + encodeURIComponent(herkunft))
+        : '/library/studio/';
     }
     window.location.href = url;
   },
