@@ -51,6 +51,8 @@
     .sub-nav a.ext, .user-section a.ext { color: #7d8f8d; }
     .sub-nav a.ext:hover, .user-section a.ext:hover { color: var(--octo-orange); }
     .sub-nav .ext-sep { color: #b9c9c9; padding: 0.4rem 0.2rem; user-select: none; }
+    nav a.nav-help { margin-left: auto; opacity: .85; }
+    nav a.nav-help:hover { opacity: 1; }
     .sub-nav { display: flex; gap: 0; background: var(--octo-light-gray); padding: 0 1.5rem; }
     .sub-nav a { color: var(--octo-dark-petrol); padding: 0.4rem 1rem; font-size: 0.9rem; text-decoration: none; border-bottom: 2px solid transparent; }
     .sub-nav a:hover, .sub-nav a.active { color: var(--octo-orange); border-bottom-color: var(--octo-orange); }
@@ -122,6 +124,10 @@ up, so it moved right; Collectives became a sub-entry under Data.
     {% if user.is_superuser %}
     <a href="/db-admin/" {% if '/db-admin/' in request.path %}class="active"{% endif %}>DB Admin</a>
     {% endif %}
+    {# Not a tab: it opens the guide and leaves the page you are on untouched. #}
+    <a href="#" class="nav-help"
+       onclick="event.preventDefault();document.getElementById('portal-help').style.display='flex'"
+       title="Open the user guide">📖 Help</a>
   </nav>
   {% if '/data/' in request.path or '/collectives/' in request.path %}
   <div class="sub-nav">
@@ -193,5 +199,6 @@ Kept because the second base template (templates/base.html) offered this block
 and now forwards here: any page that filled it must keep working.
 {% endcomment %}
 {% block extra_js %}{% endblock %}
+{% include 'core/_portal_help.html' %}
 </body>
 </html>

@@ -1,0 +1,200 @@
+<!--
+Portal help: one guide for the whole dashboard, opened by the 📖 button in the
+  main navigation (see base.html). Self-contained – no extra JS/CSS needed.
+
+  Create Posts is written out; the other tabs are one line each for now and are
+  meant to grow. The Image Studio keeps its own, much longer guide (📖 at the
+  foot of its mode rail) - it is linked from here rather than copied.
+-->
+<div id="portal-help"
+     onclick="if(event.target===this)this.style.display='none'"
+     style="display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.5);
+            align-items:flex-start;justify-content:center;padding:40px 16px;overflow:auto">
+  <div style="background:#fff;max-width:840px;width:100%;border-radius:12px;
+              box-shadow:0 12px 40px rgba(0,0,0,.3);padding:28px 32px;line-height:1.55;
+              color:#1f2d2f;font-size:15px">
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:1rem;margin-bottom:.5rem">
+      <h2 style="margin:0;color:#008591">📖 Portal – User Guide</h2>
+      <button type="button" onclick="document.getElementById('portal-help').style.display='none'"
+              style="border:none;background:#eee;border-radius:8px;width:34px;height:34px;
+                     font-size:18px;cursor:pointer" title="Close">✕</button>
+    </div>
+
+    <p style="margin:.2rem 0 .9rem;color:#555">
+      This portal takes a LinkedIn post from the first idea to the published result:
+      you write it under <b>Create Posts</b>, build its picture or video in the
+      <b>Image Studio</b>, send it through Buffer, and see afterwards how it did under
+      <b>LinkedIn Statistics</b>.
+    </p>
+
+    <style>
+      .ph-h3{color:#0e7c86;margin:1.4rem 0 .2rem;font-size:1.05rem}
+      .ph-ul{margin:.2rem 0 .9rem 1.1rem;padding:0}
+      .ph-ul li{margin-bottom:.25rem}
+      .ph-note{border-left:3px solid #b5531a;background:#fdeee3;padding:10px 14px;
+               border-radius:0 6px 6px 0;margin:.8rem 0}
+      .ph-fig{display:block;width:100%;margin:.6rem 0 .2rem;border:1px solid #e2e5e8;
+              border-radius:10px;background:#fbfdfd}
+      .ph-cap{font-size:13px;color:#6b7b7d;margin:.1rem 0 1rem}
+      .ph-box{fill:#ffffff;stroke:#0e4a52;stroke-width:1.3}
+      .ph-flow{fill:none;stroke:#0e4a52;stroke-width:1.3}
+      .ph-lbl{font:600 11px Roboto,Arial,sans-serif;fill:#0e4a52}
+      .ph-cap-t{font:10px Roboto,Arial,sans-serif;fill:#6b7b7d}
+      .ph-sec{font:600 12px Roboto,Arial,sans-serif;fill:#008591}
+      .ph-warn{font:600 11px Roboto,Arial,sans-serif;fill:#b5531a}
+      .ph-soon{color:#8a9a99;font-size:13px}
+    </style>
+
+    <h3 class="ph-h3">The tabs</h3>
+    <ul class="ph-ul">
+      <li><b>Overview</b> – the starting page. <span class="ph-soon">(short for now)</span></li>
+      <li><b>LinkedIn Statistics</b> – how the published posts did. LinkedIn delivers its
+          figures with a delay of about two days, so the last two days always look thin.</li>
+      <li><b>Web Analytics</b> – visitors on the website, from Matomo.
+          <span class="ph-soon">(short for now)</span></li>
+      <li><b>Create Posts</b> – where the posts are written, planned and sent. Written out below.</li>
+      <li><b>Image Studio</b> – builds the picture, GIF or video for a post. It has its own
+          guide: open the Studio and click <b>📖 Help</b> at the foot of the rail on the left.</li>
+      <li><b>Assets</b> – logos, images and files to reuse.
+          <span class="ph-soon">(short for now)</span></li>
+      <li><b>Data</b> – looking things up: <b>Posts Posted</b>, <b>Buffer Posts Posted</b>,
+          <b>Upload</b> (the Excel import) and <b>Collectives</b>.
+          <span class="ph-soon">(short for now)</span></li>
+      <li><b>DB Admin</b> – the database itself. Administrators only.</li>
+    </ul>
+
+    <h3 class="ph-h3">Create Posts</h3>
+    <p style="margin:.2rem 0 .6rem">The row below the tabs is the same set of posts, filtered:
+      <b>Planner</b> is the planning view grouped by topic, and <b>Draft</b>, <b>Review</b>,
+      <b>Ready</b>, <b>Scheduled</b>, <b>Archive</b> and <b>All</b> are lists by status.</p>
+
+    <h3 class="ph-h3" style="font-size:1rem">The way a post goes</h3>
+
+    <svg viewBox="0 0 820 250" class="ph-fig" xmlns="http://www.w3.org/2000/svg" role="img"
+         aria-label="A post moves from Planned through Draft, Review and Ready to Scheduled; Buffer publishes it and the sync moves it on to Posted and Archive.">
+      <defs>
+        <marker id="ph-a" viewBox="0 0 9 9" refX="8" refY="4.5" markerWidth="7" markerHeight="7" orient="auto">
+          <path d="M0,0 L9,4.5 L0,9 z" fill="#0e4a52"/>
+        </marker>
+      </defs>
+
+      <text x="14" y="26" class="ph-sec">You move it</text>
+      <rect class="ph-box" x="14" y="36" width="112" height="46" rx="6"/>
+      <text x="30" y="58" class="ph-lbl">Planned</text>
+      <text x="30" y="74" class="ph-cap-t">slot booked</text>
+
+      <rect class="ph-box" x="152" y="36" width="112" height="46" rx="6"/>
+      <text x="168" y="58" class="ph-lbl">Draft</text>
+      <text x="168" y="74" class="ph-cap-t">text written</text>
+
+      <rect class="ph-box" x="290" y="36" width="112" height="46" rx="6"/>
+      <text x="306" y="58" class="ph-lbl">Review</text>
+      <text x="306" y="74" class="ph-cap-t">read by someone</text>
+
+      <rect class="ph-box" x="428" y="36" width="112" height="46" rx="6"/>
+      <text x="444" y="58" class="ph-lbl">Ready</text>
+      <text x="444" y="74" class="ph-cap-t">may go out</text>
+
+      <line class="ph-flow" x1="126" y1="59" x2="146" y2="59" marker-end="url(#ph-a)"/>
+      <line class="ph-flow" x1="264" y1="59" x2="284" y2="59" marker-end="url(#ph-a)"/>
+      <line class="ph-flow" x1="402" y1="59" x2="422" y2="59" marker-end="url(#ph-a)"/>
+
+      <text x="566" y="26" class="ph-sec">Sending moves it</text>
+      <rect class="ph-box" x="566" y="36" width="112" height="46" rx="6"/>
+      <text x="582" y="58" class="ph-lbl">Scheduled</text>
+      <text x="582" y="74" class="ph-cap-t">in Buffer</text>
+      <line class="ph-flow" x1="540" y1="59" x2="560" y2="59" marker-end="url(#ph-a)"/>
+      <text x="553" y="104" class="ph-cap-t" text-anchor="middle">Post now</text>
+
+      <rect class="ph-box" x="566" y="132" width="112" height="46" rx="6"/>
+      <text x="582" y="154" class="ph-lbl">Posted</text>
+      <text x="582" y="170" class="ph-cap-t">out on LinkedIn</text>
+      <polyline class="ph-flow" points="622,82 622,126" marker-end="url(#ph-a)"/>
+      <text x="636" y="110" class="ph-cap-t">Buffer publishes it</text>
+
+      <rect class="ph-box" x="566" y="196" width="112" height="44" rx="6"/>
+      <text x="582" y="222" class="ph-lbl">Archive</text>
+      <polyline class="ph-flow" points="622,178 622,190" marker-end="url(#ph-a)"/>
+
+      <text x="14" y="140" class="ph-sec">The sync moves it</text>
+      <text x="14" y="160" class="ph-cap-t">The Scheduled page asks Buffer once a day whether</text>
+      <text x="14" y="176" class="ph-cap-t">a post has gone out, and moves it on. The</text>
+      <text x="14" y="192" class="ph-cap-t">🔄 Check now button asks straight away.</text>
+      <text x="14" y="216" class="ph-warn">Until it has asked, a post that is already out</text>
+      <text x="14" y="232" class="ph-warn">still says Scheduled here.</text>
+    </svg>
+    <p class="ph-cap">You move a post through the first four yourself, with the status field.
+      From <b>Scheduled</b> on it is Buffer that decides, and the sync brings the answer back.</p>
+
+    <h3 class="ph-h3" style="font-size:1rem">Writing a post</h3>
+    <p style="margin:.2rem 0 .4rem"><b>+ New post</b> opens the form; the ✏ on a post opens the
+      same one again.</p>
+    <ul class="ph-ul">
+      <li><b>Topic</b> – which series it belongs to. It gives the post its colour in the planner.</li>
+      <li><b>Status</b> – see above.</li>
+      <li><b>Date and time</b> – when it should go out. The time is what Buffer is told.</li>
+      <li><b>Title</b> – for you, to find it again. It is not part of the post.</li>
+      <li><b>Post text</b> – what LinkedIn shows.</li>
+      <li><b>Image / video</b> – see the next section.</li>
+      <li><b>Link</b> – a URL. Careful: a link <b>beats</b> the media, see the rules below.</li>
+      <li><b>Internal comment</b> – notes for yourselves, never sent anywhere.</li>
+    </ul>
+
+    <h3 class="ph-h3" style="font-size:1rem">Picture and video</h3>
+    <p style="margin:.2rem 0 .4rem">Two ways, and they do different things:</p>
+    <ul class="ph-ul">
+      <li><b>Something finished</b> – pick it in the post: <b>📷 from Studio…</b> for a picture,
+          and for a video the <b>🎨 Studio outputs</b> or <b>🎬 Planner videos</b> group, or a
+          file from your PC.</li>
+      <li><b>Something new</b> – open the <b>Image Studio</b> from the post, build it, and save.
+          It attaches to that post by itself.</li>
+    </ul>
+    <p style="margin:.2rem 0 .6rem"><b>A post holds exactly one medium.</b> A new one replaces
+      what was there — and the old file is not deleted: it goes back to <b>My outputs</b> and can
+      be used again. The Studio guide explains this with pictures.</p>
+
+    <h3 class="ph-h3" style="font-size:1rem">Sending</h3>
+    <p style="margin:.2rem 0 .4rem">The send dialog shows the text once more and asks for:</p>
+    <ul class="ph-ul">
+      <li>the <b>channel</b> – company page or personal account,</li>
+      <li><b>Post image too</b> – appears when a picture hangs on the post,</li>
+      <li><b>📅 Schedule on LinkedIn</b> with date and time. Without the tick the post goes into
+          Buffer's next free slot.</li>
+    </ul>
+    <p style="margin:.2rem 0 .6rem"><b>Post now</b> hands it to Buffer. <b>Copy text &amp; open
+      Buffer</b> is the manual way out: it copies the text and opens Buffer, for when you want to
+      do the rest by hand.</p>
+
+    <h3 class="ph-h3" style="font-size:1rem">Three rules that decide what goes out</h3>
+    <ul class="ph-ul">
+      <li><b>A link beats everything.</b> If the post has a link, the link goes out and LinkedIn
+          shows its preview — the picture or video stays behind. Leave the link empty if you want
+          the medium to go out.</li>
+      <li><b>A video beats a picture.</b> If both hang on the post, the video goes.</li>
+      <li><b>Videos go out as MP4.</b> The Studio records in the browser, which produces WebM, and
+          LinkedIn does not take WebM. The conversion happens by itself while sending, and the
+          post is only handed over once the converted file really exists.</li>
+    </ul>
+
+    <div class="ph-note">
+      <p style="margin:0"><b>A post already in Buffer cannot be changed from here.</b> Editing the
+      text or the picture afterwards changes it in this portal only — Buffer still has the old
+      version and will publish that. To really change it: withdraw the post (that removes it from
+      Buffer too), change it, send it again.</p>
+    </div>
+
+    <h3 class="ph-h3" style="font-size:1rem">After it has gone out</h3>
+    <ul class="ph-ul">
+      <li>The <b>Scheduled</b> page asks Buffer once a day whether anything has gone out, and moves
+          those posts on. <b>🔄 Check now</b> asks straight away.</li>
+      <li>Published posts end up under <b>Archive</b>, marked <b>Published</b>. One that never went
+          out and was put away by hand is marked <b>Discarded</b>.</li>
+      <li>The figures follow under <b>LinkedIn Statistics</b> — with LinkedIn's delay of about two
+          days.</li>
+    </ul>
+
+    <p style="margin:1.2rem 0 .2rem;color:#8a9a99;font-size:13px">
+      The other tabs are one line each for now. Say which one you need next and it gets written out.
+    </p>
+  </div>
+</div>
