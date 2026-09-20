@@ -489,7 +489,10 @@ def jahres_tage(jahr, nur_oj=False):
     page is read for.
     """
     nach_tag = {}
-    for t in jahres_termine(jahr):
+    # The OJ side is a plain calendar: days and posts, no world days and no
+    # holidays. Those belong to the planner's editorial year, and putting them
+    # on a personal calendar would only be noise to read past.
+    for t in ([] if nur_oj else jahres_termine(jahr)):
         nach_tag.setdefault(t['datum'], {'termine': [], 'posts': []})['termine'].append(t)
     for p in _posts_des_jahres(jahr, nur_oj):
         nach_tag.setdefault(p['kalendertag'], {'termine': [], 'posts': []})['posts'].append(p)
@@ -569,7 +572,7 @@ def kalender_view(request, jahr=None, nur_oj=False):
         'monate': monate,
         'monat': monat,
         'ohne_datum': posts_ohne_datum(nur_oj=nur_oj),
-        'termine': jahres_termine(jahr),
+        'termine': [] if nur_oj else jahres_termine(jahr),
         'wochentage': WOCHENTAGE,
         'monatsnamen': MONATE,
     })

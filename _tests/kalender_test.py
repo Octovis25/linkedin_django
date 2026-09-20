@@ -533,6 +533,30 @@ pruefe('and the two known exceptions are still the only ones',
            and 'is_oj' not in k.value
            and not re.search(r'WHERE\s+id\s*=\s*%s', k.value, re.I)))
 
+print('\n=== The OJ calendar is a plain one ===')
+# Ortrud asked for a simple calendar on the OJ side: days and posts, no world
+# days and no holidays. Those belong to the planner's editorial year.
+TAGE = herausschneiden('jahres_tage')
+pruefe('no occasions are gathered for the OJ side',
+       '[] if nur_oj else jahres_termine(jahr)' in TAGE, )
+ANSICHT2 = herausschneiden('kalender_view')
+pruefe('and none are handed to the page either',
+       "'termine': [] if nur_oj else jahres_termine(jahr)," in ANSICHT2)
+# The page must drop the column as well, or the OJ calendar keeps an empty one.
+for stueck, was in (('{% if not nur_oj %}<span>Occasion</span>', 'the occasion column'),
+                    ('{% if not nur_oj %}<button class="kal-knopf" id="kal-zur-liste"',
+                     'the jump to the list'),
+                    ('{% if not nur_oj %}\n  <!-- ================= the list you maintain',
+                     'the list of recurring dates')):
+    pruefe('the page leaves out %s on the OJ side' % was,
+           stueck.replace('\n', chr(10)) in VORLAGE)
+pruefe('and gives the OJ page a narrower grid', 'schlicht' in VORLAGE)
+# The script is shared, so it has to cope with the elements that are gone.
+# _tests/kalender_js_test.mjs runs it both ways; this only checks the guards
+# are still written, for the day nobody has node to hand.
+pruefe('the script guards the list wiring it may not find',
+       'if (regelnKoerper) {' in VORLAGE and 'if (zurListe) {' in VORLAGE)
+
 print('\n=== The OJ area is shut, not merely hidden ===')
 # Leaving the link out of the navigation was never access control - the
 # address stayed open to anyone logged in who typed it.

@@ -93,6 +93,13 @@
   .kal-zeit { font-size:11px; color:#6B7876; font-variant-numeric:tabular-nums;
               white-space:nowrap; text-align:right; }
 
+  .kal-blatt.schlicht .kal-kopf,
+  .kal-blatt.schlicht .kal-zeile { grid-template-columns: 4px 74px minmax(0,2fr) 92px 62px; }
+  .kal-blatt.schlicht .kal-anlass { display:none; }
+  @media (max-width:720px) {
+    .kal-blatt.schlicht .kal-zeile { grid-template-columns:4px 62px minmax(0,1fr) 62px; }
+  }
+
   .kal-hinweis { margin:0 0 10px; padding:7px 12px; font-size:12.5px; color:#8A5A12;
                  background:#FAEEDA; border-left:3px solid #E0A030; border-radius:0 4px 4px 0; }
   .kal-legende { display:flex; gap:12px; flex-wrap:wrap; align-items:center;
@@ -189,20 +196,20 @@
     <div class="kal-filter" id="kal-filter">
       <button data-f="alle" class="aktiv">Every day</button>
       <button data-f="voll">Only days with something</button>
-      <button data-f="offen">Still open</button>
+      {% if not nur_oj %}<button data-f="offen">Still open</button>{% endif %}
     </div>
-    <button class="kal-knopf" id="kal-zur-liste">Recurring dates</button>
+    {% if not nur_oj %}<button class="kal-knopf" id="kal-zur-liste">Recurring dates</button>{% endif %}
   </div>
 
   {% if nur_oj %}
-  <p class="kal-hinweis">This is the <b>OJ</b> calendar. It shows only posts marked
-     is_oj &ndash; the ones every other planner page hides. The planner's own calendar
-     is a separate page; the two never mix.</p>
+  <p class="kal-hinweis">The <b>OJ</b> calendar &ndash; days and posts, nothing else.
+     World days and holidays belong to the planner's editorial year and are not
+     repeated here. <a href="/planner/oj/" style="color:inherit">Back to the OJ posts</a>.</p>
   {% endif %}
 
-  <div class="kal-blatt">
+  <div class="kal-blatt{% if nur_oj %} schlicht{% endif %}">
     <div class="kal-kopf">
-      <span></span><span>Day</span><span>Occasion</span><span>Post</span><span>Binding</span><span>Time</span>
+      <span></span><span>Day</span>{% if not nur_oj %}<span>Occasion</span>{% endif %}<span>Post</span><span>Binding</span><span>Time</span>
     </div>
 
     {% for m in monate %}
@@ -257,7 +264,7 @@
   </div>
 
   <div class="kal-legende">
-    <span><i class="l-open"></i>Open</span>
+    {% if not nur_oj %}<span><i class="l-open"></i>Open</span>{% endif %}
     <span><i class="l-plan"></i>Planned &ndash; can still move</span>
     <span><i class="l-sched"></i>Scheduled &ndash; Buffer has it</span>
     <span><i class="l-done"></i>Published</span>
@@ -283,6 +290,7 @@
   </section>
   {% endif %}
 
+  {% if not nur_oj %}
   <!-- ================= the list you maintain ================= -->
   <section class="kal-liste" id="kal-liste">
     <h3>Recurring dates
@@ -369,6 +377,7 @@
     </div>
     <div class="kal-fehler" id="nf-fehler" hidden></div>
   </section>
+  {% endif %}
 
 </div>
 
@@ -440,9 +449,16 @@
     for (var i = 0; i < alle.length; i++) alle[i].classList.toggle('aktiv', alle[i] === b);
     filtern();
   });
-  document.getElementById('kal-zur-liste').onclick = function () {
-    document.getElementById('kal-liste').scrollIntoView({ behavior: 'smooth', block: 'start' });
-  };
+  // The OJ calendar carries no list of recurring dates, so none of the wiring
+  // below has anything to hold on to. Without these guards the first null ends
+  // the script - and takes the month filter down with it, on a page that looks
+  // fine until you click something.
+  var zurListe = document.getElementById('kal-zur-liste');
+  if (zurListe) {
+    zurListe.onclick = function () {
+      document.getElementById('kal-liste').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    };
+  }
 
   /* ---------- the list ---------- */
   function schuetzen(text) {
@@ -481,7 +497,9 @@
       });
   }
 
-  document.getElementById('kal-regeln').addEventListener('change', function (e) {
+  var regelnKoerper = document.getElementById('kal-regeln');
+  if (regelnKoerper) {
+  regelnKoerper.addEventListener('change', function (e) {
     var el = e.target;
     if (el.classList.contains('inliste')) {
       sende({ action: 'set_active', id: +el.dataset.id, active: el.checked })
@@ -493,7 +511,7 @@
     }
   });
 
-  document.getElementById('kal-regeln').addEventListener('click', function (e) {
+  regelnKoerper.addEventListener('click', function (e) {
     var b = e.target.closest('.raus');
     if (!b) return;
     var zeile = b.closest('tr');
@@ -540,6 +558,7 @@
   };
 
   listeLaden();
+  }   // end of the recurring-dates wiring
 
   // Which month to open on is the server's decision now (?m=, else the
   // current month in the current year), so the answer survives a reload and
