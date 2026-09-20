@@ -136,7 +136,16 @@ def promote_scheduled_to_posted():
                 SET p.status='Posted', p.in_pipeline=1, p.linkedin_posted=1,
                     p.post_scheduled_at=NULL
                 WHERE p.status='Scheduled'
-                  AND (LOWER(COALESCE(b.status,'')) = 'sent' OR b.sent_at IS NOT NULL)
+                  AND (
+                        LOWER(COALESCE(b.status,'')) = 'sent'
+                        -- A date alone is not proof. It has to lie in the past:
+                        -- nothing is ever sent tomorrow. Twice now a planned
+                        -- time ended up in sent_at and posts were archived days
+                        -- early; this makes that impossible rather than fixed.
+                        OR (b.sent_at IS NOT NULL
+                            AND STR_TO_DATE(REPLACE(LEFT(b.sent_at, 19), 'T', ' '),
+                                            '%Y-%m-%d %H:%i:%s') <= UTC_TIMESTAMP())
+                      )
             """)
             return c.rowcount or 0
         except Exception as e:

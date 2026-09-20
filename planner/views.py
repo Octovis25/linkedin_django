@@ -2098,6 +2098,7 @@ def _buffer_fetch_post_metrics(buf_token, org_id, first=50, all_pages=False, max
             id
             channelId
             dueAt
+            sentAt
             status
             text
             metricsUpdatedAt
@@ -2129,7 +2130,12 @@ def _buffer_fetch_post_metrics(buf_token, org_id, first=50, all_pages=False, max
             out.append({
                 'buffer_post_id': node.get('id'),
                 'channel_id': node.get('channelId'),
-                'sent_at': node.get('dueAt'),
+                # sent_at means sent. dueAt is the PLANNED time and travels in
+                # its own field - putting it here made every queued post look
+                # published, and promote_scheduled_to_posted() archived it days
+                # early. Fixed on 2026-09-14, lost again in 487ad48, restored.
+                'sent_at': node.get('sentAt'),
+                'due_at': node.get('dueAt'),
                 'status': node.get('status'),
                 'text': node.get('text') or '',
                 'thumbnail_url': _thumb(node),
@@ -2196,7 +2202,10 @@ def _buffer_fetch_posts_basic(buf_token, org_id, first=50, all_pages=True, max_p
             out.append({
                 'buffer_post_id': node.get('id'),
                 'channel_id': node.get('channelId'),
-                'sent_at': node.get('sentAt') or node.get('dueAt'),
+                # See above: never fall back to dueAt here. A post waiting in
+                # the queue has no sentAt, and that absence is the information.
+                'sent_at': node.get('sentAt'),
+                'due_at': node.get('dueAt'),
                 'status': node.get('status'),
                 'text': node.get('text') or '',
                 'external_link': node.get('externalLink') or '',
