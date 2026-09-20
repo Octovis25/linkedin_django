@@ -24,7 +24,7 @@ from datetime import date, timedelta
 
 from django.contrib.auth.decorators import login_required
 from django.db import connection
-from django.http import JsonResponse
+from django.http import Http404, JsonResponse
 from django.shortcuts import render
 from django.views.decorators.csrf import csrf_exempt
 
@@ -78,8 +78,23 @@ STARTLISTE = [
 
 # ----------------------------------------------------------------- the tables
 
+_tabellen_geprueft = False
+
+
 def _tabellen_anlegen():
-    """Create both tables, and fill the list once - only when it is brand new."""
+    """Create both tables, and fill the list once - only when it is brand new.
+
+    Checked once per process, not once per page load. views.py learned this the
+    hard way: 17 ALTER attempts ran on every single request, each answered with
+    an error that an except swallowed. Two CREATE TABLE IF NOT EXISTS and a
+    COUNT are cheaper than that, but they are just as pointless the second time
+    - the answer cannot change while the process lives. After a deploy the
+    workers restart, so a fresh database still gets its tables on the first
+    call.
+    """
+    global _tabellen_geprueft
+    if _tabellen_geprueft:
+        return
     with connection.cursor() as c:
         c.execute("""CREATE TABLE IF NOT EXISTS planner_recurring_dates (
             id INT AUTO_INCREMENT PRIMARY KEY,
@@ -107,6 +122,7 @@ def _tabellen_anlegen():
             UNIQUE KEY je_jahr_und_art (recurring_id, year_no, kind)
         )""")
         c.execute("SELECT COUNT(*) FROM planner_recurring_dates")
+        _tabellen_geprueft = True
         if (c.fetchone() or [0])[0]:
             return
         c.executemany(
@@ -285,42 +301,86 @@ def _tag_aus(stempel):
         return None
 
 
-def kalendertag_fuer(post):
-    """Which day a post belongs on.
+def _tag_aus_iso(stempel):
+    """The date out of Buffer's '2026-09-14T08:00:03.000Z', or None."""
+    try:
+        jahr, monat, tag = stempel[:10].split('-')
+        return date(int(jahr), int(monat), int(tag))
+    except (AttributeError, TypeError, ValueError):
+        return None
 
-    The day it goes out, when that is known - otherwise the day it is planned
-    for. The two are not always the same, and when they differ the send date is
-    the one that actually happens: post #53 is planned for 12 May and sits in
-    Buffer for 21 September. Placing it in May would put a September send time
-    on a May row, and the gap in September would look free.
+
+def gesendet_am_aus(zeilen):
+    """{post id: the day it went out}, from Buffer's rows.
+
+    Buffer answers in ISO, the planner formats German. Reading one with the
+    other's rules turns 09.11. into 11.09. without a word - a post two months
+    out of place and nothing anywhere saying so. Hence its own function, and
+    its own checks.
     """
-    return _tag_aus(post.get('send_time')) or post.get('planned_date')
+    raus = {}
+    for zeile in zeilen:
+        kennung, _faellig, gesendet = zeile[0], zeile[1], zeile[2]
+        if not kennung:
+            continue
+        tag = _tag_aus_iso(gesendet)
+        if tag:
+            raus[kennung] = tag
+    return raus
 
 
-def _posts_des_jahres(jahr):
+def kalendertag_fuer(post, gesendet_am=None):
+    """Which day a post belongs on. Three answers, in the order they are trusted:
+
+      1. the day it went out - that happened, and nothing outranks it
+      2. the day it is due to go out (send_time)
+      3. the day it is planned for
+
+    2 and 3 are not always the same, and when they differ the send date is the
+    one that will happen: post #53 is planned for 12 May and sits in Buffer for
+    21 September. Placing it in May would put a September send time on a May
+    row, and the gap in September would look free.
+
+    1 exists because publishing clears post_scheduled_at. Without it a post
+    that has gone out falls back to its plan, or - if it never had one - out of
+    the year altogether. That is how posts went missing from the page.
+    """
+    return gesendet_am or _tag_aus(post.get('send_time')) or post.get('planned_date')
+
+
+def _posts_des_jahres(jahr, nur_oj=False):
     """The posts planned in that year, with their send time worked out.
 
     Nothing is copied: this is planner_posts, read through the same
     _attach_send_time() the Scheduled page uses, so both pages agree on when a
     post goes out and on how binding that is.
     """
+    # is_oj splits the planner in two, and the two are not to be mixed up:
+    # every other page hides is_oj posts, so a calendar that showed both would
+    # disagree with the rest of the planner about what exists. The OJ side gets
+    # a calendar of its own instead - same page, other half of the data.
+    #
     # Three places know when a post might go out, and all three have to be
     # asked. Filtering on planned_date alone would miss every post that was
     # scheduled into this year from another one - and show posts here that have
     # long since been moved out of it.
     aus_buffer = set()
+    gesendet = {}
     with connection.cursor() as c:
         try:
-            c.execute("""SELECT planner_post_id FROM buffer_posts_posted
-                         WHERE LEFT(COALESCE(NULLIF(due_at, ''), sent_at, ''), 4) = %s""",
-                      [str(jahr)])
-            aus_buffer = {r[0] for r in c.fetchall() if r[0]}
+            c.execute("""SELECT planner_post_id, COALESCE(due_at, ''), COALESCE(sent_at, '')
+                         FROM buffer_posts_posted
+                         WHERE LEFT(due_at, 4) = %s OR LEFT(sent_at, 4) = %s""",
+                      [str(jahr), str(jahr)])
+            zeilen = c.fetchall()
+            aus_buffer = {r[0] for r in zeilen if r[0]}
+            gesendet = gesendet_am_aus(zeilen)
         except Exception as fehler:
             print('calendar, dates from buffer:', fehler)
 
         bedingung = """(p.planned_date BETWEEN %s AND %s
                         OR YEAR(p.post_scheduled_at) = %s)"""
-        werte = [date(jahr, 1, 1), date(jahr, 12, 31), jahr]
+        werte = [1 if nur_oj else 0, date(jahr, 1, 1), date(jahr, 12, 31), jahr]
         if aus_buffer:
             bedingung += ' OR p.id IN (%s)' % ','.join(['%s'] * len(aus_buffer))
             werte += sorted(aus_buffer)
@@ -330,7 +390,7 @@ def _posts_des_jahres(jahr):
                                  DATE_FORMAT(p.post_scheduled_at, '%%d.%%m.%%Y %%H:%%i')
                           FROM planner_posts p
                           LEFT JOIN planner_topics t ON p.topic_id = t.id
-                          WHERE """ + bedingung + """
+                          WHERE COALESCE(p.is_oj, 0) = %s AND (""" + bedingung + """)
                           ORDER BY p.planned_date, p.planned_time, p.id""", werte)
 
     posts = []
@@ -359,12 +419,56 @@ def _posts_des_jahres(jahr):
                         else 'sched' if p['verbindlich'] else 'plan')
         p['zustand_text'] = {'done': 'Published', 'sched': 'Scheduled'}.get(
             p['zustand'], p['status'] or 'Planned')
-        p['kalendertag'] = kalendertag_fuer(p)
+        p['kalendertag'] = kalendertag_fuer(p, gesendet.get(p['id']))
         p['abweichend'] = bool(p['planned_date'] and p['kalendertag']
                                and p['kalendertag'] != p['planned_date'])
 
     # A post scheduled into another year is that year's business, not ours.
     return [p for p in posts if p['kalendertag'] and p['kalendertag'].year == jahr]
+
+
+def posts_ohne_datum(grenze=60, nur_oj=False):
+    """Posts that carry no date at all - not planned, not scheduled, not sent.
+
+    They cannot be put on a day, and inventing one would be worse than leaving
+    them off: a made-up day in a calendar is read as a fact. So they are named
+    instead, under the year, where they can be given a date.
+
+    They exist because publishing clears post_scheduled_at, and a post that
+    went out through LinkedIn or Make never had a Buffer row to keep a date in.
+    """
+    mit_buffer_datum = set()
+    with connection.cursor() as c:
+        try:
+            c.execute("""SELECT planner_post_id FROM buffer_posts_posted
+                         WHERE COALESCE(due_at, '') <> '' OR COALESCE(sent_at, '') <> ''""")
+            mit_buffer_datum = {r[0] for r in c.fetchall() if r[0]}
+        except Exception as fehler:
+            print('calendar, posts without a date:', fehler)
+
+        zeilen = _q(c, """SELECT p.id, p.title, p.content, p.status, t.name, t.color,
+                                 p.linkedin_posted, p.created_at
+                          FROM planner_posts p
+                          LEFT JOIN planner_topics t ON p.topic_id = t.id
+                          WHERE COALESCE(p.is_oj, 0) = %s
+                            AND p.planned_date IS NULL AND p.post_scheduled_at IS NULL
+                          ORDER BY p.created_at DESC""", [1 if nur_oj else 0])
+
+    raus = []
+    for r in zeilen:
+        if r[0] in mit_buffer_datum:
+            continue
+        bg, fg = COLOR_MAP.get(r[5] or 'gray', ('#f5f5f5', '#6c757d'))
+        titel = (r[1] or '').strip()
+        if not titel:
+            roh = (r[2] or '').replace('\n', ' ').strip()
+            titel = (roh[:70] + '\u2026') if len(roh) > 70 else (roh or 'Untitled')
+        raus.append({'id': r[0], 'title': titel, 'status': r[3] or '',
+                     'topic_name': r[4] or '', 'bg': bg, 'fg': fg,
+                     'linkedin_posted': r[6], 'created_at': r[7]})
+        if len(raus) >= grenze:
+            break
+    return raus
 
 
 def _zustand(termine, posts):
@@ -378,7 +482,7 @@ def _zustand(termine, posts):
     return 'plan'
 
 
-def jahres_tage(jahr):
+def jahres_tage(jahr, nur_oj=False):
     """Every single day of the year - all 365 of them, empty ones included.
 
     The empty days are not filler: the gaps between the occasions are what the
@@ -387,7 +491,7 @@ def jahres_tage(jahr):
     nach_tag = {}
     for t in jahres_termine(jahr):
         nach_tag.setdefault(t['datum'], {'termine': [], 'posts': []})['termine'].append(t)
-    for p in _posts_des_jahres(jahr):
+    for p in _posts_des_jahres(jahr, nur_oj):
         nach_tag.setdefault(p['kalendertag'], {'termine': [], 'posts': []})['posts'].append(p)
 
     heute = date.today()
@@ -421,15 +525,27 @@ def jahres_tage(jahr):
 # ------------------------------------------------------------------ the pages
 
 @login_required
-def kalender_view(request, jahr=None):
+def kalender_view(request, jahr=None, nur_oj=False):
+    # One view serves both calendars, so the check cannot sit on a decorator:
+    # /planner/kalender/ is everybody's, /planner/kalender/oj/ is not.
+    if nur_oj and not request.user.is_superuser:
+        raise Http404
     _tabellen_anlegen()
     try:
         jahr = int(jahr or request.GET.get('jahr') or date.today().year)
     except (TypeError, ValueError):
         jahr = date.today().year
     jahr = max(1970, min(2999, jahr))
+    try:
+        monat = int(request.GET.get('m') or 0)
+    except (TypeError, ValueError):
+        monat = 0
+    if not 1 <= monat <= 12:
+        # No month asked for: the current one when we are looking at this year,
+        # otherwise the whole year at once.
+        monat = date.today().month if jahr == date.today().year else 0
 
-    tage = jahres_tage(jahr)
+    tage = jahres_tage(jahr, nur_oj)
     monate = []
     for nr, name in enumerate(MONATE, start=1):
         im_monat = [t for t in tage if t['monat'] == nr]
@@ -439,10 +555,20 @@ def kalender_view(request, jahr=None):
             'offen': sum(1 for t in im_monat if t['zustand'] == 'open'),
         })
 
+    # Two calendars, two addresses. Everything the page builds a link from -
+    # the year arrows, the month, a new post - hangs off this one string, so
+    # the OJ side can never quietly link back into the other half.
+    basis = '/planner/kalender/oj/' if nur_oj else '/planner/kalender/'
+
     return render(request, 'planner/kalender.html', {
-        'tab': 'kalender', 'page_title': '\U0001F4C5 Calendar %d' % jahr,
+        'tab': 'kalender',
+        'page_title': ('\U0001F4C5 OJ calendar %d' if nur_oj
+                       else '\U0001F4C5 Calendar %d') % jahr,
+        'nur_oj': nur_oj, 'basis': basis,
         'jahr': jahr, 'vorjahr': jahr - 1, 'folgejahr': jahr + 1,
         'monate': monate,
+        'monat': monat,
+        'ohne_datum': posts_ohne_datum(nur_oj=nur_oj),
         'termine': jahres_termine(jahr),
         'wochentage': WOCHENTAGE,
         'monatsnamen': MONATE,

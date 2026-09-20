@@ -60,7 +60,8 @@ RAUM = {'date': date, 'timedelta': timedelta, '__builtins__': __builtins__}
 for name in ('WOCHENTAGE', 'MONATE', 'ORDINAL'):
     exec(compile(listen_holen(name), 'planner/kalender.py (cut out)', 'exec'), RAUM)
 for name in ('_ostern', '_letzter_tag', '_nter_wochentag', 'datum_fuer',
-             'regel_text', '_zustand', '_tag_aus', 'kalendertag_fuer'):
+             'regel_text', '_zustand', '_tag_aus', '_tag_aus_iso',
+             'kalendertag_fuer', 'gesendet_am_aus'):
     exec(compile(herausschneiden(name), 'planner/kalender.py (cut out)', 'exec'), RAUM)
 
 ostern = RAUM['_ostern']
@@ -71,6 +72,8 @@ regel_text = RAUM['regel_text']
 zustand = RAUM['_zustand']
 tag_aus = RAUM['_tag_aus']
 kalendertag_fuer = RAUM['kalendertag_fuer']
+tag_aus_iso = RAUM['_tag_aus_iso']
+gesendet_am_aus = RAUM['gesendet_am_aus']
 
 # The seed list, straight out of the shipping file, so the starter dates are
 # checked as they really are.
@@ -242,6 +245,19 @@ print('\n=== Which day a post is put on ===')
 # the send date is the one that happens. Post #53 is the live example: planned
 # for 12 May, sitting in Buffer for 21 September. On the plan date the row
 # would carry a September time, and September would look free.
+# 1. The day it went out. Publishing clears post_scheduled_at, so without this
+#    a published post falls back to its plan - and one that never had a plan
+#    disappears from the calendar altogether. That is what was missing.
+pruefe('the day it went out beats everything',
+       kalendertag_fuer({'send_time': '21.09.2026 08:00',
+                         'planned_date': date(2026, 5, 12)},
+                        date(2026, 9, 14)) == date(2026, 9, 14),
+       kalendertag_fuer({'send_time': '21.09.2026 08:00',
+                         'planned_date': date(2026, 5, 12)}, date(2026, 9, 14)))
+pruefe('a post with nothing but a send date still gets a day',
+       kalendertag_fuer({'send_time': '', 'planned_date': None},
+                        date(2026, 9, 14)) == date(2026, 9, 14))
+
 pruefe('a send date beats the plan',
        kalendertag_fuer({'send_time': '21.09.2026 08:00',
                          'planned_date': date(2026, 5, 12)}) == date(2026, 9, 21),
@@ -261,6 +277,42 @@ pruefe('and a nonsense date does too',
 pruefe('the day is read, not the month',
        tag_aus('05.11.2026 09:00') == date(2026, 11, 5),
        tag_aus('05.11.2026 09:00'))
+
+print("\n=== Reading Buffer's rows ===")
+ZEILEN = [
+    (12, '2026-01-12T08:00:00.000Z', '2026-01-12T08:00:04.000Z'),   # went out
+    (49, '2026-09-01T08:00:00.000Z', ''),                            # still queued
+    (53, '2026-09-21T08:00:00.000Z', None),                          # still queued
+    (None, '2026-03-03T08:00:00.000Z', '2026-03-03T08:00:01.000Z'),  # no post id
+]
+GESENDET = gesendet_am_aus(ZEILEN)
+pruefe('a post that went out gets the day it went out',
+       GESENDET.get(12) == date(2026, 1, 12), GESENDET.get(12))
+pruefe('one that is only queued gets no send day - it has not happened',
+       49 not in GESENDET and 53 not in GESENDET, sorted(GESENDET))
+pruefe('a row without a post is skipped instead of crashing', None not in GESENDET)
+pruefe('an empty answer gives an empty result', gesendet_am_aus([]) == {})
+# The due date must never be mistaken for the send date - that mix-up archived
+# post #53 days before it goes out, twice.
+pruefe('the DUE date is not taken as the send date',
+       date(2026, 9, 1) not in GESENDET.values(), sorted(GESENDET.values()))
+
+print("\n=== Buffer's own stamps ===")
+# Buffer answers with ISO, the planner formats German. Reading one with the
+# other's rules silently turns 09.11. into 11.09. - a post two months off, and
+# nothing anywhere says so.
+pruefe('an ISO stamp is read year-month-day',
+       tag_aus_iso('2026-09-14T08:00:03.000Z') == date(2026, 9, 14),
+       tag_aus_iso('2026-09-14T08:00:03.000Z'))
+pruefe('a date on its own works too', tag_aus_iso('2026-11-05') == date(2026, 11, 5))
+pruefe('an empty stamp gives nothing', tag_aus_iso('') is None)
+pruefe('and so does a German one - they must not be mixed up',
+       tag_aus_iso('14.09.2026 08:00') is None,
+       tag_aus_iso('14.09.2026 08:00'))
+pruefe('the German reader returns nothing for an ISO stamp, the other way round',
+       tag_aus('2026-09-14T08:00:03.000Z') is None,
+       tag_aus('2026-09-14T08:00:03.000Z'))
+pruefe('rubbish gives nothing instead of an exception', tag_aus_iso('soon') is None)
 
 print('\n=== How binding a day is ===')
 # The colour on the page comes from this. "Scheduled" has to mean Buffer really
@@ -343,6 +395,32 @@ fehlend = sorted('%s.%s' % x for x in benutzt if x[1] not in SCHLUESSEL)
 pruefe('every field the page reads is one the view fills', not fehlend, fehlend)
 pruefe('and the page really does read some', len(benutzt) > 12, len(benutzt))
 
+# 2b. The same for the plain variables. {{ mnat }} instead of {{ monat }}
+#     prints nothing at all, and the month picker would simply open on the
+#     wrong month for ever. The allowed names are the ones the view hands to
+#     render(), plus whatever the page's own {% for %} loops bind.
+AUFRUF = [k for k in ast.walk(ast.parse(SRC))
+          if isinstance(k, ast.Call) and getattr(k.func, 'id', '') == 'render']
+KONTEXT = set()
+for k in AUFRUF:
+    for arg in k.args:
+        if isinstance(arg, ast.Dict):
+            KONTEXT |= {n.value for n in arg.keys
+                        if isinstance(n, ast.Constant) and isinstance(n.value, str)}
+SCHLEIFEN = set(re.findall(r'\{%\s*for\s+([a-z_]+)\s+in\b', VORLAGE))
+# base.html and Django put these there; they are not this view's to provide.
+VON_AUSSEN = {'forloop', 'user', 'request', 'csrf_token', 'block', 'True', 'False', 'None'}
+ERLAUBT = KONTEXT | SCHLEIFEN | VON_AUSSEN
+
+pruefe('the view really hands over a context', len(KONTEXT) > 5, sorted(KONTEXT))
+namen = set()
+for stueck in re.findall(r'\{\{(.*?)\}\}', VORLAGE, re.S):
+    kopf = stueck.strip().split('|')[0].split('.')[0].strip()
+    if re.match(r'^[a-z_][a-z_0-9]*$', kopf):
+        namen.add(kopf)
+unbekannte = sorted(namen - ERLAUBT)
+pruefe('every variable the page prints is one it was given', not unbekannte, unbekannte)
+
 # 3. The bug from this morning: {# ... #} comments out ONE line. A note that
 #    runs over two is printed into the page, and on the post list it read like
 #    the post's own title. Cheap to check, expensive to miss.
@@ -378,6 +456,105 @@ with open(os.path.join(WURZEL, 'planner', 'urls.py'), encoding='utf-8') as fh:
 for pfad in sorted(set(re.findall(r"fetch\('(/planner/[a-z/]+)", VORLAGE))):
     kurz = pfad.replace('/planner/', '').strip('/')
     pruefe('%s is routed' % pfad, ("'%s/'" % kurz) in URLS, kurz)
+
+# The table check must not run on every request. views.py carries a long
+# comment about what that cost there - 17 ALTER attempts per page load, each
+# answered with a swallowed error - and this file would have repeated it in a
+# milder form.
+ANLEGEN = herausschneiden('_tabellen_anlegen')
+pruefe('the table check runs once per process, not once per request',
+       'if _tabellen_geprueft:' in ANLEGEN and 'return' in ANLEGEN)
+pruefe('and the flag is actually set somewhere in it',
+       '_tabellen_geprueft = True' in ANLEGEN)
+
+print('\n=== The two halves stay apart ===')
+# is_oj splits the planner in two, and every other page honours that split.
+# A calendar that showed both, or an OJ page that linked back into the other
+# half, would quietly undo it - and nobody would notice until the wrong post
+# turned up in the wrong place.
+for name in ('_posts_des_jahres', 'posts_ohne_datum'):
+    stueck = herausschneiden(name)
+    pruefe('%s can be asked for either half' % name, 'nur_oj' in stueck.split(chr(10))[0])
+    pruefe('%s really filters on it' % name,
+           'COALESCE(p.is_oj, 0) = %s' in stueck and '1 if nur_oj else 0' in stueck)
+
+ANSICHT = herausschneiden('kalender_view')
+pruefe('the view takes the half as well', 'nur_oj=False' in ANSICHT.split(chr(10))[0])
+for aufruf in ('jahres_tage(jahr, nur_oj)', 'posts_ohne_datum(nur_oj=nur_oj)'):
+    pruefe('and passes it to %s' % aufruf.split('(')[0], aufruf in ANSICHT)
+
+# Every link the OJ page builds must stay on the OJ page. One hardcoded path
+# is enough to drop the user back into the other half without a word.
+#
+# The switch between the two is the single exception - naming both addresses
+# is the whole of its job - so it is cut out before looking, rather than the
+# check being loosened for everyone.
+OHNE_SCHALTER = re.sub(r'<span class="kal-seite">.*?</span>', '', VORLAGE, flags=re.S)
+pruefe('the switch really was cut out before checking',
+       len(OHNE_SCHALTER) < len(VORLAGE))
+HART = re.findall(r'(?:href|location\.href)\s*=\s*[\'"][^\'"]*?/planner/kalender/(?!api/)',
+                  OHNE_SCHALTER)
+pruefe('no link hardcodes the calendar address', not HART, HART[:3])
+pruefe('the links are built from the one address instead',
+       '{{ basis }}' in VORLAGE and 'BASIS +' in VORLAGE)
+pruefe('and the page says which half it is showing', '{% if nur_oj %}' in VORLAGE)
+
+print('\n=== No list page shows OJ posts by accident ===')
+# The split is only worth anything if every page honours it. A new list view
+# that forgets the filter puts OJ posts back among the others, and nothing
+# says so - the posts simply appear. So the whole file is swept, and the two
+# queries that are deliberately different are named here rather than skipped
+# by a rule that would also let a new mistake through.
+AUSNAHMEN = {
+    # takes ids that a filtered query already produced
+    'COALESCE(video_nc_path': 'video paths for posts already fetched',
+    # what gets published automatically is a decision, not a display question
+    "status = 'Scheduled'": 'the automatic send - Ortrud has not ruled on it',
+}
+ungefiltert = []
+for knoten in ast.walk(ast.parse(SRC_VIEWS)):
+    if not (isinstance(knoten, ast.Constant) and isinstance(knoten.value, str)):
+        continue
+    text = knoten.value
+    if 'planner_posts' not in text or not re.search(r'\bSELECT\b', text, re.I):
+        continue
+    if 'is_oj' in text or re.search(r'WHERE\s+id\s*=\s*%s', text, re.I):
+        continue
+    if any(marke in text for marke in AUSNAHMEN):
+        continue
+    ungefiltert.append('line %s: %s' % (knoten.lineno, ' '.join(text.split())[:60]))
+
+pruefe('every list query on planner_posts honours is_oj', not ungefiltert, ungefiltert[:2])
+pruefe('and the two known exceptions are still the only ones',
+       all(any(m in k.value for m in AUSNAHMEN)
+           for k in ast.walk(ast.parse(SRC_VIEWS))
+           if isinstance(k, ast.Constant) and isinstance(k.value, str)
+           and 'planner_posts' in k.value and re.search(r'\bSELECT\b', k.value, re.I)
+           and 'is_oj' not in k.value
+           and not re.search(r'WHERE\s+id\s*=\s*%s', k.value, re.I)))
+
+print('\n=== The OJ area is shut, not merely hidden ===')
+# Leaving the link out of the navigation was never access control - the
+# address stayed open to anyone logged in who typed it.
+ANSICHT = herausschneiden('kalender_view')
+pruefe('the OJ calendar turns non-admins away',
+       'nur_oj and not request.user.is_superuser' in ANSICHT
+       and 'raise Http404' in ANSICHT)
+pruefe('and the planner calendar is NOT shut with it',
+       ANSICHT.count('raise Http404') == 1 and 'nur_oj and' in ANSICHT)
+pruefe('Http404 is imported, so the refusal is not itself an error',
+       'from django.http import Http404' in SRC)
+
+pruefe("the planner's own OJ page is shut the same way",
+       '@nur_fuer_admin' in SRC_VIEWS and 'def oj_view' in SRC_VIEWS)
+WAECHTER = SRC_VIEWS[SRC_VIEWS.index('def nur_fuer_admin'):][:600]
+pruefe('the guard checks is_superuser and raises 404',
+       'is_superuser' in WAECHTER and 'raise Http404' in WAECHTER)
+pruefe('and it keeps the view it wraps recognisable',
+       'functools.wraps' in WAECHTER)
+# The switch must not offer a door that is locked.
+pruefe('the page offers the OJ switch to admins only',
+       '{% if user.is_superuser %}' in VORLAGE)
 
 print('\n%d ok, %d failed' % (gut, schlecht))
 sys.exit(1 if schlecht else 0)

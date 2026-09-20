@@ -1,5 +1,5 @@
 {% extends "core/base.html" %}
-{% block title %}📅 Calendar {{ jahr }}{% endblock %}
+{% block title %}📅 {% if nur_oj %}OJ {% endif %}Calendar {{ jahr }}{% endblock %}
 {% block content %}
 {# One row per calendar day. The empty ones are the point: they are the gaps. #}
 <style>
@@ -25,6 +25,11 @@
                font-size:12.5px; cursor:pointer; color:var(--octo-text); }
   .kal-knopf:hover { border-color:var(--octo-petrol); color:var(--octo-petrol); }
   .kal-knopf.voll { background:var(--octo-petrol); border-color:var(--octo-petrol); color:#fff; }
+  .kal-seite { display:inline-flex; border:1px solid #ddd; border-radius:4px; overflow:hidden; }
+  .kal-seite a { padding:5px 12px; font-size:12.5px; text-decoration:none;
+                 color:var(--octo-text); background:#fff; border-right:1px solid #ddd; }
+  .kal-seite a:last-child { border-right:0; }
+  .kal-seite a.an { background:var(--octo-petrol); color:#fff; font-weight:600; }
 
   .kal-blatt { background:#fff; border:1px solid #e4e0d5; border-radius:6px; overflow:hidden; }
   .kal-kopf, .kal-zeile {
@@ -88,6 +93,8 @@
   .kal-zeit { font-size:11px; color:#6B7876; font-variant-numeric:tabular-nums;
               white-space:nowrap; text-align:right; }
 
+  .kal-hinweis { margin:0 0 10px; padding:7px 12px; font-size:12.5px; color:#8A5A12;
+                 background:#FAEEDA; border-left:3px solid #E0A030; border-radius:0 4px 4px 0; }
   .kal-legende { display:flex; gap:12px; flex-wrap:wrap; align-items:center;
                  margin:10px 2px 0; font-size:12px; color:#6B7876; }
   .kal-legende i { width:4px; height:13px; border-radius:1px; display:inline-block;
@@ -96,6 +103,20 @@
   .kal-legende .l-plan  { background:repeating-linear-gradient(180deg,#E0A030 0 5px,transparent 5px 9px); }
   .kal-legende .l-sched { background:#008591; }
   .kal-legende .l-done  { background:#B9C2C0; }
+
+  .kal-ohne { margin-top:22px; background:#fff; border:1px solid #e4e0d5;
+              border-left:3px solid #E0A030; border-radius:6px; padding:13px 16px; }
+  .kal-ohne h3 { margin:0 0 4px; font-size:14px; color:var(--octo-dark-petrol); }
+  .kal-ohne > p { margin:0 0 10px; font-size:12.5px; color:#6B7876; max-width:70ch; }
+  .kal-ohne ul { margin:0; padding:0; list-style:none; }
+  .kal-ohne li { padding:4px 0; border-bottom:1px solid #EFECE2; font-size:12.5px;
+                 display:flex; align-items:baseline; gap:6px; flex-wrap:wrap; }
+  .kal-ohne li:last-child { border-bottom:0; }
+  .kal-ohne .nr { color:#A8B0AE; font-variant-numeric:tabular-nums; }
+  .kal-ohne a { color:var(--octo-text); text-decoration:none; }
+  .kal-ohne a:hover { text-decoration:underline; text-underline-offset:2px; }
+  .kal-ohne .thema { font-size:10px; padding:0 5px; border-radius:99px; font-weight:600; }
+  .kal-ohne .wann { margin-left:auto; color:#6B7876; font-size:11.5px; white-space:nowrap; }
 
   /* --- the list of recurring dates --- */
   .kal-liste { margin-top:26px; background:#fff; border:1px solid #e4e0d5; border-radius:6px; }
@@ -144,15 +165,25 @@
 <div class="kal-wrap">
 
   <div class="kal-top">
-    <a class="pfeil" href="/planner/kalender/{{ vorjahr }}/" title="{{ vorjahr }}">&lsaquo;</a>
+    <a class="pfeil" href="{{ basis }}{{ vorjahr }}/" title="{{ vorjahr }}">&lsaquo;</a>
     <span class="kal-jahr">{{ jahr }}</span>
-    <a class="pfeil" href="/planner/kalender/{{ folgejahr }}/" title="{{ folgejahr }}">&rsaquo;</a>
+    <a class="pfeil" href="{{ basis }}{{ folgejahr }}/" title="{{ folgejahr }}">&rsaquo;</a>
 
-    <select id="kal-monat" aria-label="Month">
+    <button class="pfeil" id="kal-monat-zurueck" title="Previous month">&lsaquo;</button>
+    <select id="kal-monat" aria-label="Month" data-start="{{ monat }}">
       <option value="0">All months</option>
-      {% for m in monatsnamen %}<option value="{{ forloop.counter }}">{{ m }}</option>{% endfor %}
+      {% for m in monatsnamen %}<option value="{{ forloop.counter }}"{% if forloop.counter == monat %} selected{% endif %}>{{ m }}</option>{% endfor %}
     </select>
+    <button class="pfeil" id="kal-monat-vor" title="Next month">&rsaquo;</button>
 
+    {% if user.is_superuser %}
+    <span class="kal-seite">
+      <a href="/planner/kalender/{{ jahr }}/{% if monat %}?m={{ monat }}{% endif %}"
+         class="{% if not nur_oj %}an{% endif %}">Planner</a><a
+         href="/planner/kalender/oj/{{ jahr }}/{% if monat %}?m={{ monat }}{% endif %}"
+         class="{% if nur_oj %}an{% endif %}">OJ</a>
+    </span>
+    {% endif %}
     <span class="luecke"></span>
 
     <div class="kal-filter" id="kal-filter">
@@ -162,6 +193,12 @@
     </div>
     <button class="kal-knopf" id="kal-zur-liste">Recurring dates</button>
   </div>
+
+  {% if nur_oj %}
+  <p class="kal-hinweis">This is the <b>OJ</b> calendar. It shows only posts marked
+     is_oj &ndash; the ones every other planner page hides. The planner's own calendar
+     is a separate page; the two never mix.</p>
+  {% endif %}
 
   <div class="kal-blatt">
     <div class="kal-kopf">
@@ -190,7 +227,7 @@
             {% endif %}
             <span class="kal-post" title="{{ p.title }}">
               <span class="nr">#{{ p.id }}</span>
-              <a href="/planner/?edit={{ p.id }}&amp;back=/planner/kalender/{{ jahr }}/">{{ p.title }}</a>
+              <a href="/planner/?edit={{ p.id }}&amp;back={{ basis }}{{ jahr }}/">{{ p.title }}</a>
               {% if p.topic_name %}<span class="thema" style="background:{{ p.bg }};color:{{ p.fg }}">{{ p.topic_name }}</span>{% endif %}
               {% if p.abweichend %}<span class="abw" title="The plan says {{ p.planned_date|date:"d.m.Y" }}. This row is the day it really goes out.">plan {{ p.planned_date|date:"d.m." }}</span>{% endif %}
             </span>
@@ -225,6 +262,26 @@
     <span><i class="l-sched"></i>Scheduled &ndash; Buffer has it</span>
     <span><i class="l-done"></i>Published</span>
   </div>
+
+  {% if ohne_datum %}
+  <section class="kal-ohne">
+    <h3>{{ ohne_datum|length }} post{{ ohne_datum|length|pluralize }} without any date</h3>
+    <p>Not planned, not scheduled, and no send date on record &ndash; so there is no day to
+       put them on. Publishing clears the scheduled time, and a post that went out through
+       LinkedIn or Make never had a Buffer entry to keep one in. Give a post a date and it
+       appears in the calendar.</p>
+    <ul>
+      {% for p in ohne_datum %}
+      <li>
+        <span class="nr">#{{ p.id }}</span>
+        <a href="/planner/?edit={{ p.id }}&amp;back={{ basis }}{{ jahr }}/">{{ p.title }}</a>
+        {% if p.topic_name %}<span class="thema" style="background:{{ p.bg }};color:{{ p.fg }}">{{ p.topic_name }}</span>{% endif %}
+        <span class="wann">{{ p.status }}{% if p.linkedin_posted %} &middot; published{% endif %}{% if p.created_at %} &middot; written {{ p.created_at|date:"d.m.Y" }}{% endif %}</span>
+      </li>
+      {% endfor %}
+    </ul>
+  </section>
+  {% endif %}
 
   <!-- ================= the list you maintain ================= -->
   <section class="kal-liste" id="kal-liste">
@@ -319,6 +376,7 @@
 (function () {
   'use strict';
   var JAHR = {{ jahr }};
+  var BASIS = '{{ basis }}';
 
   function keks(name) {
     var treffer = document.cookie.match('(^|;)\\s*' + name + '\\s*=\\s*([^;]+)');
@@ -353,8 +411,26 @@
     }
   }
 
-  document.getElementById('kal-monat').onchange = function () {
-    monat = +this.value; filtern();
+  var monatsWahl = document.getElementById('kal-monat');
+
+  function monatSetzen(neuerMonat) {
+    // Past either end of the year, paging carries on into the next one - the
+    // page reloads and opens on the month asked for, so December to January
+    // feels like one more step rather than a detour through the year picker.
+    if (neuerMonat > 12) { window.location.href = BASIS + (JAHR + 1) + '/?m=1'; return; }
+    if (neuerMonat < 1)  { window.location.href = BASIS + (JAHR - 1) + '/?m=12'; return; }
+    monat = neuerMonat;
+    monatsWahl.value = String(neuerMonat);
+    filtern();
+  }
+
+  monatsWahl.onchange = function () { monat = +this.value; filtern(); };
+  // From "All months" the arrows start at either end rather than doing nothing.
+  document.getElementById('kal-monat-vor').onclick = function () {
+    monatSetzen(monat === 0 ? 1 : monat + 1);
+  };
+  document.getElementById('kal-monat-zurueck').onclick = function () {
+    monatSetzen(monat === 0 ? 12 : monat - 1);
   };
   document.getElementById('kal-filter').addEventListener('click', function (e) {
     var b = e.target.closest('button[data-f]');
@@ -465,14 +541,12 @@
 
   listeLaden();
 
-  // Land on the current month when the year on screen is the year we are in.
-  if (JAHR === new Date().getFullYear()) {
-    var jetzt = String(new Date().getMonth() + 1);
-    var wahl = document.getElementById('kal-monat');
-    wahl.value = jetzt;
-    monat = +jetzt;
-    filtern();
-  }
+  // Which month to open on is the server's decision now (?m=, else the
+  // current month in the current year), so the answer survives a reload and
+  // can be linked to.
+  monat = +(monatsWahl.dataset.start || 0);
+  monatsWahl.value = String(monat);
+  filtern();
 })();
 </script>
 {% endblock %}

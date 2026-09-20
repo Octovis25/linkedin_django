@@ -3,6 +3,7 @@ from django.contrib.auth.decorators import login_required
 from django.http import JsonResponse, Http404
 from django.db import connection
 from django.views.decorators.csrf import csrf_exempt
+import functools
 import json
 import os
 import secrets
@@ -10,6 +11,21 @@ import urllib.parse
 import urllib.request
 import urllib.error
 from django.conf import settings
+
+
+def nur_fuer_admin(ansicht):
+    """Refuse the OJ area to everyone but an administrator.
+
+    Leaving the link out of the navigation was never access control: the
+    address stayed open to anyone who was logged in and typed it. 404 rather
+    than a refusal, so the page does not even confirm that it is there.
+    """
+    @functools.wraps(ansicht)
+    def pruefen(request, *args, **kwargs):
+        if not request.user.is_superuser:
+            raise Http404
+        return ansicht(request, *args, **kwargs)
+    return pruefen
 
 
 def _q(c, sql, params=None):
@@ -327,7 +343,7 @@ def planner_view(request):
             posts = _q(c, """SELECT id, title, content, status, planned_date, image, COALESCE(comment,'') as comment,
                                     COALESCE(link,'') as link, planned_time
                              FROM planner_posts
-                             WHERE topic_id=%s
+                             WHERE topic_id=%s AND COALESCE(is_oj,0) = 0
                              ORDER BY COALESCE(planned_date,'9999-12-31'), created_at""", [t['id']])
             ideas = _q(c, """SELECT id, text FROM planner_ideas
                              WHERE topic_id=%s ORDER BY created_at DESC""", [t['id']])
@@ -345,7 +361,7 @@ def planner_view(request):
         unc = _q(c, """SELECT id, title, content, status, planned_date, image, COALESCE(comment,'') as comment,
                               COALESCE(link,'') as link, planned_time
                        FROM planner_posts
-                       WHERE topic_id IS NULL
+                       WHERE topic_id IS NULL AND COALESCE(is_oj,0) = 0
                        ORDER BY COALESCE(planned_date,'9999-12-31'), created_at""")
         uncategorized = [{'id': r[0], 'title': r[1] or '', 'content': r[2] or '',
                           'status': r[3], 'planned_date': r[4], 'image': r[5] or '',
@@ -588,7 +604,8 @@ def archive_view(request):
                         p.updated_at, p.created_at
                  FROM planner_posts p
                  LEFT JOIN planner_topics t ON p.topic_id = t.id
-                 WHERE p.status IN ('Posted', 'Archive')"""
+                 WHERE p.status IN ('Posted', 'Archive')
+                   AND COALESCE(p.is_oj,0) = 0"""
         params = []
         if topic_filter:
             sql += " AND p.topic_id=%s"
@@ -737,6 +754,7 @@ def uebersicht_view(request):
 
 
 @login_required
+@nur_fuer_admin
 def oj_view(request):
     with connection.cursor() as c:
         topics = _topics(c)
