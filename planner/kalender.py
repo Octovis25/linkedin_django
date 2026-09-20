@@ -276,6 +276,27 @@ def jahres_termine(jahr):
 
 # ------------------------------------------------------------------ the posts
 
+def _tag_aus(stempel):
+    """The date out of a 'dd.mm.yyyy hh:mm' stamp, or None if it is not one."""
+    try:
+        tag, monat, jahr = stempel[:10].split('.')
+        return date(int(jahr), int(monat), int(tag))
+    except (AttributeError, TypeError, ValueError):
+        return None
+
+
+def kalendertag_fuer(post):
+    """Which day a post belongs on.
+
+    The day it goes out, when that is known - otherwise the day it is planned
+    for. The two are not always the same, and when they differ the send date is
+    the one that actually happens: post #53 is planned for 12 May and sits in
+    Buffer for 21 September. Placing it in May would put a September send time
+    on a May row, and the gap in September would look free.
+    """
+    return _tag_aus(post.get('send_time')) or post.get('planned_date')
+
+
 def _posts_des_jahres(jahr):
     """The posts planned in that year, with their send time worked out.
 
@@ -283,15 +304,34 @@ def _posts_des_jahres(jahr):
     _attach_send_time() the Scheduled page uses, so both pages agree on when a
     post goes out and on how binding that is.
     """
+    # Three places know when a post might go out, and all three have to be
+    # asked. Filtering on planned_date alone would miss every post that was
+    # scheduled into this year from another one - and show posts here that have
+    # long since been moved out of it.
+    aus_buffer = set()
     with connection.cursor() as c:
+        try:
+            c.execute("""SELECT planner_post_id FROM buffer_posts_posted
+                         WHERE LEFT(COALESCE(NULLIF(due_at, ''), sent_at, ''), 4) = %s""",
+                      [str(jahr)])
+            aus_buffer = {r[0] for r in c.fetchall() if r[0]}
+        except Exception as fehler:
+            print('calendar, dates from buffer:', fehler)
+
+        bedingung = """(p.planned_date BETWEEN %s AND %s
+                        OR YEAR(p.post_scheduled_at) = %s)"""
+        werte = [date(jahr, 1, 1), date(jahr, 12, 31), jahr]
+        if aus_buffer:
+            bedingung += ' OR p.id IN (%s)' % ','.join(['%s'] * len(aus_buffer))
+            werte += sorted(aus_buffer)
+
         zeilen = _q(c, """SELECT p.id, p.title, p.content, p.status, p.planned_date,
                                  p.planned_time, t.name, t.color, p.linkedin_posted,
                                  DATE_FORMAT(p.post_scheduled_at, '%%d.%%m.%%Y %%H:%%i')
                           FROM planner_posts p
                           LEFT JOIN planner_topics t ON p.topic_id = t.id
-                          WHERE p.planned_date BETWEEN %s AND %s
-                          ORDER BY p.planned_date, p.planned_time, p.id""",
-                     [date(jahr, 1, 1), date(jahr, 12, 31)])
+                          WHERE """ + bedingung + """
+                          ORDER BY p.planned_date, p.planned_time, p.id""", werte)
 
     posts = []
     for r in zeilen:
@@ -319,7 +359,12 @@ def _posts_des_jahres(jahr):
                         else 'sched' if p['verbindlich'] else 'plan')
         p['zustand_text'] = {'done': 'Published', 'sched': 'Scheduled'}.get(
             p['zustand'], p['status'] or 'Planned')
-    return posts
+        p['kalendertag'] = kalendertag_fuer(p)
+        p['abweichend'] = bool(p['planned_date'] and p['kalendertag']
+                               and p['kalendertag'] != p['planned_date'])
+
+    # A post scheduled into another year is that year's business, not ours.
+    return [p for p in posts if p['kalendertag'] and p['kalendertag'].year == jahr]
 
 
 def _zustand(termine, posts):
@@ -343,7 +388,7 @@ def jahres_tage(jahr):
     for t in jahres_termine(jahr):
         nach_tag.setdefault(t['datum'], {'termine': [], 'posts': []})['termine'].append(t)
     for p in _posts_des_jahres(jahr):
-        nach_tag.setdefault(p['planned_date'], {'termine': [], 'posts': []})['posts'].append(p)
+        nach_tag.setdefault(p['kalendertag'], {'termine': [], 'posts': []})['posts'].append(p)
 
     heute = date.today()
     tage = []

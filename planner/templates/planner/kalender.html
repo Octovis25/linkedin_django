@@ -75,6 +75,7 @@
   .kal-post .thema { font-size:10px; padding:0 5px; border-radius:99px; margin-left:6px;
                      font-weight:600; vertical-align:1px; }
   .kal-post .nix { color:#C4501A; }
+  .kal-post .abw { font-size:10.5px; color:#8A5A12; margin-left:6px; white-space:nowrap; }
   .kal-neu { visibility:hidden; font-size:11px; color:var(--octo-petrol); cursor:pointer;
              border:0; background:none; padding:0 4px; text-decoration:none; }
   .kal-zeile:hover .kal-neu { visibility:visible; }
@@ -192,6 +193,7 @@
               <span class="nr">#{{ p.id }}</span>
               <a href="/planner/?edit={{ p.id }}&amp;back=/planner/kalender/{{ jahr }}/">{{ p.title }}</a>
               {% if p.topic_name %}<span class="thema" style="background:{{ p.bg }};color:{{ p.fg }}">{{ p.topic_name }}</span>{% endif %}
+              {% if p.abweichend %}<span class="abw" title="The plan says {{ p.planned_date|date:"d.m.Y" }}. This row is the day it really goes out.">plan {{ p.planned_date|date:"d.m." }}</span>{% endif %}
             </span>
             <span><span class="kal-pille p-{{ p.zustand }}">{{ p.zustand_text }}</span></span>
             <span class="kal-zeit" title="{{ p.send_time }} ({{ p.send_time_source }})">

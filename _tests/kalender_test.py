@@ -60,7 +60,7 @@ RAUM = {'date': date, 'timedelta': timedelta, '__builtins__': __builtins__}
 for name in ('WOCHENTAGE', 'MONATE', 'ORDINAL'):
     exec(compile(listen_holen(name), 'planner/kalender.py (cut out)', 'exec'), RAUM)
 for name in ('_ostern', '_letzter_tag', '_nter_wochentag', 'datum_fuer',
-             'regel_text', '_zustand'):
+             'regel_text', '_zustand', '_tag_aus', 'kalendertag_fuer'):
     exec(compile(herausschneiden(name), 'planner/kalender.py (cut out)', 'exec'), RAUM)
 
 ostern = RAUM['_ostern']
@@ -69,6 +69,8 @@ nter_wochentag = RAUM['_nter_wochentag']
 datum_fuer = RAUM['datum_fuer']
 regel_text = RAUM['regel_text']
 zustand = RAUM['_zustand']
+tag_aus = RAUM['_tag_aus']
+kalendertag_fuer = RAUM['kalendertag_fuer']
 
 # The seed list, straight out of the shipping file, so the starter dates are
 # checked as they really are.
@@ -234,6 +236,31 @@ pruefe('and the first is in November or early December',
 pruefe('the rule says so in words',
        'on or before 24 December' in regel_text(ADVENT['4th Advent']),
        regel_text(ADVENT['4th Advent']))
+
+print('\n=== Which day a post is put on ===')
+# The plan and the send date are not always the same day, and when they differ
+# the send date is the one that happens. Post #53 is the live example: planned
+# for 12 May, sitting in Buffer for 21 September. On the plan date the row
+# would carry a September time, and September would look free.
+pruefe('a send date beats the plan',
+       kalendertag_fuer({'send_time': '21.09.2026 08:00',
+                         'planned_date': date(2026, 5, 12)}) == date(2026, 9, 21),
+       kalendertag_fuer({'send_time': '21.09.2026 08:00', 'planned_date': date(2026, 5, 12)}))
+pruefe('without one, the plan is used',
+       kalendertag_fuer({'send_time': '', 'planned_date': date(2026, 10, 1)}) == date(2026, 10, 1))
+pruefe('a date without a time still counts',
+       kalendertag_fuer({'send_time': '01.10.2026', 'planned_date': None}) == date(2026, 10, 1))
+pruefe('a post with neither has no day at all',
+       kalendertag_fuer({'send_time': '', 'planned_date': None}) is None)
+pruefe('an unreadable stamp falls back to the plan instead of crashing',
+       kalendertag_fuer({'send_time': 'tomorrow?', 'planned_date': date(2026, 3, 3)})
+       == date(2026, 3, 3))
+pruefe('and a nonsense date does too',
+       kalendertag_fuer({'send_time': '31.02.2026 08:00', 'planned_date': date(2026, 3, 3)})
+       == date(2026, 3, 3))
+pruefe('the day is read, not the month',
+       tag_aus('05.11.2026 09:00') == date(2026, 11, 5),
+       tag_aus('05.11.2026 09:00'))
 
 print('\n=== How binding a day is ===')
 # The colour on the page comes from this. "Scheduled" has to mean Buffer really
