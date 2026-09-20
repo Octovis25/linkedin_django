@@ -127,6 +127,62 @@ def _ensure_media_columns():
     schema_sicherstellen()
 
 
+def _attach_send_time(posts_list):
+    """Fill in when each post is due to go out, from the best source available.
+
+    Three places know something about the time, and they are not equally good:
+
+      1. post_scheduled_at - what we told LinkedIn or Buffer. The truth, when
+         it is there. The promotion to 'Posted' used to clear it, so a post
+         that came back from a wrong archiving has lost it.
+      2. buffer_posts_posted.due_at - what Buffer will actually do. Survives
+         everything on our side, so it is the repair for case 1.
+      3. planned_date/planned_time - the editorial plan. May be older than the
+         two above, but better than showing nothing.
+
+    On a page called "Scheduled" the one thing that has to be readable is when
+    it goes out. Until now it was the one thing that was not.
+    """
+    if not posts_list:
+        return posts_list
+    ids = [p.get('id') for p in posts_list if p.get('id')]
+    if not ids:
+        return posts_list
+    platzhalter = ','.join(['%s'] * len(ids))
+    faellig = {}
+    with connection.cursor() as c:
+        try:
+            c.execute(f"""SELECT planner_post_id, COALESCE(due_at,'')
+                          FROM buffer_posts_posted
+                          WHERE planner_post_id IN ({platzhalter})""", ids)
+            faellig = {r[0]: (r[1] or '') for r in c.fetchall()}
+        except Exception as fehler:
+            print('send time from buffer:', fehler)
+
+    for p in posts_list:
+        wann = p.get('post_scheduled_at_fmt') or ''
+        quelle = 'told to Buffer' if wann else ''
+        if not wann:
+            roh = faellig.get(p.get('id'), '')
+            if roh:
+                # Buffer's ISO stamp, e.g. 2026-09-21T08:00:00.000Z
+                try:
+                    from datetime import datetime as _dt2
+                    wann = _dt2.strptime(roh[:19], '%Y-%m-%dT%H:%M:%S').strftime('%d.%m.%Y %H:%M')
+                    quelle = 'from Buffer'
+                except Exception:
+                    wann = roh[:16].replace('T', ' ')
+                    quelle = 'from Buffer'
+        if not wann and p.get('planned_date'):
+            wann = p['planned_date'].strftime('%d.%m.%Y')
+            if p.get('planned_time'):
+                wann += ' ' + str(p['planned_time'])[:5]
+            quelle = 'planned'
+        p['send_time'] = wann
+        p['send_time_source'] = quelle
+    return posts_list
+
+
 def _attach_video_paths(posts_list):
     """Attach video_nc_path to already built post dictionaries without changing legacy SELECTs."""
     if not posts_list:
@@ -490,6 +546,7 @@ def scheduled_view(request):
         })
     li_token = _li_get_superuser_token()
     _attach_video_paths(posts_list)
+    _attach_send_time(posts_list)
     # There is no cron job - see posts_posted/buffer_sync.py. Opening this
     # page is the moment to catch up: once a day, in a thread, so nobody
     # waits on Buffer's API. What it finds shows on the next visit.
