@@ -286,5 +286,98 @@ pruefe('one post still waiting keeps the day from being done',
 pruefe('and a binding post wins over a loose one on the same day',
        zustand([], [post(status='Draft'), post(verbindlich=True)]) == 'sched')
 
+# ---------------------------------------------------------------- the page
+
+import ast
+import re
+
+with open(os.path.join(WURZEL, 'planner', 'templates', 'planner',
+                       'kalender.html'), encoding='utf-8') as fh:
+    VORLAGE = fh.read()
+
+print('\n=== The page and the code still fit together ===')
+
+# A template says nothing when it is wrong. A renamed key prints an empty
+# string, a stray tag prints itself, and both look like "nothing happened".
+# So the page is read here and held against the code that fills it.
+
+# 1. Which keys does the view actually produce? Read them out of the module
+#    rather than listing them here, so this cannot drift.
+# Some of the fields are put there by _attach_send_time() over in views.py,
+# which is the whole point of reusing it - so that file counts as a source of
+# keys too. Reading both is what keeps this check honest instead of merely
+# green.
+with open(os.path.join(WURZEL, 'planner', 'views.py'), encoding='utf-8') as fh:
+    SRC_VIEWS = fh.read()
+
+BAUM = ast.parse(SRC + chr(10) + SRC_VIEWS)
+SCHLUESSEL = set()
+for knoten in ast.walk(BAUM):
+    if isinstance(knoten, ast.Dict):
+        for k in knoten.keys:
+            if isinstance(k, ast.Constant) and isinstance(k.value, str):
+                SCHLUESSEL.add(k.value)
+    # p['x'] = ... on the left-hand side
+    if isinstance(knoten, ast.Assign):
+        for ziel in knoten.targets:
+            if (isinstance(ziel, ast.Subscript)
+                    and isinstance(ziel.slice, ast.Constant)
+                    and isinstance(ziel.slice.value, str)):
+                SCHLUESSEL.add(ziel.slice.value)
+# dict(regel, datum=..., regel_text=...) - keyword form
+for knoten in ast.walk(BAUM):
+    if isinstance(knoten, ast.Call):
+        for kw in knoten.keywords:
+            if kw.arg:
+                SCHLUESSEL.add(kw.arg)
+
+# 2. Everything the page reads off a post, a day or a month.
+LOOPS = {'p', 't', 'm'}
+benutzt = set()
+for stueck in re.findall(r'\{\{(.*?)\}\}|\{%(.*?)%\}', VORLAGE, re.S):
+    text = (stueck[0] or stueck[1])
+    for schleife, feld in re.findall(r'\b([ptm])\.([a-z_]+)', text):
+        benutzt.add((schleife, feld))
+
+fehlend = sorted('%s.%s' % x for x in benutzt if x[1] not in SCHLUESSEL)
+pruefe('every field the page reads is one the view fills', not fehlend, fehlend)
+pruefe('and the page really does read some', len(benutzt) > 12, len(benutzt))
+
+# 3. The bug from this morning: {# ... #} comments out ONE line. A note that
+#    runs over two is printed into the page, and on the post list it read like
+#    the post's own title. Cheap to check, expensive to miss.
+mehrzeilig = [k for k in re.findall(r'\{#.*?#\}', VORLAGE, re.S) if '\n' in k]
+pruefe('no template comment runs over more than one line', not mehrzeilig,
+       (mehrzeilig[0][:60] + '...') if mehrzeilig else '')
+
+# 4. Block tags in balance. An {% endif %} too few swallows the rest of the
+#    page without a word.
+for auf, zu in (('if', 'endif'), ('for', 'endfor'), ('block', 'endblock')):
+    offen = len(re.findall(r'\{%\s*' + auf + r'[\s%]', VORLAGE))
+    geschlossen = len(re.findall(r'\{%\s*' + zu + r'\s*%\}', VORLAGE))
+    pruefe('%s and %s are in balance' % (auf, zu), offen == geschlossen,
+           '%d vs %d' % (offen, geschlossen))
+
+# 5. The page talks to the API by name. A typo here is silent: the request
+#    goes out, comes back with an error nobody shows, and the button does
+#    nothing. This is the same trap the studio config had with its url keys.
+AKTIONEN = set(re.findall(r"aktion == '([a-z_]+)'", SRC))
+AKTIONEN |= set(re.findall(r"aktion in \('([a-z_]+)', '([a-z_]+)'\)", SRC)[0]
+                if re.findall(r"aktion in \('([a-z_]+)', '([a-z_]+)'\)", SRC) else [])
+gerufen = set(re.findall(r"action: '([a-z_]+)'", VORLAGE))
+gerufen |= set(re.findall(r"\? '([a-z_]+)' : '([a-z_]+)'", VORLAGE)[0]
+               if re.findall(r"\? '([a-z_]+)' : '([a-z_]+)'", VORLAGE) else [])
+unbekannt = sorted(gerufen - AKTIONEN)
+pruefe('every action the page sends is one the API answers', not unbekannt,
+       unbekannt)
+pruefe('and it sends more than one', len(gerufen) >= 4, sorted(gerufen))
+
+# 6. The address the page posts to has to be the one urls.py routes.
+with open(os.path.join(WURZEL, 'planner', 'urls.py'), encoding='utf-8') as fh:
+    URLS = fh.read()
+for pfad in sorted(set(re.findall(r"fetch\('(/planner/[a-z/]+)", VORLAGE))):
+    kurz = pfad.replace('/planner/', '').strip('/')
+    pruefe('%s is routed' % pfad, ("'%s/'" % kurz) in URLS, kurz)
+
 print('\n%d ok, %d failed' % (gut, schlecht))
 sys.exit(1 if schlecht else 0)
