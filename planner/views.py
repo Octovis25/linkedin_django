@@ -608,6 +608,7 @@ def archive_view(request):
         })
 
     _attach_video_paths(posts_list)
+    _attach_send_time(posts_list)
     return render(request, 'planner/archive.html', {'posts': posts_list, 'topics': topics, 'topic_filter': topic_filter, 'statuses': ['Draft', 'Review', 'Ready', 'Scheduled', 'Posted', 'Archive'], 'tab': 'archive', 'page_title': '📦 Archive', 'posts_json': _posts_to_json(posts_list), 'allow_create': True})
 
 
@@ -641,6 +642,7 @@ def all_view(request):
         })
 
     _attach_video_paths(posts_list)
+    _attach_send_time(posts_list)
     return render(request, 'planner/all_posts.html', {
         'posts': posts_list,
         'topics': topics,

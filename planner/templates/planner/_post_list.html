@@ -170,9 +170,7 @@ word, so a published post that was later tidied away still counts as published.
       <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:4px">
         <span style="font-size:11px;padding:1px 8px;border-radius:99px;background:{{ p.bg }};color:{{ p.fg }}">{{ p.topic_name }}</span>
         {% if p.planned_date %}<span style="font-size:11px;color:#6c757d">📅 {{ p.planned_date|date:"d.m.Y" }}{% if p.planned_time %} 🕐 {{ p.planned_time|time:"H:i" }}{% endif %}</span>{% endif %}
-        {# When it goes out is the one thing this page is about, so it is shown
-           on its own and never hidden behind another badge. "in ✓" says it
-           has been published - a different fact, not a replacement. #}
+        {# The send time is what this page is about, so it gets its own badge. #}
         {% if p.send_time %}<span style="font-size:11px;padding:1px 8px;border-radius:99px;background:#e8f4fb;color:#0077B5;font-weight:600;border:1px solid #0077B5" title="Goes out ({{ p.send_time_source }})">📤 {{ p.send_time }}</span>{% endif %}
         {% if p.linkedin_posted %}<span style="font-size:11px;padding:1px 7px;border-radius:99px;background:#0077B5;color:#fff;font-weight:600" title="Published on LinkedIn">in ✓</span>{% endif %}
       </div>
