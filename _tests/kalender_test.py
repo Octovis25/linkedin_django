@@ -61,7 +61,7 @@ for name in ('WOCHENTAGE', 'MONATE', 'ORDINAL'):
     exec(compile(listen_holen(name), 'planner/kalender.py (cut out)', 'exec'), RAUM)
 for name in ('_ostern', '_letzter_tag', '_nter_wochentag', 'datum_fuer',
              'regel_text', '_zustand', '_tag_aus', '_tag_aus_iso',
-             'kalendertag_fuer', 'gesendet_am_aus'):
+             'kalendertag_fuer', 'gesendet_am_aus', 'ohne_datum_gruppe'):
     exec(compile(herausschneiden(name), 'planner/kalender.py (cut out)', 'exec'), RAUM)
 
 ostern = RAUM['_ostern']
@@ -74,6 +74,7 @@ tag_aus = RAUM['_tag_aus']
 kalendertag_fuer = RAUM['kalendertag_fuer']
 tag_aus_iso = RAUM['_tag_aus_iso']
 gesendet_am_aus = RAUM['gesendet_am_aus']
+ohne_datum_gruppe = RAUM['ohne_datum_gruppe']
 
 # The seed list, straight out of the shipping file, so the starter dates are
 # checked as they really are.
@@ -532,6 +533,34 @@ pruefe('and the two known exceptions are still the only ones',
            and 'planner_posts' in k.value and re.search(r'\bSELECT\b', k.value, re.I)
            and 'is_oj' not in k.value
            and not re.search(r'WHERE\s+id\s*=\s*%s', k.value, re.I)))
+
+print('\n=== Posts with no date are told apart ===')
+# Thirty drafts and three lost records in one list means the three are never
+# seen. A draft without a date is an idea; a published post without one is a
+# day that is not on record anywhere.
+pruefe('a published post is the one to look at',
+       ohne_datum_gruppe({'status': 'Posted', 'linkedin_posted': 0}) == 'raus')
+pruefe('and so is one LinkedIn confirmed, whatever the status says',
+       ohne_datum_gruppe({'status': 'Draft', 'linkedin_posted': 1}) == 'raus')
+pruefe('a draft is not', ohne_datum_gruppe({'status': 'Draft', 'linkedin_posted': 0}) == 'offen')
+pruefe('nor is one still in review',
+       ohne_datum_gruppe({'status': 'Review', 'linkedin_posted': 0}) == 'offen')
+# Archive without linkedin_posted is the planner's "Discarded" - it never went
+# out, so there is no day to have lost.
+pruefe('a discarded post is not a lost record',
+       ohne_datum_gruppe({'status': 'Archive', 'linkedin_posted': 0}) == 'offen')
+pruefe('an empty post does not crash the grouping',
+       ohne_datum_gruppe({}) == 'offen')
+
+ANSICHT3 = herausschneiden('kalender_view')
+pruefe('the view hands the page both groups',
+       "'ohne_datum_raus'" in ANSICHT3 and "'ohne_datum_offen'" in ANSICHT3)
+pruefe('and reads the list only once',
+       ANSICHT3.count('posts_ohne_datum(') == 1)
+pruefe('the page shows the lost records openly',
+       '{% if ohne_datum_raus %}' in VORLAGE and 'went out without a date on record' in VORLAGE)
+pruefe('and folds the drafts away behind a summary',
+       '{% if ohne_datum_offen %}' in VORLAGE and '<details>' in VORLAGE)
 
 print('\n=== The OJ calendar is a plain one ===')
 # Ortrud asked for a simple calendar on the OJ side: days and posts, no world

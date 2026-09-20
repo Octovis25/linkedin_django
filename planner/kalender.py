@@ -427,7 +427,20 @@ def _posts_des_jahres(jahr, nur_oj=False):
     return [p for p in posts if p['kalendertag'] and p['kalendertag'].year == jahr]
 
 
-def posts_ohne_datum(grenze=60, nur_oj=False):
+def ohne_datum_gruppe(post):
+    """Which of the two groups a dateless post belongs in.
+
+    A draft without a date is an idea, and an idea without a date is fine. A
+    post that WENT OUT without a date is something else: the day it happened is
+    not on record anywhere, and it cannot be put in the year at all. Thirty
+    ideas and three lost records in one undifferentiated list means the three
+    are never seen.
+    """
+    return 'raus' if (post.get('linkedin_posted')
+                      or post.get('status') == 'Posted') else 'offen'
+
+
+def posts_ohne_datum(grenze=200, nur_oj=False):
     """Posts that carry no date at all - not planned, not scheduled, not sent.
 
     They cannot be put on a day, and inventing one would be worse than leaving
@@ -463,9 +476,11 @@ def posts_ohne_datum(grenze=60, nur_oj=False):
         if not titel:
             roh = (r[2] or '').replace('\n', ' ').strip()
             titel = (roh[:70] + '\u2026') if len(roh) > 70 else (roh or 'Untitled')
-        raus.append({'id': r[0], 'title': titel, 'status': r[3] or '',
-                     'topic_name': r[4] or '', 'bg': bg, 'fg': fg,
-                     'linkedin_posted': r[6], 'created_at': r[7]})
+        eintrag = {'id': r[0], 'title': titel, 'status': r[3] or '',
+                   'topic_name': r[4] or '', 'bg': bg, 'fg': fg,
+                   'linkedin_posted': r[6], 'created_at': r[7]}
+        eintrag['gruppe'] = ohne_datum_gruppe(eintrag)
+        raus.append(eintrag)
         if len(raus) >= grenze:
             break
     return raus
@@ -562,6 +577,7 @@ def kalender_view(request, jahr=None, nur_oj=False):
     # the year arrows, the month, a new post - hangs off this one string, so
     # the OJ side can never quietly link back into the other half.
     basis = '/planner/kalender/oj/' if nur_oj else '/planner/kalender/'
+    ohne_datum = posts_ohne_datum(nur_oj=nur_oj)
 
     return render(request, 'planner/kalender.html', {
         'tab': 'kalender',
@@ -571,7 +587,9 @@ def kalender_view(request, jahr=None, nur_oj=False):
         'jahr': jahr, 'vorjahr': jahr - 1, 'folgejahr': jahr + 1,
         'monate': monate,
         'monat': monat,
-        'ohne_datum': posts_ohne_datum(nur_oj=nur_oj),
+        'ohne_datum': ohne_datum,
+        'ohne_datum_raus': [p for p in ohne_datum if p['gruppe'] == 'raus'],
+        'ohne_datum_offen': [p for p in ohne_datum if p['gruppe'] == 'offen'],
         'termine': [] if nur_oj else jahres_termine(jahr),
         'wochentage': WOCHENTAGE,
         'monatsnamen': MONATE,

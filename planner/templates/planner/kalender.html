@@ -113,6 +113,13 @@
 
   .kal-ohne { margin-top:22px; background:#fff; border:1px solid #e4e0d5;
               border-left:3px solid #E0A030; border-radius:6px; padding:13px 16px; }
+  .kal-ohne.luecke { border-left-color:#C4501A; }
+  .kal-ohne.luecke h3 { color:#C4501A; }
+  .kal-ohne.ruhig { border-left-color:#B9C2C0; margin-top:10px; }
+  .kal-ohne summary { cursor:pointer; font-size:13px; font-weight:600;
+                      color:var(--octo-dark-petrol); list-style:revert; }
+  .kal-ohne summary:hover { color:var(--octo-petrol); }
+  .kal-ohne details > p { margin:8px 0 10px; }
   .kal-ohne h3 { margin:0 0 4px; font-size:14px; color:var(--octo-dark-petrol); }
   .kal-ohne > p { margin:0 0 10px; font-size:12.5px; color:#6B7876; max-width:70ch; }
   .kal-ohne ul { margin:0; padding:0; list-style:none; }
@@ -270,15 +277,16 @@
     <span><i class="l-done"></i>Published</span>
   </div>
 
-  {% if ohne_datum %}
-  <section class="kal-ohne">
-    <h3>{{ ohne_datum|length }} post{{ ohne_datum|length|pluralize }} without any date</h3>
-    <p>Not planned, not scheduled, and no send date on record &ndash; so there is no day to
-       put them on. Publishing clears the scheduled time, and a post that went out through
-       LinkedIn or Make never had a Buffer entry to keep one in. Give a post a date and it
-       appears in the calendar.</p>
+  {# Two groups, because they mean different things: a draft without a date is an idea, a published post without one is a lost record. #}
+  {% if ohne_datum_raus %}
+  <section class="kal-ohne luecke">
+    <h3>{{ ohne_datum_raus|length }} post{{ ohne_datum_raus|length|pluralize }} went out without a date on record</h3>
+    <p>These were published, but the day is not stored anywhere &ndash; not planned, not
+       scheduled, no send date from Buffer. Publishing clears the scheduled time, and a post
+       that went out through LinkedIn or Make never had a Buffer entry to keep one in. They
+       cannot be placed in any year until someone gives them a date.</p>
     <ul>
-      {% for p in ohne_datum %}
+      {% for p in ohne_datum_raus %}
       <li>
         <span class="nr">#{{ p.id }}</span>
         <a href="/planner/?edit={{ p.id }}&amp;back={{ basis }}{{ jahr }}/">{{ p.title }}</a>
@@ -287,6 +295,26 @@
       </li>
       {% endfor %}
     </ul>
+  </section>
+  {% endif %}
+
+  {% if ohne_datum_offen %}
+  <section class="kal-ohne ruhig">
+    <details>
+      <summary>{{ ohne_datum_offen|length }} more have no date yet &ndash; drafts and ideas</summary>
+      <p>Nothing is wrong with these: a post without a date is a post nobody has placed yet.
+         Give one a date and it appears in the calendar on that day.</p>
+      <ul>
+        {% for p in ohne_datum_offen %}
+        <li>
+          <span class="nr">#{{ p.id }}</span>
+          <a href="/planner/?edit={{ p.id }}&amp;back={{ basis }}{{ jahr }}/">{{ p.title }}</a>
+          {% if p.topic_name %}<span class="thema" style="background:{{ p.bg }};color:{{ p.fg }}">{{ p.topic_name }}</span>{% endif %}
+          <span class="wann">{{ p.status }}{% if p.created_at %} &middot; written {{ p.created_at|date:"d.m.Y" }}{% endif %}</span>
+        </li>
+        {% endfor %}
+      </ul>
+    </details>
   </section>
   {% endif %}
 
