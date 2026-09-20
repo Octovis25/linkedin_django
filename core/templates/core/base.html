@@ -146,6 +146,7 @@ up, so it moved right; Collectives became a sub-entry under Data.
     <a href="/planner/scheduled/" {% if '/scheduled/' in request.path %}class="active"{% endif %}>Scheduled</a>
     <a href="/planner/archive/" {% if '/archive/' in request.path %}class="active"{% endif %}>Archive</a>
     <a href="/planner/all/" {% if '/all/' in request.path %}class="active"{% endif %}>All</a>
+    <a href="/planner/kalender/" {% if '/kalender/' in request.path %}class="active"{% endif %}>📅 Calendar</a>
     {% if user.is_superuser %}<a href="/planner/oj/" {% if '/oj/' in request.path %}class="active"{% endif %}>OJ</a>{% endif %}
     {% if user.is_superuser %}<a href="/planner/aufgaben/" {% if '/aufgaben/' in request.path %}class="active"{% endif %}>🤖 Claude tasks</a>{% endif %}
   </div>

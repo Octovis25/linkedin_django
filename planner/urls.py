@@ -1,5 +1,5 @@
 from django.urls import path
-from . import views
+from . import views, kalender
 
 app_name = 'planner'
 urlpatterns = [
@@ -13,6 +13,9 @@ urlpatterns = [
     path('all/', views.all_view, name='all'),
     path('oj/', views.oj_view, name='oj'),
     path('aufgaben/', views.aufgaben_view, name='aufgaben'),
+    path('kalender/', kalender.kalender_view, name='kalender'),
+    path('kalender/<int:jahr>/', kalender.kalender_view, name='kalender_jahr'),
+    path('kalender/api/', kalender.kalender_api, name='kalender_api'),
     path('aufgaben/api/', views.aufgaben_api, name='aufgaben_api'),
     path('api/post/', views.api_post, name='api_post'),
     path('api/series/', views.api_series, name='api_series'),

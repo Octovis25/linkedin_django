@@ -1,0 +1,477 @@
+{% extends "core/base.html" %}
+{% block title %}📅 Calendar {{ jahr }}{% endblock %}
+{% block content %}
+{# One row per calendar day. Empty days stay in - the gaps between the
+   occasions are what this page is read for. #}
+<style>
+  .kal-wrap { max-width: 1060px; margin: 0 auto; padding: 1rem; }
+
+  .kal-top { display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-bottom:12px; }
+  .kal-jahr { font-size:21px; font-weight:700; font-variant-numeric:tabular-nums;
+              min-width:70px; text-align:center; color:var(--octo-dark-petrol); }
+  .kal-top .pfeil { width:28px; height:28px; display:inline-flex; align-items:center;
+                    justify-content:center; border:1px solid #ddd; border-radius:4px;
+                    background:#fff; text-decoration:none; color:var(--octo-text); }
+  .kal-top .pfeil:hover { border-color:var(--octo-petrol); color:var(--octo-petrol); }
+  .kal-top select { padding:5px 9px; border:1px solid #ddd; border-radius:4px;
+                    font-size:13px; background:#fff; cursor:pointer; }
+  .kal-top .luecke { flex:1 1 auto; }
+  .kal-filter { display:flex; border:1px solid #ddd; border-radius:4px; overflow:hidden; background:#fff; }
+  .kal-filter button { border:0; background:none; padding:5px 10px; font-size:12.5px;
+                       cursor:pointer; border-right:1px solid #ddd; white-space:nowrap;
+                       color:var(--octo-text); }
+  .kal-filter button:last-child { border-right:0; }
+  .kal-filter button.aktiv { background:var(--octo-petrol); color:#fff; font-weight:600; }
+  .kal-knopf { padding:5px 11px; border:1px solid #ddd; border-radius:4px; background:#fff;
+               font-size:12.5px; cursor:pointer; color:var(--octo-text); }
+  .kal-knopf:hover { border-color:var(--octo-petrol); color:var(--octo-petrol); }
+  .kal-knopf.voll { background:var(--octo-petrol); border-color:var(--octo-petrol); color:#fff; }
+
+  .kal-blatt { background:#fff; border:1px solid #e4e0d5; border-radius:6px; overflow:hidden; }
+  .kal-kopf, .kal-zeile {
+    display:grid; grid-template-columns: 4px 74px minmax(120px,1.1fr) minmax(0,2fr) 92px 62px;
+    gap:0 10px; align-items:center;
+  }
+  .kal-kopf { padding:6px 12px 6px 0; border-bottom:1px solid #e4e0d5; background:#F9F7F0; }
+  .kal-kopf span { font-size:10px; text-transform:uppercase; letter-spacing:.08em;
+                   color:#6B7876; font-weight:700; }
+
+  .kal-mkopf { display:flex; align-items:baseline; gap:8px; padding:8px 12px 6px 16px;
+               border-top:1px solid #e4e0d5; border-bottom:1px solid #e4e0d5;
+               background:#F9F7F0; position:sticky; top:0; z-index:2; }
+  .kal-mkopf b { font-size:11px; text-transform:uppercase; letter-spacing:.1em;
+                 color:var(--octo-dark-petrol); }
+  .kal-mkopf span { font-size:11px; color:#6B7876; margin-left:auto;
+                    font-variant-numeric:tabular-nums; }
+
+  .kal-zeile { padding:2px 12px 2px 0; border-bottom:1px solid #EFECE2;
+               font-size:12.5px; line-height:1.45; min-height:25px; }
+  .kal-zeile:hover { background:#F9F7F0; }
+  .kal-zeile.we { background:#FBFAF3; }
+  .kal-zeile.we:hover { background:#F4F1E6; }
+  .kal-zeile.heute .kal-datum b { background:var(--octo-petrol); color:#fff;
+                                  border-radius:3px; padding:0 4px; }
+
+  .kal-strich { align-self:stretch; min-height:21px; border-radius:0 2px 2px 0; }
+  .z-open  .kal-strich { background:repeating-linear-gradient(180deg,#F0A87E 0 3px,transparent 3px 7px); }
+  .z-plan  .kal-strich { background:repeating-linear-gradient(180deg,#E0A030 0 5px,transparent 5px 9px); }
+  .z-sched .kal-strich { background:#008591; }
+  .z-done  .kal-strich { background:#B9C2C0; }
+  .z-none  .kal-strich { background:transparent; }
+
+  .kal-datum { font-variant-numeric:tabular-nums; white-space:nowrap;
+               padding-left:10px; color:#6B7876; }
+  .kal-datum b { font-weight:700; color:var(--octo-text); font-size:12.5px; }
+  .z-none .kal-datum, .z-none .kal-datum b { color:#A8B0AE; font-weight:400; }
+  .we .kal-datum b { color:#6B7876; }
+
+  .kal-anlass, .kal-post { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0; }
+  .kal-anlass { color:#F56E28; font-weight:600; }
+  .kal-anlass .punkt { display:inline-block; width:5px; height:5px; border-radius:1px;
+                       background:#F56E28; margin-right:5px; vertical-align:middle; }
+  .kal-post .nr { color:#A8B0AE; font-variant-numeric:tabular-nums; margin-right:5px; }
+  .kal-post a { color:inherit; text-decoration:none; }
+  .kal-zeile:hover .kal-post a { text-decoration:underline; text-underline-offset:2px; }
+  .kal-post .thema { font-size:10px; padding:0 5px; border-radius:99px; margin-left:6px;
+                     font-weight:600; vertical-align:1px; }
+  .kal-post .nix { color:#C4501A; }
+  .kal-neu { visibility:hidden; font-size:11px; color:var(--octo-petrol); cursor:pointer;
+             border:0; background:none; padding:0 4px; text-decoration:none; }
+  .kal-zeile:hover .kal-neu { visibility:visible; }
+
+  .kal-pille { font-size:10px; font-weight:700; padding:1px 7px; border-radius:99px;
+               white-space:nowrap; display:inline-block; }
+  .p-open  { color:#C4501A; border:1px dashed #F0A87E; }
+  .p-plan  { color:#8A5A12; background:#FAEEDA; border:1px dashed #E0A030; }
+  .p-sched { color:#00707A; background:#E0F0F1; border:1px solid #008591; }
+  .p-done  { color:#7C8886; background:#F4F3EE; border:1px solid #B9C2C0; }
+  .kal-zeit { font-size:11px; color:#6B7876; font-variant-numeric:tabular-nums;
+              white-space:nowrap; text-align:right; }
+
+  .kal-legende { display:flex; gap:12px; flex-wrap:wrap; align-items:center;
+                 margin:10px 2px 0; font-size:12px; color:#6B7876; }
+  .kal-legende i { width:4px; height:13px; border-radius:1px; display:inline-block;
+                   margin-right:5px; vertical-align:-2px; }
+  .kal-legende .l-open  { background:repeating-linear-gradient(180deg,#F0A87E 0 3px,transparent 3px 7px); }
+  .kal-legende .l-plan  { background:repeating-linear-gradient(180deg,#E0A030 0 5px,transparent 5px 9px); }
+  .kal-legende .l-sched { background:#008591; }
+  .kal-legende .l-done  { background:#B9C2C0; }
+
+  /* --- the list of recurring dates --- */
+  .kal-liste { margin-top:26px; background:#fff; border:1px solid #e4e0d5; border-radius:6px; }
+  .kal-liste > h3 { margin:0; padding:13px 16px; border-bottom:1px solid #e4e0d5;
+                    font-size:15px; color:var(--octo-dark-petrol);
+                    display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+  .kal-liste > h3 small { font-weight:400; font-size:12.5px; color:#6B7876; flex:1 1 220px; }
+  .kal-liste table { border-collapse:collapse; width:100%; font-size:12.5px; }
+  .kal-liste th { text-align:left; font-size:10px; text-transform:uppercase; letter-spacing:.08em;
+                  color:#6B7876; font-weight:700; padding:8px 16px;
+                  border-bottom:1px solid #e4e0d5; white-space:nowrap; }
+  .kal-liste td { padding:6px 16px; border-bottom:1px solid #EFECE2; vertical-align:middle; }
+  .kal-liste tr:last-child td { border-bottom:0; }
+  .kal-liste tr.aus td { opacity:.45; }
+  .kal-liste td.wann { font-variant-numeric:tabular-nums; white-space:nowrap; font-weight:700; }
+  .kal-liste td.regel { color:#6B7876; }
+  .kal-art { font-size:10px; padding:1px 6px; border-radius:3px; font-weight:600; white-space:nowrap; }
+  .a-holiday { background:#F3F1E8; color:#6B7876; }
+  .a-awareness { background:#FCE9DC; color:#F56E28; }
+  .a-own { background:#E0F0F1; color:#008591; }
+  .kal-liste .raus { border:0; background:none; cursor:pointer; font-size:13px; padding:2px 5px; }
+  .kal-liste .raus:hover { color:#c0392b; }
+  .kal-scroll { overflow-x:auto; }
+  .kal-liste table { min-width:640px; }
+
+  .kal-neuform { display:flex; gap:8px; flex-wrap:wrap; align-items:flex-end;
+                 padding:12px 16px; border-top:1px solid #e4e0d5; background:#F9F7F0; }
+  .kal-feld { display:flex; flex-direction:column; gap:3px; }
+  .kal-feld label { font-size:10px; text-transform:uppercase; letter-spacing:.07em;
+                    color:#6B7876; font-weight:700; }
+  .kal-feld input, .kal-feld select { padding:5px 8px; border:1px solid #ccc;
+                                      border-radius:4px; font-size:13px; }
+  .kal-feld input[type=text] { min-width:200px; }
+  .kal-fehler { color:#c0392b; font-size:12.5px; padding:0 16px 12px; }
+
+  @media (max-width:720px) {
+    .kal-kopf { display:none; }
+    .kal-zeile { grid-template-columns:4px 62px minmax(0,1fr) 62px; padding-right:10px; }
+    .kal-anlass, .kal-post { grid-column:3; }
+    .kal-zeit { grid-column:4; }
+    .kal-pille { display:none; }
+    .z-none .kal-anlass, .z-none .kal-post { display:none; }
+  }
+</style>
+
+<div class="kal-wrap">
+
+  <div class="kal-top">
+    <a class="pfeil" href="/planner/kalender/{{ vorjahr }}/" title="{{ vorjahr }}">&lsaquo;</a>
+    <span class="kal-jahr">{{ jahr }}</span>
+    <a class="pfeil" href="/planner/kalender/{{ folgejahr }}/" title="{{ folgejahr }}">&rsaquo;</a>
+
+    <select id="kal-monat" aria-label="Month">
+      <option value="0">All months</option>
+      {% for m in monatsnamen %}<option value="{{ forloop.counter }}">{{ m }}</option>{% endfor %}
+    </select>
+
+    <span class="luecke"></span>
+
+    <div class="kal-filter" id="kal-filter">
+      <button data-f="alle" class="aktiv">Every day</button>
+      <button data-f="voll">Only days with something</button>
+      <button data-f="offen">Still open</button>
+    </div>
+    <button class="kal-knopf" id="kal-zur-liste">Recurring dates</button>
+  </div>
+
+  <div class="kal-blatt">
+    <div class="kal-kopf">
+      <span></span><span>Day</span><span>Occasion</span><span>Post</span><span>Binding</span><span>Time</span>
+    </div>
+
+    {% for m in monate %}
+    <div class="kal-monat" data-monat="{{ m.nr }}">
+      <div class="kal-mkopf">
+        <b>{{ m.name }} {{ jahr }}</b>
+        <span>{{ m.posts }} post{{ m.posts|pluralize }}{% if m.offen %} &middot; {{ m.offen }} open{% endif %}</span>
+      </div>
+
+      {% for t in m.tage %}
+        {% if t.posts %}
+          {% for p in t.posts %}
+          <div class="kal-zeile z-{{ p.zustand }}{% if t.wochenende %} we{% endif %}{% if t.heute %} heute{% endif %}"
+               data-monat="{{ t.monat }}" data-zustand="{{ p.zustand }}">
+            <span class="kal-strich"></span>
+            {% if forloop.first %}
+              <span class="kal-datum"><b>{{ t.tag|stringformat:"02d" }}.</b> {{ t.wochentag }}</span>
+              <span class="kal-anlass"{% if t.anlass_titel %} title="{{ t.anlass_titel }}"{% endif %}>
+                {% if t.anlass_text %}<span class="punkt"></span>{{ t.anlass_text }}{% endif %}</span>
+            {% else %}
+              <span class="kal-datum"></span><span class="kal-anlass"></span>
+            {% endif %}
+            <span class="kal-post" title="{{ p.title }}">
+              <span class="nr">#{{ p.id }}</span>
+              <a href="/planner/?edit={{ p.id }}&amp;back=/planner/kalender/{{ jahr }}/">{{ p.title }}</a>
+              {% if p.topic_name %}<span class="thema" style="background:{{ p.bg }};color:{{ p.fg }}">{{ p.topic_name }}</span>{% endif %}
+            </span>
+            <span><span class="kal-pille p-{{ p.zustand }}">{{ p.zustand_text }}</span></span>
+            <span class="kal-zeit" title="{{ p.send_time }} ({{ p.send_time_source }})">
+              {% if p.zustand == 'done' %}&#10003; {{ p.uhrzeit }}{% elif p.uhrzeit %}&#9656; {{ p.uhrzeit }}{% endif %}</span>
+          </div>
+          {% endfor %}
+        {% else %}
+          <div class="kal-zeile z-{{ t.zustand }}{% if t.wochenende %} we{% endif %}{% if t.heute %} heute{% endif %}"
+               data-monat="{{ t.monat }}" data-zustand="{{ t.zustand }}">
+            <span class="kal-strich"></span>
+            <span class="kal-datum"><b>{{ t.tag|stringformat:"02d" }}.</b> {{ t.wochentag }}</span>
+            <span class="kal-anlass"{% if t.anlass_titel %} title="{{ t.anlass_titel }}"{% endif %}>
+              {% if t.anlass_text %}<span class="punkt"></span>{{ t.anlass_text }}{% endif %}</span>
+            <span class="kal-post">
+              {% if t.termine %}<span class="nix">nothing planned</span>{% endif %}
+              <a class="kal-neu" href="/planner/?new=1&amp;datum={{ t.iso }}">+ post</a>
+            </span>
+            <span>{% if t.zustand == 'open' %}<span class="kal-pille p-open">Open</span>{% endif %}</span>
+            <span class="kal-zeit"></span>
+          </div>
+        {% endif %}
+      {% endfor %}
+    </div>
+    {% endfor %}
+  </div>
+
+  <div class="kal-legende">
+    <span><i class="l-open"></i>Open</span>
+    <span><i class="l-plan"></i>Planned &ndash; can still move</span>
+    <span><i class="l-sched"></i>Scheduled &ndash; Buffer has it</span>
+    <span><i class="l-done"></i>Published</span>
+  </div>
+
+  <!-- ================= the list you maintain ================= -->
+  <section class="kal-liste" id="kal-liste">
+    <h3>Recurring dates
+      <small>One list for every year. Take one out and it is gone from all years &ndash;
+        to skip it in {{ jahr }} only, use the year box.</small>
+    </h3>
+
+    <div class="kal-scroll">
+      <table>
+        <thead>
+          <tr><th>In {{ jahr }}</th><th>Name</th><th>Kind</th><th>Rule</th>
+              <th>Draft ahead</th><th>Series</th><th>In the list</th><th></th></tr>
+        </thead>
+        <tbody id="kal-regeln">
+          <tr><td colspan="8" style="color:#6B7876">Loading&hellip;</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="kal-neuform">
+      <div class="kal-feld">
+        <label for="nf-name">Name</label>
+        <input type="text" id="nf-name" placeholder="World Sarcoma Day">
+      </div>
+      <div class="kal-feld">
+        <label for="nf-kind">Kind</label>
+        <select id="nf-kind">
+          <option value="awareness">Awareness</option>
+          <option value="holiday">Holiday</option>
+          <option value="own">Ours</option>
+        </select>
+      </div>
+      <div class="kal-feld">
+        <label for="nf-rule">Rule</label>
+        <select id="nf-rule">
+          <option value="fixed">same date every year</option>
+          <option value="last">last day of a month</option>
+          <option value="nth">n-th weekday of a month</option>
+          <option value="easter">counted from Easter</option>
+          <option value="before">last weekday on or before a date</option>
+        </select>
+      </div>
+      <div class="kal-feld" data-fuer="fixed nth last before">
+        <label for="nf-month">Month</label>
+        <select id="nf-month">
+          {% for m in monatsnamen %}<option value="{{ forloop.counter }}">{{ m }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="kal-feld" data-fuer="fixed before">
+        <label for="nf-day">Day</label>
+        <input type="number" id="nf-day" min="1" max="31" value="1" style="width:66px">
+      </div>
+      <div class="kal-feld" data-fuer="nth">
+        <label for="nf-nth">Which one</label>
+        <select id="nf-nth">
+          <option value="1">first</option><option value="2">second</option>
+          <option value="3">third</option><option value="4">fourth</option>
+          <option value="5">fifth</option><option value="-1">last</option>
+        </select>
+      </div>
+      <div class="kal-feld" data-fuer="nth before">
+        <label for="nf-weekday">Weekday</label>
+        <select id="nf-weekday">
+          {% for w in wochentage %}<option value="{{ forloop.counter0 }}">{{ w }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="kal-feld" data-fuer="before">
+        <label for="nf-weeks">Weeks earlier</label>
+        <input type="number" id="nf-weeks" min="0" max="5" value="0" style="width:82px">
+      </div>
+      <div class="kal-feld" data-fuer="easter">
+        <label for="nf-easter">Days from Easter</label>
+        <input type="number" id="nf-easter" min="-400" max="400" value="0" style="width:82px">
+      </div>
+      <div class="kal-feld">
+        <label for="nf-lead">Draft ahead</label>
+        <input type="number" id="nf-lead" min="0" max="365" value="14" style="width:70px">
+      </div>
+      <div class="kal-feld">
+        <label for="nf-series">Series</label>
+        <input type="text" id="nf-series" placeholder="optional" style="width:130px">
+      </div>
+      <button class="kal-knopf voll" id="nf-add">Add to the list</button>
+    </div>
+    <div class="kal-fehler" id="nf-fehler" hidden></div>
+  </section>
+
+</div>
+
+<script>
+(function () {
+  'use strict';
+  var JAHR = {{ jahr }};
+
+  function keks(name) {
+    var treffer = document.cookie.match('(^|;)\\s*' + name + '\\s*=\\s*([^;]+)');
+    return treffer ? treffer.pop() : '';
+  }
+  function sende(daten) {
+    return fetch('/planner/kalender/api/', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': keks('csrftoken') },
+      body: JSON.stringify(daten)
+    }).then(function (a) { return a.json(); });
+  }
+
+  /* ---------- month and state filter ---------- */
+  var monat = 0, zustand = 'alle';
+
+  function filtern() {
+    var zeilen = document.querySelectorAll('.kal-zeile');
+    for (var i = 0; i < zeilen.length; i++) {
+      var z = zeilen[i];
+      var z1 = monat === 0 || +z.dataset.monat === monat;
+      var z2 = zustand === 'alle'
+            || (zustand === 'voll' && z.dataset.zustand !== 'none')
+            || (zustand === 'offen' && z.dataset.zustand === 'open');
+      z.hidden = !(z1 && z2);
+    }
+    // A month whose rows are all hidden should not keep its heading around.
+    var bloecke = document.querySelectorAll('.kal-monat');
+    for (var j = 0; j < bloecke.length; j++) {
+      var sichtbar = bloecke[j].querySelectorAll('.kal-zeile:not([hidden])').length;
+      bloecke[j].hidden = sichtbar === 0;
+    }
+  }
+
+  document.getElementById('kal-monat').onchange = function () {
+    monat = +this.value; filtern();
+  };
+  document.getElementById('kal-filter').addEventListener('click', function (e) {
+    var b = e.target.closest('button[data-f]');
+    if (!b) return;
+    zustand = b.dataset.f;
+    var alle = this.querySelectorAll('button');
+    for (var i = 0; i < alle.length; i++) alle[i].classList.toggle('aktiv', alle[i] === b);
+    filtern();
+  });
+  document.getElementById('kal-zur-liste').onclick = function () {
+    document.getElementById('kal-liste').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
+
+  /* ---------- the list ---------- */
+  function schuetzen(text) {
+    return String(text == null ? '' : text)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+
+  function listeLaden() {
+    fetch('/planner/kalender/api/?jahr=' + JAHR)
+      .then(function (a) { return a.json(); })
+      .then(function (d) {
+        var koerper = document.getElementById('kal-regeln');
+        if (!d.termine || !d.termine.length) {
+          koerper.innerHTML = '<tr><td colspan="8" style="color:#6B7876">The list is empty.</td></tr>';
+          return;
+        }
+        d.termine.sort(function (a, b) { return (a.datum || '9') < (b.datum || '9') ? -1 : 1; });
+        koerper.innerHTML = d.termine.map(function (t) {
+          var wann = t.datum ? t.datum.slice(8, 10) + '.' + t.datum.slice(5, 7) + '.' : '—';
+          var imJahr = t.active && !t.dieses_jahr_versteckt;
+          return '<tr class="' + (t.active ? '' : 'aus') + '">' +
+            '<td><input type="checkbox" class="dj" data-id=' + t.id +
+              (imJahr ? ' checked' : '') + (t.active ? '' : ' disabled') +
+              ' title="Show this one in ' + JAHR + '"></td>' +
+            '<td>' + schuetzen(t.name) + '</td>' +
+            '<td><span class="kal-art a-' + t.kind + '">' + schuetzen(t.art_text) + '</span></td>' +
+            '<td class="regel">' + schuetzen(t.regel_text) + '</td>' +
+            '<td class="regel">' + t.lead_days + ' d</td>' +
+            '<td class="regel">' + (schuetzen(t.series) || '—') + '</td>' +
+            '<td><input type="checkbox" class="inliste" data-id=' + t.id +
+              (t.active ? ' checked' : '') + ' title="In the list at all"></td>' +
+            '<td><button class="raus" data-id=' + t.id +
+              ' title="Delete for good">✕</button></td>' +
+            '<td class="wann" hidden>' + wann + '</td></tr>';
+        }).join('');
+      });
+  }
+
+  document.getElementById('kal-regeln').addEventListener('change', function (e) {
+    var el = e.target;
+    if (el.classList.contains('inliste')) {
+      sende({ action: 'set_active', id: +el.dataset.id, active: el.checked })
+        .then(function () { location.reload(); });
+    } else if (el.classList.contains('dj')) {
+      sende({ action: el.checked ? 'show_year' : 'hide_year',
+              id: +el.dataset.id, jahr: JAHR })
+        .then(function () { location.reload(); });
+    }
+  });
+
+  document.getElementById('kal-regeln').addEventListener('click', function (e) {
+    var b = e.target.closest('.raus');
+    if (!b) return;
+    var zeile = b.closest('tr');
+    var name = zeile ? zeile.children[1].textContent : 'this date';
+    if (!window.confirm('Delete "' + name + '" from the list?\n\n' +
+                        'It disappears from every year. To skip it in ' + JAHR +
+                        ' only, untick the first box instead.')) return;
+    sende({ action: 'delete', id: +b.dataset.id }).then(function () { location.reload(); });
+  });
+
+  /* ---------- adding one ---------- */
+  var regelWahl = document.getElementById('nf-rule');
+  function felderZeigen() {
+    var art = regelWahl.value;
+    var felder = document.querySelectorAll('.kal-neuform [data-fuer]');
+    for (var i = 0; i < felder.length; i++) {
+      felder[i].hidden = felder[i].dataset.fuer.split(' ').indexOf(art) < 0;
+    }
+  }
+  regelWahl.onchange = felderZeigen;
+  felderZeigen();
+
+  document.getElementById('nf-add').onclick = function () {
+    var fehler = document.getElementById('nf-fehler');
+    fehler.hidden = true;
+    sende({
+      action: 'create',
+      name: document.getElementById('nf-name').value,
+      kind: document.getElementById('nf-kind').value,
+      rule_type: regelWahl.value,
+      month_no: document.getElementById('nf-month').value,
+      day_no: document.getElementById('nf-day').value,
+      weekday_no: document.getElementById('nf-weekday').value,
+      nth_no: (regelWahl.value === 'before'
+               ? document.getElementById('nf-weeks').value
+               : document.getElementById('nf-nth').value),
+      easter_offset: document.getElementById('nf-easter').value,
+      lead_days: document.getElementById('nf-lead').value,
+      series: document.getElementById('nf-series').value
+    }).then(function (a) {
+      if (a.error) { fehler.textContent = a.error; fehler.hidden = false; return; }
+      location.reload();
+    });
+  };
+
+  listeLaden();
+
+  // Land on the current month when the year on screen is the year we are in.
+  if (JAHR === new Date().getFullYear()) {
+    var jetzt = String(new Date().getMonth() + 1);
+    var wahl = document.getElementById('kal-monat');
+    wahl.value = jetzt;
+    monat = +jetzt;
+    filtern();
+  }
+})();
+</script>
+{% endblock %}
