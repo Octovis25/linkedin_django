@@ -661,6 +661,17 @@ pruefe('and gives the OJ page a narrower grid', 'schlicht' in VORLAGE)
 pruefe('the script guards the list wiring it may not find',
        'if (regelnKoerper) {' in VORLAGE and 'if (zurListe) {' in VORLAGE)
 
+print('\n=== "+ post" arrives with its day ===')
+# The calendar has always sent ?datum=<day>, and the planner never read it: a
+# new post started without a date, which is the one thing it was clicked for.
+with open(os.path.join(WURZEL, 'planner', 'templates', 'planner', 'planner.html'),
+          encoding='utf-8') as fh:
+    PLANNER = fh.read()
+pruefe('the calendar sends the day with "+ post"', '&amp;datum={{ t.iso }}' in VORLAGE)
+pruefe('and the planner reads it', "params.get('datum')" in PLANNER)
+pruefe('into the date field of the new post',
+       "getElementById('m-date')" in PLANNER[PLANNER.index("params.get('datum')"):][:400])
+
 print('\n=== The OJ area is shut, not merely hidden ===')
 # Leaving the link out of the navigation was never access control - the
 # address stayed open to anyone logged in who typed it.

@@ -868,6 +868,12 @@ function oeffnePostImReiter(id, title, content, status, date, comment, image, li
         // from Draft is a draft, and it turns up there afterwards.
         const feld = document.getElementById('m-status');
         if (feld && status && [...feld.options].some(o => o.value === status)) feld.value = status;
+        // "+ post" in the calendar sends the day it was clicked on. Only a
+        // plain YYYY-MM-DD is taken; openPostModal() empties the field, so it
+        // has to be set after it.
+        const datum = params.get('datum') || '';
+        const tag = document.getElementById('m-date');
+        if (tag && /^\d{4}-\d{2}-\d{2}$/.test(datum)) tag.value = datum;
       }, 100);
     }
     // Deep link: ?edit=<id> opens the post editor directly.
