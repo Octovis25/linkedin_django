@@ -695,5 +695,75 @@ pruefe('and it keeps the view it wraps recognisable',
 pruefe('the page offers the OJ switch to admins only',
        '{% if user.is_superuser %}' in VORLAGE)
 
+print('\n=== Moving a post from the calendar ===')
+RAUM_V = {'__builtins__': __builtins__}
+for name in ('_schluessel', 'vorschlaege_fuer'):
+    exec(compile(herausschneiden(name), 'planner/kalender.py (cut out)', 'exec'), RAUM_V)
+vorschlaege = RAUM_V['vorschlaege_fuer']
+
+HERZ = [{'name': 'World Heart Day'}]
+# #119 as it really is in the database: the title carries the day's name.
+P119 = {'id': 119, 'title': 'World Heart Day – 29 September'}
+pruefe('#119 is offered on World Heart Day',
+       [p['id'] for p in vorschlaege(HERZ, [P119])] == [119])
+pruefe('an apostrophe does not stand in the way',
+       len(vorschlaege([{'name': "Mother's Day"}], [{'id': 1, 'title': 'Mothers Day post'}])) == 1)
+pruefe('case does not matter either',
+       len(vorschlaege(HERZ, [{'id': 2, 'title': 'WORLD HEART DAY is coming'}])) == 1)
+pruefe('only whole words: "Labour Day" does not claim "Labour Daycare"',
+       len(vorschlaege([{'name': 'Labour Day'}], [{'id': 3, 'title': 'Labour Daycare'}])) == 0)
+pruefe('an unrelated post is not offered',
+       vorschlaege(HERZ, [{'id': 4, 'title': 'Oversight becomes insight'}]) == [])
+pruefe('a very short occasion name matches nothing',
+       vorschlaege([{'name': 'Ok'}], [{'id': 5, 'title': 'ok then'}]) == [])
+pruefe('one post is offered once, even for two matching occasions',
+       len(vorschlaege([{'name': 'World Heart Day'}, {'name': 'Heart Day'}], [P119])) == 1)
+pruefe('a post without a title does not break it',
+       vorschlaege(HERZ, [{'id': 6, 'title': None}]) == [])
+
+ANSICHT4 = herausschneiden('kalender_view')
+# Only the dateless drafts are candidates. A planned post must never be
+# pulled off its own day by a suggestion, and a published one is not a plan.
+pruefe('suggestions come only from the dateless drafts',
+       "offen = [p for p in ohne_datum if p['gruppe'] == 'offen']" in ANSICHT4
+       and 'vorschlaege_fuer(t[\'termine\'], offen)' in ANSICHT4)
+pruefe('and only on an occasion day that has no post yet',
+       "if (t['termine'] and not t['posts'])" in ANSICHT4)
+
+HOLEN2 = herausschneiden('_posts_des_jahres')
+pruefe('a published post cannot be moved',
+       "p['verschiebbar'] = not p['veroeffentlicht']" in HOLEN2)
+pruefe('a post Buffer holds is marked as such',
+       "p['bei_buffer'] = p['zustand'] == 'sched'" in HOLEN2)
+
+API2 = herausschneiden('kalender_api')
+SETZEN = API2[API2.index("if aktion == 'set_post_date':"):]
+SETZEN = SETZEN[:SETZEN.index('\n    if aktion', 10)]
+pruefe('set_post_date changes planned_date and nothing else',
+       re.findall(r'UPDATE planner_posts SET ([^\n]*?) WHERE', SETZEN) == ['planned_date=%s'],
+       re.findall(r'UPDATE planner_posts SET ([^\n]*?) WHERE', SETZEN))
+pruefe('it refuses a post that has gone out',
+       'ist_veroeffentlicht(' in SETZEN and SETZEN.index('ist_veroeffentlicht(') < SETZEN.index('UPDATE'))
+pruefe('and asks Buffer first, the same way the page does',
+       'buffer_posts_posted' in SETZEN and 'wartet = True' in SETZEN)
+pruefe('an OJ post is moved by administrators only',
+       'ist_oj and not request.user.is_superuser' in SETZEN
+       and SETZEN.index('is_superuser') < SETZEN.index('UPDATE'))
+pruefe('a date that is not one is turned away',
+       'except (TypeError, ValueError)' in SETZEN and 'status=400' in SETZEN)
+pruefe('nothing is ever sent to Buffer from here',
+       'buffer_post' not in SETZEN.replace('buffer_posts_posted', '') and 'requests.' not in SETZEN)
+
+pruefe('the date field is offered only where the post may move',
+       '{% if p.verschiebbar %}<input type="date" class="kal-verschieben"' in VORLAGE)
+pruefe('a Buffer post whose plan moved says how to re-schedule it',
+       '{% if p.abweichend and p.bei_buffer %}' in VORLAGE and 're-schedule</a>' in VORLAGE)
+pruefe('the suggestions are on the page',
+       '{% for v in t.vorschlaege %}' in VORLAGE and 'class="kal-vorschlag"' in VORLAGE)
+pruefe('and the handlers sit on the document, so both calendars have them',
+       "document.addEventListener('change'" in VORLAGE
+       and "document.addEventListener('click'" in VORLAGE
+       and VORLAGE.index("document.addEventListener('change'") < VORLAGE.index('if (regelnKoerper) {'))
+
 print('\n%d ok, %d failed' % (gut, schlecht))
 sys.exit(1 if schlecht else 0)

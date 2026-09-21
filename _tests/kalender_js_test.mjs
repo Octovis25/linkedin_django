@@ -48,9 +48,12 @@ function element(id) {
   };
 }
 
-function laufen(mitListe) {
+function laufen(mitListe, fetchErgebnis) {
   const gefragt = [];
+  const gesendet = [];
+  const lauscher = {};
   const document = {
+    addEventListener(art, fn) { (lauscher[art] = lauscher[art] || []).push(fn); },
     getElementById(id) {
       gefragt.push(id);
       if (!mitListe && NUR_IM_PLANNER.has(id)) return null;
@@ -60,11 +63,31 @@ function laufen(mitListe) {
     querySelector: () => null,
     cookie: '',
   };
-  const window = { location: { href: '' } };
-  const fetch = () => Promise.resolve({ json: () => Promise.resolve({ termine: [] }) });
-  new Function('document', 'window', 'fetch', quelle)(document, window, fetch);
+  const window = { location: { href: '' }, alert() {} };
+  const location = { reload() { window.location.href = 'RELOAD'; } };
+  const fetch = (url, opt) => {
+    if (opt && opt.body) gesendet.push(JSON.parse(opt.body));
+    return Promise.resolve({ json: () => Promise.resolve(fetchErgebnis || { termine: [] }) });
+  };
+  new Function('document', 'window', 'fetch', 'location', quelle)(document, window, fetch, location);
+  gefragt.lauscher = lauscher;
+  gefragt.gesendet = gesendet;
+  gefragt.window = window;
   return gefragt;
 }
+
+/* A stand-in for an element the user touched. */
+function ziel(klasse, dataset, value) {
+  return {
+    classList: { contains: k => k === klasse },
+    dataset, value,
+    closest: sel => (sel === '.' + klasse ? ziel(klasse, dataset, value) : null),
+  };
+}
+function ausloesen(lauf, art, target) {
+  for (const fn of lauf.lauscher[art] || []) fn({ target });
+}
+const warten = () => new Promise(r => setTimeout(r, 0));
 
 let gut = 0, schlecht = 0;
 function pruefe(name, fn) {
@@ -131,6 +154,7 @@ async function zeilenBauen() {
       return el;
     },
     querySelectorAll: () => [], querySelector: () => null, cookie: '',
+    addEventListener() {},
   };
   const window = { location: { href: '' }, alert() {} };
   const fetch = () => Promise.resolve({
@@ -173,6 +197,55 @@ pruefe('an entry taken out of the list cannot be edited', () => {
   const aus = zeilen.slice(zeilen.lastIndexOf('<tr'));
   if (!aus.includes('disabled')) throw new Error('its fields are still live');
   return 'its fields are disabled';
+});
+
+console.log('\n=== Moving a post from the calendar ===');
+// Wired on the document, so the same two handlers must serve both calendars.
+async function pruefeAsync(name, fn) {
+  try { const e = await fn(); gut++; console.log('  ok   ' + name + (e ? '  (' + e + ')' : '')); }
+  catch (fehler) { schlecht++; console.log('  FAIL ' + name + ': ' + fehler.message); }
+}
+for (const mitListe of [true, false]) {
+  const welcher = mitListe ? 'planner calendar' : 'OJ calendar';
+  await pruefeAsync('a new date in a row sends set_post_date (' + welcher + ')', async () => {
+    const lauf = laufen(mitListe, { ok: true });
+    ausloesen(lauf, 'change', ziel('kal-verschieben', { id: '119' }, '2026-09-29'));
+    await warten(); await warten();
+    const s = lauf.gesendet.find(d => d.action === 'set_post_date');
+    if (!s) throw new Error('nothing was sent');
+    if (s.id !== 119 || s.datum !== '2026-09-29') throw new Error(JSON.stringify(s));
+    const soll = '/planner/kalender/2026/?m=9';
+    if (lauf.window.location.href !== soll) throw new Error('went to ' + lauf.window.location.href);
+    return 'then opens ' + soll;
+  });
+}
+await pruefeAsync('a suggestion click places the post on its day', async () => {
+  const lauf = laufen(true, { ok: true });
+  ausloesen(lauf, 'click', ziel('kal-vorschlag', { id: '119', datum: '2027-01-04' }));
+  await warten(); await warten();
+  const s = lauf.gesendet.find(d => d.action === 'set_post_date');
+  if (!s || s.id !== 119 || s.datum !== '2027-01-04') throw new Error(JSON.stringify(s));
+  // Into another year: the page must follow it there, not stay in 2026.
+  if (lauf.window.location.href !== '/planner/kalender/2027/?m=1') throw new Error(lauf.window.location.href);
+  return 'follows it into 2027';
+});
+await pruefeAsync('a cleared date field sends nothing', async () => {
+  const lauf = laufen(true, { ok: true });
+  ausloesen(lauf, 'change', ziel('kal-verschieben', { id: '119' }, ''));
+  await warten();
+  if (lauf.gesendet.some(d => d.action === 'set_post_date')) throw new Error('sent an empty date');
+});
+await pruefeAsync('the list of recurring dates is not mistaken for a post', async () => {
+  const lauf = laufen(true, { ok: true });
+  ausloesen(lauf, 'change', ziel('verschieben', { id: '7' }, '2026-10-01'));
+  await warten();
+  if (lauf.gesendet.some(d => d.action === 'set_post_date')) throw new Error('moved post #7 instead of the date');
+});
+await pruefeAsync('a refusal from the server reloads instead of jumping', async () => {
+  const lauf = laufen(true, { error: 'This post has gone out' });
+  ausloesen(lauf, 'change', ziel('kal-verschieben', { id: '53' }, '2026-09-24'));
+  await warten(); await warten();
+  if (lauf.window.location.href !== 'RELOAD') throw new Error(lauf.window.location.href);
 });
 
 console.log('\n' + gut + ' ok, ' + schlecht + ' failed');

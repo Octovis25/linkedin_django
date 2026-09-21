@@ -447,6 +447,14 @@ def _posts_des_jahres(jahr, nur_oj=False):
         p['zustand_text'] = {'done': 'Published', 'sched': 'Scheduled'}.get(
             p['zustand'], p['status'] or 'Planned')
         p['kalendertag'] = kalendertag_fuer(p, gesendet.get(p['id']))
+        # Moving from the calendar changes the PLAN. A post that has gone out
+        # has no plan left to change. One Buffer is holding keeps its send
+        # time there - our code can create and delete at Buffer, not move -
+        # so the row says so and offers the way to re-schedule it.
+        p['verschiebbar'] = not p['veroeffentlicht']
+        p['bei_buffer'] = p['zustand'] == 'sched'
+        tag_fuer_feld = p['planned_date'] or p['kalendertag']
+        p['plan_iso'] = tag_fuer_feld.isoformat() if tag_fuer_feld else ''
         p['abweichend'] = bool(p['planned_date'] and p['kalendertag']
                                and p['kalendertag'] != p['planned_date'])
 
@@ -510,6 +518,35 @@ def posts_ohne_datum(grenze=200, nur_oj=False):
         raus.append(eintrag)
         if len(raus) >= grenze:
             break
+    return raus
+
+
+def _schluessel(text):
+    """Lowercase, apostrophes out, everything else that is not a letter or a
+    digit becomes one space - so "World Heart Day – 29 September" and
+    "World Heart Day" meet, and "Mother's Day" meets "Mothers Day"."""
+    import re as _re
+    t = (text or '').lower().replace("'", '').replace('\u2019', '')
+    return ' ' + ' '.join(_re.findall(r'[0-9a-zäöüß]+', t)) + ' '
+
+
+def vorschlaege_fuer(termine, kandidaten):
+    """Dateless posts that name one of this day's occasions in their title.
+
+    Only posts without any date are offered - a post that is already planned
+    somewhere is never pulled off its day by a suggestion. And only whole
+    words match: "Labour Day" must not claim a post about "Labour Daycare".
+    """
+    namen = [_schluessel(t.get('name')) for t in termine]
+    namen = [n for n in namen if len(n.strip()) >= 4]
+    raus, gesehen = [], set()
+    for post in kandidaten:
+        titel = _schluessel(post.get('title'))
+        if post.get('id') in gesehen:
+            continue
+        if any(n in titel for n in namen):
+            raus.append(post)
+            gesehen.add(post.get('id'))
     return raus
 
 
@@ -605,6 +642,10 @@ def kalender_view(request, jahr=None, nur_oj=False):
     # the OJ side can never quietly link back into the other half.
     basis = '/planner/kalender/oj/' if nur_oj else '/planner/kalender/'
     ohne_datum = posts_ohne_datum(nur_oj=nur_oj)
+    offen = [p for p in ohne_datum if p['gruppe'] == 'offen']
+    for t in tage:
+        t['vorschlaege'] = (vorschlaege_fuer(t['termine'], offen)
+                            if (t['termine'] and not t['posts']) else [])
 
     return render(request, 'planner/kalender.html', {
         'tab': 'kalender',
@@ -779,6 +820,48 @@ def kalender_api(request):
                              ON DUPLICATE KEY UPDATE new_name = VALUES(new_name)""",
                           [rid, jahr, neuer_name])
             return JsonResponse({'ok': True})
+
+    if aktion == 'set_post_date':
+        # Moving a post from the calendar - or placing a dateless one there.
+        # Only planned_date changes. What Buffer holds stays as it is.
+        try:
+            pid = int(daten.get('id'))
+            neuer_tag = date(*[int(x) for x in (daten.get('datum') or '').split('-')])
+        except (TypeError, ValueError):
+            return JsonResponse({'error': 'Which post, and which day?'}, status=400)
+        with connection.cursor() as c:
+            c.execute("""SELECT COALESCE(status,''), COALESCE(linkedin_posted,0),
+                                COALESCE(is_oj,0)
+                         FROM planner_posts WHERE id=%s""", [pid])
+            zeile = c.fetchone()
+            if not zeile:
+                return JsonResponse({'error': 'No such post'}, status=404)
+            status, veroeffentlicht_flag, ist_oj = zeile
+            # An OJ post is moved from the OJ calendar only, and that one is
+            # for administrators - the same rule as for looking at it.
+            if ist_oj and not request.user.is_superuser:
+                return JsonResponse({'error': 'No such post'}, status=404)
+            # Read the same way the page reads it: any row Buffer has sent
+            # means it went out, any row still unsent means Buffer holds it.
+            gesendet_iso, wartet = '', False
+            try:
+                c.execute("""SELECT COALESCE(sent_at,'')
+                             FROM buffer_posts_posted WHERE planner_post_id=%s""", [pid])
+                for (stempel,) in c.fetchall():
+                    if (stempel or '').strip():
+                        gesendet_iso = gesendet_iso or stempel
+                    else:
+                        wartet = True
+            except Exception:
+                pass
+            raus = ist_veroeffentlicht(
+                {'status': status, 'linkedin_posted': veroeffentlicht_flag},
+                _tag_aus_iso(gesendet_iso), wartet)
+            if raus:
+                return JsonResponse({'error': 'This post has gone out - there is no plan left to move'},
+                                    status=400)
+            c.execute('UPDATE planner_posts SET planned_date=%s WHERE id=%s', [neuer_tag, pid])
+        return JsonResponse({'ok': True, 'bei_buffer': wartet})
 
     if aktion in ('hide_year', 'show_year'):
         # This is the whole of option C: one row per deviation, per year.

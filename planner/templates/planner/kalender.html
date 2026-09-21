@@ -70,6 +70,11 @@
   .we .kal-datum b { color:#6B7876; }
 
   .kal-anlass, .kal-post { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0; }
+  /* The post cell is a row of its own: the title gives way, the controls do
+     not - otherwise a long title would push the date field out of sight. */
+  .kal-post { display:flex; align-items:center; }
+  .kal-post > a { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0; }
+  .kal-post > span, .kal-post > input, .kal-post > button { flex:0 0 auto; }
   .kal-anlass { color:#F56E28; font-weight:600; }
   .kal-anlass .punkt { display:inline-block; width:5px; height:5px; border-radius:1px;
                        background:#F56E28; margin-right:5px; vertical-align:middle; }
@@ -83,6 +88,25 @@
   .kal-neu { visibility:hidden; font-size:11px; color:var(--octo-petrol); cursor:pointer;
              border:0; background:none; padding:0 4px; text-decoration:none; }
   .kal-zeile:hover .kal-neu { visibility:visible; }
+
+  /* Moving a post: the plan's date, right in the row. Out of the way until
+     the row is pointed at or the field has focus - on a touch screen there is
+     no pointing, so there it simply stays. */
+  .kal-verschieben { visibility:hidden; margin-left:8px; font:inherit; font-size:11px;
+                     padding:0 3px; border:1px solid #ccc; border-radius:4px;
+                     color:#4A5856; background:#fff; }
+  .kal-zeile:hover .kal-verschieben, .kal-verschieben:focus { visibility:visible; }
+  @media (hover:none) { .kal-verschieben { visibility:visible; } }
+  /* The re-schedule note is an instruction, so it keeps its full length -
+     the title is what gives way. */
+  .kal-post > a.abw { flex:0 0 auto; overflow:visible; text-decoration:underline;
+                      text-underline-offset:2px; font-weight:600; }
+  .kal-vorschlag { margin-left:8px; font:inherit; font-size:11px; cursor:pointer;
+                   color:var(--octo-petrol); background:#EEF6F5; border:1px dashed #7FBFC4;
+                   border-radius:99px; padding:0 8px; max-width:28ch; overflow:hidden;
+                   text-overflow:ellipsis; white-space:nowrap; }
+  .kal-vorschlag:hover { background:#DDEFEE; }
+  .kal-ohne .kal-verschieben { visibility:visible; }
 
   .kal-pille { font-size:10px; font-weight:700; padding:1px 7px; border-radius:99px;
                white-space:nowrap; display:inline-block; }
@@ -255,7 +279,9 @@
               <span class="nr">#{{ p.id }}</span>
               <a href="/planner/?edit={{ p.id }}&amp;back={{ basis }}{{ jahr }}/">{{ p.title }}</a>
               {% if p.topic_name %}<span class="thema" style="background:{{ p.bg }};color:{{ p.fg }}">{{ p.topic_name }}</span>{% endif %}
-              {% if p.abweichend %}<span class="abw" title="The plan says {{ p.planned_date|date:"d.m.Y" }}. This row is the day it really goes out.">plan {{ p.planned_date|date:"d.m." }}</span>{% endif %}
+              {% if p.abweichend and p.bei_buffer %}<a class="abw" href="/planner/?edit={{ p.id }}&amp;back={{ basis }}{{ jahr }}/" title="Buffer sends it on {{ p.kalendertag|date:"d.m." }}, the plan now says {{ p.planned_date|date:"d.m.Y" }}. Buffer's time cannot be moved from here - open the post and schedule it again.">plan {{ p.planned_date|date:"d.m." }} &rarr; re-schedule</a>{% elif p.abweichend %}<span class="abw" title="The plan says {{ p.planned_date|date:"d.m.Y" }}. This row is the day it really goes out.">plan {{ p.planned_date|date:"d.m." }}</span>{% endif %}
+              {% if p.verschiebbar %}<input type="date" class="kal-verschieben" data-id="{{ p.id }}" value="{{ p.plan_iso }}" aria-label="Move the plan for #{{ p.id }}"
+                     title="{% if p.bei_buffer %}Moves the plan only. Buffer keeps its send time until the post is scheduled again.{% else %}Move this post to another day.{% endif %}">{% endif %}
             </span>
             <span><span class="kal-pille p-{{ p.zustand }}">{{ p.zustand_text }}</span></span>
             <span class="kal-zeit" title="{{ p.send_time }} ({{ p.send_time_source }})">
@@ -271,6 +297,8 @@
               {% if t.anlass_text %}<span class="punkt"></span>{{ t.anlass_text }}{% endif %}</span>
             <span class="kal-post">
               {% if t.termine %}<span class="nix">nothing planned</span>{% endif %}
+              {% for v in t.vorschlaege %}<button type="button" class="kal-vorschlag" data-id="{{ v.id }}" data-datum="{{ t.iso }}"
+                      title="#{{ v.id }} {{ v.title }} has no date yet. Click to plan it for this day.">&#8627; #{{ v.id }} {{ v.title }}</button>{% endfor %}
               <a class="kal-neu" href="/planner/?new=1&amp;datum={{ t.iso }}">+ post</a>
             </span>
             <span>{% if t.zustand == 'open' %}<span class="kal-pille p-open">Open</span>{% endif %}</span>
@@ -315,7 +343,8 @@
     <details>
       <summary>{{ ohne_datum_offen|length }} more have no date yet &ndash; drafts and ideas</summary>
       <p>Nothing is wrong with these: a post without a date is a post nobody has placed yet.
-         Give one a date and it appears in the calendar on that day.</p>
+         Give one a date and it appears in the calendar on that day &ndash; right here, with the
+         field at the end of its line.</p>
       <ul>
         {% for p in ohne_datum_offen %}
         <li>
@@ -323,6 +352,7 @@
           <a href="/planner/?edit={{ p.id }}&amp;back={{ basis }}{{ jahr }}/">{{ p.title }}</a>
           {% if p.topic_name %}<span class="thema" style="background:{{ p.bg }};color:{{ p.fg }}">{{ p.topic_name }}</span>{% endif %}
           <span class="wann">{{ p.status }}{% if p.created_at %} &middot; written {{ p.created_at|date:"d.m.Y" }}{% endif %}</span>
+          <input type="date" class="kal-verschieben" data-id="{{ p.id }}" value="" aria-label="Plan #{{ p.id }} for a day" title="Give it a day - it then appears in the calendar there.">
         </li>
         {% endfor %}
       </ul>
@@ -439,6 +469,30 @@
       body: JSON.stringify(daten)
     }).then(function (a) { return a.json(); });
   }
+
+  /* ---------- moving a post ----------
+     Wired on the document, not on the rows: the same handlers serve both
+     calendars and every row, including the list of posts without a date.
+     Only the plan changes; afterwards the page opens on the month the post
+     went to, so it can be seen arriving there. */
+  function planSetzen(id, datum) {
+    if (!id || !/^\d{4}-\d{2}-\d{2}$/.test(datum || '')) { return; }
+    sende({ action: 'set_post_date', id: id, datum: datum }).then(function (a) {
+      if (a.error) { window.alert(a.error); location.reload(); return; }
+      var teile = datum.split('-');
+      window.location.href = BASIS + teile[0] + '/?m=' + (+teile[1]);
+    });
+  }
+  document.addEventListener('change', function (e) {
+    var el = e.target;
+    if (el && el.classList && el.classList.contains('kal-verschieben')) {
+      planSetzen(+el.dataset.id, el.value);
+    }
+  });
+  document.addEventListener('click', function (e) {
+    var knopf = e.target && e.target.closest ? e.target.closest('.kal-vorschlag') : null;
+    if (knopf) { planSetzen(+knopf.dataset.id, knopf.dataset.datum); }
+  });
 
   /* ---------- month and state filter ---------- */
   var monat = 0, zustand = 'alle';
