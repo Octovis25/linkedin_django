@@ -440,12 +440,18 @@ for auf, zu in (('if', 'endif'), ('for', 'endfor'), ('block', 'endblock')):
 # 5. The page talks to the API by name. A typo here is silent: the request
 #    goes out, comes back with an error nobody shows, and the button does
 #    nothing. This is the same trap the studio config had with its url keys.
+# Read EVERY name out of both sides, however it is written. The first
+# version of this only understood a two-element tuple, so a third action
+# slipped past it - the check failed for the right reason by accident and
+# would have passed for the wrong one just as easily.
 AKTIONEN = set(re.findall(r"aktion == '([a-z_]+)'", SRC))
-AKTIONEN |= set(re.findall(r"aktion in \('([a-z_]+)', '([a-z_]+)'\)", SRC)[0]
-                if re.findall(r"aktion in \('([a-z_]+)', '([a-z_]+)'\)", SRC) else [])
-gerufen = set(re.findall(r"action: '([a-z_]+)'", VORLAGE))
-gerufen |= set(re.findall(r"\? '([a-z_]+)' : '([a-z_]+)'", VORLAGE)[0]
-               if re.findall(r"\? '([a-z_]+)' : '([a-z_]+)'", VORLAGE) else [])
+for gruppe in re.findall(r"aktion in \(([^)]*)\)", SRC):
+    AKTIONEN |= set(re.findall(r"'([a-z_]+)'", gruppe))
+# The page writes them as `action: 'x'` or `action: <condition> ? 'a' : 'b'`,
+# so take the rest of the line and pull every name out of it.
+gerufen = set()
+for zeile in re.findall(r"action:([^,\n]*)", VORLAGE):
+    gerufen |= set(re.findall(r"'([a-z_]+)'", zeile))
 unbekannt = sorted(gerufen - AKTIONEN)
 pruefe('every action the page sends is one the API answers', not unbekannt,
        unbekannt)
@@ -533,6 +539,39 @@ pruefe('and the two known exceptions are still the only ones',
            and 'planner_posts' in k.value and re.search(r'\bSELECT\b', k.value, re.I)
            and 'is_oj' not in k.value
            and not re.search(r'WHERE\s+id\s*=\s*%s', k.value, re.I)))
+
+print('\n=== A single year can be bent, and only a single year ===')
+# This is the half of option C that was designed in from the start and had no
+# controls: move a date or rename it in ONE year, and every other year keeps
+# the rule. The logic sits in kalender_api(), which needs a database, so these
+# are static checks on the source - narrow enough that removing the rule they
+# describe fails them.
+API = herausschneiden('kalender_api')
+pruefe('the API knows the three new actions',
+       "aktion in ('move_year', 'rename_year', 'reset_year')" in API)
+# A date outside the year would vanish off the very page it was set on.
+pruefe('a move out of the year is refused',
+       'neuer_tag.year != jahr' in API and 'can only be moved within' in API)
+# An exception saying what the rule already says is not an exception. Storing
+# it would fill the table with rows that do nothing - and a nearly empty table
+# is the whole argument for this design over copying the dates in.
+pruefe('a move back onto the rule deletes the exception instead of storing one',
+       'if neuer_tag == datum_fuer(regel, jahr):' in API
+       and API.index('if neuer_tag == datum_fuer(regel, jahr):')
+           < API.index('ON DUPLICATE KEY UPDATE new_date'))
+pruefe('and the same for a rename back to the list name',
+       "if neuer_name == regel['name']:" in API
+       and API.index("if neuer_name == regel['name']:")
+           < API.index('ON DUPLICATE KEY UPDATE new_name'))
+pruefe('an empty name is refused rather than stored',
+       'if not neuer_name:' in API)
+pruefe('reset clears the move and the rename, but not the hiding',
+       "kind IN ('move', 'rename')" in API)
+# hide has its own checkbox; clearing it here would undo an unrelated choice.
+pruefe('hiding is still its own action', "aktion in ('hide_year', 'show_year')" in API)
+pruefe('the list tells the page both the rule and this year',
+       'berechnet=' in API and 'name_im_jahr=' in API
+       and 'verschoben=' in API and 'umbenannt=' in API)
 
 print('\n=== Posts with no date are told apart ===')
 # Thirty drafts and three lost records in one list means the three are never

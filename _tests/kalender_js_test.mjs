@@ -100,5 +100,80 @@ pruefe('and the OJ run asks for them too, and copes with null', () => {
   return beruehrt.length + ' asked for, all null';
 });
 
+console.log('\n=== The rows it writes into the list ===');
+// The rows are built by joining strings, which is exactly where a quote in a
+// name breaks an attribute and nobody notices until a name has one.
+const REGELN = [
+  { id: 1, name: 'World Cancer Day', kind: 'awareness', rule_text: 'fixed', lead_days: 21,
+    series: 'Oncology', active: 1, datum: '2026-02-04', berechnet: '2026-02-04',
+    name_im_jahr: 'World Cancer Day', verschoben: false, umbenannt: false,
+    art_text: 'Awareness', dieses_jahr_versteckt: false },
+  { id: 2, name: 'Whit Monday', kind: 'holiday', rule_text: 'moves', lead_days: 7,
+    series: '', active: 1, datum: '2026-05-26', berechnet: '2026-05-25',
+    name_im_jahr: 'Whit Monday (moved)', verschoben: true, umbenannt: true,
+    art_text: 'Holiday', dieses_jahr_versteckt: false },
+  { id: 3, name: 'He said "go"', kind: 'own', rule_text: 'fixed', lead_days: 14,
+    series: '', active: 0, datum: '2026-07-01', berechnet: '2026-07-01',
+    name_im_jahr: 'He said "go"', verschoben: false, umbenannt: false,
+    art_text: 'Ours', dieses_jahr_versteckt: false },
+];
+
+async function zeilenBauen() {
+  let geschrieben = '';
+  const document = {
+    getElementById(id) {
+      const el = element(id);
+      if (id === 'kal-regeln') {
+        Object.defineProperty(el, 'innerHTML', {
+          get: () => geschrieben, set: (v) => { geschrieben = v; },
+        });
+      }
+      return el;
+    },
+    querySelectorAll: () => [], querySelector: () => null, cookie: '',
+  };
+  const window = { location: { href: '' }, alert() {} };
+  const fetch = () => Promise.resolve({
+    json: () => Promise.resolve({ jahr: 2026, termine: REGELN.map(r => ({ ...r })) }),
+  });
+  new Function('document', 'window', 'fetch', quelle)(document, window, fetch);
+  await new Promise(r => setTimeout(r, 0));   // let the fetch settle
+  return geschrieben;
+}
+
+const zeilen = await zeilenBauen();
+
+pruefe('the list really was written', () => {
+  if (!zeilen || zeilen.length < 100) throw new Error('nothing was written into the list');
+  return zeilen.length + ' characters';
+});
+pruefe('each row carries a date for this year',
+       () => (zeilen.match(/type="date"/g) || []).length === 3
+             ? '3 date fields'
+             : (() => { throw new Error('found ' + (zeilen.match(/type="date"/g) || []).length); })());
+pruefe('the moved one shows the day it was moved TO', () => {
+  if (!zeilen.includes('value="2026-05-26"')) throw new Error('the moved date is not in the row');
+  return '26.05.';
+});
+pruefe('and offers a way back to the rule', () => {
+  const zurueck = (zeilen.match(/class="zurueck"/g) || []).length;
+  if (zurueck !== 1) throw new Error(zurueck + ' reset buttons, expected 1');
+  return 'on the changed row only';
+});
+pruefe('the rename shows this year\'s name, not the list\'s', () => {
+  if (!zeilen.includes('value="Whit Monday (moved)"')) throw new Error('missing');
+  return 'ok';
+});
+pruefe('a quote in a name cannot break out of the attribute', () => {
+  if (zeilen.includes('value="He said "go""')) throw new Error('the attribute is broken open');
+  if (!zeilen.includes('&quot;go&quot;')) throw new Error('the quote was not escaped at all');
+  return 'escaped';
+});
+pruefe('an entry taken out of the list cannot be edited', () => {
+  const aus = zeilen.slice(zeilen.lastIndexOf('<tr'));
+  if (!aus.includes('disabled')) throw new Error('its fields are still live');
+  return 'its fields are disabled';
+});
+
 console.log('\n' + gut + ' ok, ' + schlecht + ' failed');
 process.exit(schlecht ? 1 : 0);

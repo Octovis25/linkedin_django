@@ -152,6 +152,18 @@
   .a-awareness { background:#FCE9DC; color:#F56E28; }
   .a-own { background:#E0F0F1; color:#008591; }
   .kal-liste .raus { border:0; background:none; cursor:pointer; font-size:13px; padding:2px 5px; }
+  .kal-liste input[type=date], .kal-liste input[type=text] {
+    font:inherit; font-size:12.5px; padding:2px 5px; border:1px solid transparent;
+    border-radius:3px; background:transparent; color:inherit; width:100%; min-width:120px; }
+  .kal-liste input[type=date] { min-width:132px; font-variant-numeric:tabular-nums; }
+  .kal-liste input[type=date]:hover, .kal-liste input[type=text]:hover { border-color:#ddd; }
+  .kal-liste input[type=date]:focus, .kal-liste input[type=text]:focus {
+    border-color:var(--octo-petrol); background:#fff; outline:none; }
+  .kal-liste input:disabled { color:#aaa; }
+  .kal-liste tr.geaendert td.wann { background:#FAEEDA; }
+  .kal-liste .zurueck { border:0; background:none; cursor:pointer; font-size:13px;
+                        color:#8A5A12; padding:0 2px; line-height:1; }
+  .kal-liste .zurueck:hover { color:var(--octo-orange); }
   .kal-liste .raus:hover { color:#c0392b; }
   .kal-scroll { overflow-x:auto; }
   .kal-liste table { min-width:640px; }
@@ -322,15 +334,16 @@
   <!-- ================= the list you maintain ================= -->
   <section class="kal-liste" id="kal-liste">
     <h3>Recurring dates
-      <small>One list for every year. Take one out and it is gone from all years &ndash;
-        to skip it in {{ jahr }} only, use the year box.</small>
+      <small>One list for every year. Take one out and it is gone from all years.
+        The first three columns change {{ jahr }} only: untick it, move it, rename it &ndash;
+        every other year keeps the rule.</small>
     </h3>
 
     <div class="kal-scroll">
       <table>
         <thead>
-          <tr><th>In {{ jahr }}</th><th>Name</th><th>Kind</th><th>Rule</th>
-              <th>Draft ahead</th><th>Series</th><th>In the list</th><th></th></tr>
+          <tr><th>In {{ jahr }}</th><th>Date in {{ jahr }}</th><th>Name</th><th>Kind</th>
+              <th>Rule</th><th>Draft ahead</th><th>Series</th><th>In the list</th><th></th></tr>
         </thead>
         <tbody id="kal-regeln">
           <tr><td colspan="8" style="color:#6B7876">Loading&hellip;</td></tr>
@@ -505,13 +518,26 @@
         }
         d.termine.sort(function (a, b) { return (a.datum || '9') < (b.datum || '9') ? -1 : 1; });
         koerper.innerHTML = d.termine.map(function (t) {
-          var wann = t.datum ? t.datum.slice(8, 10) + '.' + t.datum.slice(5, 7) + '.' : '—';
           var imJahr = t.active && !t.dieses_jahr_versteckt;
-          return '<tr class="' + (t.active ? '' : 'aus') + '">' +
+          var abweichend = t.verschoben || t.umbenannt;
+          return '<tr class="' + (t.active ? '' : 'aus') +
+              (abweichend ? ' geaendert' : '') + '">' +
             '<td><input type="checkbox" class="dj" data-id=' + t.id +
               (imJahr ? ' checked' : '') + (t.active ? '' : ' disabled') +
               ' title="Show this one in ' + JAHR + '"></td>' +
-            '<td>' + schuetzen(t.name) + '</td>' +
+            '<td class="wann"><input type="date" class="verschieben" data-id=' + t.id +
+              ' value="' + schuetzen(t.datum) + '"' + (t.active ? '' : ' disabled') +
+              ' title="' + (t.verschoben
+                            ? 'Moved in ' + JAHR + '. The rule says ' + t.berechnet
+                            : 'The day this falls on in ' + JAHR) + '">' +
+              (abweichend ? '<button class="zurueck" data-id=' + t.id +
+                            ' title="Back to what the rule says">\u21ba</button>' : '') +
+              '</td>' +
+            '<td><input type="text" class="umbenennen" data-id=' + t.id +
+              ' value="' + schuetzen(t.name_im_jahr) + '"' + (t.active ? '' : ' disabled') +
+              ' title="' + (t.umbenannt
+                            ? 'Renamed in ' + JAHR + '. The list says: ' + schuetzen(t.name)
+                            : 'The name, in ' + JAHR + ' only') + '"></td>' +
             '<td><span class="kal-art a-' + t.kind + '">' + schuetzen(t.art_text) + '</span></td>' +
             '<td class="regel">' + schuetzen(t.regel_text) + '</td>' +
             '<td class="regel">' + t.lead_days + ' d</td>' +
@@ -520,7 +546,7 @@
               (t.active ? ' checked' : '') + ' title="In the list at all"></td>' +
             '<td><button class="raus" data-id=' + t.id +
               ' title="Delete for good">✕</button></td>' +
-            '<td class="wann" hidden>' + wann + '</td></tr>';
+            '</tr>';
         }).join('');
       });
   }
@@ -529,7 +555,22 @@
   if (regelnKoerper) {
   regelnKoerper.addEventListener('change', function (e) {
     var el = e.target;
-    if (el.classList.contains('inliste')) {
+    if (el.classList.contains('verschieben')) {
+      // A date typed by hand can be anything. The server decides: out of the
+      // year is refused, and a date that matches the rule deletes the
+      // exception instead of storing one that changes nothing.
+      sende({ action: 'move_year', id: +el.dataset.id, jahr: JAHR, datum: el.value })
+        .then(function (a) {
+          if (a.error) { window.alert(a.error); }
+          location.reload();
+        });
+    } else if (el.classList.contains('umbenennen')) {
+      sende({ action: 'rename_year', id: +el.dataset.id, jahr: JAHR, name: el.value })
+        .then(function (a) {
+          if (a.error) { window.alert(a.error); }
+          location.reload();
+        });
+    } else if (el.classList.contains('inliste')) {
       sende({ action: 'set_active', id: +el.dataset.id, active: el.checked })
         .then(function () { location.reload(); });
     } else if (el.classList.contains('dj')) {
@@ -540,6 +581,12 @@
   });
 
   regelnKoerper.addEventListener('click', function (e) {
+    var zurueck = e.target.closest('.zurueck');
+    if (zurueck) {
+      sende({ action: 'reset_year', id: +zurueck.dataset.id, jahr: JAHR })
+        .then(function () { location.reload(); });
+      return;
+    }
     var b = e.target.closest('.raus');
     if (!b) return;
     var zeile = b.closest('tr');

@@ -610,12 +610,24 @@ def kalender_api(request):
         ausnahmen = _ausnahmen_lesen(jahr)
         raus = []
         for regel in _regeln_lesen(nur_aktive=False):
-            tag = datum_fuer(regel, jahr)
+            eigene = ausnahmen.get(regel['id'], {})
+            berechnet = datum_fuer(regel, jahr)
+            # What the rule says, and what this one year has been told instead.
+            # Both go out, so the page can offer "back to the rule" without
+            # having to work the rule out a second time in JavaScript.
+            tag = (eigene['move'][0] if (eigene.get('move') and eigene['move'][0])
+                   else berechnet)
+            name = (eigene['rename'][1] if (eigene.get('rename') and eigene['rename'][1])
+                    else regel['name'])
             raus.append(dict(regel,
                              datum=tag.isoformat() if tag else '',
+                             berechnet=berechnet.isoformat() if berechnet else '',
+                             name_im_jahr=name,
+                             verschoben=bool(eigene.get('move')),
+                             umbenannt=bool(eigene.get('rename')),
                              regel_text=regel_text(regel),
                              art_text=ARTEN.get(regel['kind'], regel['kind']),
-                             dieses_jahr_versteckt='hide' in ausnahmen.get(regel['id'], {})))
+                             dieses_jahr_versteckt='hide' in eigene))
         return JsonResponse({'jahr': jahr, 'termine': raus})
 
     if request.method != 'POST':
@@ -678,6 +690,68 @@ def kalender_api(request):
                       [daten.get('id')])
             c.execute('DELETE FROM planner_recurring_dates WHERE id=%s', [daten.get('id')])
         return JsonResponse({'ok': True})
+
+    if aktion in ('move_year', 'rename_year', 'reset_year'):
+        try:
+            rid, jahr = int(daten.get('id')), int(daten.get('jahr'))
+        except (TypeError, ValueError):
+            return JsonResponse({'error': 'Which date, and which year?'}, status=400)
+
+        with connection.cursor() as c:
+            if aktion == 'reset_year':
+                c.execute("""DELETE FROM planner_date_exceptions
+                             WHERE recurring_id=%s AND year_no=%s
+                               AND kind IN ('move', 'rename')""", [rid, jahr])
+                return JsonResponse({'ok': True})
+
+            c.execute('SELECT %s FROM planner_recurring_dates WHERE id=%%s'
+                      % ', '.join(SPALTEN), [rid])
+            zeile = c.fetchone()
+            if not zeile:
+                return JsonResponse({'error': 'No such date'}, status=404)
+            regel = dict(zip(SPALTEN, zeile))
+
+            if aktion == 'move_year':
+                try:
+                    teile = [int(x) for x in (daten.get('datum') or '').split('-')]
+                    neuer_tag = date(*teile)
+                except (TypeError, ValueError):
+                    return JsonResponse({'error': 'That is not a date'}, status=400)
+                # Moving it out of the year would take it off the very page it
+                # was set on, and nothing would say where it went.
+                if neuer_tag.year != jahr:
+                    return JsonResponse(
+                        {'error': 'A date can only be moved within %d' % jahr}, status=400)
+                # An exception that says what the rule already says is not an
+                # exception. Storing it would fill the table with rows that do
+                # nothing - and the whole argument for this design is that the
+                # table stays nearly empty.
+                if neuer_tag == datum_fuer(regel, jahr):
+                    c.execute("""DELETE FROM planner_date_exceptions
+                                 WHERE recurring_id=%s AND year_no=%s AND kind='move'""",
+                              [rid, jahr])
+                else:
+                    c.execute("""INSERT INTO planner_date_exceptions
+                                 (recurring_id, year_no, kind, new_date)
+                                 VALUES (%s, %s, 'move', %s)
+                                 ON DUPLICATE KEY UPDATE new_date = VALUES(new_date)""",
+                              [rid, jahr, neuer_tag])
+                return JsonResponse({'ok': True})
+
+            neuer_name = (daten.get('name') or '').strip()[:160]
+            if not neuer_name:
+                return JsonResponse({'error': 'The date needs a name'}, status=400)
+            if neuer_name == regel['name']:
+                c.execute("""DELETE FROM planner_date_exceptions
+                             WHERE recurring_id=%s AND year_no=%s AND kind='rename'""",
+                          [rid, jahr])
+            else:
+                c.execute("""INSERT INTO planner_date_exceptions
+                             (recurring_id, year_no, kind, new_name)
+                             VALUES (%s, %s, 'rename', %s)
+                             ON DUPLICATE KEY UPDATE new_name = VALUES(new_name)""",
+                          [rid, jahr, neuer_name])
+            return JsonResponse({'ok': True})
 
     if aktion in ('hide_year', 'show_year'):
         # This is the whole of option C: one row per deviation, per year.
