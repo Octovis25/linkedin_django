@@ -1261,6 +1261,98 @@ def _verified_mp4_url(url, versuche=4, pause=4):
                     'sending it would have gone out with an empty video.' % (mp4, letzter))
 
 
+# ── The copy that goes to LinkedIn ──────────────────────────────────────────
+# Measured on post #53 (21.09.2026): the Studio's recording stores its colours
+# by the BT.601 rule and does not say so. A player that meets an untagged video
+# this size assumes the HD rule, BT.709, and shows the teal darker and bluer -
+# green drops from 133 to 119. Cloudinary's MP4 passed the same untagged values
+# on unchanged, so neither the recording nor Cloudinary darkens anything; the
+# missing label does.
+#
+# So the copy for LinkedIn is made here: colours rewritten to BT.709 and
+# labelled as such, scaled so the shorter side is at most 1080 (what LinkedIn
+# shows anyway), at most 60 frames a second. The file in Nextcloud keeps its
+# full size. ffmpeg comes from the imageio-ffmpeg package - Render has none.
+
+LINKEDIN_KURZE_SEITE = 1080
+
+
+def _video_farbnorm(ffmpeg_meldung):
+    """(matrix, range) a video says it uses, read from `ffmpeg -i` output.
+
+    matrix is 'bt709', 'bt601' or None when the file does not say - which is
+    exactly what a browser recording looks like ("yuv420p(tv)"). range is
+    'pc' for full-range video, otherwise 'tv'.
+    """
+    import re as _re
+    zeile = next((z for z in (ffmpeg_meldung or '').splitlines() if 'Video:' in z), '')
+    klammer = _re.search(r'yuv\w*\(([^)]*)\)', zeile)
+    if not klammer:
+        return None, 'tv'
+    angaben = klammer.group(1).lower()
+    bereich = 'pc' if _re.search(r'\bpc\b', angaben) else 'tv'
+    if 'bt709' in angaben:
+        return 'bt709', bereich
+    if any(n in angaben for n in ('bt470bg', 'smpte170m', 'bt601')):
+        return 'bt601', bereich
+    return None, bereich
+
+
+def _linkedin_mp4_befehl(ffmpeg, quelle, ziel, matrix, bereich='tv'):
+    """The ffmpeg call that makes the LinkedIn copy. Kept apart so it can be checked.
+
+    An untagged video is read as BT.601, because that is what our own recorder
+    writes - measured, not assumed. A video that names its rule is read by it.
+    """
+    ein = matrix or 'bt601'
+    kurz = LINKEDIN_KURZE_SEITE
+    skalieren = (
+        "scale="
+        "w='if(lte(iw,ih),min(iw,%d),-2)':"
+        "h='if(lte(iw,ih),-2,min(ih,%d))':"
+        "in_color_matrix=%s:out_color_matrix=bt709:in_range=%s:out_range=tv"
+    ) % (kurz, kurz, ein, bereich)
+    return [ffmpeg, '-y', '-v', 'error', '-i', quelle,
+            '-vf', skalieren, '-fpsmax', '60',
+            '-c:v', 'libx264', '-crf', '20', '-preset', 'veryfast', '-pix_fmt', 'yuv420p',
+            '-colorspace', 'bt709', '-color_primaries', 'bt709',
+            '-color_trc', 'bt709', '-color_range', 'tv',
+            '-c:a', 'aac', '-movflags', '+faststart', ziel]
+
+
+def _als_linkedin_mp4(quelle):
+    """Make the LinkedIn copy. Returns its path, or None if it could not be made.
+
+    None is not an error for the post: the caller sends the original, as
+    before, and Cloudinary converts it - the colours come out the old way, but
+    the post goes out. A colour fix must never be the reason a post fails.
+    """
+    import subprocess as _sp
+    try:
+        import imageio_ffmpeg
+        ffmpeg = imageio_ffmpeg.get_ffmpeg_exe()
+    except Exception as fehler:
+        print('LinkedIn copy: no ffmpeg (%s) - sending the original' % fehler)
+        return None
+    ziel = quelle + '.linkedin.mp4'
+    try:
+        probe = _sp.run([ffmpeg, '-hide_banner', '-i', quelle],
+                        capture_output=True, text=True, timeout=60)
+        matrix, bereich = _video_farbnorm(probe.stderr)
+        lauf = _sp.run(_linkedin_mp4_befehl(ffmpeg, quelle, ziel, matrix, bereich),
+                       capture_output=True, text=True, timeout=600)
+        if lauf.returncode != 0 or not os.path.exists(ziel) or os.path.getsize(ziel) == 0:
+            print('LinkedIn copy failed - sending the original:', (lauf.stderr or '')[-400:])
+            return None
+        print('LinkedIn copy: %s -> %d KB (read as %s/%s, written as bt709)' % (
+            os.path.basename(quelle), os.path.getsize(ziel) // 1024,
+            matrix or 'untagged=bt601', bereich))
+        return ziel
+    except Exception as fehler:
+        print('LinkedIn copy failed - sending the original:', fehler)
+        return None
+
+
 def _upload_video_to_cloudinary(post_id):
     """
     Copy the post's video from Nextcloud to a local temp file, then upload it to
@@ -1280,6 +1372,13 @@ def _upload_video_to_cloudinary(post_id):
 
     # 1) Fetch the video from Nextcloud locally (existing logic, WebDAV with login).
     local_path = _prepare_temp_video(post_id)
+
+    # 1b) Send LinkedIn a copy with its colour rule written in, at LinkedIn's
+    # size (see _als_linkedin_mp4). An animated GIF keeps its own path below.
+    if not local_path.lower().endswith('.gif'):
+        kopie = _als_linkedin_mp4(local_path)
+        if kopie:
+            local_path = kopie
 
     # 2) Signierten Upload an Cloudinary vorbereiten.
     timestamp = str(int(_time.time()))
