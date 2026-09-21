@@ -64,24 +64,11 @@ export function renderPalette(container, onPick) {
     picker.click();
   };
   container.appendChild(add);
-
-  // Lighter teal shades made for video and GIF - they make up for the
-  // darkening on export. Kept as their own labelled group "🎬 Video".
-  const vlabel = document.createElement('span');
-  vlabel.textContent = '🎬 Video-Teal:';
-  vlabel.title = 'Lighter teal tones for video/GIF – compensate for the darkening on export.';
-  vlabel.style.cssText = 'flex-basis:100%;font-size:.66rem;color:#008591;margin:6px 0 2px';
-  container.appendChild(vlabel);
-  ['#0A97A3', '#12A7B4', '#1FB2C0'].forEach(col => {
-    const sw = document.createElement('div');
-    sw.className = 'swatch';
-    sw.style.background = col;
-    sw.style.outline = '2px dotted #12A7B4';
-    sw.style.outlineOffset = '1px';
-    sw.title = 'Video teal ' + col + ' – lighter, for video/GIF (compensates for the darkening)';
-    sw.onclick = () => onPick(col);
-    container.appendChild(sw);
-  });
+  // There used to be a group of lighter "Video-Teal" shades here, to make up
+  // for videos coming out darker. That darkening was a missing colour label,
+  // fixed on 21.09.2026 in the copy sent to LinkedIn (_als_linkedin_mp4 in
+  // planner/views.py). Videos now keep the brand teal, so the lighter shades
+  // would make them come out too light.
 }
 
 // ---- Setting the background ----------------------------------------------
