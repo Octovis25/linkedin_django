@@ -69,6 +69,11 @@ pruefe('the Studio recording names no rule', farbnorm(BROWSER) == (None, 'tv'), 
 pruefe('a phone video that names BT.709 is read by it', farbnorm(HANDY) == ('bt709', 'tv'),
        farbnorm(HANDY))
 pruefe('an older full-range BT.601 file too', farbnorm(ALT) == ('bt601', 'pc'), farbnorm(ALT))
+# Another Chrome build labels its recording "smpte170m" - also BT.601, and it
+# must be read as such, or the copy would be converted from the wrong rule.
+CHROME = '  Stream #0:0(eng): Video: vp9 (Profile 0), yuv420p(tv, smpte170m/unknown/unknown), 1350x1350'
+pruefe('a Chrome recording labelled smpte170m is BT.601', farbnorm(CHROME) == ('bt601', 'tv'),
+       farbnorm(CHROME))
 pruefe('no video line at all does not crash', farbnorm('') == (None, 'tv'))
 pruefe('an RGB stream is not mistaken for anything',
        farbnorm('  Stream #0:0: Video: png, rgb24(pc), 800x800') == (None, 'tv'))
