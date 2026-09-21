@@ -329,6 +329,27 @@ def gesendet_am_aus(zeilen):
     return raus
 
 
+def ist_veroeffentlicht(post, gesendet_am=None, wartet_bei_buffer=False):
+    """Did this post really go out?
+
+    linkedin_posted is a flag our own code sets - and our own code has set it
+    wrongly. The promotion to Posted marked #53 as published on 20.09., a day
+    before it was due; the status was put back by hand, the flag stayed. A
+    calendar that believed it showed a post still waiting in Buffer as
+    "Published", and the one scheduled post on the page could not be found.
+
+    Buffer's sent_at is the witness from outside. When Buffer has sent it, it
+    went out. When Buffer is still holding it, the flag is overruled. Only
+    where Buffer knows nothing - a post sent through LinkedIn or Make directly -
+    is the flag all there is.
+    """
+    if gesendet_am or post.get('status') == 'Posted':
+        return True
+    if wartet_bei_buffer:
+        return False
+    return bool(post.get('linkedin_posted'))
+
+
 def kalendertag_fuer(post, gesendet_am=None):
     """Which day a post belongs on. Three answers, in the order they are trusted:
 
@@ -366,6 +387,7 @@ def _posts_des_jahres(jahr, nur_oj=False):
     # long since been moved out of it.
     aus_buffer = set()
     gesendet = {}
+    wartend = set()
     with connection.cursor() as c:
         try:
             c.execute("""SELECT planner_post_id, COALESCE(due_at, ''), COALESCE(sent_at, '')
@@ -375,6 +397,9 @@ def _posts_des_jahres(jahr, nur_oj=False):
             zeilen = c.fetchall()
             aus_buffer = {r[0] for r in zeilen if r[0]}
             gesendet = gesendet_am_aus(zeilen)
+            # A Buffer row without a send date: Buffer has it and has not
+            # sent it. That settles "published?" whatever our own flag says.
+            wartend = {r[0] for r in zeilen if r[0] and not (r[2] or '').strip()}
         except Exception as fehler:
             print('calendar, dates from buffer:', fehler)
 
@@ -415,7 +440,9 @@ def _posts_des_jahres(jahr, nur_oj=False):
         # Worked out here rather than in the template: the same three words
         # drive the colour, the pill and the filter, and they should not be
         # spelled out three times in template logic.
-        p['zustand'] = ('done' if (p['linkedin_posted'] or p['status'] == 'Posted')
+        p['veroeffentlicht'] = ist_veroeffentlicht(
+            p, gesendet.get(p['id']), p['id'] in wartend)
+        p['zustand'] = ('done' if p['veroeffentlicht']
                         else 'sched' if p['verbindlich'] else 'plan')
         p['zustand_text'] = {'done': 'Published', 'sched': 'Scheduled'}.get(
             p['zustand'], p['status'] or 'Planned')
@@ -490,7 +517,7 @@ def _zustand(termine, posts):
     """How binding a day is. The posts decide; a bare occasion is an open slot."""
     if not posts:
         return 'open' if termine else 'none'
-    if all(p['linkedin_posted'] or p['status'] == 'Posted' for p in posts):
+    if all(p['veroeffentlicht'] for p in posts):
         return 'done'
     if any(p['verbindlich'] for p in posts):
         return 'sched'

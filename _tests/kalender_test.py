@@ -61,7 +61,8 @@ for name in ('WOCHENTAGE', 'MONATE', 'ORDINAL'):
     exec(compile(listen_holen(name), 'planner/kalender.py (cut out)', 'exec'), RAUM)
 for name in ('_ostern', '_letzter_tag', '_nter_wochentag', 'datum_fuer',
              'regel_text', '_zustand', '_tag_aus', '_tag_aus_iso',
-             'kalendertag_fuer', 'gesendet_am_aus', 'ohne_datum_gruppe'):
+             'kalendertag_fuer', 'gesendet_am_aus', 'ohne_datum_gruppe',
+             'ist_veroeffentlicht'):
     exec(compile(herausschneiden(name), 'planner/kalender.py (cut out)', 'exec'), RAUM)
 
 ostern = RAUM['_ostern']
@@ -75,6 +76,7 @@ kalendertag_fuer = RAUM['kalendertag_fuer']
 tag_aus_iso = RAUM['_tag_aus_iso']
 gesendet_am_aus = RAUM['gesendet_am_aus']
 ohne_datum_gruppe = RAUM['ohne_datum_gruppe']
+ist_veroeffentlicht = RAUM['ist_veroeffentlicht']
 
 # The seed list, straight out of the shipping file, so the starter dates are
 # checked as they really are.
@@ -318,9 +320,10 @@ pruefe('rubbish gives nothing instead of an exception', tag_aus_iso('soon') is N
 print('\n=== How binding a day is ===')
 # The colour on the page comes from this. "Scheduled" has to mean Buffer really
 # has the post - not that the status field happens to say so.
-def post(**kw):
+def post(wartet=False, gesendet=None, **kw):
     grund = {'linkedin_posted': 0, 'status': 'Draft', 'verbindlich': False}
     grund.update(kw)
+    grund['veroeffentlicht'] = ist_veroeffentlicht(grund, gesendet, wartet)
     return grund
 
 termin = [{'name': 'World Cancer Day'}]
@@ -347,6 +350,39 @@ import re
 with open(os.path.join(WURZEL, 'planner', 'templates', 'planner',
                        'kalender.html'), encoding='utf-8') as fh:
     VORLAGE = fh.read()
+
+print('\n=== Did it really go out? ===')
+# Post #53, exactly as the database had it on 20.09.: status Scheduled,
+# linkedin_posted=1 left over from the wrong archiving, still waiting in
+# Buffer. The calendar called it Published, and the one scheduled post on the
+# page could not be found.
+NR53 = {'status': 'Scheduled', 'linkedin_posted': 1}
+pruefe('#53: a post Buffer is still holding is NOT published, whatever the flag says',
+       ist_veroeffentlicht(NR53, None, True) is False)
+pruefe('and so it shows as scheduled, where it belongs',
+       zustand([], [post(status='Scheduled', linkedin_posted=1,
+                         verbindlich=True, wartet=True)]) == 'sched')
+pruefe('once Buffer has sent it, it is published - whatever the status says',
+       ist_veroeffentlicht({'status': 'Scheduled', 'linkedin_posted': 0},
+                           date(2026, 9, 21), False) is True)
+pruefe('status Posted counts on its own', ist_veroeffentlicht({'status': 'Posted'}) is True)
+# A post sent through LinkedIn or Make never had a Buffer row. There the flag
+# is the only evidence, and it must still count.
+pruefe('without a Buffer row, the flag is all there is - and it counts',
+       ist_veroeffentlicht({'status': 'Draft', 'linkedin_posted': 1}, None, False) is True)
+pruefe('a draft is not published', ist_veroeffentlicht({'status': 'Draft'}) is False)
+
+# The rule above is only worth anything if the page hands it what Buffer is
+# holding. That wiring sits in a function that needs a database - so this reads
+# the source, narrowly enough that dropping the argument fails it. Without this
+# check, the page could forget and every test above would still be green.
+HOLEN = herausschneiden('_posts_des_jahres')
+pruefe('the page works out which posts Buffer is still holding',
+       "wartend = {r[0] for r in zeilen if r[0] and not (r[2] or '').strip()}" in HOLEN)
+pruefe('and tells the rule about it for every post',
+       "ist_veroeffentlicht(" in HOLEN and "p['id'] in wartend)" in HOLEN)
+pruefe('and the day as a whole follows the posts, not the flag',
+       "if all(p['veroeffentlicht'] for p in posts):" in herausschneiden('_zustand'))
 
 print('\n=== The page and the code still fit together ===')
 
