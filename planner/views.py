@@ -829,23 +829,38 @@ def api_post(request):
     with connection.cursor() as c:
         if action == 'create':
             is_oj = 1 if data.get('is_oj') else 0
+            status = data.get('status', 'Draft')
+            # A new post is written with everything the dialog offers. Time and
+            # link used to be dropped here and only 'update' kept them, so a
+            # post created with a time had none. And in_pipeline decides
+            # whether Ready and Scheduled show it at all - created without it,
+            # a post picked those tabs and then was not in them.
+            in_pipeline = 0 if status == 'Draft' else 1
+            if 'in_pipeline' in data:
+                in_pipeline = data.get('in_pipeline')
             base_params = [
                 data.get('topic_id') or None, data.get('title'),
-                data.get('content'), data.get('status', 'Draft'),
+                data.get('content'), status,
                 data.get('planned_date') or None,
+                data.get('planned_time') or None,
+                (data.get('link') or '').strip() or None,
+                in_pipeline,
                 data.get('series_id') or None,
                 data.get('series_order', 0),
                 data.get('comment') or None,
             ]
             try:
                 c.execute("""INSERT INTO planner_posts
-                            (topic_id, title, content, status, planned_date, series_id, series_order, comment, is_oj)
-                            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
+                            (topic_id, title, content, status, planned_date, planned_time,
+                             link, in_pipeline, series_id, series_order, comment, is_oj)
+                            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
                     base_params + [is_oj])
             except Exception:
+                # An older database without the is_oj column.
                 c.execute("""INSERT INTO planner_posts
-                            (topic_id, title, content, status, planned_date, series_id, series_order, comment)
-                            VALUES (%s,%s,%s,%s,%s,%s,%s,%s)""",
+                            (topic_id, title, content, status, planned_date, planned_time,
+                             link, in_pipeline, series_id, series_order, comment)
+                            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
                     base_params)
             return JsonResponse({'ok': True, 'id': c.lastrowid})
         elif action == 'update':

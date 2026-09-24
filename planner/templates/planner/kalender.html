@@ -299,7 +299,7 @@
               {% if t.termine %}<span class="nix">nothing planned</span>{% endif %}
               {% for v in t.vorschlaege %}<button type="button" class="kal-vorschlag" data-id="{{ v.id }}" data-datum="{{ t.iso }}"
                       title="#{{ v.id }} {{ v.title }} has no date yet. Click to plan it for this day.">&#8627; #{{ v.id }} {{ v.title }}</button>{% endfor %}
-              <a class="kal-neu" href="/planner/?new=1&amp;datum={{ t.iso }}">+ post</a>
+              <a class="kal-neu" href="/planner/?new=1&amp;datum={{ t.iso }}&amp;back={{ basis }}{{ jahr }}/">+ post</a>
             </span>
             <span>{% if t.zustand == 'open' %}<span class="kal-pille p-open">Open</span>{% endif %}</span>
             <span class="kal-zeit"></span>

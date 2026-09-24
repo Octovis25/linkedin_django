@@ -886,10 +886,19 @@ function oeffnePostImReiter(id, title, content, status, date, comment, image, li
   } catch (e) {}
 })();
 
-// After an action: back where we came from, if we came from somewhere - else reload.
+// After an action: back where we came from, if we came from somewhere - else
+// stay here. A plain reload would keep ?new=1 in the address, and the page
+// reads that as "open the new-post dialog" - an empty dialog sprang open the
+// moment a post had been saved. So the one-shot parameters are dropped.
 function ovBack() {
-  if (window.OV_RETURN) window.location.href = window.OV_RETURN;
-  else location.reload();
+  if (window.OV_RETURN) { window.location.href = window.OV_RETURN; return; }
+  try {
+    const adresse = new URL(window.location.href);
+    ['new', 'status', 'topic', 'datum', 'edit', 'von'].forEach(function (k) {
+      adresse.searchParams.delete(k);
+    });
+    window.location.href = adresse.pathname + adresse.search;
+  } catch (e) { location.reload(); }
 }
 
 /* ── Save new post ── */
@@ -926,7 +935,7 @@ async function savePost() {
       await uploadVideoNC(res.id, vidInput, document.getElementById('m-vid-status'));
     }
     closeModal('post-modal');
-    location.reload();
+    ovBack();
   } else {
     alert('Save failed. Server response: ' + JSON.stringify(res));
   }
@@ -978,7 +987,7 @@ function openStudioForPost(prefix) {
         if (d.ok && d.id) {
           window.open('/library/studio/?post_id=' + d.id, '_blank');
           closeModal('post-modal');
-          location.reload();
+          ovBack();
         } else {
           alert('Error while saving: ' + (d.error || 'Unknown'));
         }

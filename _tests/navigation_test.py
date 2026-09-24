@@ -36,6 +36,7 @@ planner = suche('planner', 'templates', 'planner', 'planner.html')
 liste = suche('planner', 'templates', 'planner', '_post_list.html')
 views = suche('planner', 'views.py')
 urls = suche('planner', 'urls.py')
+kalender = suche('planner', 'templates', 'planner', 'kalender.html')
 
 gut = schlecht = 0
 
@@ -147,6 +148,36 @@ if muster:
         pruefe('rejected: %-24s' % boese, not regex.match(boese))
 else:
     pruefe('the pattern could be read', False, 'not found')
+
+print('\n=== And the dialog is not left standing open ===')
+# What went wrong on 18.09.: the new-post dialog saved and then reloaded. The
+# address still carried ?new=1, the page reads that as "open the dialog", and
+# an empty one sprang open the moment a post had been saved.
+speichern = planner[planner.index('async function savePost()'):]
+speichern = speichern[:speichern.index('\n}')]
+pruefe('saving a new post goes back instead of reloading',
+       'ovBack();' in speichern and 'location.reload();' not in speichern)
+studio = planner[planner.index('function openStudioForPost'):]
+studio = studio[:studio.index('\n/* ── Open edit modal')]
+pruefe('and so does the way through the Studio',
+       'ovBack();' in studio and 'location.reload();' not in studio)
+zurueck = planner[planner.index('function ovBack()'):][:700]
+pruefe('with no way back, the one-shot parameters are dropped',
+       'searchParams.delete' in zurueck
+       and all(("'" + k + "'") in zurueck for k in ('new', 'status', 'datum', 'edit')))
+pruefe('the calendar\'s "+ post" also finds its way back',
+       'new=1&amp;datum={{ t.iso }}&amp;back=' in kalender)
+
+print('\n=== A new post keeps what was typed into it ===')
+# 'create' used to write fewer columns than 'update': a time or a link set in
+# the dialog was silently dropped, and in_pipeline stayed 0 - which is why a
+# post created as Ready or Scheduled was not in those tabs afterwards.
+anlegen = views[views.index("if action == 'create':\n            is_oj"):]
+anlegen = anlegen[:anlegen.index('lastrowid')]
+for spalte in ('planned_time', 'link', 'in_pipeline'):
+    pruefe('create writes ' + spalte, spalte in anlegen)
+pruefe('and a draft stays out of the pipeline',
+       "in_pipeline = 0 if status == 'Draft' else 1" in anlegen)
 
 print('\n%d ok, %d failed' % (gut, schlecht))
 sys.exit(1 if schlecht else 0)
