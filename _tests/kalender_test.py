@@ -703,23 +703,32 @@ vorschlaege = RAUM_V['vorschlaege_fuer']
 
 HERZ = [{'name': 'World Heart Day'}]
 # #119 as it really is in the database: the title carries the day's name.
-P119 = {'id': 119, 'title': 'World Heart Day – 29 September'}
+P119 = {'id': 119, 'title': 'World Heart Day – 29 September', 'status': 'Ready'}
 pruefe('#119 is offered on World Heart Day',
        [p['id'] for p in vorschlaege(HERZ, [P119])] == [119])
 pruefe('an apostrophe does not stand in the way',
-       len(vorschlaege([{'name': "Mother's Day"}], [{'id': 1, 'title': 'Mothers Day post'}])) == 1)
+       len(vorschlaege([{'name': "Mother's Day"}], [{'id': 1, 'title': 'Mothers Day post', 'status': 'Ready'}])) == 1)
 pruefe('case does not matter either',
-       len(vorschlaege(HERZ, [{'id': 2, 'title': 'WORLD HEART DAY is coming'}])) == 1)
+       len(vorschlaege(HERZ, [{'id': 2, 'title': 'WORLD HEART DAY is coming', 'status': 'Ready'}])) == 1)
 pruefe('only whole words: "Labour Day" does not claim "Labour Daycare"',
-       len(vorschlaege([{'name': 'Labour Day'}], [{'id': 3, 'title': 'Labour Daycare'}])) == 0)
+       len(vorschlaege([{'name': 'Labour Day'}], [{'id': 3, 'title': 'Labour Daycare', 'status': 'Ready'}])) == 0)
 pruefe('an unrelated post is not offered',
-       vorschlaege(HERZ, [{'id': 4, 'title': 'Oversight becomes insight'}]) == [])
+       vorschlaege(HERZ, [{'id': 4, 'title': 'Oversight becomes insight', 'status': 'Ready'}]) == [])
 pruefe('a very short occasion name matches nothing',
-       vorschlaege([{'name': 'Ok'}], [{'id': 5, 'title': 'ok then'}]) == [])
+       vorschlaege([{'name': 'Ok'}], [{'id': 5, 'title': 'ok then', 'status': 'Ready'}]) == [])
 pruefe('one post is offered once, even for two matching occasions',
        len(vorschlaege([{'name': 'World Heart Day'}, {'name': 'Heart Day'}], [P119])) == 1)
 pruefe('a post without a title does not break it',
-       vorschlaege(HERZ, [{'id': 6, 'title': None}]) == [])
+       vorschlaege(HERZ, [{'id': 6, 'title': None, 'status': 'Ready'}]) == [])
+# Ortrud, 25.09.: drafts and dateless posts do not go into the calendar by
+# themselves. A suggestion is the one way a dateless post reached a day
+# without anyone giving it a date - so only a finished post may be offered.
+for st in ('Draft', 'Review', 'Archive', '', None):
+    pruefe('a %s post is not offered, even with the right title' % (st or 'status-less'),
+           vorschlaege(HERZ, [{'id': 7, 'title': 'World Heart Day', 'status': st}]) == [])
+pruefe('among a draft and a ready post with the same title, only the ready one',
+       [p['id'] for p in vorschlaege(HERZ, [
+           {'id': 8, 'title': 'World Heart Day draft', 'status': 'Draft'}, P119])] == [119])
 
 ANSICHT4 = herausschneiden('kalender_view')
 # Only the dateless drafts are candidates. A planned post must never be

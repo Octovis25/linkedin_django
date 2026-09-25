@@ -536,11 +536,18 @@ def vorschlaege_fuer(termine, kandidaten):
     Only posts without any date are offered - a post that is already planned
     somewhere is never pulled off its day by a suggestion. And only whole
     words match: "Labour Day" must not claim a post about "Labour Daycare".
+
+    Only posts on Ready are offered. A draft is not finished, and nothing
+    unfinished turns up in the calendar unless someone gives it a date by
+    hand (Ortrud, 25.09.: drafts and dateless posts do not go into the
+    calendar by themselves). Archive is discarded, not waiting.
     """
     namen = [_schluessel(t.get('name')) for t in termine]
     namen = [n for n in namen if len(n.strip()) >= 4]
     raus, gesehen = [], set()
     for post in kandidaten:
+        if post.get('status') != 'Ready':
+            continue
         titel = _schluessel(post.get('title'))
         if post.get('id') in gesehen:
             continue
