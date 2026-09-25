@@ -945,7 +945,16 @@ async function liDoPost() {
         scheduled_ms: scheduled_ms,
       })
     });
-    const data = await r.json();
+    // A server that dies mid-way (e.g. a worker killed for taking too long)
+    // answers with an HTML page, not JSON. Say what that means instead of
+    // showing the parser's complaint about '<!DOCTYPE'.
+    const roh = await r.text();
+    let data;
+    try { data = JSON.parse(roh); }
+    catch (_) {
+      data = { ok: false, error: 'The server did not finish (HTTP ' + r.status + '). '
+        + 'Please check in Buffer whether the post arrived before trying again.' };
+    }
     res.style.display = 'block';
     if (data.ok) {
       res.style.background = '#E1F5EE'; res.style.color = '#0F6E56';
