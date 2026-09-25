@@ -797,5 +797,26 @@ pruefe('the row says so', '{% if p.ohne_medium %}' in VORLAGE and 'no image / vi
 pruefe('and the month counts them',
        "'ohne_medium': sum(" in herausschneiden('kalender_view') and '{% if m.ohne_medium %}' in VORLAGE)
 
+print('\n=== Titles, times, the folded list (25.09.) ===')
+RAUM_U = {'__builtins__': __builtins__}
+exec(compile(herausschneiden('uhrzeit_aus'), 'planner/kalender.py (cut out)', 'exec'), RAUM_U)
+uhr = RAUM_U['uhrzeit_aus']
+pruefe('a send time gives its hh:mm', uhr('28.09.2026 08:00') == '08:00')
+pruefe('a date alone gives no time - not ".2026"', uhr('29.09.2026') == '', uhr('29.09.2026'))
+pruefe('nothing gives nothing', uhr('') == '' and uhr(None) == '')
+pruefe('the calendar uses it', "p['uhrzeit'] = uhrzeit_aus(" in herausschneiden('_posts_des_jahres'))
+# base.html makes every date field 100% wide. In the flex row of a post that
+# took the whole cell and the title vanished on every post that can move.
+# A bare class loses against base.html's input[type="date"] - so the rule has
+# to name the input and the attribute as well, or it is ignored.
+REGEL = VORLAGE[VORLAGE.index('input.kal-verschieben[type=date] {'):]
+REGEL = REGEL[:REGEL.index('}')]
+pruefe('the date field in a row keeps its own width, with a selector that wins',
+       'width:auto' in REGEL, REGEL)
+pruefe('the recurring dates are folded away',
+       '<details id="kal-liste-klappe">' in VORLAGE and '<details id="kal-liste-klappe" open' not in VORLAGE)
+pruefe('and the button that leads there opens them',
+       "klappe.open = true" in VORLAGE)
+
 print('\n%d ok, %d failed' % (gut, schlecht))
 sys.exit(1 if schlecht else 0)

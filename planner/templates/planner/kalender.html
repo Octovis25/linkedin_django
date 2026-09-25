@@ -97,6 +97,13 @@
   .kal-verschieben { visibility:hidden; margin-left:8px; font:inherit; font-size:11px;
                      padding:0 3px; border:1px solid #ccc; border-radius:4px;
                      color:#4A5856; background:#fff; }
+  /* base.html gives every date field width:100%, a 2px border and 0.5rem of
+     padding, and its selector outranks a bare class. In the flex row of a post
+     the field then took the whole cell and the title shrank to nothing - on
+     every post that can still move (seen 25.09.2026 on #119 and #121). Input,
+     class and attribute together outrank it; visibility is left to the rules
+     above. */
+  input.kal-verschieben[type=date] { width:auto; padding:0 3px; border:1px solid #ccc; font-size:11px; }
   .kal-zeile:hover .kal-verschieben, .kal-verschieben:focus { visibility:visible; }
   @media (hover:none) { .kal-verschieben { visibility:visible; } }
   /* The re-schedule note is an instruction, so it keeps its full length -
@@ -160,10 +167,15 @@
 
   /* --- the list of recurring dates --- */
   .kal-liste { margin-top:26px; background:#fff; border:1px solid #e4e0d5; border-radius:6px; }
-  .kal-liste > h3 { margin:0; padding:13px 16px; border-bottom:1px solid #e4e0d5;
+  .kal-liste summary { list-style:none; cursor:pointer; }
+  .kal-liste summary::-webkit-details-marker { display:none; }
+  .kal-liste summary h3::before { content:'\25B8'; color:#6B7876; font-size:12px; }
+  .kal-liste details[open] summary h3::before { content:'\25BE'; }
+  .kal-liste details:not([open]) summary h3 { border-bottom:0; }
+  .kal-liste h3 { margin:0; padding:13px 16px; border-bottom:1px solid #e4e0d5;
                     font-size:15px; color:var(--octo-dark-petrol);
                     display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
-  .kal-liste > h3 small { font-weight:400; font-size:12.5px; color:#6B7876; flex:1 1 220px; }
+  .kal-liste h3 small { font-weight:400; font-size:12.5px; color:#6B7876; flex:1 1 220px; }
   .kal-liste table { border-collapse:collapse; width:100%; font-size:12.5px; }
   .kal-liste th { text-align:left; font-size:10px; text-transform:uppercase; letter-spacing:.08em;
                   color:#6B7876; font-weight:700; padding:8px 16px;
@@ -366,11 +378,13 @@
   {% if not nur_oj %}
   <!-- ================= the list you maintain ================= -->
   <section class="kal-liste" id="kal-liste">
-    <h3>Recurring dates
+    {# Folded by default (Ortrud, 25.09.2026): it is maintained now and then, the calendar is read every day. #}
+    <details id="kal-liste-klappe">
+    <summary><h3>Recurring dates
       <small>One list for every year. Take one out and it is gone from all years.
         The first three columns change {{ jahr }} only: untick it, move it, rename it &ndash;
         every other year keeps the rule.</small>
-    </h3>
+    </h3></summary>
 
     <div class="kal-scroll">
       <table>
@@ -450,6 +464,7 @@
       <button class="kal-knopf voll" id="nf-add">Add to the list</button>
     </div>
     <div class="kal-fehler" id="nf-fehler" hidden></div>
+    </details>
   </section>
   {% endif %}
 
@@ -554,6 +569,9 @@
   var zurListe = document.getElementById('kal-zur-liste');
   if (zurListe) {
     zurListe.onclick = function () {
+      // The list is folded away; the button that leads to it opens it too.
+      var klappe = document.getElementById('kal-liste-klappe');
+      if (klappe) klappe.open = true;
       document.getElementById('kal-liste').scrollIntoView({ behavior: 'smooth', block: 'start' });
     };
   }

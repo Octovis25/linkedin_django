@@ -350,6 +350,13 @@ def ist_veroeffentlicht(post, gesendet_am=None, wartet_bei_buffer=False):
     return bool(post.get('linkedin_posted'))
 
 
+def uhrzeit_aus(sendezeit):
+    """'28.09.2026 08:00' -> '08:00'; a date alone, or nothing, -> ''."""
+    import re as _re
+    treffer = _re.search(r'(\d{1,2}:\d{2})\s*$', sendezeit or '')
+    return treffer.group(1) if treffer else ''
+
+
 def fehlt_medium(post):
     """True when a post still to go out has nothing to show: no image, no GIF,
     no video - neither on the post nor at Buffer.
@@ -460,7 +467,9 @@ def _posts_des_jahres(jahr, nur_oj=False):
         # "Binding" means Buffer really has it - not that the status field says so.
         p['verbindlich'] = p.get('send_time_source') in ('told to Buffer', 'from Buffer')
         # The time alone; the day is already the row it sits in.
-        p['uhrzeit'] = p.get('send_time', '')[-5:] if len(p.get('send_time', '')) >= 5 else ''
+        # Only a real hh:mm. A send time that is just a date ('29.09.2026')
+        # used to leave '.2026' in the time column.
+        p['uhrzeit'] = uhrzeit_aus(p.get('send_time', ''))
         # Worked out here rather than in the template: the same three words
         # drive the colour, the pill and the filter, and they should not be
         # spelled out three times in template logic.
