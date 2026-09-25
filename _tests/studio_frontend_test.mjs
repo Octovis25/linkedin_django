@@ -155,8 +155,11 @@ const pruefe = (name, ok, detail = '') =>
 // ---- 1. Startet das Studio überhaupt sauber? ------------------------------
 pruefe('Studio startet ohne Fehlerbanner',
   !(await page.locator('#studio-fehler').count()));
-pruefe('Modus-Rail hat 4 Modi',
-  (await page.locator('#mode-rail [data-mode]').count()) === 4);
+pruefe('Modus-Rail hat 5 Modi',
+  (await page.locator('#mode-rail [data-mode]').count()) === 5,
+  String(await page.locator('#mode-rail [data-mode]').count()));
+pruefe('Effekte sind ein eigener Reiter, nicht im Einfügen-Panel versteckt',
+  (await page.locator('#mode-rail [data-mode="effects"]').count()) === 1);
 
 await sauber('Start');
 
@@ -416,7 +419,7 @@ await sauber('Pinsel und Zoom');
 
 // ---- 10. Doku im Rail, direkt unter Layers --------------------------------
 pruefe('Rail hat einen Help-Knopf', (await page.locator('#mode-rail [data-help]').count()) === 1);
-pruefe('Help steht unter den vier Modi', await page.evaluate(() => {
+pruefe('Help steht unter allen Modi', await page.evaluate(() => {
   const kinder = [...document.getElementById('mode-rail').children];
   const layers = kinder.findIndex(e => e.dataset.mode === 'layers');
   const help   = kinder.findIndex(e => e.dataset.help);
@@ -516,7 +519,7 @@ pruefe('Keine unbehandelte Promise-Ablehnung durch play()',
   fehler.find(f => /no supported sources/i.test(f)) || '');
 
 
-// ---- 13. Rundgang: alle vier Modi, jedes Einfüge-Werkzeug ----------------
+// ---- 13. Rundgang: alle Modi, jedes Einfüge-Werkzeug ---------------------
 // Sauberer Ausgangsstand, damit gezählt werden kann.
 await page.evaluate(() => {
   const e = window._studioEditor;
@@ -524,7 +527,7 @@ await page.evaluate(() => {
   e.canvas.discardActiveObject(); e.canvas.requestRenderAll(); e.snapshot();
 });
 
-for (const modus of ['build', 'insert', 'image', 'layers']) {
+for (const modus of ['build', 'insert', 'effects', 'image', 'layers']) {
   await page.click(`#mode-rail [data-mode="${modus}"]`);
   await page.waitForTimeout(120);
   pruefe(`Modus ${modus}: Panel erscheint`,
@@ -1262,6 +1265,558 @@ pruefe('gezogen wird das Original, nicht die Verkleinerung',
   zugAdresse === '/api/voll/x.png', zugAdresse);
 
 await sauber('Vorschaubilder');
+
+// ---- Effektrahmen ---------------------------------------------------------
+// The effect used to hang on an element and could only ever be as big as that
+// element. It now sits on a frame of its own: an element that shows nothing and
+// is there to give the effect an area.
+await page.evaluate(() => { window._studioEditor.clearAll(); });
+await page.click('[data-mode="effects"]');
+// Die Effekte liegen als kleine laufende Bilder im Reiter - ein Klick legt den
+// Effekt als Rahmen über das Bild.
+await page.waitForSelector('#fx-tiles .fx-tile[data-fx="network"]', { timeout: 3000 });
+await page.click('#fx-tiles .fx-tile[data-fx="network"]');
+await page.waitForTimeout(200);
+
+const fxRahmen = await page.evaluate(async () => {
+  const m = await import('/media.js');
+  const ed = window._studioEditor;
+  const r = ed.canvas.getObjects().filter(m.istEffektRahmen);
+  const o = r[0];
+  return {
+    anzahl: r.length,
+    fx: o?.fx,
+    gross: o ? (o.width === ed.width && o.height === ed.height) : false,
+    unsichtbar: o ? (!o.strokeWidth && /rgba\(0, ?0, ?0, ?0\)/.test(String(o.fill))) : false,
+    drehbar: o ? o.lockRotation !== true : true,
+  };
+});
+pruefe('Eine Kachel legt genau einen Effektrahmen an', fxRahmen.anzahl === 1, fxRahmen.anzahl);
+pruefe('Er beginnt über dem ganzen Bild', fxRahmen.gross);
+pruefe('Er trägt einen Effekt', !!fxRahmen.fx && fxRahmen.fx !== 'none', fxRahmen.fx);
+pruefe('Er ist unsichtbar - im Export ist nur der Effekt zu sehen', fxRahmen.unsichtbar);
+pruefe('Er lässt sich nicht drehen (ein Effekt hat kein Oben)', !fxRahmen.drehbar);
+
+const fxLeiste = await page.evaluate(async () => {
+  const m = await import('/media.js');
+  const ed = window._studioEditor;
+  ed.addText('Überschrift', { left: 20, top: 20 });
+  window._studioRender?.();
+  await new Promise(r => setTimeout(r, 250));
+  const objs = ed.realObjects();
+  const idxRahmen = objs.findIndex(m.istEffektRahmen);
+  const idxText = objs.findIndex(o => !m.istEffektRahmen(o));
+  // Die Zeilen stehen nach Gruppen, nicht mehr in Ebenen-Reihenfolge - also
+  // über ihre Kennung finden statt über die Position.
+  const zeile = i => document.querySelector('#anim-bar .anim-row[data-obj-idx="' + i + '"]');
+  const reihen = [...document.querySelectorAll('#anim-bar .anim-row')];
+  // Sichtbar heißt: man SIEHT es. Das Attribut hidden allein sagt darüber
+  // nichts - .anim-ctl ist display:flex, und das schlägt hidden. Genau daran
+  // ist die erste Fassung vorbeigelaufen: Test grün, Zeile trotzdem auf dem
+  // Schirm. Deshalb wird hier die gerechnete Darstellung gelesen.
+  const sichtbar = z => !!z && getComputedStyle(z).display !== 'none' && !!z.offsetParent;
+  const fxSicht = i => {
+    const zeilen = [...zeile(i).querySelectorAll('.anim-ctl')];
+    const fx = zeilen.find(z => z.textContent.trim().startsWith('Effect'));
+    const mo = zeilen.find(z => z.textContent.trim().startsWith('Motion'));
+    return { fx: sichtbar(fx), motion: sichtbar(mo) };
+  };
+  return { rahmen: fxSicht(idxRahmen), element: fxSicht(idxText), reihen: reihen.length };
+});
+pruefe('Der Rahmen zeigt den Effekt', fxLeiste.rahmen.fx === true, JSON.stringify(fxLeiste));
+pruefe('und keine Bewegung', fxLeiste.rahmen.motion === false, JSON.stringify(fxLeiste.rahmen));
+pruefe('Ein normales Element zeigt KEINEN Effekt mehr', fxLeiste.element.fx === false,
+  JSON.stringify(fxLeiste.element));
+pruefe('aber weiterhin seine Bewegung', fxLeiste.element.motion === true);
+
+const fxTempoTest = await page.evaluate(async () => {
+  const m = await import('/media.js');
+  const ep = (await import('/editor.js')).EXTRA_PROPS;
+  const ed = window._studioEditor;
+  const o = ed.realObjects().find(m.istEffektRahmen);
+  const reihe = document.querySelector('#anim-bar .anim-row[data-obj-idx="' + ed.realObjects().indexOf(o) + '"]');
+  const s = reihe.querySelectorAll('.anim-time-item input')[0];
+  // Links langsam, rechts schnell: 5 von 1..6 heißt fxTempo 2 (doppelt so langsam wie gezeichnet).
+  s.value = 5; s.dispatchEvent(new Event('input', { bubbles: true }));
+  const json = JSON.stringify(ed.canvas.toJSON(ep));
+  return { fxTempo: o.fxTempo, inProps: ep.includes('fxTempo'), serialisiert: /"fxTempo":2/.test(json) };
+});
+pruefe('Das eigene Tempo des Rahmens lässt sich stellen (rechts = schneller)', fxTempoTest.fxTempo === 2, fxTempoTest.fxTempo);
+pruefe('fxTempo steht in EXTRA_PROPS', fxTempoTest.inProps);
+pruefe('und landet im Canvas-JSON', fxTempoTest.serialisiert);
+
+// Alte Zeichnungen: jeder Element-Effekt wird zu einem Rahmen um dieses Element.
+const fxUmbau = await page.evaluate(async () => {
+  const m = await import('/media.js');
+  const ed = window._studioEditor;
+  ed.clearAll();
+  const alt = new window.fabric.Rect({ left: 60, top: 80, width: 120, height: 90, fill: '#ccc' });
+  alt.fx = 'orbit'; alt.startAt = 700;
+  ed.canvas.add(alt);
+  const anzahl = m.rahmenAusAltenEffekten(ed);
+  const rahmen = ed.canvas.getObjects().find(m.istEffektRahmen);
+  const b = alt.getBoundingRect(true);
+  return {
+    anzahl, altFx: alt.fx, rahmenFx: rahmen?.fx, start: rahmen?.startAt,
+    passt: rahmen ? Math.abs(rahmen.width - b.width) < 2 && Math.abs(rahmen.left - b.left) < 2 : false,
+    ueber: rahmen ? ed.canvas.getObjects().indexOf(rahmen) > ed.canvas.getObjects().indexOf(alt) : false,
+    nochmal: m.rahmenAusAltenEffekten(ed),
+  };
+});
+pruefe('Ein alter Element-Effekt wird zu einem Rahmen', fxUmbau.anzahl === 1 && fxUmbau.rahmenFx === 'orbit',
+  JSON.stringify(fxUmbau));
+pruefe('Der Rahmen liegt genau um das Element', fxUmbau.passt);
+pruefe('und direkt darüber, damit die Reihenfolge bleibt', fxUmbau.ueber);
+pruefe('Das Element selbst trägt den Effekt nicht mehr', !fxUmbau.altFx, fxUmbau.altFx);
+pruefe('Die Startzeit wandert mit', fxUmbau.start === 700, fxUmbau.start);
+pruefe('Zweimal umwandeln legt nichts doppelt an', fxUmbau.nochmal === 0, fxUmbau.nochmal);
+
+// Die Reihenfolge: was ÜBER dem Rahmen liegt, bleibt sauber. Das ist der Grund
+// für den ganzen Umbau - vorher lag jeder Effekt über der Schrift.
+const fxOrdnung = await page.evaluate(async () => {
+  const m = await import('/media.js');
+  const ed = window._studioEditor;
+  ed.clearAll();
+  ed.setSize(400, 300);
+  const rahmen = m.addEffektRahmen(ed, 'question');   // malt eine dunkle Scheibe + „?"
+  const deckel = new window.fabric.Rect({ left: 0, top: 0, width: 400, height: 300, fill: '#ffffff' });
+  ed.canvas.add(deckel);
+  m.previewAnimation(ed);
+  await new Promise(r => setTimeout(r, 500));
+  const c = ed.canvas.lowerCanvasEl.getContext('2d');
+  const mitte = c.getImageData(Math.round(ed.canvas.getZoom() * 200),
+                               Math.round(ed.canvas.getZoom() * 150), 1, 1).data;
+  return { r: mitte[0], g: mitte[1], b: mitte[2], a: mitte[3] };
+});
+pruefe('Der Effekt malt NICHT über das, was darüber liegt',
+  fxOrdnung.r > 245 && fxOrdnung.g > 245 && fxOrdnung.b > 245,
+  JSON.stringify(fxOrdnung));
+
+await sauber('Effektrahmen');
+
+// ---- Marker, Lupe, Stempel -----------------------------------------------
+await page.evaluate(() => { window._studioEditor.clearAll(); window._studioEditor.setSize(600, 500); });
+await page.click('[data-mode="effects"]');
+await page.click('[data-act="add-marker"]');
+await page.waitForTimeout(150);
+await page.keyboard.press('Escape');
+await page.click('[data-act="add-stamp"]');
+await page.waitForTimeout(150);
+await page.keyboard.press('Escape');
+await page.click('[data-act="add-magnifier"]');
+await page.waitForTimeout(250);
+
+const stuecke = await page.evaluate(async () => {
+  const m = await import('/media.js');
+  const ed = window._studioEditor;
+  const objs = ed.realObjects();
+  const marker = objs.find(o => o.shapeKind === 'marker');
+  const stempel = objs.find(o => o.shapeKind === 'stamp');
+  const lupe = objs.find(o => m.istEffektRahmen(o) && o.fx === 'magnifier');
+  return {
+    marker: !!marker, markerAnim: marker?.anim?.type, markerText: marker?._objects?.[3]?.text,
+    stempel: !!stempel, stempelAnim: stempel?.anim?.type, stempelText: stempel?._objects?.[2]?.text,
+    stempelSchraeg: stempel ? stempel.angle !== 0 : false,
+    lupe: !!lupe,
+    lupeFenster: lupe ? lupe.fxLens > 0 && lupe.fxPath === 'lines' && lupe.getScaledWidth() > lupe.fxLens : false,
+    lupeKleiner: lupe ? lupe.width < ed.width : false,
+  };
+});
+pruefe('Marker liegt auf dem Canvas', stuecke.marker);
+pruefe('Marker blinkt von allein (Pulse)', stuecke.markerAnim === 'pulse', stuecke.markerAnim);
+pruefe('Marker trägt ein Zeichen', !!stuecke.markerText, stuecke.markerText);
+pruefe('Stempel liegt auf dem Canvas', stuecke.stempel);
+pruefe('Stempel blendet ein statt zu knallen', stuecke.stempelAnim === 'fadeIn', stuecke.stempelAnim);
+pruefe('Stempel steht schräg, wie ein Stempel', stuecke.stempelSchraeg);
+pruefe('Stempeltext ist groß geschrieben', /^[A-Z ]+$/.test(stuecke.stempelText || ''), stuecke.stempelText);
+pruefe('Lupe ist ein Effektrahmen', stuecke.lupe);
+pruefe('Lupe kommt mit Fenster, Glas und Weg (Line by line)', stuecke.lupeFenster);
+pruefe('und nicht über dem ganzen Bild', stuecke.lupeKleiner);
+
+// Text nachträglich ändern: derselbe Weg wie beim Badge
+const geaendert = await page.evaluate(async () => {
+  const ed = window._studioEditor;
+  const alt = ed.realObjects().find(o => o.shapeKind === 'stamp');
+  ed.canvas.setActiveObject(alt);
+  ed.canvas.fire('mouse:dblclick', { target: alt });
+  await new Promise(r => setTimeout(r, 120));
+  const inp = document.getElementById('badge-edit');
+  if (!inp) return { keinFeld: true };
+  inp.value = 'Version 3.2';
+  inp.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+  await new Promise(r => setTimeout(r, 200));
+  const neu = ed.realObjects().find(o => o.shapeKind === 'stamp');
+  return { text: neu?._objects?.[2]?.text, anim: neu?.anim?.type };
+});
+pruefe('Stempeltext lässt sich per Doppelklick ändern',
+  (geaendert.text || '').toUpperCase().includes('VERSION 3.2'), JSON.stringify(geaendert));
+pruefe('und behält dabei seine Animation', geaendert.anim === 'fadeIn', geaendert.anim);
+
+// Die Lupe zeigt wirklich Vergrößertes: ein feines Muster unter ihr wird gröber.
+const lupenBild = await page.evaluate(async () => {
+  const m = await import('/media.js');
+  const ed = window._studioEditor;
+  ed.clearAll(); ed.setSize(400, 400);
+  // Weißer Grund: sonst ist der durchsichtige Canvas selbst 'dunkel' und
+  // die Messung zählt ihn als Streifen mit.
+  ed.canvas.setBackgroundColor('#ffffff', () => {});
+  // Streifen: unter der Lupe müssen sie breiter werden.
+  for (let i = 0; i < 40; i++) {
+    ed.canvas.add(new window.fabric.Rect({
+      left: i * 10, top: 0, width: 5, height: 400, fill: i % 2 ? '#000000' : '#ffffff',
+    }));
+  }
+  const lupe = m.addEffektRahmen(ed, 'magnifier');
+  lupe.set({ left: 120, top: 120, width: 160, height: 160 }); lupe.setCoords();
+  // Hier wird das Vergrößern gemessen, nicht das Wandern: Glas so groß wie das
+  // Fenster, und es bleibt stehen.
+  lupe.fxPath = 'still'; lupe.fxLens = 160;
+  // Messen heißt Pixel zählen, und dafür muss 1 Canvas-Punkt = 1 Bildpunkt
+  // sein. Sonst misst man an einer verschobenen Stelle - genau das hat hier
+  // zwei Anläufe gekostet.
+  ed.canvas.setViewportTransform([1, 0, 0, 1, 0, 0]);
+  ed.canvas.setDimensions({ width: 400, height: 400 });
+  m.previewAnimation(ed);
+  const z = ed.canvas.getZoom();
+  const c = ed.canvas.lowerCanvasEl.getContext('2d');
+  // Auf den Moment warten, in dem die Lupe wirklich auf dem Bild liegt: ihr
+  // schwarzer Rand am oberen Scheitel ist das Zeichen dafür. Sonst hinge der
+  // Test an der Laufzeit der Vorschau.
+  const px = (x, y) => c.getImageData(Math.round(x * z), Math.round(y * z), 1, 1).data;
+  // Zwei Bedingungen, nicht eine: der schwarze Rand der Lupe MUSS da sein, und
+  // daneben muss weißer Grund stehen. Ein frisch umgestellter Canvas ist
+  // nämlich komplett durchsichtig - und das sah wie "Rand da" aus.
+  const bereit = () => {
+    const rand = px(200, 122), grund = px(6, 200);
+    return rand[0] < 60 && rand[3] > 200 && grund[0] > 200 && grund[3] > 200;
+  };
+  let versuche = 0;
+  while (!bereit() && versuche++ < 60) await new Promise(r => setTimeout(r, 25));
+  // Wie breit ein schwarzer Streifen im Schnitt ist. Unter der Lupe muss er
+  // breiter sein als daneben - das ist genau, was Vergrößern heißt.
+  const streifenbreite = (x0, x1, y) => {
+    const d = c.getImageData(Math.round(x0 * z), Math.round(y * z), Math.round((x1 - x0) * z), 1).data;
+    const laengen = []; let lauf = 0;
+    for (let i = 0; i < d.length; i += 4) {
+      if (d[i] < 100) lauf++;
+      else { if (lauf) laengen.push(lauf); lauf = 0; }
+    }
+    if (lauf) laengen.push(lauf);
+    // Randstücke zählen nicht: die sind angeschnitten.
+    const voll = laengen.length > 2 ? laengen.slice(1, -1) : laengen;
+    return voll.length ? voll.reduce((a, b) => a + b, 0) / voll.length : 0;
+  };
+  return { drin: streifenbreite(168, 232, 200), draussen: streifenbreite(300, 390, 200),
+           gewartet: versuche, bereit: bereit() };
+});
+pruefe('Unter der Lupe sind die Streifen breiter als daneben',
+  lupenBild.drin > lupenBild.draussen * 1.3,
+  JSON.stringify(lupenBild));
+
+await sauber('Marker, Lupe, Stempel');
+
+// ---- Leiste unter dem Canvas: Motion und Effects getrennt -----------------
+await page.evaluate(() => { const ed = window._studioEditor; ed.clearAll(); ed.setSize(600, 400); });
+await page.click('[data-mode="effects"]');
+await page.waitForSelector('#fx-tiles .fx-tile', { timeout: 3000 });
+const lxKacheln = await page.evaluate(() => [...document.querySelectorAll('#fx-tiles .fx-tile')].map(k => k.dataset.fx));
+pruefe('Der Effekte-Reiter zeigt eine Kachel je Effekt', lxKacheln.length >= 9, lxKacheln.join(','));
+pruefe('Jede Kachel hat ein laufendes Bild', await page.evaluate(() =>
+  [...document.querySelectorAll('#fx-tiles .fx-tile canvas')].every(c => c.width > 0)));
+await page.click('#fx-tiles .fx-tile[data-fx="veil"]');
+await page.click('#fx-tiles .fx-tile[data-fx="question"]');
+await page.evaluate(() => { window._studioEditor.addText('Headline', { left: 20, top: 20 }); });
+await page.waitForTimeout(300);
+
+const lxGruppen = await page.evaluate(async () => {
+  const m = await import('/media.js');
+  const ed = window._studioEditor;
+  const objs = ed.realObjects();
+  const g = s => document.querySelector('#anim-bar details.anim-group[data-group="' + s + '"]');
+  const idxIn = s => [...g(s).querySelectorAll('.anim-row[data-obj-idx]')].map(r => +r.dataset.objIdx);
+  return {
+    motion: !!g('motion'), effects: !!g('effects'),
+    motionOk: idxIn('motion').every(i => !m.istEffektRahmen(objs[i])),
+    effectsOk: idxIn('effects').every(i => m.istEffektRahmen(objs[i])),
+    zahlRahmen: idxIn('effects').length,
+    paletten: document.querySelectorAll('#anim-bar .fx-palette').length,
+    swatchesJeZeile: document.querySelectorAll('#anim-bar .fx-row .fx-swatch').length,
+    titel: document.querySelector('#anim-bar .anim-bar-title')?.textContent || '',
+    text: document.getElementById('anim-bar').textContent,
+  };
+});
+pruefe('Die Leiste hat eine Gruppe Motion', lxGruppen.motion);
+pruefe('und eine Gruppe Effects', lxGruppen.effects);
+pruefe('In Motion steht kein Rahmen', lxGruppen.motionOk);
+pruefe('In Effects stehen nur Rahmen', lxGruppen.effectsOk && lxGruppen.zahlRahmen === 2, lxGruppen.zahlRahmen);
+pruefe('Die Farbpalette steht genau einmal', lxGruppen.paletten === 1, lxGruppen.paletten);
+pruefe('und nicht in jeder Effekt-Zeile', lxGruppen.swatchesJeZeile === 0, lxGruppen.swatchesJeZeile);
+pruefe('Die Leiste spricht Englisch', lxGruppen.titel.includes('Animation')
+  && !/je Element|Sek\./.test(lxGruppen.text), lxGruppen.titel);
+
+const lxZuklappen = await page.evaluate(async () => {
+  const d = document.querySelector('#anim-bar details.anim-group[data-group="motion"]');
+  d.open = false; d.dispatchEvent(new Event('toggle'));
+  await new Promise(r => setTimeout(r, 50));
+  const zeile = d.querySelector('.anim-row');
+  // Closed <details> keep a layout box in current Chromium - ask what is seen.
+  return { zu: !d.open, versteckt: !zeile || !zeile.checkVisibility() };
+});
+pruefe('Motion lässt sich zuklappen', lxZuklappen.zu && lxZuklappen.versteckt, JSON.stringify(lxZuklappen));
+
+// Farbe: die eine Palette färbt den ausgewählten Rahmen, und es wird gespeichert.
+const lxFarbe = await page.evaluate(async () => {
+  const m = await import('/media.js');
+  const ep = (await import('/editor.js')).EXTRA_PROPS;
+  const ed = window._studioEditor;
+  const rahmen = ed.realObjects().filter(m.istEffektRahmen);
+  const zweiter = rahmen[1];
+  ed.selectObj(zweiter);
+  await new Promise(r => setTimeout(r, 100));
+  const knoepfe = [...document.querySelectorAll('#anim-bar .fx-palette .fx-swatch')]
+    .filter(b => b.style.background);
+  const orange = knoepfe.find(b => /245, 110, 40|f56e28/i.test(b.style.background)) || knoepfe[1];
+  orange.click();
+  await new Promise(r => setTimeout(r, 100));
+  const json = JSON.stringify(ed.canvas.toJSON(ep));
+  return { gesetzt: zweiter.fxColor, ersterUnberuehrt: !rahmen[0].fxColor,
+           inProps: ep.includes('fxColor'), imJson: /"fxColor":"#/.test(json) };
+});
+pruefe('Die Palette färbt den ausgewählten Rahmen', !!lxFarbe.gesetzt, lxFarbe.gesetzt);
+pruefe('und nur diesen', lxFarbe.ersterUnberuehrt);
+pruefe('fxColor wird gespeichert', lxFarbe.inProps && lxFarbe.imJson, JSON.stringify(lxFarbe));
+
+// Die Farbe kommt wirklich im Bild an: derselbe Effekt, einmal ohne, einmal in Orange.
+const lxPixel = await page.evaluate(async () => {
+  const m = await import('/media.js');
+  const zaehle = (farbe) => {
+    const c = document.createElement('canvas'); c.width = 300; c.height = 200;
+    const ctx = c.getContext('2d');
+    ctx.fillStyle = '#000'; ctx.fillRect(0, 0, 300, 200);
+    m.malEffektVorschau(ctx, 'networkFlat', 300, 200, 1000, farbe);
+    const d = ctx.getImageData(0, 0, 300, 200).data;
+    let orange = 0, tuerkis = 0;
+    for (let i = 0; i < d.length; i += 4) {
+      if (d[i] > 150 && d[i + 1] < 140 && d[i + 2] < 90) orange++;
+      if (d[i] < 140 && d[i + 1] > 150 && d[i + 2] > 140) tuerkis++;
+    }
+    return { orange, tuerkis };
+  };
+  return { ohne: zaehle(null), orange: zaehle('#F56E28') };
+});
+pruefe('Ohne Farbe zeichnet der Effekt türkis', lxPixel.ohne.tuerkis > 20 && lxPixel.ohne.orange === 0,
+  JSON.stringify(lxPixel.ohne));
+pruefe('Mit Orange zeichnet er orange', lxPixel.orange.orange > 20 && lxPixel.orange.tuerkis === 0,
+  JSON.stringify(lxPixel.orange));
+
+// Fläche, Auswählen, Entfernen - pro Effekt zum Anfassen
+const lxFlaeche = await page.evaluate(async () => {
+  const m = await import('/media.js');
+  const ed = window._studioEditor;
+  const o = ed.realObjects().filter(m.istEffektRahmen)[0];
+  const idx = ed.realObjects().indexOf(o);
+  const zeile = () => document.querySelector('#anim-bar .anim-row[data-obj-idx="' + idx + '"]');
+  const keineFlaeche = !document.querySelector('#anim-bar [data-area]') && !/Lower half|Whole picture/.test(document.getElementById('anim-bar').textContent);
+  ed.canvas.discardActiveObject();
+  zeile().querySelector('.fx-select').click();
+  await new Promise(r => setTimeout(r, 80));
+  const gewaehlt = ed.active() === o;
+  const vorher = ed.realObjects().filter(m.istEffektRahmen).length;
+  zeile().querySelector('.fx-remove').click();
+  await new Promise(r => setTimeout(r, 80));
+  return { keineFlaeche, gewaehlt, vorher,
+           nachher: ed.realObjects().filter(m.istEffektRahmen).length };
+});
+pruefe('Whole picture / Lower half / Part gibt es nicht mehr', lxFlaeche.keineFlaeche);
+pruefe('Select setzt die Anfasser auf den Rahmen', lxFlaeche.gewaehlt);
+pruefe('Remove nimmt ihn weg', lxFlaeche.nachher === lxFlaeche.vorher - 1, lxFlaeche.vorher + ' -> ' + lxFlaeche.nachher);
+
+// Die Rahmen sichtbar machen - aber nie im Export.
+// Was hier gemessen wird, gilt nur ohne laufende Wiedergabe. Eine Video-Aufnahme
+// von weiter oben kann unter Last noch laufen - dann malt sie jeden Effekt mit,
+// und die Prüfungen unten wären rot oder, schlimmer, grundlos grün.
+// Nicht waitForFunction mit async: das Versprechen selbst ist "wahr", die
+// Warterei wäre sofort vorbei gewesen.
+const ruhig = async (wo) => {
+  const t0 = Date.now();
+  while (await page.evaluate(async () => (await import('/media.js')).effectsRunning())) {
+    if (Date.now() - t0 > 60000) throw new Error('Wiedergabe läuft seit 60 s: ' + wo);
+    await page.waitForTimeout(100);
+  }
+  if (Date.now() - t0 > 150) console.log('  (gewartet auf Wiedergabe vor ' + wo + ': ' + (Date.now() - t0) + ' ms)');
+};
+await ruhig('Rahmen-Ebene');
+const lxSichtbar = await page.evaluate(async () => {
+  const m = await import('/media.js');
+  const ed = window._studioEditor;
+  ed.clearAll(); ed.setSize(300, 200);
+  ed.canvas.setBackgroundColor('#ffffff', () => {});
+  const r = m.addEffektRahmen(ed, 'network');
+  r.set({ left: 40, top: 40, width: 120, height: 80 }); r.setCoords();
+  ed.canvas.discardActiveObject();
+  const box = document.getElementById('fx-show-frames');
+  if (box && !box.checked) { box.checked = true; box.dispatchEvent(new Event('change')); }
+  ed.canvas.renderAll();
+  await new Promise(x => setTimeout(x, 80));
+  const ebene = document.getElementById('fx-frame-layer');
+  let gezeichnet = 0;
+  if (ebene) {
+    const d = ebene.getContext('2d').getImageData(0, 0, ebene.width, ebene.height).data;
+    for (let i = 3; i < d.length; i += 4) if (d[i] > 0) gezeichnet++;
+  }
+  // Der Export darf den Rahmen nicht enthalten: ohne laufende Vorschau malt der
+  // Effekt nichts, also muss das Bild rein weiß sein.
+  const url = ed.canvas.toDataURL({ format: 'png' });
+  const img = new Image(); img.src = url; await img.decode();
+  const c = document.createElement('canvas'); c.width = img.width; c.height = img.height;
+  const cx = c.getContext('2d'); cx.drawImage(img, 0, 0);
+  const d2 = cx.getImageData(0, 0, c.width, c.height).data;
+  let nichtWeiss = 0;
+  for (let i = 0; i < d2.length; i += 4) if (d2[i] < 240 || d2[i + 1] < 240 || d2[i + 2] < 240) nichtWeiss++;
+  return { ebene: !!ebene, gezeichnet, nichtWeiss, ueberFabric: ebene?.parentNode === ed.canvas.wrapperEl };
+});
+pruefe('Es gibt eine eigene Ebene für die Rahmen-Umrisse', lxSichtbar.ebene && lxSichtbar.ueberFabric);
+pruefe('Mit "Show frames" ist der Rahmen dort eingezeichnet', lxSichtbar.gezeichnet > 50, lxSichtbar.gezeichnet);
+pruefe('Im exportierten Bild ist davon nichts', lxSichtbar.nichtWeiss === 0, lxSichtbar.nichtWeiss);
+
+// In der Vorschau keine Hilfslinien: weder die Auswahl-Striche noch die Rahmen-Ebene.
+const lxVorschau = await page.evaluate(async () => {
+  const m = await import('/media.js');
+  const ed = window._studioEditor;
+  const r = ed.realObjects().find(m.istEffektRahmen);
+  ed.selectObj(r);
+  m.previewAnimation(ed);
+  await new Promise(x => setTimeout(x, 300));
+  const laeuft = m.effectsRunning();
+  const ebene = document.getElementById('fx-frame-layer');
+  const d = ebene.getContext('2d').getImageData(0, 0, ebene.width, ebene.height).data;
+  let striche = 0;
+  for (let i = 3; i < d.length; i += 4) if (d[i] > 0) striche++;
+  return { laeuft, aktiv: !!ed.active(), striche };
+});
+pruefe('Während der Vorschau ist nichts ausgewählt', lxVorschau.laeuft && !lxVorschau.aktiv, JSON.stringify(lxVorschau));
+pruefe('und die Rahmen-Ebene ist leer', lxVorschau.laeuft && lxVorschau.striche === 0, lxVorschau.striche);
+await ruhig('nach der Vorschau');
+
+// Größe der Marken: ein Regler für Marker, Stempel und Badges
+const lxGroesse = await page.evaluate(async () => {
+  const ed = window._studioEditor;
+  ed.clearAll();
+  const r = document.getElementById('fx-mark-size');
+  r.value = 150; r.dispatchEvent(new Event('input'));
+  const w = document.getElementById('fx-text-input'); w.value = '?';
+  document.querySelector('[data-act="add-marker"]').click();
+  // Read at once: a marker pulses, and a running preview would scale it.
+  const mk = ed.realObjects().find(o => o.shapeKind === 'marker');
+  const neu = mk?.scaleX;
+  await new Promise(x => setTimeout(x, 120));
+  r.value = 80; r.dispatchEvent(new Event('input'));
+  const nachher = mk?.scaleX;
+  r.value = 100; r.dispatchEvent(new Event('input'));
+  return { neu, nachher };
+});
+pruefe('Eine neue Marke kommt in der eingestellten Größe', Math.abs(lxGroesse.neu - 1.5) < 0.01, lxGroesse.neu);
+pruefe('und der Regler ändert die ausgewählte', Math.abs(lxGroesse.nachher - 0.8) < 0.01, lxGroesse.nachher);
+
+const lxBadgesImReiter = await page.evaluate(() =>
+  ['circle', 'hex', 'pill'].every(k => !!document.querySelector('[data-panel="effects"] [data-badge="' + k + '"]')));
+pruefe('Die Badges sind auch im Effekte-Reiter', lxBadgesImReiter);
+
+// Die Lupe gehört zum Bild, nicht zur Bewegung: sichtbar ohne Vorschau, im PNG
+// dabei, und der Size-Regler greift auch bei ihr - um die Mitte, nicht um die Ecke.
+await ruhig('Lupe');
+const lxLupe = await page.evaluate(async () => {
+  const m = await import('/media.js');
+  const ed = window._studioEditor;
+  ed.clearAll(); ed.setSize(300, 200);
+  ed.canvas.setBackgroundColor('#ffffff', () => {});
+  document.querySelector('[data-act="add-magnifier"]').click();
+  const lupe = ed.realObjects().find(o => m.istEffektRahmen(o) && o.fx === 'magnifier');
+  // Das Fenster, in dem sie wandert, und ein Glas von 80 px
+  lupe.set({ left: 20, top: 30, width: 240, height: 120, scaleX: 1, scaleY: 1 }); lupe.setCoords();
+  lupe.fxLens = 80;
+  ed.canvas.discardActiveObject();
+  ed.canvas.renderAll();
+  const dunkel = (d) => { let n = 0; for (let i = 0; i < d.length; i += 4)
+    if (d[i + 3] > 200 && d[i] < 60 && d[i + 1] < 60 && d[i + 2] < 60) n++; return n; };
+  const u = ed.canvas.lowerCanvasEl;
+  const aufSchirm = dunkel(u.getContext('2d').getImageData(0, 0, u.width, u.height).data);
+  const url = ed.exportDataURL();
+  const img = new Image(); img.src = url; await img.decode();
+  const c = document.createElement('canvas'); c.width = img.width; c.height = img.height;
+  const cx = c.getContext('2d'); cx.drawImage(img, 0, 0);
+  const imPng = dunkel(cx.getImageData(0, 0, c.width, c.height).data);
+
+  // Der Weg: sie wandert, und das Glas bleibt ganz im Fenster
+  const a = m.lupenStelle(lupe, 0), b = m.lupenStelle(lupe, 3);
+  const wandert = Math.hypot(a[0] - b[0], a[1] - b[1]) > 20;
+  const imFenster = [0, 0.5, 1, 2, 3, 5, 8, 9, 13, 17, 21].every(t => {
+    const [x, y] = m.lupenStelle(lupe, t);
+    return x - 40 >= 19.5 && x + 40 <= 260.5 && y - 40 >= 29.5 && y + 40 <= 150.5;
+  });
+  // Mit Show frames liegt der Weg gepunktet auf der Hilfsebene
+  const box = document.getElementById('fx-show-frames');
+  if (box && !box.checked) { box.checked = true; box.dispatchEvent(new Event('change')); }
+  ed.canvas.renderAll();
+  const ebene = document.getElementById('fx-frame-layer');
+  const ed2 = ebene.getContext('2d').getImageData(0, 0, ebene.width, ebene.height).data;
+  let orange = 0;
+  for (let i = 0; i < ed2.length; i += 4) if (ed2[i + 3] > 100 && ed2[i] > 200 && ed2[i + 1] > 80 && ed2[i + 1] < 160 && ed2[i + 2] < 90) orange++;
+
+  // Die Regler der Lupe in der Leiste
+  const zeile = document.querySelector('#anim-bar .fx-row .fx-path')?.closest('.fx-row');
+  const setz = (sel, v) => { const i = zeile.querySelector(sel); i.value = v;
+    i.dispatchEvent(new Event(i.tagName === 'SELECT' ? 'change' : 'input')); };
+  setz('.fx-speed', 10); const schnell = lupe.fxLineSec;
+  setz('.fx-speed', 1); const langsam = lupe.fxLineSec;
+  // Fenster flacher als das Glas werden soll: es muss mitwachsen.
+  // (Der Regler reicht bis 60 % der kurzen Seite - hier 120 px.)
+  lupe.set({ height: 90 }); lupe.setCoords();
+  setz('.fx-lens', 120); const glas = lupe.fxLens, fensterHoch = lupe.getBoundingRect(true).height;
+  setz('.fx-path', 'still');
+  const steht = m.lupenStelle(lupe, 0).join() === m.lupenStelle(lupe, 4).join();
+
+  // Das Gesamt-Tempo ist auch ein Tempo: links langsam, rechts schnell
+  const t = document.getElementById('anim-tempo');
+  t.value = -2; const tempoLangsam = m.readTempo();
+  t.value = 2; const tempoSchnell = m.readTempo();
+  t.value = 0; m.readTempo();
+
+  // Motion ebenso: Regler ganz rechts = kürzeste Dauer
+  document.getElementById('fx-text-input').value = '?';
+  document.querySelector('[data-act="add-marker"]').click();
+  const mk = ed.realObjects().find(o => o.shapeKind === 'marker');
+  const mzeile = [...document.querySelectorAll('#anim-bar details[data-group="motion"] .anim-row')]
+    .find(r => ed.realObjects()[+r.dataset.objIdx] === mk);
+  const ms = mzeile.querySelectorAll('.anim-time-item input')[0];
+  ms.value = ms.max; ms.dispatchEvent(new Event('input'));
+  const motionSchnell = mk.anim.dur;
+  ms.value = ms.min; ms.dispatchEvent(new Event('input'));
+  const motionLangsam = mk.anim.dur;
+
+  const gruppen = [...document.querySelectorAll('#anim-bar details.anim-group')].map(d => d.dataset.group);
+  return { aufSchirm, imPng, wandert, imFenster, orange, schnell, langsam, glas, fensterHoch, steht,
+           tempoLangsam, tempoSchnell, motionSchnell, motionLangsam, gruppen, zeile: !!zeile };
+});
+pruefe('Die Lupe ist ohne Vorschau auf dem Canvas zu sehen', lxLupe.aufSchirm > 100, lxLupe.aufSchirm);
+pruefe('und im exportierten PNG', lxLupe.imPng > 100, lxLupe.imPng);
+pruefe('Die Lupe wandert: nach 3 s steht sie woanders', lxLupe.wandert);
+pruefe('und das Glas bleibt dabei ganz im Fenster', lxLupe.imFenster);
+pruefe('Ihr Weg liegt gepunktet auf der Hilfsebene', lxLupe.orange > 30, lxLupe.orange);
+pruefe('Die Lupe hat eigene Regler in der Leiste', lxLupe.zeile);
+pruefe('Speed: rechts 2 s pro Zeile, links 20 s', lxLupe.schnell === 2 && lxLupe.langsam === 20,
+  lxLupe.schnell + ' / ' + lxLupe.langsam);
+pruefe('Lens stellt die Glasgröße', lxLupe.glas === 120, lxLupe.glas);
+pruefe('und das Fenster wächst mit, wenn das Glas größer wird', lxLupe.fensterHoch >= 120, lxLupe.fensterHoch);
+pruefe('Stay put: sie steht still', lxLupe.steht);
+pruefe('Gesamt-Tempo: links langsam, rechts schnell', lxLupe.tempoLangsam === 2 && lxLupe.tempoSchnell === 0.5,
+  lxLupe.tempoLangsam + ' / ' + lxLupe.tempoSchnell);
+pruefe('Motion-Speed: rechts schnell, links langsam', lxLupe.motionSchnell === 300 && lxLupe.motionLangsam === 4000,
+  lxLupe.motionSchnell + ' / ' + lxLupe.motionLangsam);
+pruefe('In der Leiste stehen die Effekte vor Motion',
+  lxLupe.gruppen.join(',') === 'effects,motion', lxLupe.gruppen.join(','));
+
+await sauber('Leiste und Effekte-Reiter');
 
 // ---- Ausgabe --------------------------------------------------------------
 console.log('\n===== ERGEBNIS =====');

@@ -268,7 +268,7 @@ async function _saveImage(editor) {
       editor._ladefehler = false;
       return true;
     }
-    status('❌ ' + (d.error || 'Fehler'), 'red');
+    status('❌ ' + (d.error || 'Error'), 'red');
     toast(d.error || 'Save failed', 'err');
     return false;
   } catch (e) {

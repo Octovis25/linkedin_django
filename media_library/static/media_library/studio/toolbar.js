@@ -133,6 +133,7 @@ export const MODES = [
   { id: 'build',  icon: '🗂', label: 'Build',  title: 'Template, canvas and brand colours' },
   { id: 'insert', icon: '➕', label: 'Insert', title: 'Text, shapes and badges' },
   { id: 'image',  icon: '✂',  label: 'Image',  title: 'Cut out and retouch the selected image' },
+  { id: 'effects', icon: '✨', label: 'Effects', title: 'Effect frames, magnifier, marker and stamp' },
   { id: 'layers', icon: '☰',  label: 'Layers', title: 'Order and grouping' },
 ];
 
@@ -329,6 +330,39 @@ export const PANELS = {
       { t: 'raw', html: '<div id="tool-status" class="tool-status"></div>' },
       { t: 'raw', html: '</div>' },   // /section-body of "Tool"
       { t: 'raw', html: '</div>' },   // /retouch-body
+    ]},
+  ],
+
+  /* Effects have their own tab. They sat at the bottom of the Insert panel,
+     below shapes and badges, and were simply not found there. */
+  effects: [
+    { id: 'fxframe', title: 'Effects', items: [
+      { t: 'hint', text: 'Click a picture to lay that effect over your image. Colour, area, speed and start are set in the bar under the canvas.' },
+      { t: 'mount', id: 'fx-tiles', cls: 'fx-tiles' },
+    ]},
+
+    { id: 'fxmarken', title: 'Marks', items: [
+      { t: 'hint', text: 'Marker, stamp and badges take the word from this field - or ask for it right after you add them. The colour comes from the palette below.' },
+      { t: 'text', id: 'fx-text-input', ph: 'Word, e.g. ? or Approved…', wide: true },
+      { t: 'row', cls: 'fx-size-row', items: [
+        { t: 'label', text: 'Size' },
+        { t: 'range', id: 'fx-mark-size', min: 50, max: 250, step: 10, value: 100,
+          title: 'Size of the selected mark - and of the next one you add' },
+        { t: 'raw', html: '<span id="fx-mark-size-out" class="fx-size-out">100%</span>' },
+      ]},
+      { t: 'row', items: [
+        { t: 'btn', act: 'add-marker', icon: '📍', label: 'Marker',
+          title: 'A blinking sign you place yourself' },
+        { t: 'btn', act: 'add-stamp', icon: '🖈', label: 'Stamp',
+          title: 'Your word, stamped on - it fades in and stays' },
+        { t: 'btn', act: 'add-magnifier', icon: '🔍', label: 'Magnifier',
+          title: 'Magnifies whatever lies under it' },
+      ]},
+      { t: 'row', items: [
+        { t: 'badge', badge: 'circle', icon: '①', label: 'Circle', title: 'Circle with number or text' },
+        { t: 'badge', badge: 'hex',    icon: '⬢', label: 'Hexagon', title: 'Hexagon with number or text' },
+        { t: 'badge', badge: 'pill',   icon: '▭', label: 'Banner',  title: 'Banner pill with text' },
+      ]},
     ]},
   ],
 

@@ -15,7 +15,7 @@ if (fabric) fabric.Object.prototype.objectCaching = false;
 // carry different properties. Leave an entry out and that particular edit is
 // lost either on undo OR on reopening.
 export const EXTRA_PROPS = [
-  'srcUrl', 'originalUrl', 'bgRemoved', 'edited', 'anim', 'shapeKind', 'fx', 'fxDelay', 'startAt', 'svgPart',
+  'srcUrl', 'originalUrl', 'bgRemoved', 'edited', 'anim', 'shapeKind', 'fx', 'fxDelay', 'fxTempo', 'fxZoom', 'fxColor', 'fxLens', 'fxPath', 'fxLineSec', 'fxPause', 'startAt', 'svgPart',
   'tbHead', 'tbBody', 'tbWidth', 'tbSize', 'tbAlign', 'tbCheck', 'tbColor',
   'clItems', 'clWidth', 'clSize', 'clColor',
 ];

@@ -83,7 +83,7 @@ async function einfuegen(item, opts) {
   const url = item.url || item;
   const name = item.name || url;
   if (istSvg(name) || istSvg(url)) {
-    if (!_svgHandler) { toast('SVG-Import nicht bereit – bitte Seite neu laden', 'err'); return; }
+    if (!_svgHandler) { toast('SVG import not ready – please reload the page', 'err'); return; }
     try {
       const res = await fetch(url, { credentials: 'same-origin' });
       if (!res.ok) throw new Error('HTTP ' + res.status);
@@ -92,7 +92,7 @@ async function einfuegen(item, opts) {
       toast(n ? `SVG inserted: ${n} layer(s)` : 'SVG contained no shapes', n ? 'ok' : 'err');
     } catch (e) {
       console.error(e);
-      toast('SVG-Fehler: ' + e.message, 'err');
+      toast('SVG error: ' + e.message, 'err');
     }
     return;
   }
@@ -161,10 +161,10 @@ function initUpload() {
         });
         const d = await readJson(r);
         if (d.ok) melde(`✓ ${file.name} uploaded`);
-        else { melde(`✗ ${d.error || 'Fehler'}`); toast('Upload fehlgeschlagen', 'err'); }
+        else { melde(`✗ ${d.error || 'Error'}`); toast('Upload failed', 'err'); }
       } catch (e) {
         melde('✗ Fehler');
-        toast('Upload-Fehler', 'err');
+        toast('Upload error', 'err');
       }
     }
     setTimeout(() => { if (statusEl) statusEl.textContent = ''; }, 3000);
@@ -309,7 +309,7 @@ async function makeRow(name, path, depth) {
           const empty = document.createElement('div');
           empty.className = 'no-templates';
           empty.style.paddingLeft = (depth * 14 + 20) + 'px';
-          empty.textContent = 'keine Unterordner';
+          empty.textContent = 'no subfolders';
           kids.appendChild(empty);
         } else {
           for (const sub of d.subfolders) kids.appendChild(await makeRow(sub, path + '/' + sub, depth + 1));

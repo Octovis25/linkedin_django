@@ -236,6 +236,20 @@ bg.renderPalette(document.getElementById('palette-row'), col => {
     if (t && _hex(t.fill) === _hex(col)) t.set('fill', autoContrast(col));
     editor.canvas.requestRenderAll(); editor.snapshot();
   }
+  else if (media.istEffektRahmen(o)) {
+    // The frame itself has no colour to show - its effect gets it.
+    if (o.fx !== 'magnifier') { o.fxColor = col; editor.canvas.requestRenderAll(); editor.snapshot(); renderAnimBar(); }
+  }
+  else if (o && o.shapeKind === 'marker') {
+    o._objects?.[1]?.set('fill', col);
+    const t = o._objects?.[3];
+    if (t && _hex(t.fill) === _hex(col)) t.set('fill', autoContrast(col));
+    editor.canvas.requestRenderAll(); editor.snapshot();
+  }
+  else if (o && o.shapeKind === 'stamp') {
+    o._objects?.[0]?.set('stroke', col); o._objects?.[1]?.set('stroke', col); o._objects?.[2]?.set('fill', col);
+    editor.canvas.requestRenderAll(); editor.snapshot();
+  }
   else if (o && o.shapeKind) { o.set(o.fill ? 'fill' : 'stroke', col); editor.canvas.requestRenderAll(); editor.snapshot(); }
 });
 
@@ -264,7 +278,7 @@ async function speichereAls(kind) {
   // A second click during a save opened a second name dialog and produced two
   // outputs. The guard in io.saveImage covers only the image path; GIF and
   // video ran unchecked.
-  if (_speichertGerade) { toast('Speichert bereits…', 'err'); return; }
+  if (_speichertGerade) { toast('Already saving…', 'err'); return; }
   _speichertGerade = true;
   try {
     await _speichereAls(kind);
@@ -296,7 +310,7 @@ async function _speichereAls(kind) {
 // ---- Toolbar-Aktionen (data-act) -----------------------------------------
 const actions = {
   save:        async () => {
-    if (_speichertGerade) { toast('Speichert bereits…', 'err'); return; }
+    if (_speichertGerade) { toast('Already saving…', 'err'); return; }
     _speichertGerade = true;
     try { await io.saveImage(editor); refreshOutput(); } finally { _speichertGerade = false; }
   },
@@ -320,11 +334,30 @@ const actions = {
     }
     await speichereAls(kind);
   },
+  // An effect needs an area, and that area is a frame. It starts covering the
+  // whole picture: shrinking one is a drag, finding an invisible small one on a
+  // busy artboard is not.
+  'add-fxframe': () => {
+    const rahmen = media.addEffektRahmen(editor, 'network');
+    renderLayers(); renderAnimBar();
+    toast('Effect frame added - choose its effect under the canvas.');
+    return rahmen;
+  },
+
+  'add-magnifier': () => {
+    const lupe = media.addEffektRahmen(editor, 'magnifier');
+    renderLayers(); renderAnimBar();
+    toast('Magnifier added - drag its window over the text; way, glass and speed are under the canvas.');
+    return lupe;
+  },
+  'add-marker': () => addMarker(),
+  'add-stamp': () => addStempel(),
+
   // Format bewusst neu wählen (fragt wieder).
   'save-as-new': async () => { _saveKind = null; await actions['save-as'](); },
   // Vorhandene Ausgabe: nur speichern (gleiches Format, überschreibt).
   'save-existing': async () => {
-    if (_speichertGerade) { toast('Speichert bereits…', 'err'); return; }
+    if (_speichertGerade) { toast('Already saving…', 'err'); return; }
     let kind = _saveKind || CONFIG.libData?.kind || 'image';
     // Animations set, but the file is a PNG? A still image used to be saved
     // quietly, and the animations were not in the result.
@@ -332,8 +365,8 @@ const actions = {
       const wahl = await modal('Animationen erkannt',
         'This element has animations, but the opened file is an image. How to save?',
         [ { label: '🖼 As image (no animation)', value: 'image' },
-          { label: '🎞 Als GIF',                   value: 'gif' },
-          { label: '🎬 Als Video',                 value: 'video' },
+          { label: '🎞 As GIF',                    value: 'gif' },
+          { label: '🎬 As video',                  value: 'video' },
           { label: 'Cancel',                    value: null } ]);
       if (!wahl) return;
       kind = wahl;
@@ -357,8 +390,8 @@ const actions = {
     else                       io.downloadImage(editor);
   },
   'new':       async () => {
-    const ok = await modal('Neu anfangen?', 'Leert den Editor (alle Elemente + Hintergrund). Nicht Gespeichertes geht verloren.', [
-      { label: '🆕 Ja, neuer Editor', value: true },
+    const ok = await modal('Start over?', 'Clears the editor (all elements and the background). Anything not saved is lost.', [
+      { label: '🆕 Yes, new editor', value: true },
       { label: 'Cancel', value: false },
     ]);
     if (!ok) return;
@@ -513,21 +546,21 @@ const actions = {
   'checker-remove': async () => {
     const o = targetImage();
     if (!o) { toast('No image', 'err'); return; }
-    status('🧩 Entferne Schachbrettmuster…');
+    status('🧩 Removing checkerboard pattern…');
     try {
       const out = await removeCheckerboard(o._element);
       if (!out) { status('No checkerboard pattern found – image unchanged', '#888'); return; }
       o.bgRemoved = true; o._work = null;
       retouch.replaceElement(o, out); editor.snapshot();
       status('✅ Pattern removed', 'green');
-    } catch (e) { status('❌ ' + (e.message || 'Fehler'), 'red'); }
+    } catch (e) { status('❌ ' + (e.message || 'Error'), 'red'); }
   },
   'restore-post': async () => {
     if (!CONFIG.postData?.canvas_json) return;
     if (!window.studioDarfVerlassen || window.studioDarfVerlassen()) {
       status('⏳ Loading draft…');
-      await io.restoreCanvas(editor, CONFIG.postData.canvas_json);
-      status('Bereit.', '#888');
+      await ladeCanvas(CONFIG.postData.canvas_json);
+      status('Ready.', '#888');
     }
   },
   'post-bg':      () => CONFIG.postData?.id && bg.setBackgroundImage(editor, `/library/studio/api/post-image/${CONFIG.postData.id}/`),
@@ -686,7 +719,7 @@ async function saveAsTemplate() {
       // changes even straight after saving a template.
       window.dispatchEvent(new CustomEvent('studio:vorlage-gespeichert'));
       bg.loadTemplateList(editor);
-    } else { toast('Fehler: ' + (d.error || ''), 'err'); status('❌ ' + (d.error || 'Fehler'), 'red'); }
+    } else { toast('Error: ' + (d.error || ''), 'err'); status('❌ ' + (d.error || 'Error'), 'red'); }
   } catch (e) { toast('Save failed', 'err'); status('❌ ' + (e.message || e), 'red'); }
 }
 function _cookie(name) {
@@ -815,7 +848,7 @@ async function doCutout() {
     status('✅ Freigestellt', 'green');
   } catch (e) {
     status('❌ Freistellen fehlgeschlagen', 'red');
-    toast(e.message || 'Fehler beim Freistellen', 'err');
+    toast(e.message || 'Cutting out failed', 'err');
   }
 }
 
@@ -1312,7 +1345,7 @@ function buildBadge(kind, txt, fill, textColor) {
 }
 
 function addBadge(kind) {
-  const inp = document.getElementById('text-input');
+  const inp = fxWortfeld();
   const typed = inp?.value.trim();
   const fill = currentShapeColor;
   let textColor = document.getElementById('text-color')?.value || '#ffffff';
@@ -1322,6 +1355,7 @@ function addBadge(kind) {
   const dflt = (kind === 'circle' || kind === 'hex') ? '1' : 'Title';
   const g = buildBadge(kind, typed || dflt, fill, textColor);
   g.set({ left: editor.width / 2, top: editor.height / 2 });
+  g.scale(markenGroesse());
   editor.canvas.add(g);
   editor.canvas.setActiveObject(g);
   editor.canvas.requestRenderAll();
@@ -1465,7 +1499,7 @@ function startTextblockEdit(g) {
     const geaendert = h !== (g.tbHead || '') || b !== (g.tbBody || '')
       || sz !== (g.tbSize || 19) || wd !== (g.tbWidth || 260);
     if (save && geaendert) rebuildTextblock(g, h, b, { size: sz, width: wd });
-    status('Bereit.');
+    status('Ready.');
   };
   box.addEventListener('keydown', e => {
     e.stopPropagation();
@@ -1640,7 +1674,7 @@ function startChecklistEdit(g) {
     const wd = Math.max(60, +wi.value || g.clWidth || 300);
     wegDamit(box);
     if (save && items.length) rebuildChecklist(g, items, { size: sz, width: wd });
-    status('Bereit.');
+    status('Ready.');
   };
   box.addEventListener('keydown', e => {
     e.stopPropagation();
@@ -1804,7 +1838,7 @@ async function importSvgText(svgText, asGroup) {
     inp.onchange = async () => {
       const f = inp.files?.[0];
       if (!f) return;
-      status('SVG wird gelesen…');
+      status('Reading SVG…');
       try {
         const text = await f.text();
         const asGroup = !!document.getElementById('svg-as-group')?.checked;
@@ -1812,22 +1846,135 @@ async function importSvgText(svgText, asGroup) {
         if (n) status(asGroup ? 'SVG inserted as 1 object.' : `SVG inserted: ${n} layer(s).`, '#198754');
       } catch (err) {
         console.error(err);
-        status('SVG konnte nicht gelesen werden: ' + err.message, '#dc3545');
+        status('SVG could not be read: ' + err.message, '#dc3545');
       }
     };
   }
+}
+
+/* ---- Marker: a sign you place yourself ---------------------------------
+   A frame gives an effect an area; a marker is the opposite - one point, set
+   by hand. It is an ordinary group, so it can be dragged, scaled and sorted in
+   the layers like everything else. The blinking is the Pulse motion we already
+   have, not a second system. */
+function buildMarker(txt, fill, textColor) {
+  const r = 26;
+  const stiel = new fabric.Rect({
+    width: 4, height: r * 2.0, rx: 2, ry: 2, fill: '#0A4D52', opacity: 0.35,
+    originX: 'center', originY: 'top', left: 3, top: r * 0.55, angle: 8,
+  });
+  const kreis = new fabric.Circle({ radius: r, fill, originX: 'center', originY: 'center', left: 0, top: 0 });
+  const glanz = new fabric.Circle({
+    radius: r * 0.3, fill: '#ffffff', opacity: 0.45,
+    originX: 'center', originY: 'center', left: -r * 0.28, top: -r * 0.32,
+  });
+  const label = new fabric.Text(String(txt || '?'), {
+    fontSize: r * 1.1, fontWeight: 'bold', fontFamily: 'Roboto, Arial, sans-serif',
+    fill: textColor, originX: 'center', originY: 'center', left: 0, top: 0,
+  });
+  return new fabric.Group([stiel, kreis, glanz, label], {
+    originX: 'center', originY: 'center', shapeKind: 'marker',
+  });
+}
+
+function isMarker(o) { return !!(o && o.shapeKind === 'marker'); }
+
+function fxWortfeld() {
+  const eigen = document.getElementById('fx-text-input');
+  if (eigen && eigen.value.trim()) return eigen;
+  const alt = document.getElementById('text-input');
+  if (alt && alt.value.trim()) return alt;
+  return eigen || alt;
+}
+
+function addMarker() {
+  const inp = fxWortfeld();
+  const typed = inp?.value.trim();
+  const fill = currentShapeColor;
+  let textColor = document.getElementById('text-color')?.value || '#ffffff';
+  if (_hex(textColor) === _hex(fill)) textColor = autoContrast(fill);
+  const g = buildMarker(typed || '?', fill, textColor);
+  g.set({ left: editor.width / 2, top: editor.height / 2 });
+  g.scale(markenGroesse());
+  // Blinking from the first second: that is what a marker is for.
+  g.anim = { type: 'pulse', dur: 1400 };
+  media.setStart(g, 0);
+  editor.canvas.add(g);
+  editor.canvas.setActiveObject(g);
+  editor.canvas.requestRenderAll();
+  editor.snapshot();
+  if (inp) inp.value = '';
+  if (!typed) startBadgeEdit(g);
+  renderLayers(); renderAnimBar();
+  return g;
+}
+
+/* ---- Stamp: your word, pressed on -------------------------------------
+   No wooden stamp comes down: the imprint simply appears and stays, which is
+   what keeps the text underneath readable. Appearing is the Fade in motion. */
+function buildStempel(txt, farbe) {
+  const wort = String(txt || 'Approved').toUpperCase();
+  const fs = 30;
+  const label = new fabric.Text(wort, {
+    fontSize: fs, fontWeight: 'bold', fontFamily: 'Roboto, Arial, sans-serif',
+    fill: farbe, originX: 'center', originY: 'center', left: 0, top: 0,
+    charSpacing: 40,
+  });
+  const w = Math.max(150, label.width + fs * 0.9);
+  const h = fs * 1.9;
+  const rahmen = new fabric.Rect({
+    width: w, height: h, rx: fs * 0.22, ry: fs * 0.22,
+    fill: '', stroke: farbe, strokeWidth: Math.max(2, fs * 0.09),
+    originX: 'center', originY: 'center', left: 0, top: 0,
+  });
+  const innen = new fabric.Rect({
+    width: w - fs * 0.26, height: h - fs * 0.26, rx: fs * 0.16, ry: fs * 0.16,
+    fill: '', stroke: farbe, strokeWidth: Math.max(1, fs * 0.035), opacity: 0.8,
+    originX: 'center', originY: 'center', left: 0, top: 0,
+  });
+  return new fabric.Group([rahmen, innen, label], {
+    originX: 'center', originY: 'center', shapeKind: 'stamp', angle: -12,
+  });
+}
+
+function isStempel(o) { return !!(o && o.shapeKind === 'stamp'); }
+
+function addStempel() {
+  const inp = fxWortfeld();
+  const typed = inp?.value.trim();
+  const farbe = currentShapeColor;
+  const g = buildStempel(typed || 'Approved', farbe);
+  g.set({ left: editor.width / 2, top: editor.height * 0.62 });
+  g.scale(markenGroesse());
+  g.anim = { type: 'fadeIn', dur: 400 };
+  media.setStart(g, 600);
+  editor.canvas.add(g);
+  editor.canvas.setActiveObject(g);
+  editor.canvas.requestRenderAll();
+  editor.snapshot();
+  if (inp) inp.value = '';
+  if (!typed) startBadgeEdit(g);
+  renderLayers(); renderAnimBar();
+  return g;
 }
 
 // ---- Writing text straight in the badge (double-click, or right after creating it) ----
 function isBadge(o) { return !!(o && typeof o.shapeKind === 'string' && o.shapeKind.startsWith('badge-')); }
 
 function rebuildBadge(g, txt) {
-  const kind = g.shapeKind.replace('badge-', '');
   const old = g._objects || [];
-  const fill = old[0]?.fill || currentShapeColor;
-  const textColor = old[1]?.fill || '#ffffff';
   const c = g.getCenterPoint();
-  const ng = buildBadge(kind, txt, fill, textColor);
+  let ng;
+  if (isMarker(g)) {
+    ng = buildMarker(txt, old[1]?.fill || currentShapeColor, old[3]?.fill || '#ffffff');
+  } else if (isStempel(g)) {
+    ng = buildStempel(txt, old[0]?.stroke || currentShapeColor);
+  } else {
+    const kind = g.shapeKind.replace('badge-', '');
+    const fill = old[0]?.fill || currentShapeColor;
+    const textColor = old[1]?.fill || '#ffffff';
+    ng = buildBadge(kind, txt, fill, textColor);
+  }
   ng.set({ left: c.x, top: c.y, angle: g.angle, scaleX: g.scaleX, scaleY: g.scaleY,
            anim: g.anim, fx: g.fx, fxDelay: g.fxDelay, startAt: g.startAt });
   const idx = editor.canvas.getObjects().indexOf(g);
@@ -1841,7 +1988,7 @@ function rebuildBadge(g, txt) {
 }
 
 function startBadgeEdit(g) {
-  if (!isBadge(g)) return;
+  if (!isBadge(g) && !isMarker(g) && !isStempel(g)) return;
   wegDamit(document.getElementById('badge-edit'));
   const cur = g._objects?.[1]?.text || '';
   const cEl = editor.canvas.upperCanvasEl;
@@ -1871,7 +2018,7 @@ function startBadgeEdit(g) {
     const v = inp.value.trim();
     wegDamit(inp);
     if (save && v && v !== cur) rebuildBadge(g, v);
-    status('Bereit.');
+    status('Ready.');
   };
   inp.onkeydown = e => {
     e.stopPropagation();
@@ -1909,7 +2056,7 @@ function textZuIText(o) {
 
 editor.canvas.on('mouse:dblclick', e => {
   const o = e.target;
-  if (isBadge(o)) startBadgeEdit(o);
+  if (isBadge(o) || isMarker(o) || isStempel(o)) startBadgeEdit(o);
   else if (isChecklist(o)) startChecklistEdit(o);
   else if (isTextblock(o)) startTextblockEdit(o);
   else if (o && o.type === 'text') { textZuIText(o); status('Edit text, then click beside it.'); }
@@ -2115,12 +2262,15 @@ function wireSizeFields() {
         o.setPositionByOrigin(mitte, 'center', 'center');
       });
     });
-    if (n) status(`${n} Elemente auf ${Math.round(ziel)} px gebracht.`, '#198754');
+    if (n) status(`${n} element(s) set to ${Math.round(ziel)} px.`, '#198754');
   };
 }
 
 // ---- Ebenen-Liste ---------------------------------------------------------
 function layerLabel(o, i) {
+  if (media.istEffektRahmen(o)) return (o.fx === 'magnifier' ? '🔍 Magnifier' : '✨ Effect frame');
+  if (o.shapeKind === 'marker') return '📍 Marker';
+  if (o.shapeKind === 'stamp')  return '🖈 Stamp';
   if (o.type === 'image')   return '🖼 Image ' + i;
   if (o.shapeKind === 'textblock') return '📝 ' + (o.tbHead || o.tbBody || 'Text block').slice(0, 14);
   if (o.type === 'textbox') return '✏️ ' + (o.text || 'Text').slice(0, 14);
@@ -2145,10 +2295,10 @@ function renderLayers() {
     name.textContent = layerLabel(o, i);
     name.onclick = () => { editor.selectObj(o); };
     const up = document.createElement('button');
-    up.className = 'layer-btn'; up.textContent = '⬆'; up.title = 'Nach vorne';
+    up.className = 'layer-btn'; up.textContent = '⬆'; up.title = 'Bring forward';
     up.onclick = (e) => { e.stopPropagation(); editor.moveObj(o, 'up'); renderLayers(); };
     const down = document.createElement('button');
-    down.className = 'layer-btn'; down.textContent = '⬇'; down.title = 'Nach hinten';
+    down.className = 'layer-btn'; down.textContent = '⬇'; down.title = 'Send backward';
     down.onclick = (e) => { e.stopPropagation(); editor.moveObj(o, 'down'); renderLayers(); };
     row.appendChild(name); row.appendChild(up); row.appendChild(down);
     list.appendChild(row);
@@ -2163,6 +2313,328 @@ function renderLayers() {
 // was dead duplicate code.
 
 // ---- Animations-Leiste unter dem Canvas (pro Element ein Effekt) ----------
+/* ---- The bar under the canvas --------------------------------------------
+   Two groups that fold away on their own: Motion, one row per element, and
+   Effects, one row per effect frame. Mixed into one list, a frame looked like
+   an element with half its controls missing.
+
+   The effect frames themselves are invisible - that is the point of them, they
+   must not end up in the picture. So the bar is also where one SEES them: the
+   switch outlines every frame, pointing at a row lights up its frame, and
+   Select puts the handles on it. All of that is drawn on a separate layer
+   (zeichneRahmenHinweise), never on the canvas that gets exported. */
+const _animOffen = { motion: true, effects: true };
+let _rahmenZeigen = true;
+let _rahmenHover = null;
+
+function animGruppe(schluessel, titel, zusatz, anzahl) {
+  const d = document.createElement('details');
+  d.className = 'anim-group';
+  d.dataset.group = schluessel;
+  d.open = _animOffen[schluessel] !== false;
+  d.ontoggle = () => { _animOffen[schluessel] = d.open; };
+  const s = document.createElement('summary');
+  s.innerHTML = '<b>' + titel + '</b><small>' + zusatz + '</small>'
+              + '<span class="anim-count">' + anzahl + '</span>';
+  d.appendChild(s);
+  return d;
+}
+
+/* Speed sliders run the same way everywhere: left slow, right fast. What is
+   stored stays as it was (a duration, or a factor that stretches time), so
+   saved drawings keep their pace - only the slider is turned round. */
+function schnecke(wrap, inp) {
+  const a = document.createElement('span'); a.className = 'speed-ico'; a.textContent = '🐢';
+  const b = document.createElement('span'); b.className = 'speed-ico'; b.textContent = '🐇';
+  wrap.appendChild(a); wrap.appendChild(inp); wrap.appendChild(b);
+}
+
+function startRegler(o) {
+  const delWrap = document.createElement('label'); delWrap.className = 'anim-time-item';
+  delWrap.innerHTML = '<span>Start</span>';
+  const del = document.createElement('input');
+  del.type = 'range'; del.className = 'tl-slider'; del.min = 0; del.max = 3000; del.step = 100;
+  del.value = media.startOf(o);
+  del.title = 'Start delay: when it begins';
+  // One slider, both systems. It used to write only into o.anim.delay, so
+  // with Motion = none it silently did nothing at all.
+  del.oninput = () => media.setStart(o, del.value);
+  del.onchange = () => editor.snapshot();
+  delWrap.appendChild(del);
+  return delWrap;
+}
+
+function zeitRegler(o, rahmen) {
+  const timeRow = document.createElement('div'); timeRow.className = 'anim-ctl anim-time';
+  const durWrap = document.createElement('label'); durWrap.className = 'anim-time-item';
+  durWrap.innerHTML = '<span>Speed</span>';
+  const dur = document.createElement('input');
+  dur.type = 'range'; dur.className = 'tl-slider';
+  if (rahmen) {
+    // fxTempo stretches the effect's time: 1 = as drawn, 6 = six times as slow.
+    dur.min = 1; dur.max = 6; dur.step = 0.25;
+    dur.value = 7 - (o.fxTempo > 0 ? o.fxTempo : 1);
+    dur.title = 'Speed of this effect - left slow, right fast';
+  } else {
+    // anim.dur is how long the motion takes: more is slower.
+    dur.min = 300; dur.max = 4000; dur.step = 100;
+    dur.value = 4300 - (o.anim?.dur || 1200);
+    dur.title = 'Speed - left slow, right fast';
+  }
+  dur.oninput = () => {
+    if (rahmen) { o.fxTempo = 7 - +dur.value; editor.canvas.requestRenderAll(); return; }
+    if (o.anim) o.anim.dur = 4300 - +dur.value;
+  };
+  dur.onchange = () => editor.snapshot();
+  schnecke(durWrap, dur);
+
+  timeRow.appendChild(durWrap); timeRow.appendChild(startRegler(o));
+  return timeRow;
+}
+
+/* The magnifier's own controls. Its frame is the WINDOW it travels in - that
+   is dragged and sized on the picture. Here: which way it goes, how big the
+   glass is, how much it enlarges, how fast it reads a line and how long it
+   rests at the end of one so the enlarged words can be read. */
+const lupenSekAus = v => 20 - (v - 1) * 2;            // slider 1..10 -> 20..2 s
+const lupenReglerAus = sek => 1 + (20 - sek) / 2;
+const LUPEN_EINHEIT = { lines: ' s/line', lr: ' s/sweep', pingpong: ' s/sweep', wander: ' s/round', still: '' };
+
+function lupenRegler(o) {
+  const teile = document.createDocumentFragment();
+  const zeichnen = () => editor.canvas.requestRenderAll();
+  const reihe = () => { const d = document.createElement('div'); d.className = 'anim-ctl anim-time'; return d; };
+  const feld = (titel) => {
+    const l = document.createElement('label'); l.className = 'anim-time-item';
+    l.innerHTML = '<span>' + titel + '</span>'; return l;
+  };
+  const regler = (cls, min, max, step, wert, titel) => {
+    const i = document.createElement('input');
+    i.type = 'range'; i.className = 'tl-slider ' + cls;
+    i.min = min; i.max = max; i.step = step; i.value = wert; i.title = titel;
+    i.onchange = () => editor.snapshot();
+    return i;
+  };
+
+  const wegZeile = document.createElement('label'); wegZeile.className = 'anim-ctl';
+  wegZeile.innerHTML = '<span>Path</span>';
+  const weg = document.createElement('select'); weg.className = 'field fx-path';
+  media.LUPEN_WEGE.forEach(k => {
+    const op = document.createElement('option'); op.value = k; op.textContent = media.LUPEN_WEG_LABELS[k];
+    if ((o.fxPath || 'still') === k) op.selected = true;
+    weg.appendChild(op);
+  });
+  wegZeile.appendChild(weg);
+  teile.appendChild(wegZeile);
+
+  const r1 = reihe();
+  const glasFeld = feld('Lens');
+  const glas = regler('fx-lens', 30, Math.round(Math.min(editor.width, editor.height) * 0.6), 5,
+                      Math.round(media.lupenRadius(o) * 2), 'Size of the glass - the frame is the window it travels in');
+  glasFeld.appendChild(glas);
+  const zoomFeld = feld('Zoom');
+  const zoom = regler('fx-zoom', 1.2, 3, 0.1, o.fxZoom > 0 ? o.fxZoom : 1.9, 'How much the magnifier enlarges');
+  zoomFeld.appendChild(zoom);
+  r1.appendChild(glasFeld); r1.appendChild(zoomFeld);
+  teile.appendChild(r1);
+
+  const r2 = reihe();
+  const tempoFeld = feld('Speed');
+  const tempo = regler('fx-speed', 1, 10, 0.5, lupenReglerAus(media.lupenSekunden(o)),
+                       'How fast it reads - left slow, right fast');
+  schnecke(tempoFeld, tempo);
+  const tempoAus = document.createElement('span'); tempoAus.className = 'fx-speed-out';
+  tempoFeld.appendChild(tempoAus);
+  const pauseFeld = feld('Pause');
+  const pause = regler('fx-pause', 0, 4, 0.5, o.fxPause != null ? o.fxPause : 1.5,
+                       'How long it rests at the end of a line, so the words can be read');
+  const pauseAus = document.createElement('span'); pauseAus.className = 'fx-speed-out';
+  pauseFeld.appendChild(pause); pauseFeld.appendChild(pauseAus);
+  r2.appendChild(tempoFeld); r2.appendChild(pauseFeld);
+  teile.appendChild(r2);
+
+  const r3 = reihe();
+  const runde = document.createElement('span'); runde.className = 'anim-time-item fx-round';
+  r3.appendChild(startRegler(o)); r3.appendChild(runde);
+  teile.appendChild(r3);
+
+  const zeigen = () => {
+    const w = o.fxPath || 'still', still = w === 'still';
+    tempoAus.textContent = still ? '–' : media.lupenSekunden(o) + LUPEN_EINHEIT[w];
+    pauseAus.textContent = (o.fxPause != null ? +o.fxPause : 1.5) + ' s';
+    runde.textContent = still ? 'stays where it is' : 'one round: ' + Math.round(media.lupenWege(o).total) + ' s';
+    tempo.disabled = pause.disabled = still;
+  };
+  weg.onchange = () => { o.fxPath = weg.value; zeigen(); zeichnen(); editor.snapshot(); };
+  glas.oninput = () => {
+    const d = +glas.value;
+    o.fxLens = d;
+    // The window is never smaller than its glass: it grows around its centre.
+    const b = o.getBoundingRect(true);
+    if (b.width < d || b.height < d) {
+      const mitte = o.getCenterPoint();
+      o.set({ width: Math.max(o.width, d / (o.scaleX || 1)), height: Math.max(o.height, d / (o.scaleY || 1)) });
+      o.setPositionByOrigin(mitte, 'center', 'center');
+      o.setCoords();
+    }
+    zeigen(); zeichnen();
+  };
+  zoom.oninput = () => { o.fxZoom = +zoom.value; zeichnen(); };
+  tempo.oninput = () => { o.fxLineSec = lupenSekAus(+tempo.value); zeigen(); zeichnen(); };
+  pause.oninput = () => { o.fxPause = +pause.value; zeigen(); zeichnen(); };
+  zeigen();
+  return teile;
+}
+
+function motionZeile(o, idx) {
+  const row = document.createElement('div'); row.className = 'anim-row';
+  row.dataset.objIdx = String(idx);
+
+  const th = document.createElement('img'); th.className = 'anim-thumb';
+  th.title = layerLabel(o, idx + 1) + ' – select';
+  th.onclick = () => editor.selectObj(o);
+  // Preview image from the cache. Without it, every element was rasterised to
+  // a PNG again on EVERY click and every move - with 25 elements that meant
+  // seconds of hang per mouse click.
+  try {
+    if (!o.__thumb) {
+      const dim = Math.max(o.getScaledWidth?.() || o.width || 1, o.getScaledHeight?.() || o.height || 1);
+      o.__thumb = o.toDataURL({ format: 'png', multiplier: Math.min(1, 64 / Math.max(dim, 1)) });
+    }
+    th.src = o.__thumb;
+  } catch (e) { th.style.background = '#dfe3e6'; }
+
+  const col = document.createElement('div'); col.className = 'anim-col';
+  const selRow = document.createElement('label'); selRow.className = 'anim-ctl';
+  selRow.innerHTML = '<span>Motion</span>';
+  const sel = document.createElement('select'); sel.className = 'field';
+  media.ANIM_TYPES.forEach(t => {
+    const op = document.createElement('option'); op.value = t;
+    op.textContent = media.ANIM_LABELS[t] || t;
+    if ((o.anim?.type || 'none') === t) op.selected = true; sel.appendChild(op);
+  });
+  sel.onchange = () => {
+    const t = sel.value;
+    o.anim = (t && t !== 'none') ? { type: t, dur: o.anim?.dur || 1200 } : null;
+    media.setStart(o, media.startOf(o));   // eine Quelle fuer beide Systeme
+    editor.snapshot();
+  };
+  selRow.appendChild(sel);
+  const name = document.createElement('span');
+  name.className = 'anim-name'; name.textContent = layerLabel(o, idx + 1);
+  selRow.appendChild(name);
+
+  col.appendChild(selRow);
+  col.appendChild(zeitRegler(o, false));
+  row.appendChild(th); row.appendChild(col);
+  return row;
+}
+
+function effektZeile(o, idx) {
+  const row = document.createElement('div');
+  row.className = 'anim-row fx-row' + (o === editor.active() ? ' on' : '');
+  row.dataset.objIdx = String(idx);
+  row.onmouseenter = () => { _rahmenHover = o; editor.canvas.requestRenderAll(); };
+  row.onmouseleave = () => { if (_rahmenHover === o) _rahmenHover = null; editor.canvas.requestRenderAll(); };
+
+  const th = document.createElement('div'); th.className = 'anim-thumb fx-thumb';
+  th.textContent = o.fx === 'magnifier' ? '🔍' : '✨';
+  th.title = 'Select this frame';
+  th.onclick = () => editor.selectObj(o);
+
+  const col = document.createElement('div'); col.className = 'anim-col';
+
+  const fxRow = document.createElement('label'); fxRow.className = 'anim-ctl';
+  fxRow.innerHTML = '<span>Effect</span>';
+  const fxsel = document.createElement('select'); fxsel.className = 'field';
+  media.EFFECTS.filter(t => t !== 'none').forEach(t => {
+    const op = document.createElement('option'); op.value = t;
+    op.textContent = media.EFFECT_LABELS[t] || t;
+    if (o.fx === t) op.selected = true; fxsel.appendChild(op);
+  });
+  fxsel.onchange = () => {
+    o.fx = fxsel.value;
+    // Turned into a magnifier: it needs a glass and a way.
+    if (o.fx === 'magnifier' && !o.fxPath) {
+      Object.assign(o, media.LUPEN_STANDARD);
+      if (!(o.fxLens > 0)) o.fxLens = media.lupenGlasStandard(editor);
+    }
+    media.setStart(o, media.startOf(o));
+    editor.canvas.requestRenderAll();
+    editor.snapshot();
+    renderAnimBar(); renderLayers();
+  };
+  fxRow.appendChild(fxsel);
+  if (o.fx !== 'magnifier') {
+    // Its colour, as a dot. The palette itself sits once, above the list.
+    const punkt = document.createElement('span');
+    punkt.className = 'fx-dot';
+    punkt.style.background = o.fxColor || '#61CEBC';
+    punkt.title = o.fxColor ? 'Colour ' + o.fxColor : 'Colour: as drawn';
+    fxRow.appendChild(punkt);
+  }
+  col.appendChild(fxRow);
+
+  // No Area buttons: the frame is dragged and sized on the picture itself.
+  col.appendChild(o.fx === 'magnifier' ? lupenRegler(o) : zeitRegler(o, true));
+
+  const tools = document.createElement('div'); tools.className = 'fx-tools';
+  const waehlen = document.createElement('button');
+  waehlen.type = 'button'; waehlen.className = 'fx-select'; waehlen.textContent = '⌖ Select';
+  waehlen.title = 'Put the handles on this frame, so it can be dragged';
+  waehlen.onclick = () => editor.selectObj(o);
+  const weg = document.createElement('button');
+  weg.type = 'button'; weg.className = 'fx-remove'; weg.textContent = '✕ Remove';
+  weg.onclick = () => {
+    if (_rahmenHover === o) _rahmenHover = null;
+    editor.canvas.remove(o);
+    editor.canvas.requestRenderAll();
+    editor.snapshot();
+    renderAnimBar(); renderLayers();
+  };
+  tools.appendChild(waehlen); tools.appendChild(weg);
+
+  row.appendChild(th); row.appendChild(col); row.appendChild(tools);
+  return row;
+}
+
+// One palette for all frames: it paints the selected one - or the first, if
+// none is selected. Six swatches in every row would be six palettes doing one job.
+function effektPalette(rahmenListe) {
+  const row = document.createElement('div'); row.className = 'anim-row fx-palette';
+  const th = document.createElement('div'); th.className = 'anim-thumb fx-thumb'; th.textContent = '🎨';
+  const col = document.createElement('div'); col.className = 'anim-col';
+  const zeile = document.createElement('div'); zeile.className = 'anim-ctl';
+  zeile.innerHTML = '<span>Colour</span>';
+  const aktiv = editor.active();
+  const ziel = media.istEffektRahmen(aktiv) ? aktiv : rahmenListe.find(r => r.fx !== 'magnifier');
+  const sw = document.createElement('span'); sw.className = 'fx-swatches';
+  const standard = document.createElement('button');
+  standard.type = 'button'; standard.className = 'fx-swatch fx-swatch-auto'; standard.textContent = 'auto';
+  standard.title = 'As the effect is drawn';
+  if (ziel && !ziel.fxColor) standard.classList.add('on');
+  standard.onclick = () => { if (!ziel) return; ziel.fxColor = null; editor.canvas.requestRenderAll(); editor.snapshot(); renderAnimBar(); };
+  sw.appendChild(standard);
+  bg.getPalette().forEach(f => {
+    const b = document.createElement('button');
+    b.type = 'button'; b.className = 'fx-swatch'; b.style.background = f; b.title = f;
+    if (ziel && ziel.fxColor && _hex(ziel.fxColor) === _hex(f)) b.classList.add('on');
+    b.onclick = () => {
+      if (!ziel) return;
+      ziel.fxColor = f; editor.canvas.requestRenderAll(); editor.snapshot(); renderAnimBar();
+    };
+    sw.appendChild(b);
+  });
+  zeile.appendChild(sw);
+  const hinweis = document.createElement('span'); hinweis.className = 'anim-name';
+  hinweis.textContent = !ziel ? 'no frame with a colour'
+    : (media.istEffektRahmen(aktiv) ? 'paints the selected frame' : 'paints the first frame - select another to change it');
+  zeile.appendChild(hinweis);
+  col.appendChild(zeile);
+  row.appendChild(th); row.appendChild(col);
+  return row;
+}
+
 function renderAnimBar() {
   const bar = document.getElementById('anim-bar');
   if (!bar) return;
@@ -2171,29 +2643,30 @@ function renderAnimBar() {
   bar.innerHTML = '';
   const head = document.createElement('div'); head.className = 'anim-bar-head';
   const title = document.createElement('span');
-  title.className = 'anim-bar-title'; title.textContent = '🎬 Animation je Element';
+  title.className = 'anim-bar-title'; title.textContent = '🎬 Animation';
 
   // Tempo - stretches every Speed and every Start at once, so a piece can be
   // slowed down without dragging every element's slider again.
   const tempoWrap = document.createElement('label');
   tempoWrap.style.cssText = 'display:flex;align-items:center;gap:6px;font-size:.75rem;color:#555;margin-left:auto';
-  tempoWrap.appendChild(document.createTextNode('\u{1F422} Tempo'));
+  tempoWrap.appendChild(document.createTextNode('Tempo'));
   const tempoInp = document.createElement('input');
   tempoInp.type = 'range'; tempoInp.id = 'anim-tempo';
-  tempoInp.min = 0.5; tempoInp.max = 6; tempoInp.step = 0.25;
-  tempoInp.value = window._animTempo != null ? window._animTempo : 1;
+  // A speed on a doubling scale: 0 = as set, -2 twice as slow, +2 twice as fast.
+  tempoInp.min = -5; tempoInp.max = 2; tempoInp.step = 0.5;
+  tempoInp.value = window._animTempo != null ? window._animTempo : 0;
   tempoInp.style.cssText = 'width:104px';
-  tempoInp.title = 'Stretches every Speed and every Start together. 1x = as set, 3x = three times as slow.';
+  tempoInp.title = 'Speeds up or slows down everything together - left slow, right fast.';
   const tempoOut = document.createElement('span');
   tempoOut.style.cssText = 'min-width:32px;text-align:right;font-variant-numeric:tabular-nums';
   const showTempo = () => {
-    tempoOut.textContent = String(+tempoInp.value).replace(/\.0+$/, '') + '\u00d7';
+    tempoOut.textContent = (Math.round(Math.pow(2, +tempoInp.value / 2) * 10) / 10) + '×';
   };
   showTempo();
   tempoInp.oninput = () => { window._animTempo = tempoInp.value; showTempo(); };
-  tempoWrap.appendChild(tempoInp); tempoWrap.appendChild(tempoOut);
+  schnecke(tempoWrap, tempoInp); tempoWrap.appendChild(tempoOut);
 
-  // Videolänge – gilt fürs ganze GIF/Video (nicht pro Element).
+  // Video length - applies to the whole GIF/video, not per element.
   const lenWrap = document.createElement('label');
   lenWrap.style.cssText = 'display:flex;align-items:center;gap:6px;font-size:.75rem;color:#555;margin-left:14px';
   lenWrap.appendChild(document.createTextNode('🎬 Video length'));
@@ -2205,7 +2678,7 @@ function renderAnimBar() {
   if (window._videoLen != null) lenInp.value = window._videoLen;
   lenInp.oninput = () => { window._videoLen = lenInp.value; };
   lenWrap.appendChild(lenInp);
-  lenWrap.appendChild(document.createTextNode('Sek.'));
+  lenWrap.appendChild(document.createTextNode('s'));
 
   const prevTop = document.createElement('button');
   prevTop.className = 'tbtn primary'; prevTop.textContent = '▶ Preview';
@@ -2215,91 +2688,213 @@ function renderAnimBar() {
   head.appendChild(prevTop);
   bar.appendChild(head);
 
-  objs.forEach((o, idx) => {
-    const row = document.createElement('div'); row.className = 'anim-row';
+  const elemente = [], rahmen = [];
+  objs.forEach((o, idx) => (media.istEffektRahmen(o) ? rahmen : elemente).push([o, idx]));
 
-    // Vorschaubild des Elements
-    const th = document.createElement('img'); th.className = 'anim-thumb';
-    th.title = layerLabel(o, idx + 1) + ' – select';
-    th.onclick = () => editor.selectObj(o);
-    // Preview image from the cache. Without it, every element was rasterised to
-    // a PNG again on EVERY click and every move - with 25 elements that meant
-    // seconds of hang per mouse click.
-    try {
-      if (!o.__thumb) {
-        const dim = Math.max(o.getScaledWidth?.() || o.width || 1, o.getScaledHeight?.() || o.height || 1);
-        o.__thumb = o.toDataURL({ format: 'png', multiplier: Math.min(1, 64 / Math.max(dim, 1)) });
-      }
-      th.src = o.__thumb;
-    } catch (e) { th.style.background = '#dfe3e6'; }
+  const gm = animGruppe('motion', 'Motion', 'what each element does',
+                        elemente.length + (elemente.length === 1 ? ' element' : ' elements'));
+  if (!elemente.length) {
+    const h = document.createElement('span'); h.className = 'hint'; h.textContent = 'No elements yet.';
+    gm.appendChild(h);
+  }
+  elemente.forEach(([o, idx]) => gm.appendChild(motionZeile(o, idx)));
+  const ge = animGruppe('effects', 'Effects', 'each one lives in a frame',
+                        rahmen.length + (rahmen.length === 1 ? ' frame' : ' frames'));
+  // The switch sits in the group's head, but must not fold the group when clicked.
+  const schalter = document.createElement('label'); schalter.className = 'fx-show';
+  schalter.innerHTML = '<input type="checkbox" id="fx-show-frames"> Show frames on the picture';
+  const kasten = schalter.querySelector('input');
+  kasten.checked = _rahmenZeigen;
+  schalter.onclick = e => e.stopPropagation();
+  kasten.onchange = () => { _rahmenZeigen = kasten.checked; editor.canvas.requestRenderAll(); };
+  ge.querySelector('summary').appendChild(schalter);
+  if (!rahmen.length) {
+    const h = document.createElement('span'); h.className = 'hint';
+    h.textContent = 'No effect yet - add one in the ✨ Effects tab.';
+    ge.appendChild(h);
+  } else {
+    ge.appendChild(effektPalette(rahmen.map(([o]) => o)));
+    rahmen.forEach(([o, idx]) => ge.appendChild(effektZeile(o, idx)));
+  }
+  // Effects first: that is what the picture is built from; Motion comes after.
+  bar.appendChild(ge);
+  bar.appendChild(gm);
+}
 
-    // Regler-Spalte (untereinander)
-    const col = document.createElement('div'); col.className = 'anim-col';
+/* ---- Seeing the invisible frames -----------------------------------------
+   A layer of its own, laid over the artboard: pointer-events off, and not part
+   of Fabric at all. That is what keeps the outlines out of every export - PNG,
+   GIF and video all read Fabric's canvas, and this is not it. */
+let _rahmenEbene = null;
+function rahmenEbene() {
+  const wrap = editor.canvas.wrapperEl;
+  if (_rahmenEbene && _rahmenEbene.parentNode === wrap) return _rahmenEbene;
+  _rahmenEbene = document.createElement('canvas');
+  _rahmenEbene.id = 'fx-frame-layer';
+  _rahmenEbene.style.cssText = 'position:absolute;left:0;top:0;pointer-events:none;z-index:4';
+  wrap.appendChild(_rahmenEbene);
+  return _rahmenEbene;
+}
 
-    const selRow = document.createElement('label'); selRow.className = 'anim-ctl';
-    selRow.innerHTML = '<span>Motion</span>';
-    const sel = document.createElement('select'); sel.className = 'field';
-    media.ANIM_TYPES.forEach(t => {
-      const op = document.createElement('option'); op.value = t;
-      op.textContent = media.ANIM_LABELS[t] || t;
-      if ((o.anim?.type || 'none') === t) op.selected = true; sel.appendChild(op);
-    });
-    sel.onchange = () => {
-      const t = sel.value;
-      o.anim = (t && t !== 'none')
-        ? { type: t, dur: o.anim?.dur || 1200 }
-        : null;
-      media.setStart(o, media.startOf(o));   // eine Quelle fuer beide Systeme
-      editor.snapshot();
-    };
-    selRow.appendChild(sel);
-
-    const fxRow = document.createElement('label'); fxRow.className = 'anim-ctl';
-    fxRow.innerHTML = '<span>Effect</span>';
-    const fxsel = document.createElement('select'); fxsel.className = 'field';
-    media.EFFECTS.forEach(t => {
-      const op = document.createElement('option'); op.value = t;
-      op.textContent = media.EFFECT_LABELS[t] || t;
-      if ((o.fx || 'none') === t) op.selected = true; fxsel.appendChild(op);
-    });
-    fxsel.onchange = () => {
-      const v = fxsel.value;
-      o.fx = (v && v !== 'none') ? v : null;
-      // Keep the effect on the same Start as the motion, so one slider drives both.
-      media.setStart(o, media.startOf(o));
-      editor.snapshot();
-    };
-    fxRow.appendChild(fxsel);
-
-    // Tempo + Start (Verzögerung) nebeneinander
-    const timeRow = document.createElement('div'); timeRow.className = 'anim-ctl anim-time';
-    const durWrap = document.createElement('label'); durWrap.className = 'anim-time-item';
-    durWrap.innerHTML = '<span>Speed</span>';
-    const dur = document.createElement('input');
-    dur.type = 'range'; dur.className = 'tl-slider'; dur.min = 300; dur.max = 4000; dur.step = 100;
-    dur.value = o.anim?.dur || 1200; dur.title = 'Speed (duration)';
-    dur.oninput = () => { if (o.anim) o.anim.dur = +dur.value; };
-    dur.onchange = () => editor.snapshot();
-    durWrap.appendChild(dur);
-
-    const delWrap = document.createElement('label'); delWrap.className = 'anim-time-item';
-    delWrap.innerHTML = '<span>Start</span>';
-    const del = document.createElement('input');
-    del.type = 'range'; del.className = 'tl-slider'; del.min = 0; del.max = 3000; del.step = 100;
-    del.value = media.startOf(o);
-    del.title = 'Start delay: when motion and effect begin';
-    // One slider, both systems. It used to write only into o.anim.delay, so
-    // with Motion = none it silently did nothing at all.
-    del.oninput = () => media.setStart(o, del.value);
-    del.onchange = () => editor.snapshot();
-    delWrap.appendChild(del);
-
-    timeRow.appendChild(durWrap); timeRow.appendChild(delWrap);
-
-    col.appendChild(selRow); col.appendChild(fxRow); col.appendChild(timeRow);
-    row.appendChild(th); row.appendChild(col);
-    bar.appendChild(row);
+function zeichneRahmenHinweise() {
+  if (!editor.canvas.wrapperEl) return;
+  const unten = editor.canvas.lowerCanvasEl;
+  const ebene = rahmenEbene();
+  if (ebene.width !== unten.width) ebene.width = unten.width;
+  if (ebene.height !== unten.height) ebene.height = unten.height;
+  ebene.style.width = unten.style.width; ebene.style.height = unten.style.height;
+  const ctx = ebene.getContext('2d');
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.clearRect(0, 0, ebene.width, ebene.height);
+  // A preview shows the picture as it will be posted - no helper lines in it.
+  if (media.effectsRunning()) return;
+  const rahmen = editor.canvas.getObjects().filter(media.istEffektRahmen);
+  if (!rahmen.length) return;
+  const retina = editor.canvas.getRetinaScaling ? editor.canvas.getRetinaScaling() : 1;
+  const vp = editor.canvas.viewportTransform;
+  const zoom = editor.canvas.getZoom() || 1;
+  ctx.setTransform(vp[0] * retina, vp[1] * retina, vp[2] * retina, vp[3] * retina,
+                   vp[4] * retina, vp[5] * retina);
+  const aktiv = editor.active();
+  rahmen.forEach(o => {
+    const hell = o === _rahmenHover;
+    if (!hell && !_rahmenZeigen) return;
+    if (o === aktiv && !hell) return;          // the handles already show it
+    const b = o.getBoundingRect(true);
+    ctx.save();
+    if (hell) { ctx.fillStyle = 'rgba(0,133,145,0.12)'; ctx.fillRect(b.left, b.top, b.width, b.height); }
+    ctx.setLineDash([7 / zoom, 5 / zoom]);
+    ctx.strokeStyle = hell ? '#008591' : 'rgba(0,133,145,0.55)';
+    ctx.lineWidth = (hell ? 2 : 1.5) / zoom;
+    ctx.strokeRect(b.left, b.top, b.width, b.height);
+    ctx.setLineDash([]);
+    if (hell) {
+      const name = media.EFFECT_LABELS[o.fx] || o.fx;
+      ctx.font = `700 ${12 / zoom}px Roboto, Arial, sans-serif`;
+      ctx.textBaseline = 'top'; ctx.textAlign = 'left';
+      const w = ctx.measureText(name).width + 12 / zoom;
+      const y = Math.max(0, b.top);
+      ctx.fillStyle = '#008591'; ctx.fillRect(b.left, y, w, 18 / zoom);
+      ctx.fillStyle = '#ffffff'; ctx.fillText(name, b.left + 6 / zoom, y + 3 / zoom);
+    }
+    ctx.restore();
   });
+  // The magnifier's way, dotted orange: where the glass will travel.
+  rahmen.forEach(o => {
+    if (o.fx !== 'magnifier' || (o.fxPath || 'still') === 'still') return;
+    if (!_rahmenZeigen && o !== aktiv && o !== _rahmenHover) return;
+    const wege = media.lupenWege(o);
+    ctx.save();
+    ctx.setLineDash([2 / zoom, 5 / zoom]);
+    ctx.strokeStyle = 'rgba(245,110,40,0.85)'; ctx.lineWidth = 2 / zoom;
+    ctx.beginPath();
+    for (let i = 0; i <= 240; i++) {
+      const [x, y] = media.lupenStelle(o, wege.total * i / 240, wege);
+      if (i) ctx.lineTo(x, y); else ctx.moveTo(x, y);
+    }
+    ctx.stroke();
+    ctx.restore();
+  });
+}
+editor.canvas.on('after:render', zeichneRahmenHinweise);
+// From the start, not only once a preview ran: the magnifier is always drawn.
+media.ensureFxHook(editor);
+
+/* ---- The Effects tab: live tiles -----------------------------------------
+   One small picture per effect, drawn by the same painter as the artboard, so
+   a tile never promises something the picture will not do. A click lays the
+   effect over the image as a frame; everything else is set in the bar under
+   the canvas, in one place.
+
+   The tiles only run while the tab is open: nine animations ticking along
+   while someone retouches an image is work nobody asked for. */
+const FX_KACHELN = media.EFFECTS.filter(f => f !== 'none' && f !== 'magnifier');
+let _kachelLauf = null;
+
+function kachelnBauen() {
+  const box = document.getElementById('fx-tiles');
+  if (!box || box.dataset.gebaut) return;
+  box.dataset.gebaut = '1';
+  box.innerHTML = '';
+  FX_KACHELN.forEach(fx => {
+    const b = document.createElement('button');
+    b.type = 'button'; b.className = 'fx-tile'; b.dataset.fx = fx;
+    const name = (media.EFFECT_LABELS[fx] || fx).replace(/^\S+\s/, '');
+    b.title = 'Lay ' + name + ' over the picture';
+    const c = document.createElement('canvas'); c.width = 132; c.height = 60;
+    const n = document.createElement('span'); n.textContent = name;
+    b.appendChild(c); b.appendChild(n);
+    b.onclick = () => {
+      media.addEffektRahmen(editor, fx);
+      _animOffen.effects = true;
+      renderLayers(); renderAnimBar();
+      toast(name + ' added - colour, area and speed are under the canvas.');
+    };
+    box.appendChild(b);
+  });
+}
+
+function kachelnLaufen() {
+  const panel = document.querySelector('[data-panel="effects"]');
+  if (!panel || panel.hidden) { _kachelLauf = null; return; }
+  kachelnBauen();
+  const t = performance.now() / 2.5;
+  document.querySelectorAll('#fx-tiles .fx-tile').forEach(b => {
+    const c = b.querySelector('canvas');
+    const ctx = c.getContext('2d');
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = '#0E7C86'; ctx.fillRect(0, 0, c.width, c.height);
+    // two pale sheets, so the effect has something to lie over
+    ctx.fillStyle = 'rgba(255,255,255,0.18)';
+    ctx.fillRect(c.width * 0.18, c.height * 0.22, c.width * 0.26, c.height * 0.5);
+    ctx.fillRect(c.width * 0.52, c.height * 0.3, c.width * 0.28, c.height * 0.46);
+    try { media.malEffektVorschau(ctx, b.dataset.fx, c.width, c.height, t, null); }
+    catch (e) { /* a tile that cannot draw stays plain - the effect still works */ }
+  });
+  _kachelLauf = requestAnimationFrame(kachelnLaufen);
+}
+
+function kachelnStarten() { if (!_kachelLauf) _kachelLauf = requestAnimationFrame(kachelnLaufen); }
+document.getElementById('mode-rail')?.addEventListener('click', () => setTimeout(kachelnStarten, 0));
+kachelnStarten();
+
+/* ---- Size of the marks ---------------------------------------------------
+   One slider for marker, stamp and badges: it sizes the selected one, and the
+   next one that is added. Dragging the corners still works as before - the
+   slider just follows along when a mark is selected. */
+function istMarke(o) { return isMarker(o) || isStempel(o) || isBadge(o); }
+// Around the centre: scaling from the top-left corner walks a mark off the
+// word it was placed over.
+function groesseSetzen(o, s) {
+  const mitte = o.getCenterPoint();
+  o.scale(s);
+  o.setPositionByOrigin(mitte, 'center', 'center');
+  o.setCoords();
+}
+function markenGroesse() {
+  const v = +document.getElementById('fx-mark-size')?.value;
+  return v > 0 ? v / 100 : 1;
+}
+{
+  const regler = document.getElementById('fx-mark-size');
+  const aus = document.getElementById('fx-mark-size-out');
+  const zeigen = () => { if (aus && regler) aus.textContent = regler.value + '%'; };
+  if (regler) {
+    regler.oninput = () => {
+      zeigen();
+      const o = editor.active();
+      if (istMarke(o)) { groesseSetzen(o, markenGroesse()); editor.canvas.requestRenderAll(); }
+    };
+    regler.onchange = () => { if (istMarke(editor.active())) editor.snapshot(); };
+    const folgen = () => {
+      const o = editor.active();
+      if (istMarke(o)) { regler.value = Math.round((o.scaleX || 1) * 100); zeigen(); }
+    };
+    editor.canvas.on('selection:created', folgen);
+    editor.canvas.on('selection:updated', folgen);
+    editor.canvas.on('object:modified', folgen);
+  }
 }
 
 // ---- Changing the font size afterwards -----------------------------------
@@ -2489,7 +3084,7 @@ editor.addImageUrl = async (url, opts) => {
   const img = await _origAddImg(url, opts);
   try {
     if (!opts?.silent && img && img._element && hasCheckerboardBorder(img._element)) {
-      status('✨ Muster erkannt – entferne nur das Schachbrett…');
+      status('✨ Pattern found – removing only the checkerboard…');
       const cleaned = await removeCheckerboard(img._element);   // nur Muster weg, Weiß bleibt
       // null = nothing was found. This used to return the unchanged image, which
       // was taken as "edited" all the same - a 2 MB JPEG so became about 25 MB
@@ -2499,10 +3094,10 @@ editor.addImageUrl = async (url, opts) => {
         retouch.replaceElement(img, cleaned); editor.snapshot();
         status('✅ Pattern removed', 'green');
       } else {
-        status('Bereit.', '#888');
+        status('Ready.', '#888');
       }
     }
-  } catch (e) { console.warn('Muster-Erkennung:', e); status('Bereit.', '#888'); }
+  } catch (e) { console.warn('Muster-Erkennung:', e); status('Ready.', '#888'); }
   return img;
 };
 
@@ -2550,6 +3145,23 @@ if (CONFIG.libData?.item_id || CONFIG.libData?.nc_path) {
 // is on the artboard, the picture is not, and the result looks exactly like an
 // empty draft. Counting them is the only way to tell those two apart - and the
 // difference decides whether the user should rebuild or go looking for a file.
+/* Every way a drawing comes onto the artboard runs through here, so the old
+   element effects are converted in ONE place. Four call sites used to restore
+   directly - a conversion added to three of them would have been a bug waiting
+   in the fourth. */
+async function ladeCanvas(json, opts) {
+  const ok = await io.restoreCanvas(editor, json, opts);
+  if (ok) {
+    const umgewandelt = media.rahmenAusAltenEffekten(editor);
+    if (umgewandelt) {
+      renderLayers(); renderAnimBar();
+      toast(umgewandelt + ' effect' + (umgewandelt === 1 ? '' : 's')
+            + ' turned into effect frames - they can be moved now.');
+    }
+  }
+  return ok;
+}
+
 function fehlendeBilder() {
   return editor.realObjects().filter(o => o && o.type === 'image'
     && !(o._element && o._element.naturalWidth > 0)).length;
@@ -2564,7 +3176,7 @@ function fehlendeBilder() {
     if (tpl?.canvas_json) {
       if (tpl.width && tpl.height) { editor.setSize(tpl.width, tpl.height); fit(); }
       status('⏳ Loading template…');
-      if (await io.restoreCanvas(editor, tpl.canvas_json, { frisch: true })) {
+      if (await ladeCanvas(tpl.canvas_json, { frisch: true })) {
         status('Editing template – “💾 Save template” updates it.', '#0E7C86');
       }
       return;
@@ -2574,11 +3186,11 @@ function fehlendeBilder() {
     // - and the user took the half-empty editor for their file.
     if (post?.canvas_json) {
       status('⏳ Loading draft…');
-      if (await io.restoreCanvas(editor, post.canvas_json, { frisch: true })) {
+      if (await ladeCanvas(post.canvas_json, { frisch: true })) {
         const fehlen = fehlendeBilder();
         status(fehlen
           ? '⚠️ ' + fehlen + ' image(s) in this draft point at a file that is no longer there.'
-          : 'Bereit.', fehlen ? '#854F0B' : '#888');
+          : 'Ready.', fehlen ? '#854F0B' : '#888');
       }
       return;
     }
@@ -2626,7 +3238,7 @@ function fehlendeBilder() {
     }
     if (libD?.canvas_json) {
       status('⏳ Loading draft…');
-      if (await io.restoreCanvas(editor, libD.canvas_json, { frisch: true })) status('Bereit.', '#888');
+      if (await ladeCanvas(libD.canvas_json, { frisch: true })) status('Ready.', '#888');
       return;
     }
     if (libD?.image_url) {
@@ -2636,14 +3248,14 @@ function fehlendeBilder() {
       try {
         await editor.addImageUrl(libD.image_url, { silent: true, fill: true });
         editor.resetHistory();
-        status('Bereit.', '#888');
+        status('Ready.', '#888');
       } catch (e) {
         editor._ladefehler = true;
         status('❌ Image could not be loaded – file may be missing in Nextcloud', 'red');
         toast('Image not found', 'err');
       }
     } else {
-      status('Bereit.', '#888');
+      status('Ready.', '#888');
     }
   } catch (e) {
     console.warn('restoreInitial:', e);

@@ -234,7 +234,7 @@ export async function applyTemplate(editor, tpl) {
     status('✅ Template loaded', 'green');
   } catch (e) {
     console.error('Template-Fehler:', e);
-    status('❌ Template-Fehler', 'red');
+    status('❌ Template error', 'red');
     toast('Template could not be loaded', 'err');
   }
 }
