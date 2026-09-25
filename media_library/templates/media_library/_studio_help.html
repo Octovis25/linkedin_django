@@ -19,7 +19,7 @@
 
     <p style="margin:.2rem 0 .6rem;color:#555">
       Build images, GIFs and videos for your posts. On the far left a narrow rail
-      switches between four <b>modes</b> — only the tools of the current mode are on
+      switches between five <b>modes</b> — only the tools of the current mode are on
       screen. Right at the bottom of that rail, set apart, sits <b>📖 Help</b>: it opens
       this guide. The canvas sits in the middle, with the animation bar underneath, and
       uploads, assets and your finished outputs are on the right.
@@ -49,7 +49,8 @@
       <text x="38" y="82"  class="sec" text-anchor="middle" style="font-size:11px">Build</text>
       <text x="38" y="120" class="railoff" text-anchor="middle">Insert</text>
       <text x="38" y="162" class="railoff" text-anchor="middle">Image</text>
-      <text x="38" y="204" class="railoff" text-anchor="middle">Layers</text>
+      <text x="38" y="204" class="railoff" text-anchor="middle">Effects</text>
+      <text x="38" y="246" class="railoff" text-anchor="middle">Layers</text>
       <line x1="20" y1="352" x2="56" y2="352" stroke="#2b6f75" stroke-width="1"/>
       <text x="38" y="374" class="railoff" text-anchor="middle">📖 Help</text>
 
@@ -66,8 +67,8 @@
         <text x="90" y="197" class="lbl">Colour: Cream · White · None</text>
         <text x="90" y="213" class="cap">Image: From selection · Remove</text>
         <text x="90" y="229" class="cap">Clear canvas</text>
-      <text x="90" y="256" class="cap">(Insert, Image and Layers</text>
-      <text x="90" y="270" class="cap">replace this area)</text>
+      <text x="90" y="256" class="cap">(Insert, Image, Effects and</text>
+      <text x="90" y="270" class="cap">Layers replace this area)</text>
       <!-- pinned foot -->
       <rect x="70" y="336" width="190" height="58" rx="8" fill="#fbfdfd" stroke="#e0eded"/>
       <text x="82" y="354" class="sec">Brand colours</text>
@@ -94,10 +95,10 @@
       <text x="278" y="319" class="cap">New · Title · 💾 Save as · ▾ Format · 📥 Download · ← Exit</text>
 
       <rect x="268" y="334" width="300" height="60" rx="6" fill="#fff" stroke="#dbe6e6"/>
-      <text x="278" y="350" class="sec">🎬 Animation per element</text>
+      <text x="278" y="350" class="sec">🎬 Animation</text>
       <rect x="278" y="356" width="30" height="30" rx="4" fill="#e7eff0"/>
-      <text x="316" y="368" class="cap">Motion · Effect</text>
-      <text x="316" y="382" class="cap">Speed · Start</text>
+      <text x="316" y="368" class="cap">▾ Effects – one row per frame</text>
+      <text x="316" y="382" class="cap">▾ Motion – one row per element</text>
       <text x="470" y="350" class="cap">Video length · ▶ Preview</text>
 
       <!-- MEDIA -->
@@ -141,7 +142,7 @@
     </div>
 
     <!-- Panel tour, mirrors the left column top→bottom -->
-    <h3 style="color:#0e7c86;margin-bottom:.2rem">The four modes (rail on the far left)</h3>
+    <h3 style="color:#0e7c86;margin-bottom:.2rem">The five modes (rail on the far left)</h3>
     <ul style="margin:.2rem 0 .9rem 1.1rem;padding:0">
       <li><b>Build</b> – <b>Template</b> (thumbnails, New, Save, Manage) and <b>Canvas</b>
           (Size, the <b>Colour</b> row for the background fill, <b>Image: From selection /
@@ -156,14 +157,19 @@
           <b>Check + text</b>, <b>Checklist</b>), <b>Shapes</b> (arrows, lines, circles,
           rectangles, hexagons) and <b>Badges</b> (Circle, Hexagon, Banner with text).</li>
       <li><b>Image</b> – cut out and retouch the selected image, see below.</li>
+      <li><b>✨ Effects</b> – small moving pictures of every effect: a click lays that effect
+          over your image in a frame of its own. Below them, <b>Marks</b>: a word field, a
+          <b>Size</b> slider, <b>Marker</b>, <b>Stamp</b>, <b>Magnifier</b> and the three badges.
+          See <i>Effects, magnifier, marker and stamp</i> below.</li>
       <li><b>Layers</b> – the element list plus <b>Forward / Backward</b> and
           <b>Group / Ungroup</b>.</li>
       <li><b>📖 Help</b> – below the separator at the foot of the rail. Not a mode: it
           opens this guide and leaves your current panel exactly where it was.</li>
     </ul>
     <p style="margin:0 0 .9rem"><b>Brand colours</b> are not part of a mode: they sit pinned
-      at the bottom of the panel and stay visible in all four. The palette colours the
-      selected text or shape and every new shape you insert.</p>
+      at the bottom of the panel and stay visible in all five. The palette colours the
+      selected text or shape and every new shape you insert – and also a selected effect
+      frame, marker or stamp.</p>
 
     <h3 style="color:#0e7c86;margin-bottom:.2rem">The three bars around the canvas</h3>
     <ul style="margin:.2rem 0 .9rem 1.1rem;padding:0">
@@ -184,11 +190,14 @@
           <b>← Exit</b> asks where to: <b>to the post</b>, or <b>an empty canvas</b> — and the
           empty canvas is also how you let go of the post, so the next save goes to the
           library instead of onto it.</li>
-      <li><b>Animation bar (bottom):</b> one row per element with <b>Motion</b>, <b>Effect</b>,
-          <b>Speed</b> and <b>Start</b> (when it begins – valid for Motion and Effect),
-          plus <b>Video length</b> and <b>▶ Preview</b> in its
-          header. All elements sit side by side so you can time them against each other.
-          Click the header to fold the bar away while you are building a still image.</li>
+      <li><b>Animation bar (bottom):</b> two groups you can fold open and shut.
+          <b>Effects</b> comes first: one colour palette for the effects, then one row per
+          effect frame. <b>Motion</b> follows: one row per element with its <b>Motion</b>,
+          <b>Speed</b> and <b>Start</b> (when it begins). In the header: <b>Tempo</b>,
+          <b>Video length</b> and <b>▶ Preview</b>. All rows sit one under the other so you can
+          time them against each other. Click the header to fold the whole bar away while you
+          are building a still image.<br>
+          <b>Every speed slider runs the same way: left slow 🐢, right fast 🐇.</b></li>
     </ul>
 
     <h3 style="color:#0e7c86;margin-bottom:.2rem">Media panel (right, three tabs)</h3>
@@ -222,8 +231,10 @@
             Change the colour in the <b>Colour</b> panel.</li>
         <li><b>Add shapes/badges (optional).</b> From <b>Shapes</b>: an arrow, a
             <b>Circle + text</b>, or a <b>Banner + text</b> to highlight something.</li>
-        <li><b>Animate (optional).</b> Select an element; in the bar under the canvas choose a
-            <b>Motion</b> or <b>Effect</b> and a <b>Speed</b>, then <b>▶ Preview</b>.</li>
+        <li><b>Animate (optional).</b> For movement of an element: in the bar under the canvas,
+            group <b>Motion</b>, choose a <b>Motion</b> and a <b>Speed</b>. For an effect over
+            the picture: mode <b>✨ Effects</b>, click a picture, drag its frame where you want
+            it. Then <b>▶ Preview</b>.</li>
         <li><b>Save.</b> Type a <b>Title</b>, then <b>💾 Save as…</b> and choose
             <b>Image (PNG)</b>, <b>GIF</b> or <b>Video</b>. It attaches to the open post and also
             appears under <b>My outputs</b>.</li>
@@ -252,23 +263,26 @@
       <h3 style="margin:.2rem 0;color:#0e7c86">🎬 Make a GIF or video</h3>
       <ol style="margin:.4rem 0 .2rem 1.2rem;padding:0">
         <li><b>Build the post first</b> (image + text), exactly as above.</li>
-        <li><b>Add movement.</b> Select an element; in the bar under the canvas set a
-            <b>Motion</b> (e.g. <i>Fade in</i>, <i>In from bottom</i>) and/or an
-            <b>Effect</b> (e.g. <i>Network</i>, <i>Confetti</i>), plus a <b>Speed</b>.
-            Repeat for other elements.</li>
+        <li><b>Add movement.</b> In the bar under the canvas, group <b>Motion</b>: give an
+            element a <b>Motion</b> (e.g. <i>Fade in</i>, <i>In from bottom</i>) and a
+            <b>Speed</b>. Repeat for other elements.</li>
+        <li><b>Add effects.</b> Mode <b>✨ Effects</b>: click a picture (e.g. <i>Network</i>,
+            <i>Confetti</i>). It lands in a frame over the whole image – drag and size the
+            frame to where the effect should be. Several frames on one picture are fine.</li>
         <li><b>Stagger the elements.</b> <b>Start</b> says when that element begins, in
-            milliseconds from the first frame. It applies to <b>Motion</b> and
-            <b>Effect</b> alike, including the looping ones (<i>Pulse</i>, <i>Float</i>,
+            milliseconds from the first frame. It applies to <b>Motion</b> and to
+            <b>effect frames</b> alike, including the looping ones (<i>Pulse</i>, <i>Float</i>,
             <i>Spin</i>…): until its Start is reached the element simply rests. Give three
             similar elements 0, 600 and 1200 and they come in one after another instead of
             moving in lockstep.</li>
-        <li><b>Too fast? Use the tempo.</b> <b>🐢 Tempo</b>, top right in the same bar,
-            stretches <i>every</i> Speed and <i>every</i> Start at once – <b>1×</b> as set,
-            <b>3×</b> three times as slow. Set the choreography with the relative spacing
-            first, then slow the whole piece down without touching a single element.
-            The automatic length grows with it. It is <b>not</b> saved with the drawing:
-            reopening starts at 1× again.</li>
-        <li><b>Preview.</b> Click <b>▶ Preview</b> to play it on the canvas.</li>
+        <li><b>Too fast? Use the tempo.</b> <b>Tempo</b>, top right in the same bar, changes
+            <i>every</i> Speed and <i>every</i> Start at once – left slow 🐢, right fast 🐇.
+            <b>1×</b> is as set, <b>0.5×</b> half as fast, <b>2×</b> twice as fast. Set the
+            choreography with the relative spacing first, then slow the whole piece down
+            without touching a single element. The automatic length grows with it. It is
+            <b>not</b> saved with the drawing: reopening starts at 1× again.</li>
+        <li><b>Preview.</b> Click <b>▶ Preview</b> to play it on the canvas. The preview shows
+            the picture as it will be posted: no frame lines, no handles.</li>
         <li><b>Length.</b> Set <b>Video length</b> (seconds) in the bar; empty = automatic.
             Looping effects run a few seconds.</li>
         <li><b>Colour.</b> A video keeps the colours you see here &ndash; the brand teal
@@ -278,6 +292,73 @@
             under <b>My outputs → GIFs / Videos</b>.</li>
       </ol>
     </div>
+
+    <h3 style="color:#0e7c86;margin-bottom:.2rem">Effects, magnifier, marker and stamp — mode <b>✨ Effects</b></h3>
+    <p style="margin:.2rem 0 .5rem">An effect does not hang on an element. It lives in a
+      <b>frame</b> of its own that you drag over the picture – as large or as small as you need,
+      and as many frames as you like. The frame itself is invisible: it never shows in the
+      picture you save, only the effect does.</p>
+    <ul style="margin:.2rem 0 .6rem 1.1rem;padding:0">
+      <li><b>Add one:</b> click a picture in the <b>Effects</b> section. The frame starts over
+          the whole image – drag it by its surface, size it at its corners.</li>
+      <li><b>Find it again:</b> tick <b>Show frames on the picture</b> in the Effects group of
+          the bar: every frame is outlined, dashed. Pointing at a row lights up its frame and
+          names it; <b>⌖ Select</b> puts the handles on it, <b>✕ Remove</b> takes it away.</li>
+      <li><b>Per frame</b> in the bar: <b>Effect</b> (change it any time), <b>Speed</b> and
+          <b>Start</b>. The <b>Colour</b> row above the frames paints the selected frame;
+          <b>auto</b> goes back to the colours it was drawn in.</li>
+      <li><b>Stacking counts:</b> a frame paints where it sits among the layers. Put the headline
+          above the frame (mode <b>Layers</b>) and the effect runs behind it – the text stays
+          readable.</li>
+      <li>Effects move only in the <b>▶ Preview</b>, the GIF and the video. On a still PNG they
+          do not appear – with one exception, the magnifier.</li>
+    </ul>
+
+    <div style="background:#eef6f7;border:1px solid #b8e2e6;border-radius:10px;padding:14px 16px;margin:0 0 16px">
+      <h3 style="margin:.2rem 0;color:#0e7c86">🔍 The magnifier: a window, a glass and a way</h3>
+      <p style="margin:.4rem 0">The magnifier enlarges whatever lies <b>under</b> it. Its frame is
+        the <b>window</b> it travels in; the round glass has a size of its own. While you edit,
+        the glass stands at its starting point and a dotted orange line shows the way it will
+        take. It is part of the picture, so it also shows in a PNG.</p>
+      <ol style="margin:.2rem 0 .4rem 1.1rem;padding:0">
+        <li>Mode <b>✨ Effects</b> → <b>🔍 Magnifier</b>. A wide window appears in the middle.</li>
+        <li>Drag the window over the text that should be read, and size it at its corners.</li>
+        <li>In the bar, row of the magnifier, choose the <b>Path</b>:
+          <ul style="margin:.2rem 0 .2rem 1.1rem;padding:0">
+            <li><b>Line by line</b> – reads along the text, row by row (the default)</li>
+            <li><b>Left → right, then again</b></li>
+            <li><b>Back and forth</b></li>
+            <li><b>Wander freely</b></li>
+            <li><b>Stay put</b> – it does not move</li>
+          </ul></li>
+        <li><b>Lens</b> sets the size of the glass. If the glass gets bigger than the window,
+            the window grows with it. <b>Zoom</b> sets how much it enlarges (1.2× to 3×).</li>
+        <li><b>Speed</b> is the time for <i>one</i> line: far left 20 s, far right 2 s – the
+            value shows next to it, e.g. <i>7 s/line</i>. A taller window does not make it
+            hurry; the round just takes longer. <b>Pause</b> lets it rest at the end of each
+            line so the enlarged words can be read.</li>
+        <li>Next to <b>Start</b> you see how long one full round takes. <b>▶ Preview</b> plays
+            one whole round, up to 15 seconds – a longer round is cut off in the preview and
+            the GIF, so then move Speed to the right or make the window flatter.</li>
+      </ol>
+      <p style="margin:.4rem 0 0">A magnifier made before the window existed has no path and
+        stays where it is. Pick a <b>Path</b> and it starts to travel.</p>
+    </div>
+
+    <ul style="margin:.2rem 0 .9rem 1.1rem;padding:0">
+      <li><b>📍 Marker</b> – a blinking sign you place yourself, e.g. a <b>?</b> on the spot
+          that needs attention. It blinks from the first second (Motion <i>Pulse</i>).</li>
+      <li><b>🖈 Stamp</b> – your word, stamped on at a slant. It fades in and stays, so the text
+          underneath remains readable.</li>
+      <li><b>Which word:</b> type it into the word field first, then click Marker, Stamp or a
+          badge. Leave the field empty and the Studio asks for the word right after. To change
+          it later: double-click the marker or stamp.</li>
+      <li><b>Size</b> sets the size of the selected marker, stamp or badge, and of the next one
+          you add. It grows and shrinks around its middle, so it stays on the word it marks.</li>
+      <li>Colour: the brand colours at the foot of the panel.</li>
+      <li>Drawings made before effects moved into frames are converted when you open them: an
+          effect that hung on an element becomes a frame exactly around that element.</li>
+    </ul>
 
     <h3 style="color:#0e7c86;margin-bottom:.2rem">Let a checklist arrive line by line</h3>
     <p style="margin:.2rem 0 .5rem">A checklist is <b>one</b> element: one circle, one tick and
@@ -292,7 +373,7 @@
       <li><b>Give each row its own Start.</b> In the animation bar every row now has its own
           slider. With three rows: 0, 600, 1200. With five: 0, 400, 800, 1200, 1600.</li>
       <li><b>Check the length.</b> The last row needs its second, so the video has to run
-          longer than its Start – or use <b>🐢 Tempo</b>, which stretches both together.</li>
+          longer than its Start – or move <b>Tempo</b> to the left, which slows both together.</li>
     </ol>
     <p style="margin:.2rem 0 .5rem"><b>Why the text comes first.</b> After splitting, every row
       is a checklist of its own with a single line. Double-click still edits it, but Enter then
