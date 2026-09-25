@@ -291,10 +291,10 @@
             {% endif %}
             <span class="kal-post" title="{{ p.title }}">
               <span class="nr">#{{ p.id }}</span>
-              <a href="/planner/?edit={{ p.id }}&amp;back={{ basis }}{{ jahr }}/">{{ p.title }}</a>
+              <a href="{{ p.editor }}&amp;back={{ basis }}{{ jahr }}/">{{ p.title }}</a>
               {% if p.topic_name %}<span class="thema" style="background:{{ p.bg }};color:{{ p.fg }}">{{ p.topic_name }}</span>{% endif %}
               {% if p.ohne_medium %}<span class="ohne-medium" title="No image, GIF or video on this post yet - open it and add one.">&#9888; no image / video</span>{% endif %}
-              {% if p.abweichend and p.bei_buffer %}<a class="abw" href="/planner/?edit={{ p.id }}&amp;back={{ basis }}{{ jahr }}/" title="Buffer sends it on {{ p.kalendertag|date:"d.m." }}, the plan now says {{ p.planned_date|date:"d.m.Y" }}. Buffer's time cannot be moved from here - open the post and schedule it again.">plan {{ p.planned_date|date:"d.m." }} &rarr; re-schedule</a>{% elif p.abweichend %}<span class="abw" title="The plan says {{ p.planned_date|date:"d.m.Y" }}. This row is the day it really goes out.">plan {{ p.planned_date|date:"d.m." }}</span>{% endif %}
+              {% if p.abweichend and p.bei_buffer %}<a class="abw" href="{{ p.editor }}&amp;back={{ basis }}{{ jahr }}/" title="Buffer sends it on {{ p.kalendertag|date:"d.m." }}, the plan now says {{ p.planned_date|date:"d.m.Y" }}. Buffer's time cannot be moved from here - open the post and schedule it again.">plan {{ p.planned_date|date:"d.m." }} &rarr; re-schedule</a>{% elif p.abweichend %}<span class="abw" title="The plan says {{ p.planned_date|date:"d.m.Y" }}. This row is the day it really goes out.">plan {{ p.planned_date|date:"d.m." }}</span>{% endif %}
               {% if p.verschiebbar %}<input type="date" class="kal-verschieben" data-id="{{ p.id }}" value="{{ p.plan_iso }}" aria-label="Move the plan for #{{ p.id }}"
                      title="{% if p.bei_buffer %}Moves the plan only. Buffer keeps its send time until the post is scheduled again.{% else %}Move this post to another day.{% endif %}">{% endif %}
             </span>
@@ -344,7 +344,7 @@
       {% for p in ohne_datum_raus %}
       <li>
         <span class="nr">#{{ p.id }}</span>
-        <a href="/planner/?edit={{ p.id }}&amp;back={{ basis }}{{ jahr }}/">{{ p.title }}</a>
+        <a href="{{ p.editor }}&amp;back={{ basis }}{{ jahr }}/">{{ p.title }}</a>
         {% if p.topic_name %}<span class="thema" style="background:{{ p.bg }};color:{{ p.fg }}">{{ p.topic_name }}</span>{% endif %}
         <span class="wann">{{ p.status }}{% if p.linkedin_posted %} &middot; published{% endif %}{% if p.created_at %} &middot; written {{ p.created_at|date:"d.m.Y" }}{% endif %}</span>
       </li>
@@ -364,7 +364,7 @@
         {% for p in ohne_datum_offen %}
         <li>
           <span class="nr">#{{ p.id }}</span>
-          <a href="/planner/?edit={{ p.id }}&amp;back={{ basis }}{{ jahr }}/">{{ p.title }}</a>
+          <a href="{{ p.editor }}&amp;back={{ basis }}{{ jahr }}/">{{ p.title }}</a>
           {% if p.topic_name %}<span class="thema" style="background:{{ p.bg }};color:{{ p.fg }}">{{ p.topic_name }}</span>{% endif %}
           <span class="wann">{{ p.status }}{% if p.created_at %} &middot; written {{ p.created_at|date:"d.m.Y" }}{% endif %}</span>
           <input type="date" class="kal-verschieben" data-id="{{ p.id }}" value="" aria-label="Plan #{{ p.id }} for a day" title="Give it a day - it then appears in the calendar there.">

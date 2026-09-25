@@ -253,7 +253,9 @@ word, so a published post that was later tidied away still counts as published.
       <label style="font-size:12px;color:#6c757d;white-space:nowrap">📅 Date</label>
       <input type="date" id="pe-date" style="font-size:13px;flex:1;min-width:130px;padding:6px 8px;border:0.5px solid #ced4da;border-radius:4px">
       <label style="font-size:12px;color:#6c757d;white-space:nowrap">🕐 Time</label>
-      <input type="time" id="pe-time" step="60" style="font-size:13px;width:100px;padding:6px 8px;border:0.5px solid #ced4da;border-radius:4px">
+      {% comment %}A list instead of type="time": the browser field was too narrow to hit its
+         hour and minute parts cleanly (Ortrud, 25.09.2026). Filled by peZeitListe().{% endcomment %}
+      <select id="pe-time" title="Send time" style="font-size:13px;width:92px;padding:6px 4px;border:0.5px solid #ced4da;border-radius:4px"><option value="">--:--</option></select>
       <button type="button" onclick="document.getElementById('pe-date').value='';document.getElementById('pe-time').value=''" title="Clear date & time"
         style="font-size:13px;padding:3px 8px;border:0.5px solid #ced4da;border-radius:4px;background:#fff;cursor:pointer;color:#888;line-height:1;flex-shrink:0">✕</button>
     </div>
@@ -353,6 +355,33 @@ word, so a published post that was later tidied away still counts as published.
 <script>
 const peCSRF = '{{ csrf_token }}';
 const PE_POSTS = {{ posts_json|safe }};
+
+/* The send time is a list: every quarter of an hour from 06:00 to 22:00. A
+   post that already has another time keeps it - peSetzeZeit() adds that one
+   time to the list rather than quietly dropping it on the next save. */
+function peZeitListe() {
+  const feld = document.getElementById('pe-time');
+  if (!feld || feld.options.length > 1) return;
+  for (let min = 6 * 60; min <= 22 * 60; min += 15) {
+    const t = String(Math.floor(min / 60)).padStart(2, '0') + ':' + String(min % 60).padStart(2, '0');
+    feld.add(new Option(t, t));
+  }
+}
+function peSetzeZeit(wert) {
+  peZeitListe();
+  const feld = document.getElementById('pe-time');
+  // A time added for the previous post is not offered for the next one.
+  [...feld.options].filter(o => o.dataset.extra).forEach(o => o.remove());
+  const t = (wert || '').slice(0, 5);
+  if (t && ![...feld.options].some(o => o.value === t)) {
+    const neu = new Option(t, t);
+    neu.dataset.extra = '1';
+    const danach = [...feld.options].find(o => o.value && o.value > t);
+    feld.add(neu, danach || null);
+  }
+  feld.value = t;
+}
+peZeitListe();
 
 function peApi(data) {
   return fetch('/planner/api/post/', {
@@ -619,7 +648,7 @@ function openEdit(id) {
   document.getElementById('pe-content').innerHTML = p.content || '';
   document.getElementById('pe-status').value = p.status;
   document.getElementById('pe-date').value = p.date || '';
-  document.getElementById('pe-time').value = p.time || '';
+  peSetzeZeit(p.time);
   document.getElementById('pe-link').value = p.link || '';
   document.getElementById('pe-comment').value = p.comment || '';
   document.getElementById('pe-img-input').value = '';
@@ -674,7 +703,9 @@ function closeEdit() { document.getElementById('post-edit-modal').style.display 
       return;
     }
     if (params.get('von') !== 'all') {
-      window.location.replace('/planner/all/?edit=' + encodeURIComponent(eid) + '&von=all');
+      const zurueck = params.get('back') || '';
+      window.location.replace('/planner/all/?edit=' + encodeURIComponent(eid) + '&von=all' +
+        (zurueck ? '&back=' + encodeURIComponent(zurueck) : ''));
     } else {
       // Even All Posts does not have it - then say so instead of doing nothing.
       alert('This post is no longer in the list (it may have been deleted).');
@@ -782,10 +813,24 @@ async function saveEdit() {
       await peApi({action:'set_video', id:parseInt(id), video_nc_path:ncPath});
     }
 
-    location.reload();
+    peNachSpeichern();
   } catch(e) {
     alert('Network or server error: ' + e.message);
   }
+}
+
+/* After saving: back where the post was opened from (the calendar sends
+   ?back=), otherwise this tab again - without ?edit=, or the reload would
+   open the same post a second time. Only our own paths are followed, never a
+   foreign address that happens to stand in the query string. */
+function peNachSpeichern() {
+  try {
+    const adresse = new URL(window.location.href);
+    const zurueck = adresse.searchParams.get('back') || '';
+    if (/^\/[a-z0-9\-_/]*$/i.test(zurueck)) { window.location.href = zurueck; return; }
+    ['edit', 'von', 'back'].forEach(function (k) { adresse.searchParams.delete(k); });
+    window.location.href = adresse.pathname + adresse.search;
+  } catch (e) { location.reload(); }
 }
 
 document.getElementById('post-edit-modal').addEventListener('click', function(e) {

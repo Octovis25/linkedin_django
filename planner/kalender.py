@@ -350,6 +350,32 @@ def ist_veroeffentlicht(post, gesendet_am=None, wartet_bei_buffer=False):
     return bool(post.get('linkedin_posted'))
 
 
+# Where a post is edited: the tab that belongs to its status - the same map as
+# STATUS_REITER in planner.html, so a click in the calendar lands where a click
+# in the Planner lands. The Planner's own dialog has no topic and no status row
+# (Ortrud, 25.09.2026: "Event und Ready fehlen oben").
+EDITOR_REITER = {
+    'Draft': '/planner/draft/',
+    'Review': '/planner/pipeline/',
+    'Ready': '/planner/ready/',
+    'Scheduled': '/planner/scheduled/',
+    'Posted': '/planner/archive/',
+    'Archive': '/planner/archive/',
+}
+
+
+def editor_adresse(post, nur_oj=False):
+    """'/planner/ready/?edit=119' - the full editor for this post.
+
+    A status without a tab of its own goes to All Posts, which has every post.
+    OJ posts stay on the address they had: the status tabs leave is_oj out.
+    """
+    if nur_oj:
+        return '/planner/?edit=%s' % post.get('id')
+    return '%s?edit=%s' % (EDITOR_REITER.get(post.get('status') or '', '/planner/all/'),
+                           post.get('id'))
+
+
 def uhrzeit_aus(sendezeit):
     """'28.09.2026 08:00' -> '08:00'; a date alone, or nothing, -> ''."""
     import re as _re
@@ -481,6 +507,7 @@ def _posts_des_jahres(jahr, nur_oj=False):
             p['zustand'], p['status'] or 'Planned')
         p['kalendertag'] = kalendertag_fuer(p, gesendet.get(p['id']))
         p['ohne_medium'] = fehlt_medium(p)
+        p['editor'] = editor_adresse(p, nur_oj)
         # Moving from the calendar changes the PLAN. A post that has gone out
         # has no plan left to change. One Buffer is holding keeps its send
         # time there - our code can create and delete at Buffer, not move -
@@ -549,6 +576,7 @@ def posts_ohne_datum(grenze=200, nur_oj=False):
                    'topic_name': r[4] or '', 'bg': bg, 'fg': fg,
                    'linkedin_posted': r[6], 'created_at': r[7]}
         eintrag['gruppe'] = ohne_datum_gruppe(eintrag)
+        eintrag['editor'] = editor_adresse(eintrag, nur_oj)
         raus.append(eintrag)
         if len(raus) >= grenze:
             break

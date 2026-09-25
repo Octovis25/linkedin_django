@@ -818,5 +818,41 @@ pruefe('the recurring dates are folded away',
 pruefe('and the button that leads there opens them',
        "klappe.open = true" in VORLAGE)
 
+print('\n=== A click on a post opens the full editor (25.09.) ===')
+RAUM_E = {'__builtins__': __builtins__}
+_q = SRC[SRC.index('EDITOR_REITER = {'):]
+exec(_q[:_q.index('\n}\n') + 3], RAUM_E)
+exec(compile(herausschneiden('editor_adresse'), 'planner/kalender.py (cut out)', 'exec'), RAUM_E)
+ed = RAUM_E['editor_adresse']
+pruefe('a Ready post opens in the Ready tab', ed({'id': 119, 'status': 'Ready'}) == '/planner/ready/?edit=119')
+pruefe('a Scheduled one in Scheduled', ed({'id': 121, 'status': 'Scheduled'}) == '/planner/scheduled/?edit=121')
+pruefe('Review lives under pipeline', ed({'id': 1, 'status': 'Review'}) == '/planner/pipeline/?edit=1')
+pruefe('published and archived in the archive',
+       ed({'id': 2, 'status': 'Posted'}) == ed({'id': 2, 'status': 'Archive'}) == '/planner/archive/?edit=2')
+pruefe('a status without a tab goes to All Posts', ed({'id': 3, 'status': 'Planned'}) == '/planner/all/?edit=3')
+pruefe('and so does no status at all', ed({'id': 4}) == '/planner/all/?edit=4')
+pruefe('the OJ calendar keeps its address', ed({'id': 5, 'status': 'Ready'}, True) == '/planner/?edit=5')
+PLANNER = open(os.path.join(os.path.dirname(HIER), 'planner', 'templates', 'planner', 'planner.html'), encoding='utf-8').read()
+_st = PLANNER[PLANNER.index('const STATUS_REITER = {'):]
+_st = _st[:_st.index('};')]
+pruefe('the map is the same one the Planner uses',
+       all("'%s':" % k in _st and "'%s'" % v in _st for k, v in RAUM_E['EDITOR_REITER'].items()))
+pruefe('every post link in the calendar uses it',
+       VORLAGE.count('href="{{ p.editor }}&amp;back=') == 4 and '/planner/?edit=' not in VORLAGE)
+pruefe('both kinds of post carry the address',
+       "p['editor'] = editor_adresse(p, nur_oj)" in herausschneiden('_posts_des_jahres')
+       and "eintrag['editor'] = editor_adresse(eintrag, nur_oj)" in herausschneiden('posts_ohne_datum'))
+LISTE_T = open(os.path.join(os.path.dirname(HIER), 'planner', 'templates', 'planner', '_post_list.html'), encoding='utf-8').read()
+pruefe('after saving, the tab goes back to the calendar',
+       'peNachSpeichern();' in LISTE_T and "searchParams.get('back')" in LISTE_T)
+pruefe('and only to one of our own pages', "/^\\/[a-z0-9\\-_/]*$/i.test(zurueck)" in LISTE_T)
+pruefe('the way back survives the detour to All Posts', "'&back=' + encodeURIComponent(zurueck)" in LISTE_T)
+
+LISTE_T = open(os.path.join(os.path.dirname(HIER), 'planner', 'templates', 'planner', '_post_list.html'), encoding='utf-8').read()
+pruefe('the send time in the editor is a list, not the narrow browser field',
+       '<select id="pe-time"' in LISTE_T and 'type="time" id="pe-time"' not in LISTE_T)
+pruefe('a post keeps a time that is not on the list', 'peSetzeZeit(p.time);' in LISTE_T
+       and 'o.dataset.extra' in LISTE_T)
+
 print('\n%d ok, %d failed' % (gut, schlecht))
 sys.exit(1 if schlecht else 0)
