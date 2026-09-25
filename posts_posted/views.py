@@ -18,6 +18,89 @@ def _norm_text(s):
     return re.sub(r'[^a-z0-9]', '', (s or '').lower())[:25]
 
 
+def zusammenfuehren(linkedin, buffer, schluessel):
+    """One row per post, out of the two lists Data used to show separately.
+
+    linkedin: what LinkedIn reports (the Excel upload) - dicts with 'text'
+              and 'datum' (a date or None).
+    buffer:   what Buffer sent or still holds - dicts with 'text', 'datum'
+              and 'status'.
+    schluessel: the content key, the one in linkedin_statistics/post_text.py.
+
+    There is no shared ID: LinkedIn and Buffer number the same post
+    differently (activity against share/ugcPost). So the text decides, and
+    within one text the dates do: a text posted twice is two posts, and each
+    LinkedIn entry takes the Buffer entry closest to its own day. What Buffer
+    has left over for a text is a repeat, and is hung on the row nearest in
+    time instead of becoming a row of its own.
+
+    Returns dicts: li, bu (either may be None), bu_mehr (Buffer repeats),
+    li_gleich (how often the text is in the Excel data), datum, art
+    ('both' | 'li' | 'bu') and hinweise (what does not add up).
+    """
+    gruppen = {}
+    for i, p in enumerate(linkedin):
+        k = schluessel(p.get('text')) or ('li', i)
+        gruppen.setdefault(k, ([], []))[0].append(p)
+    for i, b in enumerate(buffer):
+        k = schluessel(b.get('text')) or ('bu', i)
+        gruppen.setdefault(k, ([], []))[1].append(b)
+
+    def abstand(a, b):
+        if a is None or b is None:
+            return 10 ** 6
+        return abs((a - b).days)
+
+    zeilen = []
+    for lis, bus in gruppen.values():
+        paare = sorted((abstand(l.get('datum'), b.get('datum')), i, j)
+                       for i, l in enumerate(lis) for j, b in enumerate(bus))
+        zu_li, zu_bu = {}, {}
+        for _d, i, j in paare:
+            if i in zu_li or j in zu_bu:
+                continue
+            zu_li[i], zu_bu[j] = j, i
+
+        if lis:
+            neu = [{'li': l, 'bu': bus[zu_li[i]] if i in zu_li else None, 'bu_mehr': []}
+                   for i, l in enumerate(lis)]
+            for j, b in enumerate(bus):
+                if j in zu_bu:
+                    continue
+                ziel = min(neu, key=lambda z: abstand(
+                    (z['bu'] or z['li']).get('datum'), b.get('datum')))
+                ziel['bu_mehr'].append(b)
+        else:
+            # Only Buffer knows this text: one row, the latest copy leads.
+            reihe = sorted(bus, key=lambda b: (b.get('datum') is not None, b.get('datum')),
+                           reverse=True)
+            neu = [{'li': None, 'bu': reihe[0], 'bu_mehr': reihe[1:]}]
+
+        for z in neu:
+            z['li_gleich'] = len(lis)
+            li, bu = z['li'], z['bu']
+            # Buffer's send date wins: it is when the post went out. The
+            # LinkedIn date comes from the export and has been wrong before.
+            z['datum'] = (bu or {}).get('datum') or (li or {}).get('datum')
+            z['art'] = 'both' if (li and bu) else ('li' if li else 'bu')
+            hinweise = []
+            if li and bu and abstand(li.get('datum'), bu.get('datum')) > 1 \
+                    and li.get('datum') and bu.get('datum'):
+                hinweise.append('Excel says %s' % li['datum'].strftime('%d.%m.'))
+            if z['bu_mehr']:
+                tage = sorted(x['datum'].strftime('%d.%m.') for x in [bu] + z['bu_mehr']
+                              if x and x.get('datum'))
+                hinweise.append('%d\u00d7 in Buffer%s' % (
+                    1 + len(z['bu_mehr']), (' (' + ', '.join(tage) + ')') if tage else ''))
+            if len(lis) > 1:
+                hinweise.append('%d\u00d7 in the Excel data' % len(lis))
+            z['hinweise'] = hinweise
+            zeilen.append(z)
+
+    zeilen.sort(key=lambda z: (z['datum'] is not None, z['datum']), reverse=True)
+    return zeilen
+
+
 def fill_missing_post_images():
     """Fill in missing overview images (linkedin_posts_posted.post_image)
     from the matching Buffer thumbnail, matched on text. Only EMPTY images are set.
@@ -231,71 +314,60 @@ def post_list(request):
               AND lp.post_id IS NOT NULL
               AND lp.post_url IS NOT NULL
         """)
-    """linkedin_posts is the leading table - it holds every post."""
+    """One view of what went out: what LinkedIn reports (the Excel upload)
+    and what Buffer sent, side by side - Ortrud, 25.09.2026: "one view is
+    enough". Both tables stay; the calendar, the overview and the statistics
+    read from them."""
+    from linkedin_statistics.post_text import TITEL, _inhalts_schluessel
     query = request.GET.get("q", "").strip()
 
-    sql = """
-        SELECT
-            lp.post_id,
-            lp.post_title,
-            lp.post_url,
-            pp.post_date,
-            pp.post_image,
-            pp.id AS pp_id
-        FROM linkedin_posts lp
-        LEFT JOIN linkedin_posts_posted pp
-            ON lp.post_id = pp.post_id
-    """
-    params = []
-
-    if query:
-        sql += """
-            WHERE lp.post_id LIKE %s
-               OR lp.post_title LIKE %s
-               OR lp.post_url LIKE %s
-        """
-        like = "%%{}%%".format(query)
-        params = [like, like, like]
-
-    sql += """
-        ORDER BY
-            pp.post_date IS NOT NULL, lp.post_date IS NOT NULL,
-            COALESCE(pp.post_date, lp.post_date) DESC,
-            lp.post_id DESC
-    """
-
     with connection.cursor() as cur:
-        cur.execute(sql, params)
-        columns = [col[0] for col in cur.description]
-        rows = cur.fetchall()
+        cur.execute("""
+            SELECT lp.post_id, """ + TITEL + """ AS text, lp.post_url,
+                   COALESCE(pp.post_date, lp.post_date) AS datum,
+                   pp.post_image, pp.id AS pp_id
+            FROM linkedin_posts lp
+            LEFT JOIN linkedin_posts_posted pp ON lp.post_id = pp.post_id
+        """)
+        spalten = [col[0] for col in cur.description]
+        linkedin = [dict(zip(spalten, r)) for r in cur.fetchall()]
+    for p in linkedin:
+        d = p.get('datum')
+        p['datum'] = d.date() if hasattr(d, 'date') and callable(d.date) else d
+        p['text'] = p.get('text') or ''
 
-    posts = []
-    for row in rows:
-        d = dict(zip(columns, row))
-        pd = d.get("post_date")
-        posts.append({
-            "post_id":          d["post_id"],
-            "post_title":       d.get("post_title") or "",
-            "post_url":        d.get("post_url") or "",
-            "post_date":        pd,
-            "post_date_formatted": pd.strftime("%d.%m.%Y") if pd else "",
-            "post_image":       d.get("post_image") or "",
-            "pp_id":            d.get("pp_id"),
-            "has_date":         pd is not None,
-        })
+    buffer, last_fetch, error = _buffer_posts_lesen()
+    from datetime import date as _date
+    for b in buffer:
+        try:
+            b['datum'] = _date.fromisoformat(b['sent_at'][:10]) if b['sent_at'] else None
+        except ValueError:
+            b['datum'] = None
+
+    zeilen = zusammenfuehren(linkedin, buffer, _inhalts_schluessel)
+    zaehler = {
+        'all': len(zeilen),
+        'both': sum(1 for z in zeilen if z['art'] == 'both'),
+        'li': sum(1 for z in zeilen if z['art'] == 'li'),
+        'bu': sum(1 for z in zeilen if z['art'] == 'bu'),
+        'check': sum(1 for z in zeilen if z['hinweise']),
+    }
 
     return render(request, "posts_posted/list.html", {
-        "posts": posts,
+        "zeilen": zeilen,
+        "zaehler": zaehler,
         "query": query,
+        "last_fetch": last_fetch,
+        "error": error,
+        "zuerst": 10,
     })
 
 
-@login_required
-def buffer_post_list(request):
-    """
-    Tab 'Buffer Posts Posted': reads the buffer_posts_posted table, which is
-    filled on upload and once a day by the fetch_buffer_posts cron job.
-    Same columns as 'Posts Posted' (text, image, id, LinkedIn link), but read only.
+def _buffer_posts_lesen():
+    """The Octovis company posts in buffer_posts_posted, from 2023 on.
+
+    Returns (posts, last_fetch, error). This used to be the whole of the tab
+    'Buffer Posts Posted'; since 25.09.2026 that tab is part of Posts Posted.
     """
     error = None
     posts = []
@@ -362,11 +434,14 @@ def buffer_post_list(request):
         error = ("No Buffer posts in the database yet. Run "
                  "'python manage.py fetch_buffer_posts' once.")
 
-    return render(request, "posts_posted/list_buffer.html", {
-        "posts": posts,
-        "error": error,
-        "last_fetch": last_fetch,
-    })
+    return posts, last_fetch, error
+
+
+@login_required
+def buffer_post_list(request):
+    """The old tab 'Buffer Posts Posted' is part of Posts Posted now.
+    Kept as an address, so a bookmark still lands somewhere sensible."""
+    return redirect('posts_posted:list')
 
 
 @login_required

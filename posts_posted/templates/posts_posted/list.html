@@ -1,132 +1,167 @@
 {% extends "core/base.html" %}
-{% block title %}Posted posts{% endblock %}
+{% block title %}Posts Posted{% endblock %}
 {% block content %}
 <style>
-.post-title-cell {
-    max-width: 300px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-.copy-link-btn {
-    cursor: pointer;
-    margin-left: 0.3rem;
-    color: var(--octo-petrol);
-    text-decoration: none;
-    font-size: 1rem;
-}
-.copy-link-btn:hover { color: var(--octo-orange); }
-.actions-cell .btn { font-size: 0.75rem; padding: 0.25rem 0.6rem; }
-.no-date { color: #e74c3c; font-style: italic; }
-
-/* Thumbnail with hover zoom */
-.thumb-wrap {
-    position: relative;
-    display: inline-block;
-}
-.thumb-wrap img.thumb {
-    max-height: 40px;
-    max-width: 60px;
-    border-radius: 4px;
-    cursor: pointer;
-    transition: transform 0.2s;
-}
-.thumb-wrap .thumb-large {
-    display: none;
-    position: absolute;
-    bottom: 100%;
-    left: 50%;
-    transform: translateX(-50%);
-    z-index: 1000;
-    border: 3px solid var(--octo-petrol);
-    border-radius: 8px;
-    box-shadow: 0 8px 24px rgba(0,0,0,0.3);
-    background: #fff;
-    max-width: 120px;
-    max-height: 80px;
-}
-.thumb-wrap:hover .thumb-large {
-    display: block;
-}
+.pp-top { display:flex; justify-content:space-between; align-items:flex-start; gap:1rem; flex-wrap:wrap; margin-bottom:.4rem; }
+.pp-meta { font-size:12px; color:#6c757d; margin:0 0 .8rem; }
+.pp-bar { display:flex; gap:.4rem; align-items:center; flex-wrap:wrap; margin-bottom:.8rem; }
+.pp-chip { border:1px solid #cfd8da; background:#fff; border-radius:16px; padding:3px 11px; font-size:12px; cursor:pointer; color:#344; }
+.pp-chip.on { background:var(--octo-petrol,#008591); border-color:var(--octo-petrol,#008591); color:#fff; }
+.pp-chip .n { opacity:.7; margin-left:2px; }
+.pp-bar input { flex:1; min-width:180px; }
+.pp-text { max-width:360px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.pp-src { display:inline-block; font-size:11.5px; border-radius:10px; padding:2px 8px; white-space:nowrap; }
+.pp-li { background:#E6F2F3; color:#0E4A52; }
+.pp-bu { background:#EEF0FA; color:#3a3f7a; }
+.pp-sch { background:#FFF1E7; color:#b24a12; }
+.pp-fehlt { color:#aaa; font-size:12px; }
+.pp-hinweis { display:block; font-size:11px; color:#b24a12; margin-top:3px; }
+.pp-hidden { display:none; }
+.pp-mehr { text-align:center; padding:.8rem; }
+.pp-legend { font-size:12px; color:#6c757d; margin-top:.6rem; line-height:1.5; }
+.copy-link-btn { cursor:pointer; margin-left:.3rem; color:var(--octo-petrol); text-decoration:none; font-size:1rem; }
+.copy-link-btn:hover { color:var(--octo-orange); }
+.thumb-wrap { position:relative; display:inline-block; }
+.thumb-wrap img.thumb { max-height:40px; max-width:60px; border-radius:4px; cursor:pointer; }
+.thumb-wrap .thumb-large { display:none; position:absolute; bottom:100%; left:50%; transform:translateX(-50%); z-index:1000;
+  border:3px solid var(--octo-petrol); border-radius:8px; box-shadow:0 8px 24px rgba(0,0,0,.3); background:#fff; max-width:120px; max-height:80px; }
+.thumb-wrap:hover .thumb-large { display:block; }
 </style>
 
 <div class="card">
-<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;gap:1rem;flex-wrap:wrap">
-<h2 style="margin:0">All posts ({{ posts|length }})</h2>
-<div style="display:flex;gap:.5rem;align-items:center">
-<button type="button" id="fill-img-btn" class="btn btn-sm" style="background:var(--octo-petrol,#008591);color:#fff;border:none"
-        onclick="fillImagesFromBuffer(this)">🖼️ Auto-fill images</button>
-<form style="display:flex;gap:.5rem;width:300px">
-<input type="text" name="q" value="{{ query }}" class="form-input" placeholder="Search…">
-<button type="submit" class="btn btn-secondary btn-sm">Search</button>
-</form>
+<div class="pp-top">
+  <h2 style="margin:0">Posts Posted</h2>
+  <div style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap">
+    <button type="button" id="fill-img-btn" class="btn btn-sm" style="background:#fff;color:var(--octo-petrol,#008591);border:1px solid #cfd8da"
+            onclick="fillImagesFromBuffer(this)">🖼️ Auto-fill images</button>
+    <a href="/data/upload/" class="btn btn-sm" style="background:var(--octo-petrol,#008591);color:#fff;border:none">⬆ Upload Excel</a>
+  </div>
 </div>
-</div>
-<p style="margin:0 0 1rem;font-size:13px;color:#5a6b6b;background:#f3f8f8;border-left:3px solid var(--octo-petrol,#008591);padding:8px 12px;border-radius:0 6px 6px 0">
+<p class="pp-meta">One row per post – what LinkedIn reports (your Excel upload) and what Buffer sent, side by side.
+  {% if last_fetch %}Last Buffer fetch: {{ last_fetch|date:"d.m.Y H:i" }}{% endif %}</p>
+<p style="margin:0 0 .8rem;font-size:13px;color:#5a6b6b;background:#f3f8f8;border-left:3px solid var(--octo-petrol,#008591);padding:8px 12px;border-radius:0 6px 6px 0">
   <strong>Reporting delay:</strong> LinkedIn provides data with a two-day lag.
-  Dates and figures are therefore complete only up to the day before yesterday;
-  posts published more recently may still appear without them.
+  A post from the last two days may show under Buffer only until the next upload.
 </p>
+{% if error %}<div class="alert alert-error" style="margin-bottom:.8rem">{{ error }}</div>{% endif %}
 <div id="fill-img-msg" style="display:none;font-size:13px;margin-bottom:1rem;padding:8px 12px;border-radius:6px"></div>
+
+<div class="pp-bar">
+  <span class="pp-chip on" data-f="all">All <span class="n">{{ zaehler.all }}</span></span>
+  <span class="pp-chip" data-f="both">In both <span class="n">{{ zaehler.both }}</span></span>
+  <span class="pp-chip" data-f="li">Only LinkedIn <span class="n">{{ zaehler.li }}</span></span>
+  <span class="pp-chip" data-f="bu">Only Buffer <span class="n">{{ zaehler.bu }}</span></span>
+  <span class="pp-chip" data-f="check">Check ⚠ <span class="n">{{ zaehler.check }}</span></span>
+  <input type="text" id="pp-suche" class="form-input" value="{{ query }}" placeholder="Search text or ID…">
+</div>
 
 <table>
 <thead><tr>
-    <th>Post-ID</th>
-    <th>Post title</th>
-    <th>Post-Link</th>
-    <th>Posted on</th>
     <th>Image</th>
-    <th>Actions</th>
+    <th>Post</th>
+    <th>Posted on</th>
+    <th>LinkedIn (Excel)</th>
+    <th>Buffer</th>
+    <th></th>
 </tr></thead>
-<tbody>
-{% for p in posts %}
-<tr>
-    <td><span class="badge">{{ p.post_id }}</span></td>
-    <td class="post-title-cell" title="{{ p.post_title }}">{{ p.post_title|default:"-"|truncatechars:80 }}</td>
+<tbody id="pp-zeilen">
+{% for z in zeilen %}
+<tr data-art="{{ z.art }}{% if z.hinweise %} check{% endif %}"
+    data-suche="{{ z.li.text|default:'' }} {{ z.bu.text|default:'' }} {{ z.li.post_id|default:'' }} {{ z.bu.buffer_post_id|default:'' }}">
     <td>
-        {% if p.post_url %}
-        <a href="{{ p.post_url }}" target="_blank" title="{{ p.post_url }}">&#x1F517; LinkedIn</a>
-        <a href="#" class="copy-link-btn" title="Copy link" onclick="copyLink('{{ p.post_url }}', event)">&#x1F4CB;</a>
-        {% else %}-{% endif %}
-    </td>
-    <td>
-        {% if p.has_date %}
-            {{ p.post_date_formatted }}
-        {% else %}
-            —
-        {% endif %}
-    </td>
-    <td>
-        {% if p.pp_id and p.post_image %}
+        {% if z.li.pp_id and z.li.post_image %}
         <div class="thumb-wrap">
-            <img src="{% url 'posts_posted:image_proxy' p.pp_id %}" class="thumb" alt="Post image">
-            <img src="{% url 'posts_posted:image_proxy' p.pp_id %}" class="thumb-large" alt="Post image, enlarged">
+            <img src="{% url 'posts_posted:image_proxy' z.li.pp_id %}" class="thumb" alt="Post image">
+            <img src="{% url 'posts_posted:image_proxy' z.li.pp_id %}" class="thumb-large" alt="Post image, enlarged">
         </div>
-        {% else %}
-            <span style="color:#aaa">—</span>
-        {% endif %}
+        {% elif z.bu.thumbnail_url %}
+        <div class="thumb-wrap">
+            <img src="{{ z.bu.thumbnail_url }}" class="thumb" alt="Post image" referrerpolicy="no-referrer">
+            <img src="{{ z.bu.thumbnail_url }}" class="thumb-large" alt="Post image, enlarged" referrerpolicy="no-referrer">
+        </div>
+        {% elif z.bu.planner_id and z.bu.has_image %}
+        <div class="thumb-wrap">
+            <img src="{% url 'planner_image' z.bu.planner_id %}" class="thumb" alt="Post image">
+            <img src="{% url 'planner_image' z.bu.planner_id %}" class="thumb-large" alt="Post image, enlarged">
+        </div>
+        {% else %}<span style="color:#aaa">—</span>{% endif %}
+    </td>
+    <td class="pp-text" title="{% firstof z.li.text z.bu.text %}">{% firstof z.li.text z.bu.text "-" %}</td>
+    <td style="white-space:nowrap">{% if z.datum %}{{ z.datum|date:"d.m.Y" }}{% else %}—{% endif %}</td>
+    <td>
+        {% if z.li %}
+            {% if z.li.post_url %}
+            <a href="{{ z.li.post_url }}" target="_blank" class="pp-src pp-li" title="{{ z.li.post_id }}">🔗 LinkedIn ✓</a>
+            <a href="#" class="copy-link-btn" title="Copy link" onclick="copyLink('{{ z.li.post_url }}', event)">&#x1F4CB;</a>
+            {% else %}<span class="pp-src pp-li" title="{{ z.li.post_id }}">LinkedIn ✓</span>{% endif %}
+        {% elif z.bu.status == 'scheduled' %}<span class="pp-fehlt">not yet</span>
+        {% else %}<span class="pp-fehlt">not in the upload</span>{% endif %}
+        {% for h in z.hinweise %}{% if 'Excel' in h %}<span class="pp-hinweis">⚠ {{ h }}</span>{% endif %}{% endfor %}
+    </td>
+    <td>
+        {% if z.bu %}
+            {% if z.bu.status == 'sent' %}<span class="pp-src pp-bu" title="{{ z.bu.buffer_post_id }}">✓ sent</span>
+            {% elif z.bu.status == 'scheduled' %}<span class="pp-src pp-sch" title="{{ z.bu.buffer_post_id }}">⏱ scheduled</span>
+            {% else %}<span class="pp-src pp-bu" title="{{ z.bu.buffer_post_id }}">{{ z.bu.status|default:"—" }}</span>{% endif %}
+            {% if not z.li and z.bu.link %}<a href="{{ z.bu.link }}" target="_blank" title="{{ z.bu.link }}">&#x1F517;</a>{% endif %}
+        {% else %}<span class="pp-fehlt">— posted directly</span>{% endif %}
+        {% for h in z.hinweise %}{% if 'Buffer' in h %}<span class="pp-hinweis">⚠ {{ h }}</span>{% endif %}{% endfor %}
     </td>
     <td class="actions-cell">
-        {% if p.pp_id %}
-            <a href="{% url 'posts_posted:edit' p.pp_id %}" class="btn btn-secondary btn-sm">Edit</a>
-        {% else %}
-            <span style="color:#aaa;font-size:0.8rem">&mdash;</span>
-        {% endif %}
+        {% if z.li.pp_id %}<a href="{% url 'posts_posted:edit' z.li.pp_id %}" class="btn btn-secondary btn-sm" style="font-size:.75rem;padding:.25rem .6rem">Edit</a>{% endif %}
     </td>
 </tr>
 {% empty %}
 <tr><td colspan="6" style="text-align:center;color:#aaa;padding:2rem">No entries yet.</td></tr>
 {% endfor %}
 </tbody></table>
+<div class="pp-mehr"><button type="button" class="btn btn-secondary btn-sm" id="pp-alle">Show all {{ zaehler.all }}</button></div>
+<div class="pp-legend">
+  <b>LinkedIn (Excel)</b> = in your upload, with its link. <b>Buffer</b> = Buffer sent it or still has it.
+  ⚠ = the two do not agree: another date, or the same text more than once.
+  <b>Edit</b> changes the date and the image, as before.
+</div>
 </div>
 
 <script>
+(function () {
+    var ZUERST = {{ zuerst }};
+    var zeilen = Array.prototype.slice.call(document.querySelectorAll('#pp-zeilen tr[data-art]'));
+    var filter = 'all', alle = false;
+    var suche = document.getElementById('pp-suche');
+    var knopf = document.getElementById('pp-alle');
+    function zeigen() {
+        var q = (suche.value || '').trim().toLowerCase();
+        var n = 0;
+        // The first ten only while nothing narrows the list: a filter or a
+        // search that hid its own hits behind "show all" would look empty.
+        var kurz = filter === 'all' && !q && !alle;
+        zeilen.forEach(function (r) {
+            var passt = (filter === 'all' || r.dataset.art.split(' ').indexOf(filter) >= 0)
+                        && (!q || r.dataset.suche.toLowerCase().indexOf(q) >= 0);
+            var sicht = passt && (!kurz || n < ZUERST);
+            if (passt) n++;
+            r.classList.toggle('pp-hidden', !sicht);
+        });
+        knopf.parentNode.style.display = (kurz && zeilen.length > ZUERST) ? '' : 'none';
+    }
+    document.querySelectorAll('.pp-chip').forEach(function (c) {
+        c.addEventListener('click', function () {
+            document.querySelectorAll('.pp-chip').forEach(function (x) { x.classList.remove('on'); });
+            c.classList.add('on'); filter = c.dataset.f; zeigen();
+        });
+    });
+    suche.addEventListener('input', zeigen);
+    knopf.addEventListener('click', function () { alle = true; zeigen(); });
+    zeigen();
+})();
+
 function copyLink(link, event) {
     event.preventDefault();
     navigator.clipboard.writeText(link).then(function() {
         var btn = event.target;
         var orig = btn.textContent;
-        btn.textContent = '\u2713';
+        btn.textContent = '✓';
         btn.style.color = 'green';
         setTimeout(function() { btn.textContent = orig; btn.style.color = ''; }, 1500);
     });
@@ -141,7 +176,7 @@ function fillImagesFromBuffer(btn) {
     var msg = document.getElementById('fill-img-msg');
     btn.disabled = true;
     var orig = btn.textContent;
-    btn.textContent = '\u23f3 Filling in images…';
+    btn.textContent = '⏳ Filling in images…';
     fetch('/data/posts/fill-images/', {
         method: 'POST',
         headers: { 'X-CSRFToken': csrfToken() }
@@ -152,17 +187,17 @@ function fillImagesFromBuffer(btn) {
         msg.style.display = 'block';
         if (d.ok) {
             msg.style.background = '#e1f5ee'; msg.style.color = '#0F6E56';
-            msg.textContent = '\u2705 ' + d.filled + ' image(s) and ' + (d.dates_filled || 0) + ' date(s) filled in, ' + (d.promoted || 0) + ' post(s) set to \u201cPosted\u201d' + (d.errors ? ' (errors: ' + d.errors + ')' : '') + '. Reload the page to see them.';
+            msg.textContent = '✅ ' + d.filled + ' image(s) and ' + (d.dates_filled || 0) + ' date(s) filled in, ' + (d.promoted || 0) + ' post(s) set to “Posted”' + (d.errors ? ' (errors: ' + d.errors + ')' : '') + '. Reload the page to see them.';
         } else {
             msg.style.background = '#fdecea'; msg.style.color = '#b71c1c';
-            msg.textContent = '\u274c Error: ' + (d.error || 'unknown');
+            msg.textContent = '❌ Error: ' + (d.error || 'unknown');
         }
     })
     .catch(function(){
         btn.disabled = false; btn.textContent = orig;
         msg.style.display = 'block';
         msg.style.background = '#fdecea'; msg.style.color = '#b71c1c';
-        msg.textContent = '\u274c Could not reach the server.';
+        msg.textContent = '❌ Could not reach the server.';
     });
 }
 </script>

@@ -1,6 +1,6 @@
 """
 Holt die Posts aus Buffer (ohne Metriken, kommt mit posts:read aus) und
-speichert sie in der Tabelle buffer_posts_posted. Der Tab 'Buffer Posts Posted'
+speichert sie in der Tabelle buffer_posts_posted. Die Buffer-Spalte in 'Posts Posted'
 liest NUR aus dieser Tabelle -> schnell und unabhaengig vom Internet.
 
 Aufruf:
