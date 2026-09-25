@@ -1862,6 +1862,9 @@ const lxVideo = await page.evaluate(async () => {
   window.requestAnimationFrame = cb => setTimeout(() => cb(performance.now()), 500);
   const uhren = [];
   const merke = () => { if (m.effectsRunning()) uhren.push(m.effectsClock()); };
+  // Eine Vorschau läuft noch, wenn "Save video" geklickt wird. Früher schaltete
+  // ihr Ende die Effekte mitten im Export ab.
+  m.previewAnimation(ed);
   ed.canvas.on('after:render', merke);
   let blob = null;
   try { await m.exportVideo(ed, b => { blob = b; }); }
@@ -1878,12 +1881,36 @@ const lxVideo = await page.evaluate(async () => {
     await new Promise(r => { v.onloadeddata = r; v.onerror = r; setTimeout(r, 4000); });
     dauer = v.duration;
   }
-  return { bilder: zeiten.length, groessterSprung, inhalt: zeiten.length ? zeiten[zeiten.length - 1] / 1000 : 0, dauer };
+  const aufnahme = m.letzteVideoAufnahme();
+  const stempel = aufnahme.zeiten.slice().sort((a, b) => a - b);
+  const abstaende = new Set(stempel.slice(1).map((z, i) => z - stempel[i]));
+  return { bilder: zeiten.length, groessterSprung, inhalt: zeiten.length ? zeiten[zeiten.length - 1] / 1000 : 0, dauer,
+           weg: aufnahme.weg, stempel: stempel.length, abstaende: [...abstaende] };
 });
-pruefe('Video: jedes Bild bekommt seine eigene Zeit, kein Sprung über 1/30 s',
-  lxVideo.bilder > 20 && lxVideo.groessterSprung <= 34, JSON.stringify(lxVideo));
+pruefe('Video: jedes Bild bekommt seine eigene Zeit, kein Sprung über 1/30 s - auch mit laufender Vorschau',
+  lxVideo.bilder >= 60 && lxVideo.groessterSprung <= 34, JSON.stringify(lxVideo).slice(0, 160));
 pruefe('und ein langsamer Rechner dehnt das Video nicht',
   Number.isFinite(lxVideo.dauer) && Math.abs(lxVideo.dauer - (lxVideo.inhalt + 0.4)) < 0.6, JSON.stringify(lxVideo));
+// Ruckeln auf LinkedIn: der Rekorder stempelte Bilder 19 bis 73 ms auseinander.
+// Mit WebCodecs trägt jedes Bild seine genaue Zeit - genau 1/30 s Abstand.
+pruefe('Das Video wird Bild für Bild kodiert (WebCodecs)', lxVideo.weg === 'webcodecs', lxVideo.weg);
+pruefe('und jedes Bild liegt genau 1/30 s nach dem vorigen',
+  lxVideo.stempel > 20 && lxVideo.abstaende.every(a => a === 33333 || a === 33334), JSON.stringify(lxVideo.abstaende));
+
+// Ohne WebCodecs (ältere Browser) nimmt weiter der Rekorder auf.
+await ruhig('Video ohne WebCodecs');
+const lxRekorder = await page.evaluate(async () => {
+  const m = await import('/media.js');
+  const ed = window._studioEditor;
+  const vorher = window.VideoEncoder;
+  window.VideoEncoder = undefined;
+  let blob = null;
+  try { await m.exportVideo(ed, b => { blob = b; }); }
+  finally { window.VideoEncoder = vorher; }
+  return { weg: m.letzteVideoAufnahme().weg, groesse: blob ? blob.size : 0 };
+});
+pruefe('Ohne WebCodecs nimmt der Rekorder auf, und es kommt ein Video heraus',
+  lxRekorder.weg === 'recorder' && lxRekorder.groesse > 1000, JSON.stringify(lxRekorder));
 await sauber('Video Bild für Bild');
 
 // ---- Vom Post aus speichern: nicht jedes Mal nach dem Format fragen --------

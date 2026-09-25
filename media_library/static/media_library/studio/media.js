@@ -736,13 +736,22 @@ function resetAnim(editor) {
 
 // Plays the animation over `total` ms and calls onFrame() for each frame.
 // Returns a promise that resolves when it is done.
+// Every playback and every export draws a number; an older one that finds a
+// newer number stops quietly. Two previews - or a preview still running when
+// "Save video" is clicked - used to share _fxOn: the first to finish switched
+// the effects off in the middle of the other one.
+let _laufNr = 0;
+
 function play(editor, total, onFrame) {
   ensureFxHook(editor);
   readTempo();
+  const nr = ++_laufNr;
   return new Promise(resolve => {
     const start = performance.now();
     _fxOn = true;
+    _fxTime = 0;          // not the last run's end time, until the first tick
     function tick(now) {
+      if (nr !== _laufNr) { resolve(); return; }   // a newer run has taken over
       const t = now - start;
       _fxTime = t;
       editor.canvas.getObjects().forEach(o => applyAt(o, t));
@@ -807,19 +816,116 @@ function animDuration(editor) {
 }
 
 // ---- Export as a moving image (WebM) --------------------------------------
+/* ---- The video, assembled frame by frame (WebCodecs) ----------------------
+   A MediaRecorder stamps every frame with the moment it arrives. Those moments
+   wobble - measured: 19 to 73 ms apart instead of 33 - so the file has no
+   steady frame rate. Cloudinary and LinkedIn then convert it to a fixed
+   30 fps, doubling and dropping frames at every wobble: on LinkedIn the
+   movement stutters. Here each frame is encoded with its exact time,
+   n x 1/30 s, and packed into the WebM ourselves (webm-muxer, in vendor/).
+   The file has exactly 30 frames a second and nothing needs converting. */
+const VIDEO_FPS = 30;
+const VIDEO_CODEC = 'vp09.00.10.08';
+let _letzteVideoZeiten = [];        // µs stamps of the last video, for the checks
+let _letzterVideoWeg = '';
+export function letzteVideoAufnahme() { return { weg: _letzterVideoWeg, zeiten: _letzteVideoZeiten.slice() }; }
+
+let _muxerPromise = null;
+function ladeMuxer() {
+  if (!_muxerPromise) _muxerPromise = import(VENDOR + 'webm-muxer.esm.js');
+  return _muxerPromise;
+}
+// Both sides are needed: the encoder in the browser, and the packer from vendor/.
+async function kannBildgenau(breit, hoch) {
+  if (typeof VideoEncoder === 'undefined' || typeof VideoFrame === 'undefined') return false;
+  try {
+    const ok = await VideoEncoder.isConfigSupported({ codec: VIDEO_CODEC, width: breit, height: hoch,
+                                                      bitrate: 6_000_000, framerate: VIDEO_FPS });
+    if (!ok.supported) return false;
+    await ladeMuxer();
+    return true;
+  } catch (e) {
+    console.warn('[media] frame-exact video not available:', e);
+    return false;
+  }
+}
+
+async function videoBildgenau(editor, gesamt, breit, hoch) {
+  const { Muxer, ArrayBufferTarget } = await ladeMuxer();
+  const muxer = new Muxer({
+    target: new ArrayBufferTarget(),
+    video: { codec: 'V_VP9', width: breit, height: hoch, frameRate: VIDEO_FPS },
+  });
+  let fehler = null;
+  const zeiten = [];
+  const enc = new VideoEncoder({
+    output: (chunk, meta) => { zeiten.push(chunk.timestamp); muxer.addVideoChunk(chunk, meta); },
+    error: e => { fehler = e; },
+  });
+  enc.configure({ codec: VIDEO_CODEC, width: breit, height: hoch, bitrate: 6_000_000, framerate: VIDEO_FPS });
+
+  // The picture always goes out at its design size (e.g. 1080 x 1080), even
+  // pixels only (VP9 halves the colour planes) - whatever the screen scaling.
+  const bild = document.createElement('canvas'); bild.width = breit; bild.height = hoch;
+  const bctx = bild.getContext('2d');
+  const quelle = editor.canvas.lowerCanvasEl;
+  const schrittUs = 1e6 / VIDEO_FPS;
+  const frameMs = 1000 / VIDEO_FPS;
+  const letzter = Math.floor(gesamt / frameMs);
+  const halten = Math.round(0.4 * VIDEO_FPS);       // hold the last frame 0.4 s
+  const anzahl = letzter + 1 + halten;
+
+  _fxOn = true;
+  for (let n = 0; n < anzahl; n++) {
+    if (fehler) throw fehler;
+    const t = Math.min(n, letzter) * frameMs;
+    _fxTime = t;
+    editor.canvas.getObjects().forEach(o => applyAt(o, t));
+    editor.canvas.renderAll();
+    bctx.clearRect(0, 0, breit, hoch);
+    bctx.drawImage(quelle, 0, 0, breit, hoch);
+    const f = new VideoFrame(bild, { timestamp: Math.round(n * schrittUs), duration: Math.round(schrittUs) });
+    enc.encode(f, { keyFrame: n % (VIDEO_FPS * 2) === 0 });
+    f.close();
+    // Let the encoder catch up, and the page breathe (status line, no freeze).
+    if (enc.encodeQueueSize > 8 || n % 10 === 9) {
+      status(`🎬 Creating video… ${Math.round((n + 1) / anzahl * 100)} %`);
+      await new Promise(r => setTimeout(r, 0));
+      while (enc.encodeQueueSize > 8) await new Promise(r => setTimeout(r, 5));
+    }
+  }
+  await enc.flush();
+  enc.close();
+  if (fehler) throw fehler;
+  muxer.finalize();
+  _letzteVideoZeiten = zeiten;
+  return new Blob([muxer.target.buffer], { type: 'video/webm' });
+}
+
 export async function exportVideo(editor, onBlob) {
   // Returns true/false: the caller may only report "saved" on true.
   if (!hasAnimations(editor)) { toast('No animations – nothing to export', 'err'); return false; }
+  _laufNr++;                         // a preview still running stops here
   const canvasEl = editor.canvas.lowerCanvasEl;
-  if (!canvasEl.captureStream) { toast('Browser does not support video capture', 'err'); return false; }
+  const breit = Math.max(2, Math.round(editor.width / 2) * 2);
+  const hoch = Math.max(2, Math.round(editor.height / 2) * 2);
+  const bildgenau = await kannBildgenau(breit, hoch);
+  if (!bildgenau && !canvasEl.captureStream) { toast('Browser does not support video capture', 'err'); return false; }
 
   status('🎬 Recording video…');
   editor.canvas.discardActiveObject();
   const chunks = [];
+  let blob = null;
+  _letzteVideoZeiten = [];
+  _letzterVideoWeg = bildgenau ? 'webcodecs' : 'recorder';
   try {
     editor.setGridVisible(false);   // Raster nicht mit aufnehmen
     toFullRes(editor);
-    /* Frame by frame, like the GIF - not played in real time.
+    if (bildgenau) {
+      ensureFxHook(editor);
+      blob = await videoBildgenau(editor, animDuration(editor), breit, hoch);
+    } else {
+    /* Fallback for browsers without WebCodecs. Frame by frame, like the GIF - not played in real time.
        The video used to be the preview, filmed: play() asks the browser for
        the next frame and takes the wall clock as the time. When the browser
        hands out frames rarely - the tab in the background, the window behind
@@ -877,6 +983,7 @@ export async function exportVideo(editor, onBlob) {
     for (let i = 0; i < 12; i++) { bildHolen(); await new Promise(r => setTimeout(r, frameMs)); }
     rec.stop();
     await done;
+    }
   } catch (e) {
     console.error('Video-Aufnahme:', e);
     status('❌ ' + (e.message || 'Video capture failed'), 'red');
@@ -891,7 +998,7 @@ export async function exportVideo(editor, onBlob) {
     if (editor.gridOn) editor.setGridVisible(true);
   }
 
-  const blob = new Blob(chunks, { type: 'video/webm' });
+  if (!blob) blob = new Blob(chunks, { type: 'video/webm' });
   if (!blob.size) { status('❌ Video is empty', 'red'); toast('Video capture returned no data', 'err'); return false; }
   if (typeof onBlob === 'function') { onBlob(blob); status('Bereit.'); return true; }
   // No auto-download - save to "My outputs" only (with canvas_json, so it stays editable).
@@ -931,6 +1038,7 @@ function loadGifLib() {
 
 export async function exportGif(editor, onBlob) {
   if (!hasAnimations(editor)) { toast('No animations – nothing to export', 'err'); return false; }
+  _laufNr++;                         // a preview still running stops here
   status('🎞 Creating GIF…');
   try {
     try {
