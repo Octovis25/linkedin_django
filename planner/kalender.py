@@ -350,6 +350,23 @@ def ist_veroeffentlicht(post, gesendet_am=None, wartet_bei_buffer=False):
     return bool(post.get('linkedin_posted'))
 
 
+def fehlt_medium(post):
+    """True when a post still to go out has nothing to show: no image, no GIF,
+    no video - neither on the post nor at Buffer.
+
+    Ortrud, 25.09.2026: the calendar should say when a picture or a video is
+    missing. Only for posts that have not gone out: a published post cannot
+    be given one any more, and a warning nobody can act on is noise. Buffer
+    counts as a witness too - a post can have been scheduled with its image
+    straight from Buffer, and then the planner row is empty but nothing is
+    missing.
+    """
+    if post.get('veroeffentlicht'):
+        return False
+    return not (post.get('hat_bild') or post.get('gif_nc_path')
+                or post.get('video_nc_path') or post.get('buffer_hat_bild'))
+
+
 def kalendertag_fuer(post, gesendet_am=None):
     """Which day a post belongs on. Three answers, in the order they are trusted:
 
@@ -388,9 +405,11 @@ def _posts_des_jahres(jahr, nur_oj=False):
     aus_buffer = set()
     gesendet = {}
     wartend = set()
+    buffer_mit_bild = set()
     with connection.cursor() as c:
         try:
-            c.execute("""SELECT planner_post_id, COALESCE(due_at, ''), COALESCE(sent_at, '')
+            c.execute("""SELECT planner_post_id, COALESCE(due_at, ''), COALESCE(sent_at, ''),
+                                COALESCE(has_image, 0)
                          FROM buffer_posts_posted
                          WHERE LEFT(due_at, 4) = %s OR LEFT(sent_at, 4) = %s""",
                       [str(jahr), str(jahr)])
@@ -400,6 +419,7 @@ def _posts_des_jahres(jahr, nur_oj=False):
             # A Buffer row without a send date: Buffer has it and has not
             # sent it. That settles "published?" whatever our own flag says.
             wartend = {r[0] for r in zeilen if r[0] and not (r[2] or '').strip()}
+            buffer_mit_bild = {r[0] for r in zeilen if r[0] and r[3]}
         except Exception as fehler:
             print('calendar, dates from buffer:', fehler)
 
@@ -412,7 +432,9 @@ def _posts_des_jahres(jahr, nur_oj=False):
 
         zeilen = _q(c, """SELECT p.id, p.title, p.content, p.status, p.planned_date,
                                  p.planned_time, t.name, t.color, p.linkedin_posted,
-                                 DATE_FORMAT(p.post_scheduled_at, '%%d.%%m.%%Y %%H:%%i')
+                                 DATE_FORMAT(p.post_scheduled_at, '%%d.%%m.%%Y %%H:%%i'),
+                                 COALESCE(LENGTH(p.image), 0) > 0,
+                                 COALESCE(p.gif_nc_path, ''), COALESCE(p.video_nc_path, '')
                           FROM planner_posts p
                           LEFT JOIN planner_topics t ON p.topic_id = t.id
                           WHERE COALESCE(p.is_oj, 0) = %s AND (""" + bedingung + """)
@@ -426,6 +448,8 @@ def _posts_des_jahres(jahr, nur_oj=False):
             'status': r[3] or '', 'planned_date': r[4], 'planned_time': r[5],
             'topic_name': r[6] or '', 'bg': bg, 'fg': fg,
             'linkedin_posted': r[8], 'post_scheduled_at_fmt': r[9] or '',
+            'hat_bild': bool(r[10]), 'gif_nc_path': r[11] or '', 'video_nc_path': r[12] or '',
+            'buffer_hat_bild': r[0] in buffer_mit_bild,
         })
     _attach_send_time(posts)
 
@@ -447,6 +471,7 @@ def _posts_des_jahres(jahr, nur_oj=False):
         p['zustand_text'] = {'done': 'Published', 'sched': 'Scheduled'}.get(
             p['zustand'], p['status'] or 'Planned')
         p['kalendertag'] = kalendertag_fuer(p, gesendet.get(p['id']))
+        p['ohne_medium'] = fehlt_medium(p)
         # Moving from the calendar changes the PLAN. A post that has gone out
         # has no plan left to change. One Buffer is holding keeps its send
         # time there - our code can create and delete at Buffer, not move -
@@ -642,6 +667,7 @@ def kalender_view(request, jahr=None, nur_oj=False):
             'nr': nr, 'name': name, 'tage': im_monat,
             'posts': sum(len(t['posts']) for t in im_monat),
             'offen': sum(1 for t in im_monat if t['zustand'] == 'open'),
+            'ohne_medium': sum(1 for t in im_monat for p in t['posts'] if p.get('ohne_medium')),
         })
 
     # Two calendars, two addresses. Everything the page builds a link from -

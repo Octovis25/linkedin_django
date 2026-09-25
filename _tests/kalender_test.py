@@ -774,5 +774,28 @@ pruefe('and the handlers sit on the document, so both calendars have them',
        and "document.addEventListener('click'" in VORLAGE
        and VORLAGE.index("document.addEventListener('change'") < VORLAGE.index('if (regelnKoerper) {'))
 
+print('\n=== A post without image or video (25.09.) ===')
+RAUM_M = {'__builtins__': __builtins__}
+exec(compile(herausschneiden('fehlt_medium'), 'planner/kalender.py (cut out)', 'exec'), RAUM_M)
+fehlt = RAUM_M['fehlt_medium']
+pruefe('a planned post with nothing attached is flagged', fehlt({'veroeffentlicht': False}) is True)
+pruefe('an image on the post is enough', fehlt({'hat_bild': True}) is False)
+pruefe('so is a GIF', fehlt({'gif_nc_path': 'x.gif'}) is False)
+pruefe('so is a video', fehlt({'video_nc_path': 'x.mp4'}) is False)
+pruefe('and so is an image Buffer holds for it', fehlt({'buffer_hat_bild': True}) is False)
+pruefe('an empty path is not a medium', fehlt({'gif_nc_path': '', 'video_nc_path': ''}) is True)
+pruefe('a published post is never flagged - nothing can be added any more',
+       fehlt({'veroeffentlicht': True}) is False)
+JAHR_SRC = herausschneiden('_posts_des_jahres')
+pruefe('the calendar reads all three media of a post',
+       'LENGTH(p.image)' in JAHR_SRC and 'p.gif_nc_path' in JAHR_SRC and 'p.video_nc_path' in JAHR_SRC)
+pruefe('and whether Buffer has an image for it',
+       'COALESCE(has_image, 0)' in JAHR_SRC and "'buffer_hat_bild': r[0] in buffer_mit_bild" in JAHR_SRC)
+pruefe('the flag is worked out after "published?" is known',
+       JAHR_SRC.index("p['veroeffentlicht'] =") < JAHR_SRC.index("p['ohne_medium'] = fehlt_medium(p)"))
+pruefe('the row says so', '{% if p.ohne_medium %}' in VORLAGE and 'no image / video' in VORLAGE)
+pruefe('and the month counts them',
+       "'ohne_medium': sum(" in herausschneiden('kalender_view') and '{% if m.ohne_medium %}' in VORLAGE)
+
 print('\n%d ok, %d failed' % (gut, schlecht))
 sys.exit(1 if schlecht else 0)

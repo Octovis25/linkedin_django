@@ -85,6 +85,8 @@
                      font-weight:600; vertical-align:1px; }
   .kal-post .nix { color:#C4501A; }
   .kal-post .abw { font-size:10.5px; color:#8A5A12; margin-left:6px; white-space:nowrap; }
+  .kal-post .ohne-medium { font-size:10.5px; color:#C4501A; margin-left:6px; white-space:nowrap; }
+  .kal-mkopf .ohne-medium { color:#C4501A; }
   .kal-neu { visibility:hidden; font-size:11px; color:var(--octo-petrol); cursor:pointer;
              border:0; background:none; padding:0 4px; text-decoration:none; }
   .kal-zeile:hover .kal-neu { visibility:visible; }
@@ -259,7 +261,7 @@
     <div class="kal-monat" data-monat="{{ m.nr }}">
       <div class="kal-mkopf">
         <b>{{ m.name }} {{ jahr }}</b>
-        <span>{{ m.posts }} post{{ m.posts|pluralize }}{% if m.offen %} &middot; {{ m.offen }} open{% endif %}</span>
+        <span>{{ m.posts }} post{{ m.posts|pluralize }}{% if m.offen %} &middot; {{ m.offen }} open{% endif %}{% if m.ohne_medium %} &middot; <span class="ohne-medium">&#9888; {{ m.ohne_medium }} without image / video</span>{% endif %}</span>
       </div>
 
       {% for t in m.tage %}
@@ -279,6 +281,7 @@
               <span class="nr">#{{ p.id }}</span>
               <a href="/planner/?edit={{ p.id }}&amp;back={{ basis }}{{ jahr }}/">{{ p.title }}</a>
               {% if p.topic_name %}<span class="thema" style="background:{{ p.bg }};color:{{ p.fg }}">{{ p.topic_name }}</span>{% endif %}
+              {% if p.ohne_medium %}<span class="ohne-medium" title="No image, GIF or video on this post yet - open it and add one.">&#9888; no image / video</span>{% endif %}
               {% if p.abweichend and p.bei_buffer %}<a class="abw" href="/planner/?edit={{ p.id }}&amp;back={{ basis }}{{ jahr }}/" title="Buffer sends it on {{ p.kalendertag|date:"d.m." }}, the plan now says {{ p.planned_date|date:"d.m.Y" }}. Buffer's time cannot be moved from here - open the post and schedule it again.">plan {{ p.planned_date|date:"d.m." }} &rarr; re-schedule</a>{% elif p.abweichend %}<span class="abw" title="The plan says {{ p.planned_date|date:"d.m.Y" }}. This row is the day it really goes out.">plan {{ p.planned_date|date:"d.m." }}</span>{% endif %}
               {% if p.verschiebbar %}<input type="date" class="kal-verschieben" data-id="{{ p.id }}" value="{{ p.plan_iso }}" aria-label="Move the plan for #{{ p.id }}"
                      title="{% if p.bei_buffer %}Moves the plan only. Buffer keeps its send time until the post is scheduled again.{% else %}Move this post to another day.{% endif %}">{% endif %}
