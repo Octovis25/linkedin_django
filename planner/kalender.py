@@ -376,6 +376,25 @@ def editor_adresse(post, nur_oj=False):
                            post.get('id'))
 
 
+def lesbarer_titel(titel, inhalt=''):
+    """A title as text. Some titles were saved with the editor's HTML in them
+    (#50 read '<p class="font-claude-response-body ...'), so tags go and
+    entities are turned back into characters; an empty title falls back to
+    the start of the text, the same way."""
+    import html as _html
+    import re as _re
+
+    def rein(x):
+        x = _re.sub(r'<[^>]*>?', ' ', x or '')
+        return ' '.join(_html.unescape(x).split())
+
+    t = rein(titel)
+    if not t:
+        roh = rein(inhalt)
+        t = (roh[:70] + '\u2026') if len(roh) > 70 else (roh or 'Untitled')
+    return t
+
+
 def uhrzeit_aus(sendezeit):
     """'28.09.2026 08:00' -> '08:00'; a date alone, or nothing, -> ''."""
     import re as _re
@@ -487,9 +506,7 @@ def _posts_des_jahres(jahr, nur_oj=False):
     _attach_send_time(posts)
 
     for p in posts:
-        if not p['title']:
-            roh = (p['content'] or '').replace('\n', ' ').strip()
-            p['title'] = (roh[:70] + '…') if len(roh) > 70 else (roh or 'Untitled')
+        p['title'] = lesbarer_titel(p['title'], p['content'])
         # "Binding" means Buffer really has it - not that the status field says so.
         p['verbindlich'] = p.get('send_time_source') in ('told to Buffer', 'from Buffer')
         # The time alone; the day is already the row it sits in.
@@ -568,10 +585,7 @@ def posts_ohne_datum(grenze=200, nur_oj=False):
         if r[0] in mit_buffer_datum:
             continue
         bg, fg = COLOR_MAP.get(r[5] or 'gray', ('#f5f5f5', '#6c757d'))
-        titel = (r[1] or '').strip()
-        if not titel:
-            roh = (r[2] or '').replace('\n', ' ').strip()
-            titel = (roh[:70] + '\u2026') if len(roh) > 70 else (roh or 'Untitled')
+        titel = lesbarer_titel(r[1], r[2])
         eintrag = {'id': r[0], 'title': titel, 'status': r[3] or '',
                    'topic_name': r[4] or '', 'bg': bg, 'fg': fg,
                    'linkedin_posted': r[6], 'created_at': r[7]}

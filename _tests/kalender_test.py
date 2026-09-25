@@ -635,7 +635,7 @@ pruefe('and reads the list only once',
 pruefe('the page shows the lost records openly',
        '{% if ohne_datum_raus %}' in VORLAGE and 'went out without a date on record' in VORLAGE)
 pruefe('and folds the drafts away behind a summary',
-       '{% if ohne_datum_offen %}' in VORLAGE and '<details>' in VORLAGE)
+       '{% if ohne_datum_offen %}' in VORLAGE and '<details id="kal-ohne-klappe">' in VORLAGE)
 
 print('\n=== The OJ calendar is a plain one ===')
 # Ortrud asked for a simple calendar on the OJ side: days and posts, no world
@@ -868,6 +868,29 @@ pruefe('every month has a soft ground of its own',
        all('.kal-monat[data-monat="%d"]' % m in VORLAGE for m in range(1, 13)))
 pruefe('rows shade the ground instead of covering it',
        '.kal-zeile.we { background:rgba(' in VORLAGE and '.kal-zeile:hover { background:rgba(' in VORLAGE)
+
+print('\n=== The lists below, reachable from the top; readable titles (25.09.) ===')
+RAUM_T = {'__builtins__': __builtins__}
+exec(compile(herausschneiden('lesbarer_titel'), 'planner/kalender.py (cut out)', 'exec'), RAUM_T)
+lt = RAUM_T['lesbarer_titel']
+pruefe('HTML in a title is taken out (#50)',
+       lt('<p class="font-claude-response-body break-words">Clinical data</p>') == 'Clinical data',
+       lt('<p class="font-claude-response-body break-words">Clinical data</p>'))
+pruefe('a tag cut off at the end goes too', lt('Oversight <p class="lead') == 'Oversight', lt('Oversight <p class="lead'))
+pruefe('entities become characters', lt('Do &amp; Don&#8217;t') == 'Do & Don\u2019t')
+pruefe('a plain title stays as it is', lt('SOPs: Do / Don\u2019t') == 'SOPs: Do / Don\u2019t')
+pruefe('no title: the start of the text, without its tags',
+       lt('', '<p>Every heartbeat matters.</p>') == 'Every heartbeat matters.')
+pruefe('a long text is cut at 70 characters', lt(None, 'x' * 100) == 'x' * 70 + '\u2026')
+pruefe('nothing at all: Untitled', lt('', '') == 'Untitled')
+pruefe('both lists of posts use it',
+       "p['title'] = lesbarer_titel(p['title'], p['content'])" in herausschneiden('_posts_des_jahres')
+       and 'titel = lesbarer_titel(r[1], r[2])' in herausschneiden('posts_ohne_datum'))
+pruefe('a button up top leads to the posts without a date',
+       'data-ziel="kal-ohne-raus"' in VORLAGE and 'id="kal-ohne-raus"' in VORLAGE)
+pruefe('and one to the drafts, opening them on the way',
+       'data-ziel="kal-ohne-offen" data-klappe="kal-ohne-klappe"' in VORLAGE
+       and 'id="kal-ohne-offen"' in VORLAGE and 'klappe.open = true' in VORLAGE)
 
 print('\n%d ok, %d failed' % (gut, schlecht))
 sys.exit(1 if schlecht else 0)

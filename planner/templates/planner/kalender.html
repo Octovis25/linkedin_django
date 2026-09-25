@@ -25,6 +25,7 @@
                font-size:12.5px; cursor:pointer; color:var(--octo-text); }
   .kal-knopf:hover { border-color:var(--octo-petrol); color:var(--octo-petrol); }
   .kal-knopf.voll { background:var(--octo-petrol); border-color:var(--octo-petrol); color:#fff; }
+  .kal-knopf.warn { color:#C4501A; border-color:#F0C9B3; }
   .kal-seite { display:inline-flex; border:1px solid #ddd; border-radius:4px; overflow:hidden; }
   .kal-seite a { padding:5px 12px; font-size:12.5px; text-decoration:none;
                  color:var(--octo-text); background:#fff; border-right:1px solid #ddd; }
@@ -266,6 +267,12 @@
       <button data-f="voll">Only days with something</button>
       {% if not nur_oj %}<button data-f="offen">Still open</button>{% endif %}
     </div>
+    {% comment %}The lists under the calendar are a long scroll away since the months
+       run on (Ortrud, 25.09.2026) - so the way there starts up here.{% endcomment %}
+    {% if ohne_datum_raus %}<button class="kal-knopf kal-hin warn" data-ziel="kal-ohne-raus"
+      title="Published, but no day on record">&#9888; {{ ohne_datum_raus|length }} without a date</button>{% endif %}
+    {% if ohne_datum_offen %}<button class="kal-knopf kal-hin" data-ziel="kal-ohne-offen" data-klappe="kal-ohne-klappe"
+      title="Drafts and ideas without a date">{{ ohne_datum_offen|length }} drafts &amp; ideas</button>{% endif %}
     {% if not nur_oj %}<button class="kal-knopf" id="kal-zur-liste">Recurring dates</button>{% endif %}
   </div>
 
@@ -345,7 +352,7 @@
 
   {# Two groups, because they mean different things: a draft without a date is an idea, a published post without one is a lost record. #}
   {% if ohne_datum_raus %}
-  <section class="kal-ohne luecke">
+  <section class="kal-ohne luecke" id="kal-ohne-raus">
     <h3>{{ ohne_datum_raus|length }} post{{ ohne_datum_raus|length|pluralize }} went out without a date on record</h3>
     <p>These were published, but the day is not stored anywhere &ndash; not planned, not
        scheduled, no send date from Buffer. Publishing clears the scheduled time, and a post
@@ -365,8 +372,8 @@
   {% endif %}
 
   {% if ohne_datum_offen %}
-  <section class="kal-ohne ruhig">
-    <details>
+  <section class="kal-ohne ruhig" id="kal-ohne-offen">
+    <details id="kal-ohne-klappe">
       <summary>{{ ohne_datum_offen|length }} more have no date yet &ndash; drafts and ideas</summary>
       <p>Nothing is wrong with these: a post without a date is a post nobody has placed yet.
          Give one a date and it appears in the calendar on that day &ndash; right here, with the
@@ -582,6 +589,16 @@
   // below has anything to hold on to. Without these guards the first null ends
   // the script - and takes the month filter down with it, on a page that looks
   // fine until you click something.
+  // The buttons up top that lead to the lists under the calendar.
+  document.querySelectorAll('.kal-hin').forEach(function (b) {
+    b.addEventListener('click', function () {
+      var klappe = b.dataset.klappe && document.getElementById(b.dataset.klappe);
+      if (klappe) klappe.open = true;
+      var ziel = document.getElementById(b.dataset.ziel);
+      if (ziel) ziel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+  });
+
   var zurListe = document.getElementById('kal-zur-liste');
   if (zurListe) {
     zurListe.onclick = function () {
