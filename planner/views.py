@@ -1318,6 +1318,14 @@ def _linkedin_mp4_befehl(ffmpeg, quelle, ziel, matrix, bereich='tv'):
 
     An untagged video is read as BT.601, because that is what our own recorder
     writes - measured, not assumed. A video that names its rule is read by it.
+
+    One thread each for decoding, filtering and encoding. ffmpeg picks its
+    thread count from the CPUs it sees, and on Render it sees the whole host:
+    measured on a 15 s 1080 x 1080 clip, 1 thread peaks at 156 MB, 16 threads at
+    476 MB, 32 at 805 MB. Render's instance has 512 MB for everything, so the
+    service was killed mid-post ("exceeded its memory limit") and the planner
+    got Render's HTML error page. One thread is ~20 % slower - seconds, not
+    minutes - and the memory no longer depends on the machine.
     """
     ein = matrix or 'bt601'
     kurz = LINKEDIN_KURZE_SEITE
@@ -1327,9 +1335,10 @@ def _linkedin_mp4_befehl(ffmpeg, quelle, ziel, matrix, bereich='tv'):
         "h='if(lte(iw,ih),-2,min(ih,%d))':"
         "in_color_matrix=%s:out_color_matrix=bt709:in_range=%s:out_range=tv"
     ) % (kurz, kurz, ein, bereich)
-    return [ffmpeg, '-y', '-v', 'error', '-i', quelle,
+    return [ffmpeg, '-y', '-v', 'error', '-threads', '1', '-filter_threads', '1', '-i', quelle,
             '-vf', skalieren, '-fpsmax', '60',
-            '-c:v', 'libx264', '-crf', '20', '-preset', 'veryfast', '-pix_fmt', 'yuv420p',
+            '-c:v', 'libx264', '-threads', '1',
+            '-crf', '20', '-preset', 'veryfast', '-pix_fmt', 'yuv420p',
             '-colorspace', 'bt709', '-color_primaries', 'bt709',
             '-color_trc', 'bt709', '-color_range', 'tv',
             '-c:a', 'aac', '-movflags', '+faststart', ziel]

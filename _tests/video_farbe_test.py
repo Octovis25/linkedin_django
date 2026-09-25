@@ -94,6 +94,16 @@ pruefe('the shorter side is capped at LinkedIn\'s 1080',
        RAUM['LINKEDIN_KURZE_SEITE'] == 1080 and 'min(iw,1080)' in text and 'min(ih,1080)' in text)
 pruefe('at most 60 frames a second', '-fpsmax' in unser and unser[unser.index('-fpsmax') + 1] == '60')
 pruefe('written to the target, H.264', unser[-1] == 'aus.mp4' and 'libx264' in unser)
+# Memory: ffmpeg takes one thread per CPU it sees, and on Render it sees the
+# whole host - 16 threads peaked at 476 MB, the instance has 512 MB in all.
+vor_eingabe = unser[:unser.index('-i')]
+nach_eingabe = unser[unser.index('-i'):]
+pruefe('decoding runs on one thread (memory, see views.py)',
+       '-threads' in vor_eingabe and vor_eingabe[vor_eingabe.index('-threads') + 1] == '1', vor_eingabe)
+pruefe('filtering too', '-filter_threads' in vor_eingabe
+       and vor_eingabe[vor_eingabe.index('-filter_threads') + 1] == '1', vor_eingabe)
+pruefe('and encoding', '-threads' in nach_eingabe
+       and nach_eingabe[nach_eingabe.index('-threads') + 1] == '1', nach_eingabe)
 
 print('\n=== Wired in, and never the reason a post fails ===')
 HOCHLADEN = herausschneiden('_upload_video_to_cloudinary')
