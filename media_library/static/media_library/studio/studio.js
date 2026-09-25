@@ -273,6 +273,24 @@ bg.renderPalette(document.getElementById('palette-row'), col => {
 // When an existing output is opened, take over the format it used.
 let _saveKind = CONFIG.libData?.kind && CONFIG.libData.kind !== 'image'
                 ? CONFIG.libData.kind : null;
+// Opened from a post whose medium was built here: save in that medium again,
+// without asking every time. Only with a saved layout - a video uploaded from
+// the PC leaves an empty artboard, and saving that as a video in one click
+// would replace the real one. ▾ Format still picks another format.
+let _saveKindVomPost = false;
+if (!_saveKind && !CONFIG.libData && CONFIG.postData?.canvas_json) {
+  const p = CONFIG.postData;
+  _saveKind = p.video ? 'video' : p.gif ? 'gif' : p.image ? 'image' : null;
+  _saveKindVomPost = !!_saveKind;
+}
+// The save button says which format it will write.
+function saveKnopfZeigt(kind) {
+  const btn = document.querySelector('[data-act="save-as"], [data-act="save-existing"]');
+  if (!btn || !kind) return;
+  btn.textContent = kind === 'gif' ? '💾 Save GIF' : kind === 'video' ? '💾 Save video' : '💾 Save image';
+  btn.title = 'Saves as ' + (kind === 'image' ? 'an image (PNG)' : kind === 'gif' ? 'a GIF' : 'a video')
+            + '. For another format: ▾ Format (or Shift+Click).';
+}
 let _speichertGerade = false;
 async function speichereAls(kind) {
   // A second click during a save opened a second name dialog and produced two
@@ -299,12 +317,7 @@ async function _speichereAls(kind) {
   // Rename the button, so it is clear: from now on it saves directly.
   // Look for both possible states: as soon as an output is open the attribute
   // is "save-existing" - the old selector then found nothing.
-  const btn = document.querySelector('[data-act="save-as"], [data-act="save-existing"]');
-  if (btn) {
-    const lbl = kind === 'gif' ? '💾 GIF speichern' : kind === 'video' ? '💾 Video speichern' : '💾 Speichern';
-    btn.textContent = lbl;
-    btn.title = 'Saves in the same format. Shift+Click for a different format.';
-  }
+  saveKnopfZeigt(kind);
 }
 
 // ---- Toolbar-Aktionen (data-act) -----------------------------------------
@@ -322,16 +335,20 @@ const actions = {
       setTimeout(() => { if (titleEl) titleEl.style.border = ''; }, 2500);
       return;
     }
-    // Ask for the format only the first time (or after "as…") and remember it.
+    // Ask for the format only the first time (or after ▾ Format) and remember it.
     let kind = _saveKind;
+    // Taken over from a post that carries an image - but animations were added
+    // since. Saving quietly as a PNG would drop them, so ask this once.
+    if (kind === 'image' && _saveKindVomPost && media.hasAnimations(editor)) kind = null;
     if (!kind) {
       kind = await modal('Save as…', 'What would you like to save?', [
         { label: '🖼 Image (PNG)', value: 'image' },
-        { label: '🎞 GIF (mit Animationen)', value: 'gif' },
-        { label: '🎬 Video (mit Animationen)', value: 'video' },
+        { label: '🎞 GIF (animated)', value: 'gif' },
+        { label: '🎬 Video (animated)', value: 'video' },
       ]);
-      if (!kind) return;   // abgebrochen
+      if (!kind) return;   // cancelled
     }
+    _saveKindVomPost = false;
     await speichereAls(kind);
   },
   // An effect needs an area, and that area is a frame. It starts covering the
@@ -354,7 +371,7 @@ const actions = {
   'add-stamp': () => addStempel(),
 
   // Format bewusst neu wählen (fragt wieder).
-  'save-as-new': async () => { _saveKind = null; await actions['save-as'](); },
+  'save-as-new': async () => { _saveKind = null; _saveKindVomPost = false; await actions['save-as'](); },
   // Vorhandene Ausgabe: nur speichern (gleiches Format, überschreibt).
   'save-existing': async () => {
     if (_speichertGerade) { toast('Already saving…', 'err'); return; }
@@ -362,7 +379,7 @@ const actions = {
     // Animations set, but the file is a PNG? A still image used to be saved
     // quietly, and the animations were not in the result.
     if (kind === 'image' && media.hasAnimations(editor)) {
-      const wahl = await modal('Animationen erkannt',
+      const wahl = await modal('Animations found',
         'This element has animations, but the opened file is an image. How to save?',
         [ { label: '🖼 As image (no animation)', value: 'image' },
           { label: '🎞 As GIF',                    value: 'gif' },
@@ -404,9 +421,10 @@ const actions = {
     setTemplateId(null);
     editor._ladefehler = false;
     _saveKind = null;
+    _saveKindVomPost = false;
     editor.resetHistory();
     {
-      const b = document.querySelector('[data-act="save-existing"]');
+      const b = document.querySelector('[data-act="save-existing"], [data-act="save-as"]');
       if (b) { b.textContent = '💾 Save as…'; b.dataset.act = 'save-as'; b.title = 'Choose format and save'; }
     }
     const t = document.getElementById('title-input'); if (t) t.value = '';
@@ -3139,6 +3157,8 @@ if (CONFIG.tplData?.id) setTemplateId(CONFIG.tplData.id);
 if (CONFIG.libData?.item_id || CONFIG.libData?.nc_path) {
   const b = document.querySelector('[data-act="save-as"]');
   if (b) { b.textContent = '💾 Save'; b.dataset.act = 'save-existing'; b.title = 'Overwrite the existing output in the same format'; }
+} else if (_saveKindVomPost) {
+  saveKnopfZeigt(_saveKind);
 }
 
 // Fabric builds an image object even when its source answers 404: the element

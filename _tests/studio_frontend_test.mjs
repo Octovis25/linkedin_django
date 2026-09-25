@@ -18,6 +18,19 @@ let letzterUpload = null;
 let LOESCH_MODUS = 'ok';        // 'ok' | 'gesperrt'
 let letzteLoeschung = null;
 
+// Posts to open the Studio from. A layout with one animated text: that is what
+// a video built here leaves behind.
+const POST_LAYOUT = JSON.stringify({ version: '5.3.0', objects: [
+  { type: 'text', text: 'Hi', left: 50, top: 50, fontSize: 40, fill: '#08323a',
+    anim: { type: 'fadeIn', dur: 800 } }] });
+const POST_GRUND = { id: 7, title: 'Test post', image: '', gif: '', video: '',
+                     image_url: '', gif_url: '', video_url: '' };
+const POST_SEITEN = {
+  '/post-video':  { ...POST_GRUND, video: 'Planner/Videos/a.webm', video_url: '/api/a.webm', canvas_json: POST_LAYOUT },
+  '/post-upload': { ...POST_GRUND, video: 'Planner/Videos/b.webm', video_url: '/api/b.webm' },
+  '/post-bild':   { ...POST_GRUND, image: 'Planner/a.png', image_url: '/api/a.png', canvas_json: POST_LAYOUT },
+};
+
 const server = http.createServer((req, res) => {
   const url = req.url.split('?')[0];
   // Stub the backend: every /api/ call answers with empty, well-formed JSON so
@@ -97,6 +110,13 @@ const server = http.createServer((req, res) => {
     }
     res.writeHead(200, { 'Content-Type': 'application/json' });
     return res.end(JSON.stringify({ ok: true, templates: [], items: [], folders: [], files: [] }));
+  }
+  // The Studio opened from a post: the same page, with a post in its config.
+  if (POST_SEITEN[url]) {
+    const html = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8')
+      .replace('"postData": null', '"postData": ' + JSON.stringify(POST_SEITEN[url]));
+    res.writeHead(200, { 'Content-Type': 'text/html' });
+    return res.end(html);
   }
   const file = path.join(ROOT, url === '/' ? 'index.html' : url);
   fs.readFile(file, (err, buf) => {
@@ -1817,6 +1837,59 @@ pruefe('In der Leiste stehen die Effekte vor Motion',
   lxLupe.gruppen.join(',') === 'effects,motion', lxLupe.gruppen.join(','));
 
 await sauber('Leiste und Effekte-Reiter');
+
+// ---- Vom Post aus speichern: nicht jedes Mal nach dem Format fragen --------
+async function postSeite(url) {
+  const p = await browser.newPage({ viewport: { width: 1600, height: 950 } });
+  const fehlerHier = [];
+  p.on('pageerror', e => fehlerHier.push(e.message));
+  await p.goto(`http://127.0.0.1:${PORT}${url}`, { waitUntil: 'load' });
+  await p.waitForFunction(() => !!window._studioEditor, null, { timeout: 10000 });
+  await p.waitForTimeout(400);
+  await p.fill('#title-input', 'Testtitel');
+  const knopf = await p.locator('#save-btn').textContent();
+  return { p, knopf: (knopf || '').trim(), fehlerHier };
+}
+// Counts only the FORMAT question. Saving an image can open a dialog of its
+// own (the name), so "any dialog" would pass even when the format was not asked.
+const dialogNachKlick = async (p, sel) => {
+  await p.click(sel);
+  await p.waitForTimeout(300);
+  const t = await p.evaluate(() => [...document.querySelectorAll('.studio-modal')].map(m => m.textContent).join(' '));
+  if (t) { await p.keyboard.press('Escape'); await p.waitForTimeout(150); }
+  return /What would you like to save/.test(t) ? 1 : 0;
+};
+{
+  const v = await postSeite('/post-video');
+  pruefe('Post mit Studio-Video: der Knopf heißt "Save video"', v.knopf === '💾 Save video', v.knopf);
+  pruefe('und ▾ Format fragt weiterhin', await dialogNachKlick(v.p, '[data-act="save-as-new"]') === 1);
+  // Zurück auf das Video des Posts: "New" gibt es hier nicht - neu laden.
+  await v.p.reload({ waitUntil: 'load' });
+  await v.p.waitForFunction(() => !!window._studioEditor, null, { timeout: 10000 });
+  await v.p.waitForTimeout(400);
+  await v.p.fill('#title-input', 'Testtitel');
+  pruefe('Save fragt beim Video-Post nicht noch einmal', await dialogNachKlick(v.p, '#save-btn') === 0);
+  pruefe('Kein Fehler auf der Post-Seite (Video)', v.fehlerHier.length === 0, v.fehlerHier.join(' | '));
+  await v.p.close();
+
+  const u = await postSeite('/post-upload');
+  pruefe('Hochgeladenes Video ohne Aufbau: der Knopf bleibt "Save as…"', u.knopf === '💾 Save as…', u.knopf);
+  pruefe('und fragt nach dem Format - ein leerer Canvas darf das Video nicht mit einem Klick ersetzen',
+    await dialogNachKlick(u.p, '#save-btn') === 1);
+  await u.p.close();
+
+  const b = await postSeite('/post-bild');
+  pruefe('Post mit Bild: der Knopf heißt "Save image"', b.knopf === '💾 Save image', b.knopf);
+  pruefe('aber mit Animationen im Aufbau fragt Save lieber nach', await dialogNachKlick(b.p, '#save-btn') === 1);
+  pruefe('Die Format-Auswahl ist englisch', await b.p.evaluate(() => {
+    document.querySelector('[data-act="save-as-new"]').click();
+    return new Promise(r => setTimeout(() => {
+      const t = document.querySelector('.studio-modal')?.textContent || '';
+      r(t.includes('GIF (animated)') && !/mit Animationen/.test(t));
+    }, 300));
+  }));
+  await b.p.close();
+}
 
 // ---- Ausgabe --------------------------------------------------------------
 console.log('\n===== ERGEBNIS =====');
