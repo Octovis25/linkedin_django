@@ -491,6 +491,22 @@ main:has(.studio-wrap) { max-width:none; padding:0 1rem; margin-top:.5rem; }
 .fx-tile span           { display:block; font-size:.62rem; color:#555; padding:2px 2px 3px; }
 .fx-tile:hover          { border-color:var(--octo-petrol,#008591); box-shadow:0 0 0 2px rgba(0,133,145,.18); }
 .fx-size-row            { align-items:center; }
+/* ---- Question web row in the bar ---- */
+.qweb-titel             { font-size:.72rem; color:var(--octo-petrol,#008591); }
+.anim-ctl > .qweb-dot   { flex:0 0 20px !important; width:20px; height:20px; border-radius:50%; color:#fff;
+                          font-weight:700; font-size:.66rem; display:flex; align-items:center; justify-content:center;
+                          cursor:pointer; }
+.qweb-text input        { flex:1; min-width:0; font-size:.7rem; height:23px; padding:1px 6px; }
+.qweb-weg               { flex:0 0 auto; border:1px solid #ddd; background:#fff; border-radius:5px; cursor:pointer;
+                          font-size:.62rem; padding:1px 6px; color:#777; }
+.qweb-weg:disabled      { opacity:.35; cursor:default; }
+.qweb-dazu              { align-self:flex-start; margin:2px 0 3px 58px; font-size:.64rem; padding:2px 8px;
+                          border:1px solid #ccc; border-radius:5px; background:#fff; cursor:pointer; }
+.anim-ctl > .qweb-seg   { flex:1 1 auto; display:flex; gap:3px; flex-wrap:wrap; }
+.qweb-seg button        { font-size:.64rem; padding:1px 7px; height:21px; border:1px solid #ccc; white-space:nowrap;
+                          border-radius:5px; background:#fff; cursor:pointer; color:#444; }
+.qweb-seg button.on     { background:var(--octo-petrol,#008591); border-color:var(--octo-petrol,#008591);
+                          color:#fff; font-weight:600; }
 /* Speed sliders: left slow, right fast - the animals say which end is which. */
 .speed-ico              { font-size:11px; flex:0 0 auto; line-height:1; }
 .fx-speed-out           { flex:0 0 auto; min-width:48px; text-align:right; font-size:.62rem; color:#777;

@@ -359,6 +359,10 @@ export const PANELS = {
           title: 'Magnifies whatever lies under it' },
       ]},
       { t: 'row', items: [
+        { t: 'btn', act: 'add-qweb', icon: '❓', label: 'Question web',
+          title: 'Question marks you place, tied by threads - each blinks and shows its own text' },
+      ]},
+      { t: 'row', items: [
         { t: 'badge', badge: 'circle', icon: '①', label: 'Circle', title: 'Circle with number or text' },
         { t: 'badge', badge: 'hex',    icon: '⬢', label: 'Hexagon', title: 'Hexagon with number or text' },
         { t: 'badge', badge: 'pill',   icon: '▭', label: 'Banner',  title: 'Banner pill with text' },

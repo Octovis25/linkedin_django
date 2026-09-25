@@ -1838,6 +1838,96 @@ pruefe('In der Leiste stehen die Effekte vor Motion',
 
 await sauber('Leiste und Effekte-Reiter');
 
+// ---- Question web: Fragezeichen mit Fäden und eigenem Text ------------------
+await ruhig('Question web');
+await page.click('[data-mode="effects"]');
+const qw = await page.evaluate(async () => {
+  const m = await import('/media.js');
+  const ep = (await import('/editor.js')).EXTRA_PROPS;
+  const ed = window._studioEditor;
+  ed.clearAll(); ed.setSize(600, 400);
+  ed.canvas.setBackgroundColor('#ffffff', () => {});
+  ed.canvas.setViewportTransform([1, 0, 0, 1, 0, 0]);
+  ed.canvas.setDimensions({ width: 600, height: 400 });
+  const zeile = () => document.querySelector('#anim-bar .qweb-row');
+  const wahl = (key, v) => zeile().querySelector('.qweb-seg[data-key="' + key + '"] [data-v="' + v + '"]').click();
+  const orange = (r, g, b, a) => a > 200 && r > 200 && g > 80 && g < 150 && b < 90;
+  const zaehle = (d, fn) => { let n = 0; for (let i = 0; i < d.length; i += 4) if (fn(d[i], d[i + 1], d[i + 2], d[i + 3])) n++; return n; };
+  const schirm = () => { ed.canvas.discardActiveObject(); ed.canvas.renderAll();
+    const c = ed.canvas.lowerCanvasEl; return c.getContext('2d').getImageData(0, 0, c.width, c.height).data; };
+
+  document.querySelector('[data-act="add-qweb"]').click();
+  const k = [...m.fragenNetze(ed).values()][0] || [];
+  const id = k[0] && k[0].qwebId;
+  const netz = () => m.fragenNetze(ed).get(id) || [];
+  const erst = { anzahl: k.length, eineId: k.every(o => o.qwebId === id), nr: k.map(o => o.qwebNr).join(','),
+                 orange: k.every(o => o.qwebColor === '#F56E28'), texte: k.every(o => !!o.qwebText) };
+  const imMotion = document.querySelectorAll('#anim-bar details[data-group="motion"] .anim-row').length;
+  const mitFaeden = zaehle(schirm(), orange);
+  wahl('qwebThreads', 'none');
+  const ohneFaeden = zaehle(schirm(), orange);
+  wahl('qwebThreads', 'web');
+  // Im stehenden PNG: Fäden und Schilder (weiße Karten neben den Fragezeichen)
+  const url = ed.exportDataURL(); const img = new Image(); img.src = url; await img.decode();
+  const c2 = document.createElement('canvas'); c2.width = img.width; c2.height = img.height;
+  const x2 = c2.getContext('2d'); x2.drawImage(img, 0, 0);
+  const png = x2.getImageData(0, 0, c2.width, c2.height).data;
+  const pngOrange = zaehle(png, orange);
+  // Text ändern
+  const inp = zeile().querySelector('.qweb-text input');
+  inp.value = 'Wo ist der Nachweis?'; inp.dispatchEvent(new Event('input'));
+  const text0 = netz()[0].qwebText;
+  // + Question, dann Nummern
+  zeile().querySelector('.qweb-dazu').click();
+  const vier = netz().length;
+  wahl('qwebSign', '#');
+  const zeichen = netz().map(o => o._objects[1].text).join(',');
+  const einstellungGleich = netz().every(o => o.qwebSign === '#' && o.qwebThreads === 'web');
+  // Farbe über die eine Palette
+  const sw = [...document.querySelectorAll('#anim-bar .fx-palette .fx-swatch')]
+    .filter(b => !b.classList.contains('fx-swatch-auto')).find(b => !/245, 110, 40|f56e28/i.test(b.style.background));
+  sw.click();
+  const farben = new Set(netz().map(o => o.qwebColor)); const kreise = new Set(netz().map(o => o._objects[0].fill));
+  // Nacheinander blinken
+  const kk = netz(), takt = m.fragenRundeMs(kk) / kk.length;
+  const z0 = m.fragenZustand(kk, 0, takt * 0.5), z1 = m.fragenZustand(kk, 1, takt * 0.5), z1b = m.fragenZustand(kk, 1, takt * 1.5);
+  // Größe: alle zusammen
+  ed.selectObj(kk[2]);
+  const regler = document.getElementById('fx-mark-size');
+  regler.value = 150; regler.dispatchEvent(new Event('input'));
+  const skalen = netz().map(o => Math.round(o.scaleX * 100));
+  regler.value = 100; regler.dispatchEvent(new Event('input'));
+  const json = JSON.stringify(ed.canvas.toJSON(ep));
+  const animiert = m.hasAnimations(ed);
+  // Eine Frage weg, dann das ganze Netz
+  zeile().querySelectorAll('.qweb-weg')[3].click();
+  const nachWeg = netz().length, nrNachWeg = netz().map(o => o.qwebNr).join(',');
+  zeile().querySelector('.fx-remove').click();
+  return { erst, imMotion, mitFaeden, ohneFaeden, pngOrange, text0, vier, zeichen, einstellungGleich,
+           farben: [...farben], kreise: [...kreise], z0: z0.dran, z1: z1.dran, z1b: z1b.dran,
+           skalen: skalen.join(','), jsonTexte: /"qwebText":"Wo ist der Nachweis\?"/.test(json) && /"qwebSign":"#"/.test(json),
+           animiert, nachWeg, nrNachWeg, rest: m.fragenNetze(ed).size };
+});
+pruefe('Question web legt drei Fragezeichen an, ein Netz, in Reihenfolge',
+  qw.erst.anzahl === 3 && qw.erst.eineId && qw.erst.nr === '0,1,2', JSON.stringify(qw.erst));
+pruefe('in Octo-Orange und mit Beispieltexten', qw.erst.orange && qw.erst.texte);
+pruefe('Die Fragezeichen stehen nicht unter Motion', qw.imMotion === 0, qw.imMotion);
+pruefe('Die Fäden sind ohne Vorschau zu sehen', qw.mitFaeden > qw.ohneFaeden + 150, qw.mitFaeden + ' / ' + qw.ohneFaeden);
+pruefe('und im exportierten PNG', qw.pngOrange > 300, qw.pngOrange);
+pruefe('Der Text lässt sich in der Leiste ändern', qw.text0 === 'Wo ist der Nachweis?', qw.text0);
+pruefe('+ Question hängt ein viertes an', qw.vier === 4, qw.vier);
+pruefe('Sign 1 2 3 nummeriert der Reihe nach', qw.zeichen === '1,2,3,4', qw.zeichen);
+pruefe('Einstellungen gelten für das ganze Netz', qw.einstellungGleich);
+pruefe('Die eine Palette färbt alle Fragezeichen', qw.farben.length === 1 && qw.kreise.length === 1
+  && qw.farben[0] !== '#F56E28', JSON.stringify([qw.farben, qw.kreise]));
+pruefe('Nacheinander: erst das erste, dann das zweite', qw.z0 && !qw.z1 && qw.z1b, [qw.z0, qw.z1, qw.z1b].join(','));
+pruefe('Der Size-Regler nimmt alle Fragezeichen mit', qw.skalen === '150,150,150,150', qw.skalen);
+pruefe('Texte und Einstellungen werden gespeichert', qw.jsonTexte);
+pruefe('Ein Netz zählt als Animation (Vorschau, GIF, Video)', qw.animiert);
+pruefe('Eine Frage entfernen nummeriert neu', qw.nachWeg === 3 && qw.nrNachWeg === '0,1,2', qw.nachWeg + ' / ' + qw.nrNachWeg);
+pruefe('Remove nimmt das ganze Netz weg', qw.rest === 0, qw.rest);
+await sauber('Question web');
+
 // ---- Video Bild für Bild: auch auf einem langsamen Rechner nichts überspringen --
 // Ortrud: "im fertigen Video bewegt sich die Lupe nicht - sie springt einmal,
 // und das war's". Das Video war die gefilmte Vorschau: Zeit = Wanduhr. Gab der

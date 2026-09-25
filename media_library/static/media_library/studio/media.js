@@ -95,7 +95,141 @@ export function setAnim(editor, type, dur = 1200, delay = 0) {
 
 export function hasAnimations(editor) {
   return editor.canvas.getObjects().some(o =>
-    (o.anim && o.anim.type && o.anim.type !== 'none') || (o.fx && o.fx !== 'none'));
+    (o.anim && o.anim.type && o.anim.type !== 'none') || (o.fx && o.fx !== 'none') || istFrageKnoten(o));
+}
+
+/* ---- Question web -----------------------------------------------------------
+   Question marks placed by hand - each one an element of its own (shapeKind
+   'qweb') - tied together by threads that small sparks run along. Nodes that
+   share a qwebId are one web; qwebNr is their order (chain, blinking, numbers).
+   The settings sit on every node of a web alike, so any node can be read for
+   them. The threads are drawn where the web's first node sits among the layers,
+   so what lies above stays on top; the texts go over everything, like a
+   callout. Threads and texts are part of the picture - shown while editing and
+   in a PNG - only the sparks and the blinking need a preview. */
+export const FRAGE = 'qweb';
+export function istFrageKnoten(o) { return !!o && o.shapeKind === FRAGE; }
+export const FRAGE_STANDARD = {
+  qwebThreads: 'web', qwebBlink: 'turn', qwebLabel: 'blink', qwebSign: '?',
+  qwebColor: '#F56E28', qwebSpeed: 4,
+};
+export function fragenNetze(editor) {
+  const netze = new Map();
+  editor.canvas.getObjects().forEach(o => {
+    if (!istFrageKnoten(o)) return;
+    const id = o.qwebId || 'q';
+    if (!netze.has(id)) netze.set(id, []);
+    netze.get(id).push(o);
+  });
+  netze.forEach(l => l.sort((a, b) => (a.qwebNr || 0) - (b.qwebNr || 0)));
+  return netze;
+}
+// Speed 1..10, left slow: ms a question is "on", ms a spark needs for a thread.
+const _qBlinkMs = v => 7000 - ((v > 0 ? v : 4) - 1) * 600;
+const _qLichtMs = v => 6000 - ((v > 0 ? v : 4) - 1) * 500;
+export function fragenRundeMs(knoten) {
+  return (knoten.length || 1) * _qBlinkMs(knoten[0] && knoten[0].qwebSpeed);
+}
+// How far node i is "on" at time t (ms): glow 0..1, and whether it is its turn.
+export function fragenZustand(knoten, i, t) {
+  const e = knoten[0] || {};
+  const takt = _qBlinkMs(e.qwebSpeed);
+  if (e.qwebBlink === 'all') {
+    const p = (t % takt) / takt;
+    return { glanz: Math.max(0, Math.sin(p * Math.PI)), dran: true };
+  }
+  const runde = takt * (knoten.length || 1);
+  const p = ((t - i * takt) % runde + runde) % runde;
+  const dran = p < takt;
+  return { glanz: dran ? Math.sin((p / takt) * Math.PI) : 0, dran };
+}
+function _qMitte(o) { const p = o.getCenterPoint(); return [p.x, p.y]; }
+function _qKanten(P, art) {
+  if (art === 'none') return [];
+  if (art === 'chain') return P.slice(1).map((_, i) => [i, i + 1]);
+  const e = [], gesehen = new Set();
+  P.forEach((a, i) => {
+    P.map((c, j) => [j, Math.hypot(c[0] - a[0], c[1] - a[1])]).filter(([j]) => j !== i)
+      .sort((x, y) => x[1] - y[1]).slice(0, 2).forEach(([j]) => {
+        const k = i < j ? i + '-' + j : j + '-' + i;
+        if (!gesehen.has(k)) { gesehen.add(k); e.push([i, j]); }
+      });
+  });
+  return e;
+}
+// One unit = what 1 px was in the 720 px mockup, measured on the node's size.
+function _qEinheit(knoten, z) {
+  const o = knoten[0];
+  return Math.max(0.4, (Math.max(o.getScaledWidth(), o.getScaledHeight()) / 2) * z / 15);
+}
+function _malFragenFaeden(ctx, knoten, z, t, stehend) {
+  const e = knoten[0], farbe = e.qwebColor || '#F56E28', u = _qEinheit(knoten, z);
+  const P = knoten.map(o => _qMitte(o).map(v => v * z));
+  const licht = _qLichtMs(e.qwebSpeed);
+  _qKanten(P, e.qwebThreads || 'web').forEach(([i, j], idx) => {
+    const [ax, ay] = P[i], [cx, cy] = P[j];
+    const dx = cx - ax, dy = cy - ay, len = Math.hypot(dx, dy) || 1;
+    const nx = -dy / len, ny = dx / len;
+    const bogen = (18 * Math.sin(idx * 1.7) + (stehend ? 0 : 4 * Math.sin(t / 900 + idx))) * u;
+    const qx = (ax + cx) / 2 + nx * bogen, qy = (ay + cy) / 2 + ny * bogen;
+    ctx.save();
+    ctx.shadowColor = _mitAlpha(farbe, 0.6); ctx.shadowBlur = 8 * u;
+    ctx.strokeStyle = _mitAlpha(farbe, 0.85); ctx.lineWidth = 2 * u;
+    ctx.setLineDash([7 * u, 5 * u]); ctx.lineDashOffset = stehend ? 0 : -t / licht * 60 * u;
+    ctx.beginPath(); ctx.moveTo(ax, ay); ctx.quadraticCurveTo(qx, qy, cx, cy); ctx.stroke();
+    ctx.setLineDash([]); ctx.shadowBlur = 0;
+    ctx.strokeStyle = _mitAlpha(farbe, 0.3); ctx.lineWidth = 1 * u;
+    for (const f of [-7, 9]) {
+      ctx.beginPath(); ctx.moveTo(ax, ay);
+      ctx.quadraticCurveTo(qx + nx * f * u + (stehend ? 0 : Math.sin(t / 700 + f) * 3 * u), qy + ny * f * u, cx, cy);
+      ctx.stroke();
+    }
+    if (!stehend) {
+      const k = ((t / licht) + idx * 0.37) % 1;
+      const px = (1 - k) * (1 - k) * ax + 2 * (1 - k) * k * qx + k * k * cx;
+      const py = (1 - k) * (1 - k) * ay + 2 * (1 - k) * k * qy + k * k * cy;
+      const g = ctx.createRadialGradient(px, py, 0, px, py, 9 * u);
+      g.addColorStop(0, 'rgba(255,240,220,1)'); g.addColorStop(0.35, _mitAlpha(farbe, 0.9));
+      g.addColorStop(1, _mitAlpha(farbe, 0));
+      ctx.fillStyle = g; ctx.beginPath(); ctx.arc(px, py, 9 * u, 0, Math.PI * 2); ctx.fill();
+    }
+    ctx.restore();
+  });
+}
+function _malFragenSchilder(ctx, knoten, z, t, stehend) {
+  const e = knoten[0], farbe = e.qwebColor || '#F56E28', u = _qEinheit(knoten, z);
+  const art = e.qwebLabel || 'blink';
+  const breitGesamt = ctx.canvas.width;
+  knoten.forEach((o, i) => {
+    const [x, y] = _qMitte(o).map(v => v * z);
+    const r = (Math.max(o.getScaledWidth(), o.getScaledHeight()) / 2) * z;
+    const zst = stehend ? { glanz: 0, dran: true } : fragenZustand(knoten, i, t);
+    if (!stehend && zst.glanz > 0.02) {
+      ctx.save();
+      ctx.strokeStyle = _mitAlpha(farbe, 0.5 * (1 - zst.glanz * 0.3)); ctx.lineWidth = 2 * u;
+      ctx.shadowColor = _mitAlpha(farbe, 0.4 + zst.glanz * 0.4); ctx.shadowBlur = (8 + zst.glanz * 16) * u;
+      ctx.beginPath(); ctx.arc(x, y, r + (6 + (1 - zst.glanz) * 14) * u, 0, Math.PI * 2); ctx.stroke();
+      ctx.restore();
+    }
+    const text = (o.qwebText || '').trim();
+    if (!text || art === 'off') return;
+    let alpha = 1;
+    if (!stehend && art === 'blink' && e.qwebBlink !== 'all') alpha = zst.dran ? Math.min(1, zst.glanz * 3) : 0;
+    if (alpha <= 0.01) return;
+    ctx.save(); ctx.globalAlpha = alpha;
+    ctx.font = `600 ${13 * u}px Roboto, Arial, sans-serif`;
+    const w = ctx.measureText(text).width + 20 * u, h = 28 * u;
+    const rechts = x + r + 9 * u + w < breitGesamt - 10 * u;
+    const bx = rechts ? x + r + 9 * u : x - r - 9 * u - w, by = y - h / 2;
+    ctx.shadowColor = 'rgba(0,0,0,.18)'; ctx.shadowBlur = 8 * u; ctx.shadowOffsetY = 2 * u;
+    ctx.fillStyle = '#ffffff';
+    ctx.beginPath(); ctx.roundRect(bx, by, w, h, 6 * u); ctx.fill();
+    ctx.shadowColor = 'transparent';
+    ctx.fillStyle = farbe; ctx.fillRect(rechts ? bx : bx + w - 4 * u, by, 4 * u, h);
+    ctx.fillStyle = '#1f2d2f'; ctx.textBaseline = 'middle'; ctx.textAlign = 'left';
+    ctx.fillText(text, bx + (rechts ? 12 : 8) * u, by + h / 2 + u);
+    ctx.restore();
+  });
 }
 
 // ===== Deko-Effekte (Partikel: Funkeln, Konfetti, Kreise, Strahlen …) ======
@@ -634,8 +768,22 @@ function _obenDrauf(ctx, editor, o) {
 function _drawEffects(ctx, editor, nurLupe = false) {
   const z = editor.canvas.getZoom();
   let gemalt = false;
+  const netze = fragenNetze(editor);
+  const netzZeit = k => nurLupe ? 0 : elapsedAt(k[0], _fxTime) / _tempo;
+  const netzGemalt = new Set();
   editor.canvas.getObjects().forEach(o => {
     if (o._snap || o._grid) return;
+    if (istFrageKnoten(o)) {
+      const id = o.qwebId || 'q';
+      if (!netzGemalt.has(id)) {
+        netzGemalt.add(id);
+        const k = netze.get(id);
+        _malFragenFaeden(ctx, k, z, netzZeit(k), nurLupe);
+        gemalt = true;
+        _obenDrauf(ctx, editor, o);     // the node itself back over its threads
+        return;
+      }
+    }
     const hatEffekt = o.fx && o.fx !== 'none';
     if (hatEffekt) {
       if (nurLupe && o.fx !== 'magnifier') return;
@@ -658,6 +806,7 @@ function _drawEffects(ctx, editor, nurLupe = false) {
     }
     if (gemalt) _obenDrauf(ctx, editor, o);
   });
+  netze.forEach(k => _malFragenSchilder(ctx, k, z, netzZeit(k), nurLupe));
 }
 
 // Registers the 'after:render' hook once (paints the effects over the picture).
@@ -798,6 +947,12 @@ function animDuration(editor) {
     // second line - up to the same 15 s ceiling as everything else.
     if (o.fx === 'magnifier' && (o.fxPath || 'still') !== 'still') {
       lupenWeg = Math.max(lupenWeg, (startOf(o) + lupenWege(o).total * 1000) * _tempo + 300);
+    }
+    // A question web too: every question gets its turn once.
+    if (istFrageKnoten(o)) {
+      hasLoop = true;
+      const k = fragenNetze(editor).get(o.qwebId || 'q') || [o];
+      lupenWeg = Math.max(lupenWeg, (startOf(k[0]) + fragenRundeMs(k)) * _tempo + 300);
     }
     if (o.anim) {
       max = Math.max(max, (startOf(o) + (o.anim.dur || 1200)) * _tempo + 300);

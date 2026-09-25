@@ -240,6 +240,9 @@ bg.renderPalette(document.getElementById('palette-row'), col => {
     // The frame itself has no colour to show - its effect gets it.
     if (o.fx !== 'magnifier') { o.fxColor = col; editor.canvas.requestRenderAll(); editor.snapshot(); renderAnimBar(); }
   }
+  else if (media.istFrageKnoten(o)) {
+    netzEinstellen(netzVon(o), 'qwebColor', col);
+  }
   else if (o && o.shapeKind === 'marker') {
     o._objects?.[1]?.set('fill', col);
     const t = o._objects?.[3];
@@ -369,6 +372,7 @@ const actions = {
   },
   'add-marker': () => addMarker(),
   'add-stamp': () => addStempel(),
+  'add-qweb': () => addFragenNetz(),
 
   // Format bewusst neu wählen (fragt wieder).
   'save-as-new': async () => { _saveKind = null; _saveKindVomPost = false; await actions['save-as'](); },
@@ -1897,6 +1901,80 @@ function buildMarker(txt, fill, textColor) {
 
 function isMarker(o) { return !!(o && o.shapeKind === 'marker'); }
 
+/* ---- Question web: question marks you place, tied by threads -------------
+   Each question mark is an element of its own, so it is dragged like any other
+   one; the threads and the texts are painted by media.js from where the
+   question marks stand. The settings sit on every node of a web alike. */
+const frageRadius = () => Math.max(12, Math.round(Math.min(editor.width, editor.height) * 0.028));
+function frageZeichenFuer(o, i) { const z = o.qwebSign || '?'; return z === '#' ? String(i + 1) : z; }
+function buildFrage(zeichen, farbe, r) {
+  const kreis = new fabric.Circle({ radius: r, fill: farbe, originX: 'center', originY: 'center', left: 0, top: 0 });
+  const text = new fabric.Text(zeichen, {
+    fontSize: r * 1.15, fontWeight: 'bold', fontFamily: 'Roboto, Arial, sans-serif',
+    fill: '#ffffff', originX: 'center', originY: 'center', left: 0, top: r * 0.04,
+  });
+  return new fabric.Group([kreis, text], { originX: 'center', originY: 'center', shapeKind: media.FRAGE });
+}
+function frageKnoten(props, x, y) {
+  const g = buildFrage('?', props.qwebColor || '#F56E28', frageRadius());
+  Object.assign(g, props);
+  g.set({ left: x, top: y });
+  return g;
+}
+function netzVon(o) { return media.fragenNetze(editor).get(o.qwebId || 'q') || [o]; }
+// Order, sign and colour after any change - the numbers follow the list.
+function netzAktualisieren(knoten) {
+  knoten.forEach((o, i) => {
+    o.qwebNr = i;
+    o._objects?.[0]?.set('fill', o.qwebColor || '#F56E28');
+    o._objects?.[1]?.set('text', frageZeichenFuer(o, i));
+    o.dirty = true;
+  });
+  editor.canvas.requestRenderAll();
+}
+function netzEinstellen(knoten, schluessel, wert) {
+  knoten.forEach(o => { o[schluessel] = wert; });
+  netzAktualisieren(knoten);
+  editor.snapshot();
+  renderAnimBar(); renderLayers();
+}
+function addFragenNetz() {
+  const id = 'q' + Date.now().toString(36);
+  const W = editor.width, H = editor.height;
+  // A zigzag down the left half: the texts sit to the right of their
+  // question marks and do not run into the next one.
+  const stellen = [[0.30, 0.30, 'Which version?'], [0.60, 0.46, 'Who was trained?'],
+                   [0.34, 0.64, 'Where is the evidence?']];
+  const knoten = stellen.map(([fx, fy, text], i) => {
+    const o = frageKnoten({ ...media.FRAGE_STANDARD, qwebId: id, qwebNr: i, qwebText: text, startAt: 0 },
+                          Math.round(W * fx), Math.round(H * fy));
+    o.scale(markenGroesse());
+    editor.canvas.add(o);
+    return o;
+  });
+  netzAktualisieren(knoten);
+  editor.canvas.setActiveObject(knoten[0]);
+  editor.canvas.requestRenderAll();
+  editor.snapshot();
+  renderLayers(); renderAnimBar();
+  toast('Question web added - drag the question marks to the gaps; texts and look are under the canvas.');
+  return knoten;
+}
+function frageDazu(knoten) {
+  const e = knoten[0];
+  const mx = knoten.reduce((a, o) => a + o.getCenterPoint().x, 0) / knoten.length;
+  const my = knoten.reduce((a, o) => a + o.getCenterPoint().y, 0) / knoten.length;
+  const props = { qwebId: e.qwebId, qwebNr: knoten.length, qwebText: '', startAt: e.startAt || 0 };
+  Object.keys(media.FRAGE_STANDARD).forEach(k => { props[k] = e[k]; });
+  const o = frageKnoten(props, Math.round(mx + frageRadius() * 3), Math.round(my + frageRadius() * 2));
+  o.scale(e.scaleX || 1);
+  editor.canvas.add(o);
+  netzAktualisieren([...knoten, o]);
+  editor.snapshot();
+  renderLayers(); renderAnimBar();
+  return o;
+}
+
 function fxWortfeld() {
   const eigen = document.getElementById('fx-text-input');
   if (eigen && eigen.value.trim()) return eigen;
@@ -2288,6 +2366,7 @@ function wireSizeFields() {
 function layerLabel(o, i) {
   if (media.istEffektRahmen(o)) return (o.fx === 'magnifier' ? '🔍 Magnifier' : '✨ Effect frame');
   if (o.shapeKind === 'marker') return '📍 Marker';
+  if (media.istFrageKnoten(o)) return '❓ ' + ((o.qwebText || 'Question').slice(0, 14));
   if (o.shapeKind === 'stamp')  return '🖈 Stamp';
   if (o.type === 'image')   return '🖼 Image ' + i;
   if (o.shapeKind === 'textblock') return '📝 ' + (o.tbHead || o.tbBody || 'Text block').slice(0, 14);
@@ -2618,34 +2697,129 @@ function effektZeile(o, idx) {
 
 // One palette for all frames: it paints the selected one - or the first, if
 // none is selected. Six swatches in every row would be six palettes doing one job.
-function effektPalette(rahmenListe) {
+function frageZeile(knoten) {
+  const row = document.createElement('div');
+  const aktiv = editor.active();
+  row.className = 'anim-row fx-row qweb-row' + (knoten.includes(aktiv) ? ' on' : '');
+  row.dataset.qweb = knoten[0].qwebId || 'q';
+  const th = document.createElement('div'); th.className = 'anim-thumb fx-thumb'; th.textContent = '❓';
+  th.title = 'Select the first question mark';
+  th.onclick = () => editor.selectObj(knoten[0]);
+  const col = document.createElement('div'); col.className = 'anim-col';
+
+  const kopf = document.createElement('div'); kopf.className = 'anim-ctl';
+  kopf.innerHTML = '<span>Effect</span><b class="qweb-titel">Question web</b>';
+  col.appendChild(kopf);
+
+  knoten.forEach((o, i) => {
+    const z = document.createElement('div'); z.className = 'anim-ctl qweb-text';
+    const punkt = document.createElement('span'); punkt.className = 'qweb-dot';
+    punkt.textContent = frageZeichenFuer(o, i); punkt.style.background = o.qwebColor || '#F56E28';
+    punkt.title = 'Select this question mark'; punkt.onclick = () => editor.selectObj(o);
+    const inp = document.createElement('input'); inp.type = 'text'; inp.className = 'field';
+    inp.value = o.qwebText || ''; inp.placeholder = 'Text (optional)';
+    inp.oninput = () => { o.qwebText = inp.value; editor.canvas.requestRenderAll(); };
+    inp.onchange = () => { editor.snapshot(); renderLayers(); };
+    const weg = document.createElement('button'); weg.type = 'button'; weg.className = 'qweb-weg';
+    weg.textContent = '✕'; weg.title = 'Remove this question';
+    weg.disabled = knoten.length < 2;
+    weg.onclick = () => {
+      editor.canvas.remove(o);
+      netzAktualisieren(knoten.filter(k => k !== o));
+      editor.snapshot(); renderLayers(); renderAnimBar();
+    };
+    z.append(punkt, inp, weg);
+    col.appendChild(z);
+  });
+  const dazu = document.createElement('button'); dazu.type = 'button'; dazu.className = 'qweb-dazu';
+  dazu.textContent = '+ Question'; dazu.onclick = () => frageDazu(knoten);
+  col.appendChild(dazu);
+
+  const e = knoten[0];
+  const wahl = (titel, schluessel, optionen) => {
+    const z = document.createElement('div'); z.className = 'anim-ctl';
+    z.innerHTML = '<span>' + titel + '</span>';
+    const seg = document.createElement('span'); seg.className = 'qweb-seg'; seg.dataset.key = schluessel;
+    optionen.forEach(([wert, text]) => {
+      const b = document.createElement('button'); b.type = 'button'; b.textContent = text; b.dataset.v = wert;
+      if ((e[schluessel] || media.FRAGE_STANDARD[schluessel]) === wert) b.classList.add('on');
+      b.onclick = () => netzEinstellen(knoten, schluessel, wert);
+      seg.appendChild(b);
+    });
+    z.appendChild(seg);
+    col.appendChild(z);
+  };
+  wahl('Threads', 'qwebThreads', [['web', 'Web'], ['chain', 'Chain'], ['none', 'None']]);
+  wahl('Blink', 'qwebBlink', [['turn', 'One after another'], ['all', 'All together']]);
+  wahl('Text', 'qwebLabel', [['blink', 'When it blinks'], ['always', 'Always'], ['off', 'Off']]);
+  wahl('Sign', 'qwebSign', [['?', '?'], ['!', '!'], ['#', '1 2 3']]);
+
+  const zeit = document.createElement('div'); zeit.className = 'anim-ctl anim-time';
+  const tempoFeld = document.createElement('label'); tempoFeld.className = 'anim-time-item';
+  tempoFeld.innerHTML = '<span>Speed</span>';
+  const tempo = document.createElement('input');
+  tempo.type = 'range'; tempo.className = 'tl-slider qweb-speed'; tempo.min = 1; tempo.max = 10; tempo.step = 0.5;
+  tempo.value = e.qwebSpeed > 0 ? e.qwebSpeed : media.FRAGE_STANDARD.qwebSpeed;
+  tempo.title = 'How fast the questions take turns - left slow, right fast';
+  tempo.oninput = () => { knoten.forEach(o => { o.qwebSpeed = +tempo.value; }); editor.canvas.requestRenderAll(); };
+  tempo.onchange = () => editor.snapshot();
+  schnecke(tempoFeld, tempo);
+  zeit.appendChild(tempoFeld); zeit.appendChild(startRegler(e));
+  col.appendChild(zeit);
+
+  const tools = document.createElement('div'); tools.className = 'fx-tools';
+  const waehlen = document.createElement('button');
+  waehlen.type = 'button'; waehlen.className = 'fx-select'; waehlen.textContent = '⌖ Select';
+  waehlen.title = 'Put the handles on the first question mark';
+  waehlen.onclick = () => editor.selectObj(e);
+  const alleWeg = document.createElement('button');
+  alleWeg.type = 'button'; alleWeg.className = 'fx-remove'; alleWeg.textContent = '✕ Remove';
+  alleWeg.title = 'Remove the whole question web';
+  alleWeg.onclick = () => {
+    knoten.forEach(o => editor.canvas.remove(o));
+    editor.canvas.requestRenderAll(); editor.snapshot();
+    renderAnimBar(); renderLayers();
+  };
+  tools.appendChild(waehlen); tools.appendChild(alleWeg);
+
+  row.appendChild(th); row.appendChild(col); row.appendChild(tools);
+  return row;
+}
+
+function effektPalette(rahmenListe, netzListe = []) {
   const row = document.createElement('div'); row.className = 'anim-row fx-palette';
   const th = document.createElement('div'); th.className = 'anim-thumb fx-thumb'; th.textContent = '🎨';
   const col = document.createElement('div'); col.className = 'anim-col';
   const zeile = document.createElement('div'); zeile.className = 'anim-ctl';
   zeile.innerHTML = '<span>Colour</span>';
   const aktiv = editor.active();
-  const ziel = media.istEffektRahmen(aktiv) ? aktiv : rahmenListe.find(r => r.fx !== 'magnifier');
+  let netzZiel = media.istFrageKnoten(aktiv) ? netzVon(aktiv) : null;
+  let ziel = netzZiel ? null : (media.istEffektRahmen(aktiv) ? aktiv : rahmenListe.find(r => r.fx !== 'magnifier'));
+  if (!ziel && !netzZiel && netzListe.length) netzZiel = netzListe[0];
+  const farbeSetzen = f => {
+    if (netzZiel) { netzEinstellen(netzZiel, 'qwebColor', f || media.FRAGE_STANDARD.qwebColor); return; }
+    if (!ziel) return;
+    ziel.fxColor = f; editor.canvas.requestRenderAll(); editor.snapshot(); renderAnimBar();
+  };
   const sw = document.createElement('span'); sw.className = 'fx-swatches';
   const standard = document.createElement('button');
   standard.type = 'button'; standard.className = 'fx-swatch fx-swatch-auto'; standard.textContent = 'auto';
   standard.title = 'As the effect is drawn';
-  if (ziel && !ziel.fxColor) standard.classList.add('on');
-  standard.onclick = () => { if (!ziel) return; ziel.fxColor = null; editor.canvas.requestRenderAll(); editor.snapshot(); renderAnimBar(); };
+  if ((ziel && !ziel.fxColor) || (netzZiel && _hex(netzZiel[0].qwebColor || '') === _hex(media.FRAGE_STANDARD.qwebColor))) standard.classList.add('on');
+  standard.onclick = () => farbeSetzen(null);
   sw.appendChild(standard);
   bg.getPalette().forEach(f => {
     const b = document.createElement('button');
     b.type = 'button'; b.className = 'fx-swatch'; b.style.background = f; b.title = f;
-    if (ziel && ziel.fxColor && _hex(ziel.fxColor) === _hex(f)) b.classList.add('on');
-    b.onclick = () => {
-      if (!ziel) return;
-      ziel.fxColor = f; editor.canvas.requestRenderAll(); editor.snapshot(); renderAnimBar();
-    };
+    const jetzt = netzZiel ? netzZiel[0].qwebColor : (ziel && ziel.fxColor);
+    if (jetzt && _hex(jetzt) === _hex(f)) b.classList.add('on');
+    b.onclick = () => farbeSetzen(f);
     sw.appendChild(b);
   });
   zeile.appendChild(sw);
   const hinweis = document.createElement('span'); hinweis.className = 'anim-name';
-  hinweis.textContent = !ziel ? 'no frame with a colour'
+  hinweis.textContent = netzZiel ? (media.istFrageKnoten(aktiv) ? 'paints the selected question web' : 'paints the question web')
+    : !ziel ? 'no frame with a colour'
     : (media.istEffektRahmen(aktiv) ? 'paints the selected frame' : 'paints the first frame - select another to change it');
   zeile.appendChild(hinweis);
   col.appendChild(zeile);
@@ -2707,7 +2881,11 @@ function renderAnimBar() {
   bar.appendChild(head);
 
   const elemente = [], rahmen = [];
-  objs.forEach((o, idx) => (media.istEffektRahmen(o) ? rahmen : elemente).push([o, idx]));
+  objs.forEach((o, idx) => {
+    if (media.istFrageKnoten(o)) return;          // a question web has a row of its own
+    (media.istEffektRahmen(o) ? rahmen : elemente).push([o, idx]);
+  });
+  const netze = [...media.fragenNetze(editor).values()];
 
   const gm = animGruppe('motion', 'Motion', 'what each element does',
                         elemente.length + (elemente.length === 1 ? ' element' : ' elements'));
@@ -2717,7 +2895,9 @@ function renderAnimBar() {
   }
   elemente.forEach(([o, idx]) => gm.appendChild(motionZeile(o, idx)));
   const ge = animGruppe('effects', 'Effects', 'each one lives in a frame',
-                        rahmen.length + (rahmen.length === 1 ? ' frame' : ' frames'));
+                        [rahmen.length || !netze.length ? rahmen.length + (rahmen.length === 1 ? ' frame' : ' frames') : '',
+                         netze.length ? netze.length + (netze.length === 1 ? ' question web' : ' question webs') : '']
+                          .filter(Boolean).join(' · '));
   // The switch sits in the group's head, but must not fold the group when clicked.
   const schalter = document.createElement('label'); schalter.className = 'fx-show';
   schalter.innerHTML = '<input type="checkbox" id="fx-show-frames"> Show frames on the picture';
@@ -2726,13 +2906,14 @@ function renderAnimBar() {
   schalter.onclick = e => e.stopPropagation();
   kasten.onchange = () => { _rahmenZeigen = kasten.checked; editor.canvas.requestRenderAll(); };
   ge.querySelector('summary').appendChild(schalter);
-  if (!rahmen.length) {
+  if (!rahmen.length && !netze.length) {
     const h = document.createElement('span'); h.className = 'hint';
     h.textContent = 'No effect yet - add one in the ✨ Effects tab.';
     ge.appendChild(h);
   } else {
-    ge.appendChild(effektPalette(rahmen.map(([o]) => o)));
+    ge.appendChild(effektPalette(rahmen.map(([o]) => o), netze));
     rahmen.forEach(([o, idx]) => ge.appendChild(effektZeile(o, idx)));
+    netze.forEach(k => ge.appendChild(frageZeile(k)));
   }
   // Effects first: that is what the picture is built from; Motion comes after.
   bar.appendChild(ge);
@@ -2881,7 +3062,7 @@ kachelnStarten();
    One slider for marker, stamp and badges: it sizes the selected one, and the
    next one that is added. Dragging the corners still works as before - the
    slider just follows along when a mark is selected. */
-function istMarke(o) { return isMarker(o) || isStempel(o) || isBadge(o); }
+function istMarke(o) { return isMarker(o) || isStempel(o) || isBadge(o) || media.istFrageKnoten(o); }
 // Around the centre: scaling from the top-left corner walks a mark off the
 // word it was placed over.
 function groesseSetzen(o, s) {
@@ -2902,7 +3083,8 @@ function markenGroesse() {
     regler.oninput = () => {
       zeigen();
       const o = editor.active();
-      if (istMarke(o)) { groesseSetzen(o, markenGroesse()); editor.canvas.requestRenderAll(); }
+      if (media.istFrageKnoten(o)) { netzVon(o).forEach(k => groesseSetzen(k, markenGroesse())); editor.canvas.requestRenderAll(); }
+      else if (istMarke(o)) { groesseSetzen(o, markenGroesse()); editor.canvas.requestRenderAll(); }
     };
     regler.onchange = () => { if (istMarke(editor.active())) editor.snapshot(); };
     const folgen = () => {
