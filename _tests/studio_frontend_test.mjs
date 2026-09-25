@@ -1838,6 +1838,54 @@ pruefe('In der Leiste stehen die Effekte vor Motion',
 
 await sauber('Leiste und Effekte-Reiter');
 
+// ---- Video Bild für Bild: auch auf einem langsamen Rechner nichts überspringen --
+// Ortrud: "im fertigen Video bewegt sich die Lupe nicht - sie springt einmal,
+// und das war's". Das Video war die gefilmte Vorschau: Zeit = Wanduhr. Gab der
+// Browser selten ein Bild heraus, lief die Uhr dazwischen weiter. Hier wird ein
+// langsamer Rechner nachgestellt: jedes Bild braucht 60 ms, und Bilder kommen
+// nur alle 500 ms.
+await ruhig('Video Bild für Bild');
+const lxVideo = await page.evaluate(async () => {
+  const m = await import('/media.js');
+  const ed = window._studioEditor;
+  ed.clearAll(); ed.setSize(300, 200);
+  ed.canvas.setBackgroundColor('#ffffff', () => {});
+  ed.canvas.add(new window.fabric.Text('Hi there', { left: 20, top: 60, fontSize: 30 }));
+  const l = m.addEffektRahmen(ed, 'magnifier');
+  l.set({ left: 10, top: 40, width: 280, height: 120 }); l.setCoords();
+  l.fxLens = 60; l.fxLineSec = 2; l.fxPath = 'lr';
+  const vl = document.getElementById('video-length'); const alt = vl ? vl.value : '';
+  if (vl) vl.value = 2;
+  const orig = ed.canvas.renderAll.bind(ed.canvas);
+  ed.canvas.renderAll = function () { const t = performance.now(); while (performance.now() - t < 60) {} return orig(); };
+  const oraf = window.requestAnimationFrame;
+  window.requestAnimationFrame = cb => setTimeout(() => cb(performance.now()), 500);
+  const uhren = [];
+  const merke = () => { if (m.effectsRunning()) uhren.push(m.effectsClock()); };
+  ed.canvas.on('after:render', merke);
+  let blob = null;
+  try { await m.exportVideo(ed, b => { blob = b; }); }
+  finally {
+    ed.canvas.renderAll = orig; window.requestAnimationFrame = oraf;
+    ed.canvas.off('after:render', merke); if (vl) vl.value = alt;
+  }
+  const zeiten = [...new Set(uhren)].sort((a, b) => a - b);
+  let groessterSprung = 0;
+  for (let i = 1; i < zeiten.length; i++) groessterSprung = Math.max(groessterSprung, zeiten[i] - zeiten[i - 1]);
+  let dauer = null;
+  if (blob) {
+    const v = document.createElement('video'); v.muted = true; v.src = URL.createObjectURL(blob);
+    await new Promise(r => { v.onloadeddata = r; v.onerror = r; setTimeout(r, 4000); });
+    dauer = v.duration;
+  }
+  return { bilder: zeiten.length, groessterSprung, inhalt: zeiten.length ? zeiten[zeiten.length - 1] / 1000 : 0, dauer };
+});
+pruefe('Video: jedes Bild bekommt seine eigene Zeit, kein Sprung über 1/30 s',
+  lxVideo.bilder > 20 && lxVideo.groessterSprung <= 34, JSON.stringify(lxVideo));
+pruefe('und ein langsamer Rechner dehnt das Video nicht',
+  Number.isFinite(lxVideo.dauer) && Math.abs(lxVideo.dauer - (lxVideo.inhalt + 0.4)) < 0.6, JSON.stringify(lxVideo));
+await sauber('Video Bild für Bild');
+
 // ---- Vom Post aus speichern: nicht jedes Mal nach dem Format fragen --------
 async function postSeite(url) {
   const p = await browser.newPage({ viewport: { width: 1600, height: 950 } });

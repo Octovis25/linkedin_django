@@ -57,6 +57,8 @@ let _tempo = 1;
 export function tempo() { return _tempo; }
 // True while a preview or a GIF/video recording is playing the effects.
 export function effectsRunning() { return _fxOn; }
+// The time (ms) the effects were last drawn at - for the frame-by-frame checks.
+export function effectsClock() { return _fxTime; }
 // The slider is a SPEED: left slow, right fast. Its value is a step on a
 // doubling scale - 0 as set, -2 twice as slow, +2 twice as fast - and _tempo
 // stays what the painters need: the factor every time is stretched by.
@@ -817,15 +819,62 @@ export async function exportVideo(editor, onBlob) {
   try {
     editor.setGridVisible(false);   // Raster nicht mit aufnehmen
     toFullRes(editor);
-    const stream = canvasEl.captureStream(30);
+    /* Frame by frame, like the GIF - not played in real time.
+       The video used to be the preview, filmed: play() asks the browser for
+       the next frame and takes the wall clock as the time. When the browser
+       hands out frames rarely - the tab in the background, the window behind
+       another one, a busy machine - the clock runs on between two frames and
+       the magnifier "jumps once, and that's it". Here every frame is drawn at
+       its own time (n x 1/30 s) and only then handed to the recorder, so
+       nothing can be skipped. The recorder is paused while the tab is hidden,
+       so a switch to another window leaves no frozen gap in the video, and
+       while each frame is drawn, so a slow machine does not stretch it. */
+    let stream = canvasEl.captureStream(0);
+    let spur = stream.getVideoTracks()[0];
+    // A browser without requestFrame would record nothing at all from a
+    // stream at rate 0 - there the stream films at 30 fps by itself.
+    if (!spur || typeof spur.requestFrame !== 'function') {
+      stream = canvasEl.captureStream(30);
+      spur = null;
+    }
+    const bildHolen = () => { if (spur) spur.requestFrame(); };
     const mime = MediaRecorder.isTypeSupported('video/webm;codecs=vp9') ? 'video/webm;codecs=vp9' : 'video/webm';
     const rec = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: 6_000_000 });
     rec.ondataavailable = e => { if (e.data.size) chunks.push(e.data); };
 
     const done = new Promise(res => { rec.onstop = res; });
+    const gesamt = animDuration(editor);    // reads the tempo as well
+    ensureFxHook(editor);
+    const frameMs = 1000 / 30;
+    const warteSichtbar = () => new Promise(res => {
+      const weiter = () => { if (!document.hidden) { document.removeEventListener('visibilitychange', weiter); res(); } };
+      document.addEventListener('visibilitychange', weiter);
+      weiter();
+    });
     rec.start();
-    await play(editor, animDuration(editor));
-    await new Promise(r => setTimeout(r, 400));   // letzten Frame halten
+    _fxOn = true;
+    for (let n = 0; n * frameMs <= gesamt; n++) {
+      if (document.hidden) {
+        if (rec.state === 'recording') rec.pause();
+        status('⏸ Video paused - bring this tab back to the front to go on.', '#854F0B');
+        await warteSichtbar();
+        if (rec.state === 'paused') rec.resume();
+        status('🎬 Recording video…');
+      }
+      const t = n * frameMs;
+      _fxTime = t;
+      // The recorder stamps frames with the wall clock. Paused while a frame is
+      // drawn, it only counts the 1/30 s the frame is shown - so a slow machine
+      // gives the same video, it just takes longer to make.
+      if (spur && rec.state === 'recording') rec.pause();
+      editor.canvas.getObjects().forEach(o => applyAt(o, t));
+      editor.canvas.renderAll();
+      if (spur && rec.state === 'paused') rec.resume();
+      bildHolen();
+      await new Promise(r => setTimeout(r, frameMs));
+    }
+    // Hold the last frame for a moment, so the video does not end mid-move.
+    for (let i = 0; i < 12; i++) { bildHolen(); await new Promise(r => setTimeout(r, frameMs)); }
     rec.stop();
     await done;
   } catch (e) {
@@ -836,6 +885,7 @@ export async function exportVideo(editor, onBlob) {
   } finally {
     // Without the finally, an error left the canvas at full resolution and the
     // grid invisible - the editor was broken until the page was reloaded.
+    _fxOn = false;
     resetAnim(editor);
     restoreFit(editor);
     if (editor.gridOn) editor.setGridVisible(true);
