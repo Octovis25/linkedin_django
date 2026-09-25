@@ -854,5 +854,20 @@ pruefe('the send time in the editor is a list, not the narrow browser field',
 pruefe('a post keeps a time that is not on the list', 'peSetzeZeit(p.time);' in LISTE_T
        and 'o.dataset.extra' in LISTE_T)
 
+print('\n=== Scrolling on through the months (25.09.) ===')
+ANSICHT5 = herausschneiden('kalender_view')
+pruefe('without ?m= this year opens from the current month on',
+       'ab_monat = date.today().month' in ANSICHT5 and "'ab_monat': ab_monat" in ANSICHT5)
+pruefe('another year still opens whole', "monat = 0\n        if jahr == date.today().year:" in ANSICHT5)
+pruefe('the page knows where "from ... on" starts',
+       'data-ab="{{ ab_monat }}"' in VORLAGE and '<option value="-1">From {{ ab_monat_name }} on</option>' in VORLAGE)
+pruefe('the filter shows that month and every later one',
+       "(monat === -1 && +z.dataset.monat >= AB_MONAT)" in VORLAGE)
+pruefe('the arrows step on from there', 'monat === -1 ? AB_MONAT + 1' in VORLAGE and 'monat === -1 ? AB_MONAT - 1' in VORLAGE)
+pruefe('every month has a soft ground of its own',
+       all('.kal-monat[data-monat="%d"]' % m in VORLAGE for m in range(1, 13)))
+pruefe('rows shade the ground instead of covering it',
+       '.kal-zeile.we { background:rgba(' in VORLAGE and '.kal-zeile:hover { background:rgba(' in VORLAGE)
+
 print('\n%d ok, %d failed' % (gut, schlecht))
 sys.exit(1 if schlecht else 0)

@@ -50,9 +50,19 @@
 
   .kal-zeile { padding:2px 12px 2px 0; border-bottom:1px solid #EFECE2;
                font-size:12.5px; line-height:1.45; min-height:25px; }
-  .kal-zeile:hover { background:#F9F7F0; }
-  .kal-zeile.we { background:#FBFAF3; }
-  .kal-zeile.we:hover { background:#F4F1E6; }
+  /* Each month has its own soft ground, four in turn, so where one ends and
+     the next begins shows while scrolling (Ortrud, 25.09.2026). Rows lay a
+     thin shade over it instead of a colour of their own, so weekends and
+     hover still show on every ground. */
+  .kal-monat { background:var(--m-grund, #fff); }
+  .kal-monat .kal-mkopf { background:var(--m-kopf, #F9F7F0); }
+  .kal-monat[data-monat="1"], .kal-monat[data-monat="5"], .kal-monat[data-monat="9"]  { --m-grund:#F3F9F8; --m-kopf:#E2F0EE; }
+  .kal-monat[data-monat="2"], .kal-monat[data-monat="6"], .kal-monat[data-monat="10"] { --m-grund:#FBF7EE; --m-kopf:#F2E9D6; }
+  .kal-monat[data-monat="3"], .kal-monat[data-monat="7"], .kal-monat[data-monat="11"] { --m-grund:#F3F6FA; --m-kopf:#E2E9F2; }
+  .kal-monat[data-monat="4"], .kal-monat[data-monat="8"], .kal-monat[data-monat="12"] { --m-grund:#FCF4EF; --m-kopf:#F5E3D8; }
+  .kal-zeile:hover { background:rgba(80,70,40,.06); }
+  .kal-zeile.we { background:rgba(120,100,50,.035); }
+  .kal-zeile.we:hover { background:rgba(80,70,40,.08); }
   .kal-zeile.heute .kal-datum b { background:var(--octo-petrol); color:#fff;
                                   border-radius:3px; padding:0 4px; }
 
@@ -234,7 +244,8 @@
     <a class="pfeil" href="{{ basis }}{{ folgejahr }}/" title="{{ folgejahr }}">&rsaquo;</a>
 
     <button class="pfeil" id="kal-monat-zurueck" title="Previous month">&lsaquo;</button>
-    <select id="kal-monat" aria-label="Month" data-start="{{ monat }}">
+    <select id="kal-monat" aria-label="Month" data-start="{% if ab_monat %}-1{% else %}{{ monat }}{% endif %}" data-ab="{{ ab_monat }}">
+      {% if ab_monat %}<option value="-1">From {{ ab_monat_name }} on</option>{% endif %}
       <option value="0">All months</option>
       {% for m in monatsnamen %}<option value="{{ forloop.counter }}"{% if forloop.counter == monat %} selected{% endif %}>{{ m }}</option>{% endfor %}
     </select>
@@ -513,13 +524,17 @@
   });
 
   /* ---------- month and state filter ---------- */
+  // monat: 1..12 one month, 0 all of them, -1 from AB_MONAT on (the default
+  // in the current year: this month, and the ones after it below).
   var monat = 0, zustand = 'alle';
+  var AB_MONAT = +(document.getElementById('kal-monat').dataset.ab || 0);
 
   function filtern() {
     var zeilen = document.querySelectorAll('.kal-zeile');
     for (var i = 0; i < zeilen.length; i++) {
       var z = zeilen[i];
-      var z1 = monat === 0 || +z.dataset.monat === monat;
+      var z1 = monat === 0 || +z.dataset.monat === monat
+            || (monat === -1 && +z.dataset.monat >= AB_MONAT);
       var z2 = zustand === 'alle'
             || (zustand === 'voll' && z.dataset.zustand !== 'none')
             || (zustand === 'offen' && z.dataset.zustand === 'open');
@@ -548,11 +563,12 @@
 
   monatsWahl.onchange = function () { monat = +this.value; filtern(); };
   // From "All months" the arrows start at either end rather than doing nothing.
+  // From "from ... on" they step from that month.
   document.getElementById('kal-monat-vor').onclick = function () {
-    monatSetzen(monat === 0 ? 1 : monat + 1);
+    monatSetzen(monat === 0 ? 1 : monat === -1 ? AB_MONAT + 1 : monat + 1);
   };
   document.getElementById('kal-monat-zurueck').onclick = function () {
-    monatSetzen(monat === 0 ? 12 : monat - 1);
+    monatSetzen(monat === 0 ? 12 : monat === -1 ? AB_MONAT - 1 : monat - 1);
   };
   document.getElementById('kal-filter').addEventListener('click', function (e) {
     var b = e.target.closest('button[data-f]');
@@ -713,7 +729,7 @@
   // Which month to open on is the server's decision now (?m=, else the
   // current month in the current year), so the answer survives a reload and
   // can be linked to.
-  monat = +(monatsWahl.dataset.start || 0);
+  monat = +(monatsWahl.dataset.start || 0);  // -1: from this month on
   monatsWahl.value = String(monat);
   filtern();
 })();

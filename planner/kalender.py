@@ -691,10 +691,14 @@ def kalender_view(request, jahr=None, nur_oj=False):
         monat = int(request.GET.get('m') or 0)
     except (TypeError, ValueError):
         monat = 0
+    ab_monat = 0
     if not 1 <= monat <= 12:
-        # No month asked for: the current one when we are looking at this year,
-        # otherwise the whole year at once.
-        monat = date.today().month if jahr == date.today().year else 0
+        # No month asked for. This year: from the current month on, the months
+        # after it below - one scroll down instead of paging (Ortrud,
+        # 25.09.2026). Another year: the whole year at once.
+        monat = 0
+        if jahr == date.today().year:
+            ab_monat = date.today().month
 
     tage = jahres_tage(jahr, nur_oj)
     monate = []
@@ -725,6 +729,8 @@ def kalender_view(request, jahr=None, nur_oj=False):
         'jahr': jahr, 'vorjahr': jahr - 1, 'folgejahr': jahr + 1,
         'monate': monate,
         'monat': monat,
+        'ab_monat': ab_monat,
+        'ab_monat_name': MONATE[ab_monat - 1] if ab_monat else '',
         'ohne_datum': ohne_datum,
         'ohne_datum_raus': [p for p in ohne_datum if p['gruppe'] == 'raus'],
         'ohne_datum_offen': [p for p in ohne_datum if p['gruppe'] == 'offen'],
