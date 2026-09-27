@@ -2339,6 +2339,121 @@ await gifSeite.close();
 pruefe('GIF: gleiche Bilder hintereinander werden eins (3 s, 0,4 s Bewegung)', pbF.ok && pbF.bilder > 2 && pbF.bilder < 15, JSON.stringify(pbF));
 await sauber('Paket B2');
 
+// ---- Sechseck-Muster (Build → Hexagon pattern) -----------------------------
+// Ortrud, 27.09.2026: die Sechsecke am Rand der Vorlage per Knopf in die Ecken
+// legen oder wie mit einem Stempel setzen.
+await ruhig('Sechsecke');
+await page.click('#mode-rail [data-mode="build"]');
+const hxA = await page.evaluate(async () => {
+  const ed = window._studioEditor;
+  const warte = ms => new Promise(r => setTimeout(r, ms));
+  ed.clearAll(); ed.setSize(1080, 1080);
+  ed.canvas.setBackgroundColor('#008591', () => {});
+  ed.canvas.add(new fabric.Text('Main Headline', { left: 100, top: 200, fontSize: 50, fill: '#61CEBC' }));
+  ed.snapshot();
+  const da = !!document.querySelector('[data-act="hex-ecken"]') && !!document.getElementById('hex-farben')?.children.length
+    && document.getElementById('hex-groesse-out')?.textContent === '216 px';
+  document.querySelector('[data-act="hex-ecken"]').click();
+  await warte(100);
+  const objs = ed.canvas.getObjects();
+  const hexe = objs.filter(o => o.hexDeko);
+  const hinten = hexe.every(h => objs.indexOf(h) < objs.findIndex(o => o.type === 'text'));
+  const farbe = hexe[0]?.stroke;
+  const ecken = hexe.map(h => (h.left > 540 ? 'r' : 'l') + (h.top > 540 ? 'u' : 'o'));
+  // again: a new arrangement, not twice as many
+  document.querySelector('[data-act="hex-ecken"]').click();
+  await warte(100);
+  const nochmal = ed.canvas.getObjects().filter(o => o.hexDeko).length;
+  // all four corners
+  document.querySelector('#hex-ecken-art [data-v="alle"]').click();
+  document.querySelector('[data-act="hex-ecken"]').click();
+  await warte(100);
+  const vier = ed.canvas.getObjects().filter(o => o.hexDeko).length;
+  // layer name and one motion row
+  const ebene = [...document.querySelectorAll('#layers-list .layer-name')].some(n => n.textContent === '⬡ Hexagon');
+  const zeilen = document.querySelectorAll('#anim-bar .hex-row').length;
+  const motionZeilen = document.querySelectorAll('#anim-bar .anim-group[data-group="motion"] .anim-row').length;
+  return { da, n: hexe.length, hinten, farbe, ecken: [...new Set(ecken)].sort().join(','), nochmal, vier, ebene, zeilen, motionZeilen };
+});
+pruefe('Build hat den Bereich Hexagon pattern mit Farben', hxA.da, JSON.stringify(hxA));
+pruefe('Corners legt drei Sechsecke je Ecke, oben rechts und unten links', hxA.n === 6 && hxA.ecken === 'lu,ro', JSON.stringify(hxA));
+pruefe('die Sechsecke liegen hinter dem Text', hxA.hinten);
+pruefe('Farbe auto: ein Hauch heller als der Grund', /^#0a8f9a$|^#0f8f9a$|^#0f8e99$|^#0f8f99$/.test(hxA.farbe || '') || (hxA.farbe || '').startsWith('#0') , hxA.farbe);
+pruefe('noch einmal Corners: neue Anordnung statt doppelt so viele', hxA.nochmal === 6, hxA.nochmal);
+pruefe('alle vier Ecken: zwölf Sechsecke', hxA.vier === 12, hxA.vier);
+pruefe('in den Ebenen heißen sie „⬡ Hexagon“', hxA.ebene);
+pruefe('in der Animationsleiste EINE Zeile für das ganze Muster', hxA.zeilen === 1 && hxA.motionZeilen === 2, JSON.stringify(hxA));
+
+const hxB = await page.evaluate(async () => {
+  const ed = window._studioEditor;
+  const warte = ms => new Promise(r => setTimeout(r, ms));
+  document.querySelector('[data-act="hex-weg"]').click();
+  await warte(50);
+  const leer = ed.canvas.getObjects().filter(o => o.hexDeko).length;
+  // stamp: a click sets one, Shift+click a bigger one, Alt+click removes one
+  document.querySelector('[data-act="hex-stempel"]').click();
+  const an = document.getElementById('hex-stempel-btn').classList.contains('on') && ed.canvas.skipTargetFind === true;
+  const klick = (x, y, mods = {}) => {
+    const r = ed.canvas.upperCanvasEl.getBoundingClientRect(), z = r.width / ed.width;
+    const opt = { clientX: r.left + x * z, clientY: r.top + y * z, bubbles: true, button: 0, ...mods };
+    ed.canvas.upperCanvasEl.dispatchEvent(new MouseEvent('mousedown', opt));
+    ed.canvas.upperCanvasEl.dispatchEvent(new MouseEvent('mouseup', opt));
+  };
+  klick(500, 600);
+  klick(800, 800, { shiftKey: true });
+  await warte(50);
+  const hx = ed.canvas.getObjects().filter(o => o.hexDeko);
+  const groesser = hx.length === 2 && hx.find(h => h.left > 700).hexR > hx.find(h => h.left < 700).hexR * 1.4;
+  const lage = hx.find(h => h.left < 700);
+  const ort = lage && Math.abs(lage.left - 500) < 3 && Math.abs(lage.top - 600) < 3;
+  klick(502, 598, { altKey: true });
+  await warte(50);
+  const nachAlt = ed.canvas.getObjects().filter(o => o.hexDeko).length;
+  document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+  const aus = !document.getElementById('hex-stempel-btn').classList.contains('on') && ed.canvas.skipTargetFind === false;
+  // undo brings the removed one back
+  ed.undo(); await warte(300);
+  const nachUndo = ed.canvas.getObjects().filter(o => o.hexDeko).length;
+  return { leer, an, groesser, ort, nachAlt, aus, nachUndo };
+});
+pruefe('Remove all nimmt alle Sechsecke weg', hxB.leer === 0, JSON.stringify(hxB));
+pruefe('Stamp: Klick setzt eins genau dort, Shift+Klick ein größeres', hxB.an && hxB.ort && hxB.groesser, JSON.stringify(hxB));
+pruefe('Alt+Klick entfernt eins, Esc beendet', hxB.nachAlt === 1 && hxB.aus, JSON.stringify(hxB));
+pruefe('Undo holt das entfernte zurück', hxB.nachUndo === 2, JSON.stringify(hxB));
+
+const hxC = await page.evaluate(async () => {
+  const ed = window._studioEditor;
+  const warte = ms => new Promise(r => setTimeout(r, ms));
+  const h = ed.canvas.getObjects().find(o => o.hexDeko);
+  ed.canvas.setActiveObject(h);
+  ed.canvas.fire('selection:created', { selected: [h] });
+  // settings change the selected hexagon
+  document.querySelector('#hex-fuell [data-v="ja"]').click();
+  const gefuellt = !!h.fill && !h.stroke;
+  const deck = document.getElementById('hex-deck'); deck.value = 40; deck.dispatchEvent(new Event('input'));
+  const r0 = h.getScaledWidth();
+  const gr = document.getElementById('hex-groesse'); gr.value = 120; gr.dispatchEvent(new Event('input'));
+  // slider 120 → radius 120 x 1.8 = 216 px on a 1080 canvas, whatever it was before
+  const groesser = Math.abs(h.hexR * h.scaleX - 216) < 1 && h.getScaledWidth() > r0;
+  // a new ground colour: the auto hexagon follows
+  document.querySelector('#hex-fuell [data-v="nein"]').click();
+  ed.canvas.discardActiveObject();
+  const vorher = h.stroke;
+  const pick = document.getElementById('bg-color'); pick.value = '#fbf8f0'; pick.dispatchEvent(new Event('input'));
+  const nachher = h.stroke;
+  const dunkler = parseInt(nachher.slice(1, 3), 16) < 0xfb;
+  // saved with the drawing
+  const io = await import('/io.js');
+  const json = JSON.parse(io.buildCanvasJson(ed, ''));
+  const gespeichert = json.fabric.objects.filter(o => o.hexDeko).length;
+  return { gefuellt, deck: h.opacity, groesser, vorher, nachher, dunkler, gespeichert };
+});
+pruefe('die Einstellungen ändern das gewählte Sechseck (gefüllt, sichtbar, Größe)',
+  hxC.gefuellt && Math.abs(hxC.deck - 0.4) < 0.01 && hxC.groesser, JSON.stringify(hxC));
+pruefe('neue Grundfarbe: auto-Sechsecke ziehen mit (auf Creme etwas dunkler)', hxC.vorher !== hxC.nachher && hxC.dunkler, JSON.stringify(hxC));
+pruefe('die Sechsecke werden mit der Zeichnung gespeichert', hxC.gespeichert === 2, JSON.stringify(hxC));
+await sauber('Sechsecke');
+
 // ---- Video Bild für Bild: auch auf einem langsamen Rechner nichts überspringen --
 // Ortrud: "im fertigen Video bewegt sich die Lupe nicht - sie springt einmal,
 // und das war's". Das Video war die gefilmte Vorschau: Zeit = Wanduhr. Gab der

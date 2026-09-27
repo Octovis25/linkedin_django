@@ -30,6 +30,7 @@ export const EXTRA_PROPS = [
   'spotBewegung', 'spotRahmen', 'spotReihe', 'spotPause', 'spotEnde',
   'tbHead', 'tbBody', 'tbWidth', 'tbSize', 'tbAlign', 'tbCheck', 'tbColor',
   'clItems', 'clWidth', 'clSize', 'clColor',
+  'hexDeko', 'hexEcke', 'hexAuto', 'hexR', 'hexFuell', 'hexLinie', 'hexFolge',
 ];
 
 // The six corners of a hexagon with its point at the top, radius r, round (0,0).

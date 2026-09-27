@@ -84,6 +84,17 @@ function renderItem(it) {
         + attr('min', it.min) + attr('max', it.max) + attr('step', it.step)
         + attr('value', it.value) + attr('title', it.title) + '>';
 
+    // A choice of a few, as a row of buttons (like the ones in the animation
+    // bar). The handler finds the value in data-v; the chosen one has "on".
+    case 'seg':
+      return `<span class="qweb-seg ctl-seg"` + attr('id', it.id) + '>'
+        + it.opts.map(o => `<button type="button"${attr('data-v', o.v)}${attr('title', o.title)}`
+                           + `${o.on ? ' class="on"' : ''}>${esc(o.l)}</button>`).join('')
+        + '</span>';
+
+    case 'readout':  // a read-out next to a slider
+      return `<span class="ctl-out"${attr('id', it.id)}></span>`;
+
     case 'check':
       return `<label class="check">${renderItem({ t: 'raw', html: `<input type="checkbox"${attr('id', it.id)}>` })}`
         + `<span>${esc(it.label)}</span></label>`;
@@ -180,6 +191,56 @@ export const PANELS = {
       { t: 'mount', id: 'bg-info', cls: 'bg-info' },
       { t: 'btn', act: 'clear-all', cls: 'danger', wide: true, icon: '🧹', label: 'Clear canvas',
         title: 'Remove every element from the canvas' },
+    ]},
+
+    // Hexagon outlines as in the Octotrial templates - laid into the corners,
+    // or stamped on one by one. Each one stays an element of its own.
+    { id: 'pattern', title: 'Hexagon pattern', items: [
+      { t: 'row', items: [
+        { t: 'btn', act: 'hex-ecken', cls: 'primary', icon: '⬡', label: 'Corners',
+          title: 'A few hexagons into the corners, like the template - click again for another arrangement' },
+        { t: 'btn', act: 'hex-stempel', id: 'hex-stempel-btn', icon: '🖈', label: 'Stamp',
+          title: 'Every click on the picture sets one hexagon. Esc ends.' },
+        { t: 'btn', act: 'hex-weg', cls: 'danger', icon: '✕', label: 'Remove all',
+          title: 'Removes every hexagon of the pattern' },
+      ]},
+      { t: 'row', items: [
+        { t: 'label', text: 'Corners' },
+        { t: 'seg', id: 'hex-ecken-art', opts: [
+          { v: 'tr-bl', l: '↗ ↙', on: true, title: 'Top right and bottom left' },
+          { v: 'tl-br', l: '↖ ↘', title: 'Top left and bottom right' },
+          { v: 'alle', l: 'all four' }] },
+      ]},
+      { t: 'row', items: [
+        { t: 'label', text: 'Size' },
+        { t: 'range', id: 'hex-groesse', min: 20, max: 160, step: 5, value: 60,
+          title: 'Size of the next hexagons - and of the selected ones' },
+        { t: 'readout', id: 'hex-groesse-out' },
+      ]},
+      { t: 'row', items: [
+        { t: 'label', text: 'Tilt' },
+        { t: 'seg', id: 'hex-kipp', opts: [{ v: 'gerade', l: 'Straight' }, { v: 'zufall', l: 'A little', on: true }] },
+      ]},
+      { t: 'row', items: [
+        { t: 'label', text: 'Line' },
+        { t: 'seg', id: 'hex-linie', opts: [{ v: '1.5', l: 'Thin' }, { v: '2.5', l: 'Normal', on: true }, { v: '4', l: 'Bold' }] },
+      ]},
+      { t: 'row', items: [
+        { t: 'label', text: 'Colour' },
+        { t: 'mount', id: 'hex-farben', cls: 'fx-swatches' },
+      ]},
+      { t: 'row', items: [
+        { t: 'label', text: 'Visible' },
+        { t: 'range', id: 'hex-deck', min: 10, max: 100, step: 5, value: 100, title: 'How strongly the hexagons show' },
+        { t: 'readout', id: 'hex-deck-out' },
+      ]},
+      { t: 'row', items: [
+        { t: 'label', text: 'Filled' },
+        { t: 'seg', id: 'hex-fuell', opts: [{ v: 'nein', l: 'Outline', on: true }, { v: 'ja', l: 'Filled' }] },
+      ]},
+      { t: 'hint', html: '<b>auto</b> = a touch lighter than the ground (darker on a light one). '
+        + 'Hexagons sit behind everything. Stamp: click sets one · Shift+click bigger · '
+        + 'Alt+click removes one · Esc ends. The settings also change the selected hexagons.' },
     ]},
 
   ],

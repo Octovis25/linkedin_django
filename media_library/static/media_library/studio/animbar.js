@@ -8,6 +8,7 @@
 import * as media from './media.js';
 import * as bg from './background.js';
 import { modal, hexNorm } from './util.js';
+import { fabric } from './editor.js';
 
 let editor = null;
 let S = {};     // netzVon, netzAktualisieren, netzEinstellen, frageDazu, frageZeichenFuer,
@@ -57,6 +58,7 @@ export function layerLabel(o, i) {
   if (o.type === 'image')   return '🖼 Image ' + i;
   if (o.shapeKind === 'textblock') return '📝 ' + (o.tbHead || o.tbBody || 'Text block').slice(0, 14);
   if (o.type === 'textbox') return '✏️ ' + (o.text || 'Text').slice(0, 14);
+  if (o.hexDeko)            return '⬡ Hexagon';
   if (o.svgPart)            return '📐 SVG part ' + o.svgPart;
   if (o.shapeKind)          return '🔷 Shape ' + i;
   return 'Element ' + i;
@@ -293,6 +295,58 @@ function motionZeile(o, idx) {
   col.appendChild(selRow);
   col.appendChild(zeitRegler(o, false));
   row.appendChild(th); row.appendChild(col);
+  return row;
+}
+
+// All hexagons of the pattern share ONE row: a pattern of twelve would
+// otherwise fill the Motion group with twelve identical rows. Motion, speed
+// and start apply to all of them; "In turn" staggers their starts.
+function musterZeile(hexe) {
+  const e = hexe[0];
+  const row = el('div', 'anim-row hex-row');
+  const th = el('div', 'anim-thumb fx-thumb', '⬡');
+  th.title = 'Select all hexagons';
+  th.onclick = () => {
+    editor.canvas.setActiveObject(new fabric.ActiveSelection(hexe, { canvas: editor.canvas }));
+    editor.canvas.requestRenderAll();
+  };
+  const col = el('div', 'anim-col');
+  const selRow = el('label', 'anim-ctl');
+  selRow.innerHTML = '<span>Motion</span>';
+  const sel = el('select', 'field hex-motion');
+  media.ANIM_TYPES.forEach(t => {
+    const op = el('option', null, media.ANIM_LABELS[t] || t); op.value = t;
+    if ((e.anim?.type || 'none') === t) op.selected = true;
+    sel.appendChild(op);
+  });
+  const starts = () => {
+    const basis = media.startOf(e), folge = e.hexFolge === 'reihe';
+    hexe.forEach((o, i) => media.setStart(o, basis + (folge ? i * 250 : 0)));
+  };
+  sel.onchange = () => {
+    const t = sel.value;
+    hexe.forEach(o => { o.anim = (t && t !== 'none') ? { type: t, dur: e.anim?.dur || 1200 } : null; });
+    starts();
+    editor.snapshot();
+  };
+  selRow.append(sel, el('span', 'anim-name', '⬡ Hexagon pattern (' + hexe.length + ')'));
+  col.appendChild(selRow);
+  segmente(col, 'Together', 'hexFolge', 'qweb-seg hex-folge',
+           [['zusammen', 'All at once'], ['reihe', 'In turn']],
+           wert => (e.hexFolge || 'zusammen') === wert,
+           wert => { hexe.forEach(o => { o.hexFolge = wert; }); starts(); editor.snapshot(); renderAnimBar(); });
+  const zeit = el('div', 'anim-ctl anim-time');
+  const durWrap = feld('Speed');
+  const dur = schieber('', 300, 4000, 100, 4300 - (e.anim?.dur || 1200), 'Speed - left slow, right fast');
+  dur.oninput = () => hexe.forEach(o => { if (o.anim) o.anim.dur = 4300 - +dur.value; });
+  schnecke(durWrap, dur);
+  const startWrap = feld('Start');
+  const start = schieber('', 0, 3000, 100, media.startOf(e), 'When the pattern begins');
+  start.oninput = () => { media.setStart(e, start.value); starts(); };
+  startWrap.appendChild(start);
+  zeit.append(durWrap, startWrap);
+  col.appendChild(zeit);
+  row.append(th, col);
   return row;
 }
 
@@ -571,18 +625,21 @@ export function renderAnimBar() {
   head.appendChild(prevTop);
   bar.appendChild(head);
 
-  const elemente = [], rahmen = [];
+  const elemente = [], rahmen = [], hexe = [];
   objs.forEach((o, idx) => {
     if (media.istFrageKnoten(o)) return;          // a question web has a row of its own
     if (media.istSpot(o)) return;                 // so has a spotlight
+    if (o.hexDeko) { hexe.push(o); return; }      // and the hexagon pattern one for all
     (media.istEffektRahmen(o) ? rahmen : elemente).push([o, idx]);
   });
   const netze = [...media.fragenNetze(editor).values()];
   const spots = [...media.spotGruppen(editor).values()];
 
   const gm = animGruppe('motion', 'Motion', 'what each element does',
-                        elemente.length + (elemente.length === 1 ? ' element' : ' elements'));
-  if (!elemente.length) {
+                        elemente.length + (elemente.length === 1 ? ' element' : ' elements')
+                        + (hexe.length ? ' · hexagon pattern' : ''));
+  if (hexe.length) gm.appendChild(musterZeile(hexe));
+  if (!elemente.length && !hexe.length) {
     const h = document.createElement('span'); h.className = 'hint'; h.textContent = 'No elements yet.';
     gm.appendChild(h);
   }

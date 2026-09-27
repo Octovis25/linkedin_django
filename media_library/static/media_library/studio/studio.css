@@ -503,3 +503,9 @@ main:has(.studio-wrap) { max-width:none; padding:0 1rem; margin-top:.5rem; }
 .fx-size-row input[type=range] { flex:1; min-width:0; }
 .fx-size-out            { min-width:38px; text-align:right; font-size:.7rem; color:#555;
                           font-variant-numeric:tabular-nums; }
+
+/* Hexagon pattern (Build): button segments and read-outs in the side panel */
+.ctl-seg                { display:inline-flex; gap:3px; flex-wrap:wrap; }
+.ctl-out                { font-size:.68rem; color:var(--st-muted); min-width:34px; }
+.ctl-row .tl-slider     { flex:1 1 90px; min-width:70px; }
+.tbtn.on                { background:#e4f3f1; border-color:var(--octo-petrol,#008591); font-weight:700; }

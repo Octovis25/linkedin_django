@@ -9,6 +9,7 @@ import * as media from './media.js';
 import { fabric, hexPoints } from './editor.js';
 import { toast, status, modal, wegDamit, hexNorm } from './util.js';
 import { renderLayers, renderAnimBar } from './animbar.js';
+import * as bg from './background.js';
 
 let editor = null;
 let formFarbe = () => '#F56E28';     // the palette colour for new shapes, read when needed
@@ -928,9 +929,297 @@ export function markenGroesse() {
   return v > 0 ? v / 100 : 1;
 }
 
+/* ---- Hexagon pattern ------------------------------------------------------
+   Hexagon outlines as in the Octotrial templates: "Corners" lays a loose
+   cluster into two (or four) corners, "Stamp" sets one per click. Each is a
+   plain element (fabric.Polygon, hexDeko: true) right at the back, so it can
+   be dragged, sized, deleted and animated like any other. The settings in
+   Build → Hexagon pattern apply to the next ones and to the selected ones.
+   Colour "auto" is the ground a touch lighter (darker on a light ground) -
+   the template's lines are #0a949a on #008591. */
+export const istHex = o => !!(o && o.hexDeko);
+const _hexWahl = { ecken: 'tr-bl', kipp: 'zufall', linie: 2.5, fuell: 'nein', farbe: 'auto' };
+let _hexStempel = null;   // pick mode: { cursor }
+
+function hexEinstellung() {
+  const zahl = (id, std) => { const v = +document.getElementById(id)?.value; return v > 0 ? v : std; };
+  return { ..._hexWahl, groesse: zahl('hex-groesse', 60), deck: zahl('hex-deck', 100) };
+}
+// Radius in picture pixels: the slider is the same on every canvas size.
+const hexRadius = (groesse, faktor = 1) => groesse * 1.8 * faktor * Math.min(editor.width, editor.height) / 1080;
+
+// The colour of the ground at (x, y): the background image if there is one,
+// otherwise the background colour.
+let _grundBild = null;   // { quelle, w, h, ctx }
+function grundBei(x, y) {
+  const cv = editor.canvas, W = editor.width, H = editor.height;
+  const bild = cv.backgroundImage;
+  if (bild && bild.render) {
+    if (!_grundBild || _grundBild.quelle !== bild || _grundBild.w !== W || _grundBild.h !== H) {
+      const c = document.createElement('canvas'); c.width = W; c.height = H;
+      const ctx = c.getContext('2d', { willReadFrequently: true });
+      if (typeof cv.backgroundColor === 'string' && cv.backgroundColor) { ctx.fillStyle = cv.backgroundColor; ctx.fillRect(0, 0, W, H); }
+      try { bild.render(ctx); } catch (e) { /* not drawable - the colour stays */ }
+      _grundBild = { quelle: bild, w: W, h: H, ctx };
+    }
+    try {
+      const d = _grundBild.ctx.getImageData(Math.min(W - 1, Math.max(0, Math.round(x))), Math.min(H - 1, Math.max(0, Math.round(y))), 1, 1).data;
+      if (d[3] > 20) return [d[0], d[1], d[2]];
+    } catch (e) { /* tainted - fall through to the colour */ }
+  }
+  const f = typeof cv.backgroundColor === 'string' && cv.backgroundColor ? cv.backgroundColor : '#ffffff';
+  const m = /^#?([0-9a-f]{6})$/i.exec(hexNorm(f));
+  if (!m) return [255, 255, 255];
+  const n = parseInt(m[1], 16);
+  return [n >> 16, (n >> 8) & 255, n & 255];
+}
+function autoFarbe(x, y) {
+  const [r, g, b] = grundBei(x, y);
+  const hell = (0.299 * r + 0.587 * g + 0.114 * b) / 255 > 0.6;
+  const k = hell ? -0.08 : 0.06;           // on cream a shade darker, on teal a shade lighter
+  const f = v => Math.round(k > 0 ? v + (255 - v) * k : v * (1 + k));
+  return '#' + [r, g, b].map(v => f(v).toString(16).padStart(2, '0')).join('');
+}
+
+function hexAussehen(o, e) {
+  const farbe = e.farbe === 'auto' ? autoFarbe(o.left, o.top) : e.farbe;
+  const s = Math.min(editor.width, editor.height) / 1080;
+  const voll = e.fuell === 'ja';
+  o.set({ fill: voll ? farbe : '', stroke: voll ? '' : farbe, strokeWidth: voll ? 0 : e.linie * 2 * s,
+          opacity: e.deck / 100 });
+  o.hexAuto = e.farbe === 'auto';
+  o.hexFuell = e.fuell;
+  o.hexLinie = e.linie;
+}
+
+function neuesHex(x, y, e, faktor = 1) {
+  const r = hexRadius(e.groesse, faktor);
+  const o = new fabric.Polygon(hexPoints(r), {
+    left: x, top: y, originX: 'center', originY: 'center',
+    angle: e.kipp === 'zufall' ? (Math.random() - 0.5) * 28 : 0,
+    strokeUniform: true, strokeLineJoin: 'round',
+    shapeKind: 'hexdeko', hexDeko: true, hexR: r,
+  });
+  hexAussehen(o, e);
+  return o;
+}
+// Right at the back - behind text, images and every other shape.
+function nachHinten(liste) {
+  liste.slice().reverse().forEach(o => editor.canvas.sendToBack(o));
+}
+
+export function hexEcken() {
+  const e = hexEinstellung();
+  const W = editor.width, H = editor.height;
+  editor.canvas.getObjects().filter(o => o.hexEcke).forEach(o => editor.canvas.remove(o));
+  const plaetze = { 'tr-bl': ['tr', 'bl'], 'tl-br': ['tl', 'br'], alle: ['tr', 'bl', 'tl', 'br'] }[e.ecken] || ['tr', 'bl'];
+  const z = (a, b) => a + Math.random() * (b - a);
+  // As in the template: a big one half beyond the edge, a middle one beside
+  // it, a small one further out - with a little play every time.
+  const muster = [[0.07, 0.13, 0.15], [0.26, 0.10, 0.075], [0.40, 0.035, 0.035]];
+  const k = e.groesse / 60, M = Math.min(W, H);
+  const neu = [];
+  plaetze.forEach(p => {
+    const rechts = p.includes('r'), unten = p.includes('b');
+    muster.forEach(([mx, my, mr]) => {
+      const [ax, ay] = unten ? [my, mx] : [mx, my];      // at the bottom the cluster runs up the side
+      const x = (rechts ? W - ax * M * k : ax * M * k) + z(-0.02, 0.02) * M;
+      const y = (unten ? H - ay * M * k : ay * M * k) + z(-0.02, 0.02) * M;
+      const o = neuesHex(x, y, e, mr * 10 * z(0.9, 1.1));   // radius = mr x the shorter side at size 60
+      o.hexEcke = true;
+      editor.canvas.add(o);
+      neu.push(o);
+    });
+  });
+  nachHinten(neu);
+  editor.canvas.discardActiveObject();
+  editor.canvas.requestRenderAll();
+  editor.snapshot();
+  renderLayers(); renderAnimBar();
+  status('⬡ ' + neu.length + ' hexagons in the corners – click again for another arrangement.', '#198754');
+  return neu;
+}
+
+export function hexAlleWeg() {
+  const weg = editor.canvas.getObjects().filter(istHex);
+  if (!weg.length) { toast('No hexagons on the picture.'); return 0; }
+  weg.forEach(o => editor.canvas.remove(o));
+  editor.canvas.discardActiveObject();
+  editor.canvas.requestRenderAll();
+  editor.snapshot();
+  renderLayers(); renderAnimBar();
+  status(weg.length + ' hexagon(s) removed.', '#198754');
+  return weg.length;
+}
+
+// Auto-coloured hexagons follow a new ground colour or background image.
+export function hexFarbenNachziehen() {
+  _grundBild = null;
+  let n = 0;
+  editor.canvas.getObjects().filter(o => istHex(o) && o.hexAuto).forEach(o => {
+    const f = autoFarbe(o.left, o.top);
+    o.set(o.hexFuell === 'ja' ? { fill: f } : { stroke: f });
+    n++;
+  });
+  if (n) editor.canvas.requestRenderAll();
+  return n;
+}
+
+// ---- Stamp: every click sets one ------------------------------------------
+export function hexStempel(an = !_hexStempel) {
+  const cv = editor.canvas;
+  const knopf = document.getElementById('hex-stempel-btn');
+  if (an && !_hexStempel) {
+    _hexStempel = { cursor: [cv.defaultCursor, cv.hoverCursor] };
+    cv.discardActiveObject();
+    cv.skipTargetFind = true; cv.selection = false;
+    cv.defaultCursor = 'crosshair'; cv.hoverCursor = 'crosshair';
+    knopf?.classList.add('on');
+    status('🖈 Stamp: click on the picture. Shift+click bigger, Alt+click removes one, Esc ends.');
+  } else if (!an && _hexStempel) {
+    [cv.defaultCursor, cv.hoverCursor] = _hexStempel.cursor;
+    _hexStempel = null;
+    cv.skipTargetFind = false; cv.selection = true;
+    cv.clearContext(cv.contextTop);
+    knopf?.classList.remove('on');
+    status('Stamp ended.');
+  }
+  cv.requestRenderAll();
+  return !!_hexStempel;
+}
+// The next hexagon, dashed, where the pointer is (on the top layer only).
+function hexGeist(p, groesser) {
+  const cv = editor.canvas, ctx = cv.contextTop;
+  cv.clearContext(ctx);
+  if (!p) return;
+  const v = cv.viewportTransform, rs = cv.getRetinaScaling ? cv.getRetinaScaling() : 1;
+  const r = hexRadius(hexEinstellung().groesse, groesser ? 1.6 : 1);
+  ctx.save();
+  ctx.setTransform(v[0] * rs, v[1] * rs, v[2] * rs, v[3] * rs, v[4] * rs, v[5] * rs);
+  ctx.beginPath();
+  hexPoints(r).forEach((q, i) => (i ? ctx.lineTo(p.x + q.x, p.y + q.y) : ctx.moveTo(p.x + q.x, p.y + q.y)));
+  ctx.closePath();
+  ctx.setLineDash([8 / (cv.getZoom() || 1), 6 / (cv.getZoom() || 1)]);
+  ctx.lineWidth = 2 / (cv.getZoom() || 1);
+  ctx.strokeStyle = 'rgba(255,255,255,0.85)'; ctx.stroke();
+  ctx.strokeStyle = 'rgba(0,0,0,0.35)'; ctx.lineDashOffset = 7 / (cv.getZoom() || 1); ctx.stroke();
+  ctx.restore();
+}
+function hexStempelKlick(e) {
+  const p = editor.canvas.getPointer(e.e);
+  if (e.e.altKey) {
+    const treffer = editor.canvas.getObjects().filter(istHex).reverse()
+      .find(o => Math.hypot(o.left - p.x, o.top - p.y) < (o.hexR || 50) * (o.scaleX || 1));
+    if (!treffer) { status('No hexagon under the pointer.'); return; }
+    editor.canvas.remove(treffer);
+  } else {
+    const o = neuesHex(p.x, p.y, hexEinstellung(), e.e.shiftKey ? 1.6 : 1);
+    editor.canvas.add(o);
+    nachHinten([o]);
+  }
+  editor.canvas.requestRenderAll();
+  editor.snapshot();
+  renderLayers(); renderAnimBar();
+  status('🖈 ' + editor.canvas.getObjects().filter(istHex).length + ' hexagon(s) – keep clicking, Esc ends.');
+}
+
+// The settings change the selected hexagons too.
+function ausgewaehlteHexe() { return editor.activeAll().filter(istHex); }
+function aufAuswahl(fn) {
+  const hexe = ausgewaehlteHexe();
+  if (!hexe.length) return false;
+  hexe.forEach(fn);
+  editor.canvas.requestRenderAll();
+  return true;
+}
+function hexBedienung() {
+  const e = () => hexEinstellung();
+  const aus = (id, text) => { const r = document.getElementById(id), o = document.getElementById(id + '-out');
+                               if (r && o) o.textContent = text(+r.value); };
+  const zeigen = () => {
+    aus('hex-groesse', v => Math.round(hexRadius(v) * 2) + ' px');
+    aus('hex-deck', v => v + ' %');
+  };
+  zeigen();
+  const groesse = document.getElementById('hex-groesse');
+  if (groesse) {
+    groesse.oninput = () => {
+      zeigen();
+      aufAuswahl(o => {
+        const mitte = o.getCenterPoint();
+        o.scale(hexRadius(e().groesse) / (o.hexR || 1));
+        o.setPositionByOrigin(mitte, 'center', 'center');
+        o.setCoords();
+      });
+    };
+    groesse.onchange = () => { if (ausgewaehlteHexe().length) editor.snapshot(); };
+  }
+  const deck = document.getElementById('hex-deck');
+  if (deck) {
+    deck.oninput = () => { zeigen(); aufAuswahl(o => o.set('opacity', e().deck / 100)); };
+    deck.onchange = () => { if (ausgewaehlteHexe().length) editor.snapshot(); };
+  }
+  const segment = (id, key, zahl, anwenden) => {
+    const s = document.getElementById(id);
+    if (!s) return;
+    s.addEventListener('click', ev => {
+      const b = ev.target.closest('button[data-v]');
+      if (!b) return;
+      s.querySelectorAll('button').forEach(x => x.classList.toggle('on', x === b));
+      _hexWahl[key] = zahl ? +b.dataset.v : b.dataset.v;
+      if (anwenden && aufAuswahl(o => hexAussehen(o, { ...e(), farbe: o.hexAuto ? 'auto' : (o.stroke || o.fill), [key]: _hexWahl[key] }))) editor.snapshot();
+    });
+  };
+  segment('hex-ecken-art', 'ecken');
+  segment('hex-kipp', 'kipp');
+  segment('hex-linie', 'linie', true, true);
+  segment('hex-fuell', 'fuell', false, true);
+  hexFarbenBauen();
+  // Selecting a hexagon shows its settings.
+  const folgen = () => {
+    const o = ausgewaehlteHexe()[0];
+    if (!o) return;
+    if (groesse && o.hexR) { groesse.value = Math.round(o.hexR * (o.scaleX || 1) / hexRadius(1)); }
+    if (deck) deck.value = Math.round((o.opacity ?? 1) * 100);
+    zeigen();
+  };
+  editor.canvas.on('selection:created', folgen);
+  editor.canvas.on('selection:updated', folgen);
+}
+// auto + the brand colours. Rebuilt when the palette may have changed.
+export function hexFarbenBauen() {
+  const box = document.getElementById('hex-farben');
+  if (!box) return;
+  box.innerHTML = '';
+  const knopf = (wert, farbe) => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'fx-swatch' + (wert === 'auto' ? ' fx-swatch-auto' : '') + (_hexWahl.farbe === wert ? ' on' : '');
+    if (wert === 'auto') { b.textContent = 'auto'; b.title = 'A touch lighter than the ground'; }
+    else { b.style.background = farbe; b.title = farbe; }
+    b.dataset.v = wert;
+    b.onclick = () => {
+      _hexWahl.farbe = wert;
+      box.querySelectorAll('button').forEach(x => x.classList.toggle('on', x === b));
+      if (aufAuswahl(o => hexAussehen(o, { ...hexEinstellung(), fuell: o.hexFuell || 'nein', linie: o.hexLinie || 2.5 }))) editor.snapshot();
+    };
+    box.appendChild(b);
+  };
+  knopf('auto');
+  bg.getPalette().forEach(f => knopf(f, f));
+}
+
 export function initElemente(ed, { farbe }) {
   editor = ed;
   if (farbe) formFarbe = farbe;
+  // Hexagon pattern: the stamp's clicks and pointer, Esc, and the panel.
+  editor.canvas.on('mouse:down', e => { if (_hexStempel) hexStempelKlick(e); });
+  editor.canvas.on('mouse:move', e => { if (_hexStempel) hexGeist(editor.canvas.getPointer(e.e), e.e.shiftKey); });
+  editor.canvas.on('mouse:out', () => { if (_hexStempel) hexGeist(null); });
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape' && _hexStempel) { e.preventDefault(); hexStempel(false); }
+  });
+  hexBedienung();
   {
     const btn = document.getElementById('svg-import-btn');
     const inp = document.getElementById('svg-file-input');

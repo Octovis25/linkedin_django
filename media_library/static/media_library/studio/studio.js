@@ -13,7 +13,7 @@ import { removeBackground, floodFillTransparent, recolorRegion, recolorSimilarAl
 import * as retouch from './retouch.js';
 import { buildContext } from './toolbar.js';
 import { mountShell, initUi } from './ui.js';
-import { initElemente, isTextblock, netzVon, istMarke, spotStarten, spotEinstellen, rebuildTextblock, netzEinstellen, markenGroesse, isChecklist, isBadge, groesseSetzen, autoContrast, spotAlle, splitChecklist, rebuildChecklist, netzAktualisieren, importSvgText, frageZeichenFuer, frageDazu, buildTextblock, buildCheckList, addTextblock, addStempel, addMarker, addFragenNetz, addBadge } from './elements.js';
+import { initElemente, hexEcken, hexStempel, hexAlleWeg, hexFarbenNachziehen, isTextblock, netzVon, istMarke, spotStarten, spotEinstellen, rebuildTextblock, netzEinstellen, markenGroesse, isChecklist, isBadge, groesseSetzen, autoContrast, spotAlle, splitChecklist, rebuildChecklist, netzAktualisieren, importSvgText, frageZeichenFuer, frageDazu, buildTextblock, buildCheckList, addTextblock, addStempel, addMarker, addFragenNetz, addBadge } from './elements.js';
 import { initAnimBar, renderLayers, renderAnimBar, planeUiAufbau, layerLabel, oeffneEffekte } from './animbar.js';
 
 // Build rail, mode panels and the media panel from the declaration in
@@ -118,6 +118,7 @@ function setCanvasFarbe(farbe) {
   // If the image hides the colour, the Studio points that out; removing it is
   // a deliberate act through "🚫 Remove background image".
   editor.canvas.backgroundColor = farbe || '';
+  hexFarbenNachziehen();                  // auto-coloured hexagons follow the ground
   editor.canvas.requestRenderAll();
   editor.snapshot();
   const pick = document.getElementById('bg-color');
@@ -460,6 +461,7 @@ const actions = {
     o.set({ left: 0, top: 0, originX: 'left', originY: 'top',
             scaleX: editor.width / o.width, scaleY: editor.height / o.height, selectable: false, evented: false });
     editor.canvas.setBackgroundImage(o, editor.canvas.renderAll.bind(editor.canvas));
+    hexFarbenNachziehen();
     editor.snapshot();
     bg.updateBgInfo?.(editor);
     status('Image set as background.', '#198754');
@@ -526,7 +528,11 @@ const actions = {
     }
     editor.setSize(choice[0], choice[1]); fit(); bg.updateBgInfo(editor);
   },
-  'clear-bg':  () => bg.clearBackground(editor),
+  'clear-bg':  () => bg.clearBackground(editor, hexFarbenNachziehen),
+  // Hexagon pattern (Build): corners, stamp, remove - see elements.js.
+  'hex-ecken':   () => hexEcken(),
+  'hex-stempel': () => hexStempel(),
+  'hex-weg':     () => hexAlleWeg(),
   'bg-creme':       () => setCanvasFarbe('#FBF8F0'),
   'bg-weiss':       () => setCanvasFarbe('#FFFFFF'),
   'bg-transparent': () => setCanvasFarbe(''),

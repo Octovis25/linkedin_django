@@ -106,11 +106,14 @@ export function setBackgroundColor(editor, hex) {
   editor.snapshot();
 }
 
-export function clearBackground(editor) {
+// `danach` runs before the undo step is taken (the Studio recolours its
+// auto-coloured hexagons there), so both land in one step.
+export function clearBackground(editor, danach) {
   editor.canvas.setBackgroundImage(null, editor.canvas.renderAll.bind(editor.canvas));
   // '' = transparent (chequerboard). This used to set dark blue - the area
   // looked broken after "🚫 BG off", and the blue ended up in the export.
   editor.canvas.setBackgroundColor('', editor.canvas.renderAll.bind(editor.canvas));
+  if (danach) danach();
   editor.snapshot();
   updateBgInfo(editor);
 }
