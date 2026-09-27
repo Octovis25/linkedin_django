@@ -25,7 +25,7 @@
 
 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem">
   <h1>📐 Studio Templates</h1>
-  <a href="/library/studio/" class="btn btn-primary">→ Zum Editor</a>
+  <a href="/library/studio/" class="btn btn-primary">→ To the editor</a>
 </div>
 
 {% if messages %}
@@ -33,12 +33,12 @@
 {% endif %}
 
 <!-- ══════════════════════════════════════════
-     🎨 Brand-Farbpalette — zentrale Verwaltung
-     Änderungen hier wirken auf das gesamte Portal
+     🎨 Brand colour palette — managed in one place
+     Changes here apply to the whole portal
      ══════════════════════════════════════════ -->
 <div class="card" style="margin-bottom:1.5rem;padding:1.25rem">
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.25rem">
-    <h2 style="margin:0">🎨 Brand-Farbpalette</h2>
+    <h2 style="margin:0">🎨 Brand colour palette</h2>
     <span style="font-size:.8rem;color:#888">Changes take effect immediately on navigation, buttons and the whole portal</span>
   </div>
   <p style="font-size:.8rem;color:#aaa;margin-bottom:1rem">Click a colour to change it → Save</p>
@@ -53,7 +53,7 @@
       <div class="color-swatch-wrap">
         <div class="color-swatch-input"><input type="color" name="c2" value="{{ brand.c2 }}"></div>
         <span style="font-size:.8rem;font-weight:700;color:var(--octo-dark-petrol)">2</span>
-        <span style="font-size:.7rem;color:#888">Akzent</span>
+        <span style="font-size:.7rem;color:#888">Accent</span>
       </div>
       <div class="color-swatch-wrap">
         <div class="color-swatch-input"><input type="color" name="c3" value="{{ brand.c3 }}"></div>
@@ -68,15 +68,15 @@
       <div class="color-swatch-wrap">
         <div class="color-swatch-input"><input type="color" name="c5" value="{{ brand.c5 }}"></div>
         <span style="font-size:.8rem;font-weight:700;color:var(--octo-dark-petrol)">5</span>
-        <span style="font-size:.7rem;color:#888">Dunkel</span>
+        <span style="font-size:.7rem;color:#888">Dark</span>
       </div>
       <div class="color-swatch-wrap">
         <div class="color-swatch-input"><input type="color" name="c6" value="{{ brand.c6 }}"></div>
         <span style="font-size:.8rem;font-weight:700;color:var(--octo-dark-petrol)">6</span>
-        <span style="font-size:.7rem;color:#888">Schwarz/Text</span>
+        <span style="font-size:.7rem;color:#888">Black/Text</span>
       </div>
     </div>
-    <!-- Extra-Farben -->
+    <!-- Extra colours -->
     <p style="font-size:.8rem;color:#aaa;margin-bottom:.5rem">Additional colours (optional)</p>
     <div id="extra-colors-row" style="display:flex;gap:.75rem;align-items:flex-end;flex-wrap:wrap;margin-bottom:1rem">
       {% for ec in brand.extra_colors %}
@@ -88,7 +88,7 @@
       {% endfor %}
       <button type="button" onclick="addExtraColor()" style="width:52px;height:52px;border-radius:8px;border:2px dashed #ccc;background:#f9f9f9;font-size:1.5rem;cursor:pointer;color:#888" title="Add new colour">+</button>
     </div>
-    <button type="submit" class="btn btn-secondary">💾 Farben speichern</button>
+    <button type="submit" class="btn btn-secondary">💾 Save colours</button>
   </form>
   <script>
   function addExtraColor() {
@@ -115,12 +115,12 @@
       <input type="file" name="template" accept="image/*" required>
     </div>
     <div class="form-group">
-      <label>Titel</label>
-      <input type="text" name="title" placeholder="z.B. LinkedIn Banner Werbung">
+      <label>Title</label>
+      <input type="text" name="title" placeholder="e.g. LinkedIn banner advert">
     </div>
     <div class="form-row">
       <div class="form-group">
-        <label>Breite (px)</label>
+        <label>Width (px)</label>
         <input type="number" name="width" value="1200">
       </div>
       <div class="form-group">
@@ -141,7 +141,7 @@
     <div class="tpl-card-body">
       <div style="display:flex;justify-content:space-between;align-items:center;gap:6px">
         <h3 style="margin:0">{{ t.title }}</h3>
-        <span class="tpl-badge {% if t.active %}on{% else %}off{% endif %}">{% if t.active %}aktiv{% else %}passiv{% endif %}</span>
+        <span class="tpl-badge {% if t.active %}on{% else %}off{% endif %}">{% if t.active %}active{% else %}passive{% endif %}</span>
       </div>
       <small>{{ t.width }} × {{ t.height }} px</small>
       {% if t.colors %}
@@ -156,7 +156,7 @@
         <form method="post" action="/library/studio/template/colors/{{ t.id }}/" style="display:flex;gap:4px;flex-wrap:wrap;align-items:center">
           {% csrf_token %}
           {% for col in t.colors %}
-          <input type="color" name="color{{ forloop.counter }}" value="{{ col }}" style="width:28px;height:28px;border:none;padding:0;cursor:pointer;border-radius:3px" title="Farbe {{ forloop.counter }}">
+          <input type="color" name="color{{ forloop.counter }}" value="{{ col }}" style="width:28px;height:28px;border:none;padding:0;cursor:pointer;border-radius:3px" title="Colour {{ forloop.counter }}">
           {% endfor %}
           <button type="submit" class="btn btn-sm" style="font-size:10px;padding:2px 8px">💾</button>
         </form>
@@ -165,16 +165,16 @@
       <form method="post" action="/library/studio/template/colors/{{ t.id }}/" style="display:flex;gap:4px;flex-wrap:wrap;align-items:center;margin-top:8px">
         {% csrf_token %}
         {% for i in "123456" %}
-        <input type="color" name="color{{ i }}" value="#008591" style="width:28px;height:28px;border:none;padding:0;cursor:pointer;border-radius:3px" title="Farbe {{ i }}">
+        <input type="color" name="color{{ i }}" value="#008591" style="width:28px;height:28px;border:none;padding:0;cursor:pointer;border-radius:3px" title="Colour {{ i }}">
         {% endfor %}
-        <button type="submit" class="btn btn-sm" style="font-size:10px;padding:2px 8px">🎨 Farben setzen</button>
+        <button type="submit" class="btn btn-sm" style="font-size:10px;padding:2px 8px">🎨 Set colours</button>
       </form>
       {% endif %}
       <div class="tpl-card-actions" style="margin-top:8px">
         <a href="/library/studio/?template={{ t.id }}" class="btn btn-primary btn-sm">Open in editor</a>
         <form method="post" action="/library/studio/template/toggle-active/{{ t.id }}/" style="display:inline">
           {% csrf_token %}
-          <button class="btn btn-sm" title="{% if t.active %}Auf passiv setzen – erscheint dann nicht mehr in der Studio-Auswahl{% else %}Auf aktiv setzen – erscheint wieder in der Studio-Auswahl{% endif %}">{% if t.active %}⏸ Passiv{% else %}▶ Aktiv{% endif %}</button>
+          <button class="btn btn-sm" title="{% if t.active %}Set to passive – no longer offered in the Studio{% else %}Set to active – offered in the Studio again{% endif %}">{% if t.active %}⏸ Passive{% else %}▶ Active{% endif %}</button>
         </form>
         <form method="post" action="/library/studio/template/delete/{{ t.id }}/" style="display:inline">
           {% csrf_token %}

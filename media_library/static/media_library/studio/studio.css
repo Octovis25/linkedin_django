@@ -182,7 +182,6 @@ textarea.field      { font-family:inherit; resize:vertical; }
 .studio-actionbar .group { display:flex; gap:.3rem; align-items:center; padding-right:.5rem;
                       border-right:1px solid #e8e8e8; }
 .studio-actionbar .group:last-of-type { border-right:none; }
-.studio-actionbar .group-save { flex-wrap:wrap; }
 
 /* ---- Contextual selection bar over the canvas --------------------------- */
 .sel-bar            { display:flex; gap:4px; margin-bottom:6px; flex-wrap:wrap; align-items:center;
@@ -226,20 +225,6 @@ textarea.field      { font-family:inherit; resize:vertical; }
                       align-items:center; justify-content:center; opacity:0; transition:opacity .15s; }
 .lib-tile:hover .tile-del { opacity:1; }
 .lib-tile .tile-del:hover { background:#c0392b; }
-
-/* Ordner-Kacheln + Breadcrumb im Assets-Browser */
-.lib-folder         { display:flex; flex-direction:column; align-items:center; justify-content:center;
-                      aspect-ratio:1; border:1px solid #e2e2e2; border-radius:6px; cursor:pointer;
-                      background:#fafafa; padding:2px; transition:border-color .15s,background .15s; }
-.lib-folder:hover   { border-color:var(--octo-petrol,#008591); background:#f0f7f7; }
-.lib-folder-icon    { font-size:22px; line-height:1; }
-.lib-folder-name    { font-size:.6rem; color:#555; text-align:center; margin-top:2px;
-                      overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:100%; }
-.lib-crumb          { display:flex; flex-wrap:wrap; align-items:center; gap:2px; margin-bottom:6px;
-                      font-size:.72rem; }
-.crumb-btn          { border:none; background:none; color:var(--octo-petrol,#008591); cursor:pointer;
-                      padding:1px 3px; border-radius:3px; font-size:.72rem; }
-.crumb-btn:hover    { background:#eef6f6; text-decoration:underline; }
 
 .lib-search         { width:100%; margin-bottom:.4rem; padding:.3rem .45rem;
                       border:1px solid #ccc; border-radius:4px; font-size:.8rem; box-sizing:border-box; }
@@ -285,14 +270,12 @@ a.manage-link       { font-size:.75rem; color:var(--octo-petrol,#008591); }
 .layer-btn:hover    { background:#dfe7e7; color:var(--octo-petrol,#008591); }
 
 /* ---- Retouch-Panel Beschriftungen -------------------------------------- */
-.retouch-label      { font-size:.72rem; color:#555; font-weight:600; margin-bottom:4px; }
 /* Freistellen-Panel immer offen: Pfeil weg, nie einklappen */
 #retouch-section h3           { cursor:default; }
 #retouch-section h3::after    { display:none; }
 #retouch-section .section-body{ display:block !important; }
 
 /* ---- Timeline / animation ---------------------------------------------- */
-.tl-row             { display:flex; align-items:center; gap:6px; font-size:.72rem; margin-bottom:4px; }
 .tl-slider          { -webkit-appearance:none; appearance:none; height:14px; background:transparent; cursor:pointer; flex:1; }
 .tl-slider::-webkit-slider-runnable-track { height:3px; border-radius:2px; background:#ddd; }
 .tl-slider::-webkit-slider-thumb { -webkit-appearance:none; width:14px; height:14px; border-radius:50%;
@@ -323,7 +306,6 @@ a.manage-link       { font-size:.75rem; color:var(--octo-petrol,#008591); }
 .studio-toast.ok    { background:#1e8449; }
 
 /* ---- Assets: anhakbarer Ordnerbaum ------------------------------------- */
-.lib-hint           { font-size:.68rem; color:#888; margin-bottom:3px; }
 .lib-tree           { max-height:190px; overflow-y:auto; border:1px solid #e6e8ea;
                       border-radius:6px; padding:3px; margin-bottom:.4rem; background:#fafbfc; }
 .lib-trow           { display:flex; align-items:center; gap:5px; padding:2px 3px;

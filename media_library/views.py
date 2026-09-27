@@ -1652,12 +1652,12 @@ def studio_save(request):
         try:
             studio_image_id = _studio_bild_metadaten_schreiben(
                 post_id, lib_item_id, old_nc_path, nc_path, title, None, template_id)
-            warnung = ('Das Bild wurde gespeichert, aber der bearbeitbare Entwurf nicht '
-                       f'({e}). Beim erneuten Oeffnen sind die Ebenen nicht mehr einzeln '
-                       'anpassbar.')
+            warnung = ('The image was saved, but the editable draft was not '
+                       f'({e}). When you open it again, the layers can no longer be '
+                       'edited one by one.')
         except Exception as e2:
             return JsonResponse({'ok': False,
-                                 'error': f'Bild gespeichert, Entwurf nicht: {e2}'}, status=500)
+                                 'error': f'Image saved, draft not: {e2}'}, status=500)
 
     # Attach to planner post if post_id given. IMPORTANT: attaching must ALWAYS
     # happen - moving and tidying up are nice to have and must never stop the
@@ -1689,17 +1689,17 @@ def studio_save(request):
         _release_old_media(old_media, keep=nc_path)   # back to the outputs, not deleted
 
     # Renamed? Then remove the file under the old name. Otherwise it would stay
-    # there, block the old name as "taken" for good, and appear in "My outputs"
+    # there, block the old name as "taken" for good, and appear in "Outputs"
     # as a ghost tile without a design.
     if umbenannt_von and umbenannt_von != nc_path:
-        _nc_delete_aufraeumen(umbenannt_von, 'Datei unter dem alten Namen')
+        _nc_delete_aufraeumen(umbenannt_von, 'file under the old name')
         try:
             _alt_stamm = umbenannt_von.rsplit('/', 1)[-1].rsplit('.', 1)[0]
             _alt_ordner = umbenannt_von.rsplit('/', 1)[0]
             _nc_delete_aufraeumen(f"{_alt_ordner}/{_alt_stamm}_preview.png",
-                                  'Vorschau unter dem alten Namen')
+                                  'preview under the old name')
         except Exception as e:
-            print("Umbenennen: alter Vorschaupfad nicht bestimmbar:", e)
+            print("Rename: old preview path could not be determined:", e)
 
     image_url = f"/library/image/{lib_id}/"
     antwort = {'ok': True, 'lib_id': lib_id, 'image_url': image_url, 'nc_path': nc_path}
@@ -1762,7 +1762,9 @@ def studio_save_video(request):
                     _safe(c, "SELECT id FROM media_library_items WHERE title=%s AND tags=%s LIMIT 1", [title, tag]))
         if existing:
             lib_id = existing[0][0]
-            c.execute("UPDATE media_library_items SET nc_path=%s, title=%s, folder_id=%s, tags=%s WHERE id=%s",
+            # Overwriting keeps the entry in its folder: the Studio sends no
+            # folder, and folder_id=NULL used to pull it out on every re-save.
+            c.execute("UPDATE media_library_items SET nc_path=%s, title=%s, folder_id=COALESCE(%s, folder_id), tags=%s WHERE id=%s",
                       [nc_path, title, folder_id, tag, lib_id])
         else:
             c.execute("""INSERT INTO media_library_items (nc_path, title, series, tags, folder_id)
@@ -1879,7 +1881,7 @@ def studio_video_template_save(request):
         return JsonResponse({'error': 'POST required'}, status=405)
     _ensure_video_template_table()
     import time, json as _json
-    title = request.POST.get('title', f'Video-Vorlage {int(time.time())}')
+    title = request.POST.get('title', f'Video template {int(time.time())}')
     canvas_json = request.POST.get('canvas_json', '')
     if not canvas_json:
         return JsonResponse({'error': 'No canvas_json'}, status=400)
@@ -2943,7 +2945,7 @@ def studio_shared_assets_upload(request):
                      headers={'Content-Type': f.content_type or 'image/png'},
                      timeout=60)
         if r.status_code not in [200, 201, 204]:
-            return JsonResponse({'error': f'Upload fehlgeschlagen: {r.status_code}'}, status=500)
+            return JsonResponse({'error': f'Upload failed: {r.status_code}'}, status=500)
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=500)
 
@@ -3000,7 +3002,7 @@ def studio_upload(request):
     nc_path = _nc_upload(content, f"{NC_STUDIO_UPLOAD_FOLDER}/{filename}",
                          f.content_type or 'image/png')
     if not nc_path:
-        return JsonResponse({'error': 'Upload fehlgeschlagen'}, status=500)
+        return JsonResponse({'error': 'Upload failed'}, status=500)
 
     proxy_url = f"/library/studio/nc-image/?p={quote(nc_path, safe='/')}"
     return JsonResponse({'ok': True, 'name': filename, 'url': proxy_url, 'nc_path': nc_path})
@@ -3054,7 +3056,7 @@ def studio_output_delete(request):
     try:
         folder, fname = nc_path.rsplit('/', 1)
         stem = fname.rsplit('.', 1)[0]
-        _nc_delete_aufraeumen(f"{folder}/{stem}_preview.png", 'Vorschau der Ausgabe')
+        _nc_delete_aufraeumen(f"{folder}/{stem}_preview.png", 'preview of the output')
     except Exception:
         pass
     # Remove the database entries
@@ -3136,7 +3138,7 @@ def studio_db_item_to_nc(request):
                      headers={'Content-Type': ct or 'image/png'},
                      timeout=60)
         if r.status_code not in [200, 201, 204]:
-            return JsonResponse({'error': f'Upload fehlgeschlagen: {r.status_code}'}, status=500)
+            return JsonResponse({'error': f'Upload failed: {r.status_code}'}, status=500)
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=500)
 

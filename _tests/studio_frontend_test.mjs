@@ -1243,7 +1243,7 @@ const kacheln = await page.evaluate(() => {
   const gefunden = {};
   document.querySelectorAll('#output-grid img.lib-thumb').forEach(el => {
     // Der Titel kann Zusaetze tragen: "– preview could not be loaded" bei
-    // nicht ladbarer Datei, "· am Post" bei einer Datei im Planner-Ordner.
+    // nicht ladbarer Datei, "· on a post" bei einer Datei im Planner-Ordner.
     const name = (el.title || '').split(/[\u2013\u00b7]/)[0].trim();
     gefunden[name] = el.getAttribute('src') || el.dataset.src || '';
   });
@@ -1252,9 +1252,9 @@ const kacheln = await page.evaluate(() => {
 const marken = await page.evaluate(() =>
   [...document.querySelectorAll('#output-grid img.lib-thumb')].map(e => e.title || ''));
 pruefe('eine an einem Post haengende Ausgabe wird markiert',
-  marken.some(t => /am Post/.test(t)), marken.join(' | '));
+  marken.some(t => /on a post/.test(t)), marken.join(' | '));
 pruefe('eine freie Ausgabe wird NICHT markiert',
-  marken.some(t => /gross/.test(t) && !/am Post/.test(t)), marken.join(' | '));
+  marken.some(t => /gross/.test(t) && !/on a post/.test(t)), marken.join(' | '));
 pruefe('Kachel nimmt die verkleinerte Fassung',
   /\/api\/klein\//.test(kacheln['gross'] || ''), kacheln['gross']);
 pruefe('ohne verkleinerte Fassung bleibt es beim Original',
@@ -2048,6 +2048,147 @@ pruefe('eine Runde: sechs Mal 2,5 s, Pausen und das ganze Bild am Ende',
   spC.film.runde === Math.round((6 * (2.5 + 0.4) + 1.2) * 1000), spC.film.runde);
 pruefe('Remove nimmt den ganzen Spotlight weg', spC.rest === 0, spC.rest);
 await sauber('Spotlight');
+
+// ---- Paket A: Duplizieren, Löschen, Neuaufbau, Farbe, englische Texte --------
+// Review 27.09.2026. Ein Duplikat eines Fragezeichens oder Spots behielt Netz
+// und Nummer; eine Mehrfachauswahl kam als EIN Objekt zurück; Entf ließ Lücken
+// in der Nummerierung; ein Neuaufbau verlor Deckkraft, Spiegelung und Farbe.
+await ruhig('Paket A');
+await page.click('[data-mode="effects"]');
+const paA = await page.evaluate(async () => {
+  const m = await import('/media.js');
+  const ed = window._studioEditor;
+  const warte = ms => new Promise(r => setTimeout(r, ms));
+  ed.clearAll(); ed.setSize(800, 600);
+  document.querySelector('[data-act="add-qweb"]').click();
+  await warte(150);
+  const netz = () => [...m.fragenNetze(ed).values()];
+  const erstes = netz()[0];
+  // 1) one question mark duplicated: it joins the web as number four
+  ed.canvas.setActiveObject(erstes[1]);
+  ed.duplicateSelected();
+  await warte(200);
+  const nachEins = netz().map(k => k.map(o => o.qwebNr).join(','));
+  // 2) the whole web duplicated: a second web, element by element
+  const vorher = ed.canvas.getObjects().length;
+  const alle = netz()[0];
+  ed.canvas.setActiveObject(new fabric.ActiveSelection(alle, { canvas: ed.canvas }));
+  ed.duplicateSelected();
+  await warte(250);
+  ed.canvas.discardActiveObject();
+  const dazu = ed.canvas.getObjects().length - vorher;
+  const keineAuswahlImBild = ed.canvas.getObjects().every(o => o.type !== 'activeSelection');
+  const netze = netz().map(k => k.map(o => o.qwebNr).join(','));
+  // 3) Del closes the gap - and with numbers as sign the labels run 1 2 3 again
+  const w = netz()[0];
+  w.forEach(o => { o.qwebSign = '#'; });
+  ed.canvas.setActiveObject(w[1]);
+  ed.deleteSelected();
+  await warte(100);
+  const rest = m.fragenNetze(ed).get(w[0].qwebId);
+  const nachDel = rest.map(o => o.qwebNr).join(',');
+  const zeichen = rest.map(o => o._objects[1].text).join(',');
+  // 4) spotlights: a single one duplicated is a spotlight of its own; a member
+  //    of a film duplicated joins the film at the end
+  ed.clearAll();
+  const s1 = m.addSpot(ed, { x: 100, y: 100, w: 120, h: 120 }, null);
+  ed.canvas.setActiveObject(s1); ed.duplicateSelected();
+  await warte(200);
+  const spotsNachEins = m.spotGruppen(ed).size;
+  const s2 = m.addSpot(ed, { x: 400, y: 100, w: 120, h: 120 }, [s1]);
+  ed.canvas.setActiveObject(s2); ed.duplicateSelected();
+  await warte(200);
+  const film = m.spotGruppen(ed).get(s1.spotId).map(o => o.spotNr).join(',');
+  ed.canvas.setActiveObject(s1); ed.deleteSelected();
+  await warte(100);
+  const filmNachDel = m.spotGruppen(ed).get(s2.spotId).map(o => o.spotNr).join(',');
+  return { nachEins, dazu, keineAuswahlImBild, netze, nachDel, zeichen, spotsNachEins, film, filmNachDel };
+});
+pruefe('Duplikat eines Fragezeichens: es kommt als Nummer vier ins Netz', paA.nachEins.join('|') === '0,1,2,3', paA.nachEins.join('|'));
+pruefe('Mehrfachauswahl dupliziert: vier Elemente, nicht ein Klumpen', paA.dazu === 4 && paA.keineAuswahlImBild, paA.dazu);
+pruefe('ein ganz kopiertes Netz ist ein eigenes Netz', paA.netze.length === 2 && paA.netze.every(n => n === '0,1,2,3'), paA.netze.join('|'));
+pruefe('Entf schließt die Lücke in der Nummerierung', paA.nachDel === '0,1,2', paA.nachDel);
+pruefe('und die Zahlen laufen wieder 1 2 3', paA.zeichen === '1,2,3', paA.zeichen);
+pruefe('ein einzelner Spot dupliziert ist ein eigener Spotlight', paA.spotsNachEins === 2, paA.spotsNachEins);
+pruefe('ein Spot aus einem Film dupliziert kommt ans Ende', paA.film === '0,1,2', paA.film);
+pruefe('Entf im Film nummeriert neu', paA.filmNachDel === '0,1', paA.filmNachDel);
+
+const paB = await page.evaluate(async () => {
+  const ed = window._studioEditor;
+  const warte = ms => new Promise(r => setTimeout(r, ms));
+  ed.clearAll(); ed.setSize(800, 600);
+  document.querySelector('[data-mode="insert"]')?.click();
+  document.querySelector('[data-act="add-textblock"]').click();
+  await warte(150);
+  const tb = ed.active();
+  tb.set({ opacity: 0.5, flipX: true, fxColor: '#123456', fxTempo: 1.7 });
+  ed.snapshot();
+  const tc = document.getElementById('text-color');
+  tc.value = '#aa0000'; tc.dispatchEvent(new Event('input'));
+  await warte(100);
+  const neu = ed.active();
+  return { neu: neu !== tb, opacity: neu.opacity, flipX: neu.flipX, fxColor: neu.fxColor, fxTempo: neu.fxTempo, farbe: neu.tbColor || '' };
+});
+pruefe('Neuaufbau (Textfarbe) behält Deckkraft, Spiegelung, Effektfarbe und Tempo',
+  paB.neu && paB.opacity === 0.5 && paB.flipX === true && paB.fxColor === '#123456' && paB.fxTempo === 1.7, JSON.stringify(paB));
+
+const paC = await page.evaluate(async () => {
+  const ed = window._studioEditor;
+  const warte = ms => new Promise(r => setTimeout(r, ms));
+  ed.clearAll(); ed.setSize(400, 300);
+  const r = new fabric.Rect({ left: 20, top: 20, width: 100, height: 60, fill: '#00aa00' });
+  ed.canvas.add(r); ed.canvas.setActiveObject(r); ed.snapshot();
+  await warte(120);
+  const bild = () => document.querySelector('#anim-bar img.anim-thumb')?.src || '';
+  const vorher = bild();
+  r.set('fill', '#dd0000'); ed.snapshot();
+  await warte(120);
+  return { vorher: vorher.length, anders: bild() !== vorher && bild().length > 0 };
+});
+pruefe('Vorschaubild in der Motion-Zeile folgt der neuen Farbe', paC.anders, JSON.stringify(paC));
+
+const paD = await page.evaluate(async () => {
+  const m = await import('/media.js');
+  const ed = window._studioEditor;
+  const warte = ms => new Promise(r => setTimeout(r, ms));
+  ed.clearAll(); ed.setSize(800, 600);
+  const netzwerk = m.addEffektRahmen(ed, 'network');
+  const lupe = m.addEffektRahmen(ed, 'magnifier');
+  ed.canvas.setActiveObject(lupe); ed.snapshot();
+  await warte(120);
+  document.querySelector('#anim-bar .fx-palette .fx-swatch:not(.fx-swatch-auto)').click();
+  await warte(120);
+  return { lupe: lupe.fxColor || null, netz: netzwerk.fxColor || null };
+});
+pruefe('Die Effekt-Palette färbt nicht die Lupe, sondern den ersten Rahmen mit Farbe', !paD.lupe && !!paD.netz, JSON.stringify(paD));
+
+const paE = await page.evaluate(async () => {
+  const ed = window._studioEditor;
+  const warte = ms => new Promise(r => setTimeout(r, ms));
+  ed.clearAll(); ed.setSize(800, 600);
+  document.querySelector('[data-mode="effects"]')?.click();
+  const zu = document.querySelector('#anim-bar details.anim-group[data-group="effects"]');
+  if (zu) { zu.open = false; zu.dispatchEvent(new Event('toggle')); }
+  await warte(50);
+  document.querySelector('[data-act="add-qweb"]').click();
+  await warte(150);
+  return document.querySelector('#anim-bar details.anim-group[data-group="effects"]')?.open === true;
+});
+pruefe('Fragenetz hinzufügen klappt die Effects-Gruppe auf', paE);
+
+// Die Oberfläche spricht Englisch: keine deutschen Meldungen in den Modulen.
+{
+  const deutsch = ['Eigene Canvas', 'Abbrechen', 'Übernehmen', 'Speichert…', "'Gespeichert", 'Freigestellt',
+    'Stelle frei', 'Sitzung abgelaufen', 'Server-Fehler', 'Schriftgröße', "'Bereit.'", 'am Post', 'Dein Text',
+    'Name schon vergeben', 'Fehler beim Laden', 'nicht ladbar', 'Herunterladen fehlgeschlagen', 'Eine Zeile = ein Haken'];
+  const funde = [];
+  for (const f of fs.readdirSync(ROOT).filter(n => n.endsWith('.js'))) {
+    const text = fs.readFileSync(path.join(ROOT, f), 'utf8');
+    deutsch.forEach(w => { if (text.includes(w)) funde.push(f + ': ' + w); });
+  }
+  pruefe('Keine deutschen UI-Texte mehr in den Studio-Modulen', funde.length === 0, funde.slice(0, 5).join(' | '));
+}
+await sauber('Paket A');
 
 // ---- Video Bild für Bild: auch auf einem langsamen Rechner nichts überspringen --
 // Ortrud: "im fertigen Video bewegt sich die Lupe nicht - sie springt einmal,

@@ -79,11 +79,6 @@ export function wegDamit(el) {
   catch (e) { try { el.parentNode && el.parentNode.removeChild(el); } catch (_) { /* schon weg */ } }
 }
 
-export function debounce(fn, ms) {
-  let t;
-  return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); };
-}
-
 // Reads a server response as JSON - naming the cause instead of "error".
 // ONE place for the whole app: io.js and library.js share this function, so an
 // expired session is called the same everywhere, instead of ending up as

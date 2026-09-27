@@ -142,8 +142,8 @@ re-downloaded on every single page load and nothing could ever be cached.
     }
     box.innerHTML = '<strong>' + titel + '</strong><br>' +
       '<span style="opacity:.9">' + String(text).replace(/[<>&]/g, '') + '</span>' +
-      '<br><span style="opacity:.75;font-size:12px">Tipp: Seite neu laden (Strg+F5). ' +
-      'Bleibt der Fehler, diese Meldung weitergeben.</span>' +
+      '<br><span style="opacity:.75;font-size:12px">Tip: reload the page (Ctrl+F5). ' +
+      'If the error stays, pass this message on.</span>' +
       '<button style="position:absolute;top:6px;right:8px;background:none;border:0;color:#fff;' +
       'font-size:18px;cursor:pointer" onclick="this.parentNode.remove()">×</button>';
     box.style.position = 'fixed';
@@ -152,14 +152,14 @@ re-downloaded on every single page load and nothing could ever be cached.
   function harmlos(text) { return /ResizeObserver loop/i.test(String(text || '')); }
   window.addEventListener('error', function (e) {
     if (harmlos(e.message)) return;
-    zeige('Das Studio hat einen Fehler gemeldet.', (e.message || 'Unbekannter Fehler') +
+    zeige('The Studio reported an error.', (e.message || 'Unknown error') +
       (e.filename ? ' (' + String(e.filename).split('/').pop() + ':' + e.lineno + ')' : ''));
   });
   window.addEventListener('unhandledrejection', function (e) {
     var r = e.reason;
-    var txt = (r && (r.message || r)) || 'Unbekannter Fehler';
+    var txt = (r && (r.message || r)) || 'Unknown error';
     if (harmlos(txt)) return;
-    zeige('Ein Vorgang ist fehlgeschlagen.', txt);
+    zeige('An operation failed.', txt);
   });
 })();
 </script>
@@ -168,7 +168,7 @@ re-downloaded on every single page load and nothing could ever be cached.
 <script src="{% static 'media_library/studio/vendor/fabric.min.js' %}"></script>
 <script>
 if (!window.fabric && window.studioZeigeFehler) {
-  window.studioZeigeFehler('Editor-Engine konnte nicht geladen werden.',
+  window.studioZeigeFehler('The editor engine could not be loaded.',
     'fabric.min.js is missing or was blocked. Check on the server: ' +
     'staticfiles/media_library/studio/vendor/fabric.min.js (run collectstatic if needed).',
     true);

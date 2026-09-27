@@ -131,7 +131,7 @@ export async function loadTemplateList(editor) {
   if (!listEl) return;   // fehlte der Guard, warf auch der catch-Zweig erneut
   try {
     const res = await fetch(URLS.apiTemplates);
-    if (!res.ok) throw new Error('Server-Fehler ' + res.status);
+    if (!res.ok) throw new Error('Server error ' + res.status);
     const data = await res.json();
     listEl.innerHTML = '';
     (data.templates || []).forEach(t => {
@@ -144,7 +144,7 @@ export async function loadTemplateList(editor) {
     });
     if (!(data.templates || []).length) listEl.innerHTML = '<span class="no-templates">No templates.</span>';
   } catch (e) {
-    listEl.innerHTML = '<span class="no-templates">Fehler beim Laden.</span>';
+    listEl.innerHTML = '<span class="no-templates">Could not load the templates.</span>';
   }
 }
 
@@ -196,7 +196,7 @@ export async function applyTemplate(editor, tpl) {
   if (tpl.has_canvas) {
     try {
       const res = await fetch(`/library/studio/template/canvas/${tpl.id}/`, { credentials: 'same-origin' });
-      if (!res.ok) throw new Error('Server-Fehler ' + res.status);
+      if (!res.ok) throw new Error('Server error ' + res.status);
       const d = await res.json();
       if (d.ok && d.canvas_json && nurHintergrund) {
         await nurHintergrundAnwenden(editor, d.canvas_json);
@@ -218,7 +218,7 @@ export async function applyTemplate(editor, tpl) {
                             : '⚠️ Template only partially loaded', vollstaendig ? 'green' : 'red');
         return;
       }
-    } catch (e) { console.warn('Template-Layout-Fehler, nutze Hintergrundbild:', e); }
+    } catch (e) { console.warn('Template layout error, using the background image:', e); }
   }
   try {
     // The canvas size is NOT changed - it stays fixed and is only altered

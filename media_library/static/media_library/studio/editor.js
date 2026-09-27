@@ -33,7 +33,7 @@ export class Editor {
     // Klare Ursache statt „Cannot read properties of undefined (reading 'Canvas')".
     if (!fabric) {
       throw new Error('Editor engine missing: vendor/fabric.min.js was not loaded. '
-                    + 'Auf dem Server prüfen (ggf. collectstatic ausführen).');
+                    + 'Check the server (run collectstatic if needed).');
     }
     this.canvas = new fabric.Canvas(canvasEl, {
       backgroundColor: '',        // transparent → Schachbrett scheint durch
@@ -272,23 +272,43 @@ export class Editor {
   isGroup() { const a = this.active(); return !!(a && a.type === 'group'); }
 
   deleteSelected() {
-    this.activeAll().forEach(o => this.canvas.remove(o));
+    const weg = this.activeAll();
+    weg.forEach(o => this.canvas.remove(o));
     this.canvas.discardActiveObject();
+    // Question webs and spotlights number their members: the Studio closes the gaps.
+    this._nachLoeschen?.(weg);
     this.canvas.requestRenderAll();
     this.snapshot();
   }
 
+  // A multi-selection is cloned as a whole but added element by element -
+  // added as it came, the selection used to land on the canvas as ONE object.
   duplicateSelected() {
     const a = this.active();
     if (!a) return;
+    const quellen = this.activeAll();
     a.clone(clone => {
+      this.canvas.discardActiveObject();
       clone.set({ left: a.left + 25, top: a.top + 25 });
-      this.canvas.add(clone);
+      let neu;
+      if (clone.type === 'activeSelection') {
+        clone.canvas = this.canvas;
+        neu = clone.getObjects();
+        neu.forEach(o => this.canvas.add(o));
+        clone.setCoords();
+      } else {
+        neu = [clone];
+        this.canvas.add(clone);
+      }
+      this._nachDuplikat?.(quellen, neu);
       this.canvas.setActiveObject(clone);
       this.canvas.requestRenderAll();
       this.snapshot();
     }, EXTRA_PROPS);
   }
+  // Hooks for the Studio: (removed) and (originals, copies), before the snapshot.
+  nachLoeschen(fn) { this._nachLoeschen = fn; }
+  nachDuplikat(fn) { this._nachDuplikat = fn; }
 
   flip(axis) {
     this.activeAll().forEach(o => o.set(axis === 'h' ? 'flipX' : 'flipY', !o[axis === 'h' ? 'flipX' : 'flipY']));
@@ -471,7 +491,7 @@ export class Editor {
     try {
       json = JSON.stringify(this.canvas.toJSON(EXTRA_PROPS));
     } catch (e) {
-      console.warn('snapshot fehlgeschlagen', e);
+      console.warn('snapshot failed', e);
       // Count it as a change all the same - otherwise the design wrongly counts
       // as saved and the prompt on leaving would not appear.
       this._rev++;
@@ -549,7 +569,7 @@ export class Editor {
     try {
       this.canvas.loadFromJSON(json, finish);
     } catch (e) {
-      console.warn('_restore Fehler:', e);
+      console.warn('_restore error:', e);
       finish();
     }
   }

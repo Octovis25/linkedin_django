@@ -84,15 +84,6 @@ export function setStart(o, ms) {
   return v;
 }
 
-// Puts an animation on the currently selected element.
-export function setAnim(editor, type, dur = 1200, delay = 0) {
-  const o = editor.active();
-  if (!o) { toast('Select an element first', 'err'); return; }
-  o.anim = (type && type !== 'none') ? { type, dur } : null;
-  setStart(o, delay);
-  editor.snapshot();
-}
-
 export function hasAnimations(editor) {
   // A spotlight that is still (one frame, Still) is part of the picture.
   const spots = spotGruppen(editor);
@@ -295,9 +286,6 @@ export function addEffektRahmen(editor, fx = 'network') {
   return o;
 }
 
-/* Drawings from before the frame existed: every element that carried an effect
-   gets a frame of its own, exactly around that element. It therefore looks the
-   way it was saved - and from now on it can be moved. */
 /* ---- The magnifier's way through its window ------------------------------
    The frame is the window, the glass has a size of its own (fxLens, picture
    pixels). A round is a list of legs: move from A to B in d seconds, or rest.
@@ -375,6 +363,9 @@ export function lupenStelle(o, sek, wege) {
   return legs[0].a;
 }
 
+/* Drawings from before the frame existed: every element that carried an effect
+   gets a frame of its own, exactly around that element. It therefore looks the
+   way it was saved - and from now on it can be moved. */
 export function rahmenAusAltenEffekten(editor) {
   const alte = editor.canvas.getObjects()
     .filter(o => !o._snap && !o._grid && !istEffektRahmen(o) && o.fx && o.fx !== 'none');
@@ -1487,8 +1478,8 @@ export async function exportVideo(editor, onBlob) {
 
   if (!blob) blob = new Blob(chunks, { type: 'video/webm' });
   if (!blob.size) { status('❌ Video is empty', 'red'); toast('Video capture returned no data', 'err'); return false; }
-  if (typeof onBlob === 'function') { onBlob(blob); status('Bereit.'); return true; }
-  // No auto-download - save to "My outputs" only (with canvas_json, so it stays editable).
+  if (typeof onBlob === 'function') { onBlob(blob); status('Ready.'); return true; }
+  // No auto-download - save to "Outputs" only (with canvas_json, so it stays editable).
   status('💾 Saving video…');
   const erg = await saveAnimation(editor, blob, '.webm');
   if (!erg?.ok) return false;
@@ -1496,7 +1487,7 @@ export async function exportVideo(editor, onBlob) {
   return true;
 }
 
-// Make a video and download it straight to the computer (instead of "My outputs").
+// Make a video and download it straight to the computer (instead of "Outputs").
 export async function downloadVideo(editor) {
   await exportVideo(editor, blob => {
     const a = document.createElement('a');
@@ -1598,8 +1589,8 @@ export async function exportGif(editor, onBlob) {
       gif.render();
     });
 
-    if (typeof onBlob === 'function') { onBlob(blob); status('Bereit.'); return true; }
-    // No auto-download - save to "My outputs" only.
+    if (typeof onBlob === 'function') { onBlob(blob); status('Ready.'); return true; }
+    // No auto-download - save to "Outputs" only.
     status('💾 Saving GIF…');
     const erg = await saveAnimation(editor, blob, '.gif');
     if (!erg?.ok) return false;
@@ -1608,12 +1599,12 @@ export async function exportGif(editor, onBlob) {
   } catch (e) {
     console.error('GIF-Export:', e);
     status('❌ ' + (e.message || 'GIF error'), 'red');
-    toast(e.message || 'GIF-Export fehlgeschlagen', 'err');
+    toast(e.message || 'GIF export failed', 'err');
     throw e;   // der Aufrufer darf danach kein „Gespeichert." melden
   }
 }
 
-// Make a GIF and download it straight to the computer (instead of "My outputs").
+// Make a GIF and download it straight to the computer (instead of "Outputs").
 export async function downloadGif(editor) {
   await exportGif(editor, blob => {
     const a = document.createElement('a');

@@ -32,12 +32,6 @@ export function entschaerfe(text) {
     .replace(/^[_-]+|[_-]+$/g, '');
 }
 
-// Is the name usable as a file name? (no spaces, not empty)
-export function nameOk(name) {
-  const n = String(name || '').trim();
-  return n.length >= 2 && n.length <= 80 && /^[A-Za-z0-9_-]+$/.test(n);
-}
-
 // Builds a suggested name from the design's own text.
 // "Studies for your practice 2026" → "StudiesPractice2026"
 export function vorschlagAusInhalt(editor) {
@@ -142,7 +136,7 @@ export function frageNachNamen({ vorschlag, belegt, eigener, titel, hinweis }) {
       `<h4>${titel || 'What should the output be called?'}</h4>` +
       `<div style="font-size:.82rem;color:#555;margin-bottom:10px">${hinweis ||
         'The name applies to all formats of this draft (image, GIF, video) and appears in the file name. ' +
-        'Er muss eindeutig sein – Leerzeichen werden zu Unterstrichen.'}</div>` +
+        'It has to be unique – spaces become underscores.'}</div>` +
       `<input type="text" id="nm-feld" class="field" style="width:100%;font-size:1rem;padding:7px" ` +
       `value="${(vorschlag || '').replace(/"/g, '&quot;')}" spellcheck="false" autocomplete="off">` +
       `<div id="nm-hinweis" style="font-size:.74rem;margin:6px 0 2px;min-height:2.2em"></div>`;
@@ -166,21 +160,21 @@ export function frageNachNamen({ vorschlag, belegt, eigener, titel, hinweis }) {
       const roh = feld.value;
       const sauber = entschaerfe(roh);
       if (!sauber || sauber.length < 2) {
-        info.innerHTML = '<span style="color:#b3261e">Bitte einen Namen mit mindestens 2 Zeichen.</span>';
+        info.innerHTML = '<span style="color:#b3261e">Please use a name with at least 2 characters.</span>';
         ok.disabled = true; return null;
       }
       const kollidiert = belegt.has(sauber.toLowerCase()) && sauber.toLowerCase() !== eigenerKlein;
       if (kollidiert) {
         const frei = eindeutig(sauber, belegt, eigener);
-        info.innerHTML = `<span style="color:#b3261e">„${sauber}" ist schon vergeben.</span> ` +
-          `<button type="button" id="nm-frei" class="tbtn" style="padding:1px 7px">„${frei}" nehmen</button>`;
+        info.innerHTML = `<span style="color:#b3261e">“${sauber}” is already taken.</span> ` +
+          `<button type="button" id="nm-frei" class="tbtn" style="padding:1px 7px">Use “${frei}”</button>`;
         const b = info.querySelector('#nm-frei');
         if (b) b.onclick = () => { feld.value = frei; pruefe(); feld.focus(); };
         ok.disabled = true; return null;
       }
       info.innerHTML = (sauber !== roh.trim())
         ? `<span style="color:#666">Will be saved as <b>${sauber}</b></span>`
-        : '<span style="color:#198754">Name ist frei.</span>';
+        : '<span style="color:#198754">Name is free.</span>';
       ok.disabled = false;
       return sauber;
     };

@@ -162,15 +162,6 @@ export function clearMask(obj) {
   obj._maskDirty = false;
 }
 
-// Rechteck-Markierung: setzt die Maske auf ein Rechteck (ersetzt vorherige).
-export function markRect(obj, x0, y0, x1, y1) {
-  const { ctx, W, H } = getMask(obj);
-  ctx.clearRect(0, 0, W, H);
-  const x = Math.min(x0, x1), y = Math.min(y0, y1);
-  ctx.fillStyle = '#ffffff';
-  ctx.fillRect(x, y, Math.abs(x1 - x0), Math.abs(y1 - y0));
-  obj._maskDirty = (Math.abs(x1 - x0) > 0 && Math.abs(y1 - y0) > 0);
-}
 // This used to scan the entire mask on EVERY tool change (about 300 ms of
 // stutter per click on a 24-megapixel image). A flag does the job now.
 export function hasMask(obj) {
@@ -233,7 +224,7 @@ export async function vorschauenUebernehmen(fabricCanvas) {
   for (const o of offen) {
     o._maskPreview = false;
     try { await commitWork(o); }
-    catch (e) { console.warn('Arbeitsstand konnte nicht übernommen werden:', e); }
+    catch (e) { console.warn('Work state could not be applied:', e); }
   }
   fabricCanvas.requestRenderAll();
 }

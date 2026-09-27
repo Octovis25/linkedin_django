@@ -121,7 +121,7 @@ function setCanvasFarbe(farbe) {
   const pick = document.getElementById('bg-color');
   if (pick && farbe) pick.value = farbe;
   if (farbe && editor.canvas.backgroundImage) {
-    status(`Background: ${farbe} – still covered by the background image (use “🚫 Remove background image” to show it)`, '#B26A00');
+    status(`Background: ${farbe} – still covered by the background image (Canvas → Image: “🚫 Remove” shows it)`, '#B26A00');
   } else {
     status(farbe ? `Background: ${farbe}` : 'Background transparent.', '#198754');
   }
@@ -139,18 +139,18 @@ function askSize(w0, h0) {
       display:flex;align-items:center;justify-content:center;`;
     back.innerHTML = `
       <div style="background:#fff;border-radius:10px;padding:16px;width:280px;box-shadow:0 10px 40px rgba(0,0,0,.3)">
-        <div style="font-weight:700;color:#0E7C86;margin-bottom:10px">Eigene Canvas-Größe</div>
+        <div style="font-weight:700;color:#0E7C86;margin-bottom:10px">Custom canvas size</div>
         <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px">
-          <label style="font-size:.75rem;color:#666">Breite</label>
+          <label style="font-size:.75rem;color:#666">Width</label>
           <input type="number" id="cs-w" value="${w0}" min="50" max="6000"
                  style="width:80px;padding:5px;border:1px solid #ccc;border-radius:4px">
-          <label style="font-size:.75rem;color:#666">Höhe</label>
+          <label style="font-size:.75rem;color:#666">Height</label>
           <input type="number" id="cs-h" value="${h0}" min="50" max="6000"
                  style="width:80px;padding:5px;border:1px solid #ccc;border-radius:4px">
         </div>
         <div style="display:flex;gap:6px;justify-content:flex-end">
-          <button id="cs-no" class="tbtn">Abbrechen</button>
-          <button id="cs-ok" class="tbtn primary">Übernehmen</button>
+          <button id="cs-no" class="tbtn">Cancel</button>
+          <button id="cs-ok" class="tbtn primary">Apply</button>
         </div>
       </div>`;
     document.body.appendChild(back);
@@ -329,11 +329,6 @@ async function _speichereAls(kind) {
 
 // ---- Toolbar-Aktionen (data-act) -----------------------------------------
 const actions = {
-  save:        async () => {
-    if (_speichertGerade) { toast('Already saving…', 'err'); return; }
-    _speichertGerade = true;
-    try { await io.saveImage(editor); refreshOutput(); } finally { _speichertGerade = false; }
-  },
   'save-as':   async () => {
     const titleEl = document.getElementById('title-input');
     if (!titleEl || !titleEl.value.trim()) {
@@ -358,26 +353,17 @@ const actions = {
     _saveKindVomPost = false;
     await speichereAls(kind);
   },
-  // An effect needs an area, and that area is a frame. It starts covering the
-  // whole picture: shrinking one is a drag, finding an invisible small one on a
-  // busy artboard is not.
-  'add-fxframe': () => {
-    const rahmen = media.addEffektRahmen(editor, 'network');
-    renderLayers(); renderAnimBar();
-    toast('Effect frame added - choose its effect under the canvas.');
-    return rahmen;
-  },
-
   'add-magnifier': () => {
     const lupe = media.addEffektRahmen(editor, 'magnifier');
+    _animOffen.effects = true;
     renderLayers(); renderAnimBar();
     toast('Magnifier added - drag its window over the text; way, glass and speed are under the canvas.');
     return lupe;
   },
   'add-marker': () => addMarker(),
   'add-stamp': () => addStempel(),
-  'add-qweb': () => addFragenNetz(),
-  'add-spot': () => spotStarten(),
+  'add-qweb': () => { _animOffen.effects = true; return addFragenNetz(); },
+  'add-spot': () => { _animOffen.effects = true; return spotStarten(); },
 
   // Format bewusst neu wählen (fragt wieder).
   'save-as-new': async () => { _saveKind = null; _saveKindVomPost = false; await actions['save-as'](); },
@@ -477,7 +463,7 @@ const actions = {
   'add-textblock': () => addTextblock(),
   'add-checktext': () => {
     const txt = (document.getElementById('tb-head')?.value.trim())
-             || (document.getElementById('text-input')?.value.trim()) || 'Dein Text';
+             || (document.getElementById('text-input')?.value.trim()) || 'Your text';
     const g = buildTextblock(txt, '', {
       width: +(document.getElementById('tb-width')?.value || 260),
       size:  +(document.getElementById('tb-size')?.value || 19),
@@ -521,11 +507,11 @@ const actions = {
   },
   'canvas-size': async () => {
     const choice = await modal('Canvas size', 'Choose format', [
-      { label: '1080 × 1080 (Quadrat)', value: [1080, 1080] },
-      { label: '1080 × 1350 (LinkedIn Hochformat)', value: [1080, 1350] },
-      { label: '1024 × 1536 (Hochformat 2:3)', value: [1024, 1536] },
-      { label: '1200 × 628 (Link)', value: [1200, 628] },
-      { label: '1920 × 1080 (Video)', value: [1920, 1080] },
+      { label: '1080 × 1080 (square)', value: [1080, 1080] },
+      { label: '1080 × 1350 (LinkedIn portrait)', value: [1080, 1350] },
+      { label: '1024 × 1536 (portrait 2:3)', value: [1024, 1536] },
+      { label: '1200 × 628 (link)', value: [1200, 628] },
+      { label: '1920 × 1080 (video)', value: [1920, 1080] },
       { label: '✏️ Custom size…', value: 'frei' },
     ]);
     if (!choice) return;
@@ -547,8 +533,6 @@ const actions = {
     ]);
     if (ok) editor.clearAll();
   },
-  'export-gif':   () => media.exportGif(editor),
-  'export-video': () => media.exportVideo(editor),
   'zoom-in':    () => zeigeZoom(editor.zoom('in')),
   'zoom-out':   () => zeigeZoom(editor.zoom('out')),
   'zoom-reset': () => zeigeZoom(editor.zoom('reset')),
@@ -649,7 +633,7 @@ const actions = {
     editor.clearAll();
     setTemplateId(null);   // frische Vorlage → beim Speichern neu anlegen
     const t = document.getElementById('title-input'); if (t) t.value = '';
-    status('Build a template: background, logo, text fields – then “💾 Save template”.', '#888');
+    status('Build a template: background, logo, text fields – then “💾 Save” under Template.', '#888');
   },
 };
 
@@ -695,10 +679,10 @@ async function saveAsTemplate() {
       const clash = (dj.templates || []).some(
         t => (t.title || '').trim().toLowerCase() === title.trim().toLowerCase());
       if (clash) {
-        const go = await modal('Name schon vergeben',
+        const go = await modal('Name already taken',
           `A template named “${title.trim()}” already exists. Do you still want to create a second one with the same name?`,
           [ { label: 'Cancel (choose a different name)', value: null },
-            { label: 'Trotzdem anlegen',                 value: true } ]);
+            { label: 'Create it anyway',                  value: true } ]);
         if (!go) return;
       }
     } catch (e) { /* Prüfung ist nur Komfort – bei Fehler normal weiter */ }
@@ -712,7 +696,7 @@ async function saveAsTemplate() {
     const preview = editor.exportDataURL({ multiplier: 0.4 });
     dataUrl = editor.exportDataURL({ multiplier: 1 });     // Vorschau-PNG (ohne Raster)
     canvasJson = io.buildCanvasJson(editor, preview);      // Layout: Hintergrund + Logo + Textfelder
-  } catch (e) { toast('Export fehlgeschlagen', 'err'); status('❌ Export fehlgeschlagen', 'red'); return; }
+  } catch (e) { toast('Export failed', 'err'); status('❌ Export failed', 'red'); return; }
   // An empty artboard is nearly always a slip (clicked too early) and would
   // replace a working template with nothing.
   if (updateExisting && !editor.realObjects().length && !editor.canvas.backgroundImage) {
@@ -733,8 +717,8 @@ async function saveAsTemplate() {
       // Without this check, res.json() choked on the HTML error page and the
       // user saw "SyntaxError: Unexpected token '<'".
       const grund = res.status === 413 ? 'Template too large for the server'
-                  : res.status === 403 ? 'Sitzung abgelaufen – bitte neu anmelden'
-                  : 'Server-Fehler ' + res.status;
+                  : res.status === 403 ? 'Session expired – please sign in again'
+                  : 'Server error ' + res.status;
       toast(grund, 'err'); status('❌ ' + grund, 'red'); return;
     }
     const d = await res.json();
@@ -845,7 +829,7 @@ function setTextAlign(align) {
 async function doCutout() {
   const o = editor.active();
   if (!o || o.type !== 'image') { toast('Select an image first', 'err'); return; }
-  status('✂ Stelle frei…');
+  status('✂ Removing background…');
   try {
     const cleaned = await removeBackground(o._element, { tol: 55 });
     // removeBackground deliberately protects light, colour-neutral pixels
@@ -872,9 +856,9 @@ async function doCutout() {
     o.bgRemoved = true; o._work = null;
     retouch.replaceElement(o, cleaned);
     editor.snapshot();
-    status('✅ Freigestellt', 'green');
+    status('✅ Background removed', 'green');
   } catch (e) {
-    status('❌ Freistellen fehlgeschlagen', 'red');
+    status('❌ Removing the background failed', 'red');
     toast(e.message || 'Cutting out failed', 'err');
   }
 }
@@ -1027,7 +1011,7 @@ async function doFillAt(o, px, py) {
     const cleaned = await floodFillTransparent(o._element, px, py, _tol);
     o.bgRemoved = true; o._work = null;
     retouch.replaceElement(o, cleaned); editor.snapshot();
-  } catch (e) { setToolStatus('❌ Fehler'); }
+  } catch (e) { setToolStatus('❌ Error – nothing changed'); }
 }
 
 async function doPickAt(o, px, py) {
@@ -1036,26 +1020,9 @@ async function doPickAt(o, px, py) {
     o.bgRemoved = true; o._work = null;
     retouch.replaceElement(o, out); editor.snapshot();
     setToolStatus('💧 Background colour removed – keep clicking or turn the tool off');
-  } catch (e) { setToolStatus('❌ Fehler'); }
+  } catch (e) { setToolStatus('❌ Error – nothing changed'); }
 }
 
-async function doSwapAt(o, px, py) {
-  const hex = document.getElementById('recolor-color')?.value || '#ffffff';
-  try {
-    // Zusammenhängende Fläche ab dem Klickpunkt umfärben ("näheres Umfeld").
-    const out = await recolorRegion(o._element, px, py, hex, 40);
-    o._work = null;
-    retouch.replaceElement(o, out); editor.snapshot();
-    setToolStatus('🎨 Colour swapped – keep clicking or turn the tool off');
-  } catch (e) { console.error('Farbtausch:', e); setToolStatus('❌ Fehler'); }
-}
-
-// doRecolorAt is gone: apart from the tolerance the function was identical to
-// doSwapAt (both recolorRegion). Two buttons for one and the same thing.
-
-// Recolour every similar-coloured area in the WHOLE image from the click point
-// (all the red places at once, for instance). Uses the same chosen colour as
-// "Recolour area". Transparency is kept.
 // Eyedropper: takes the colour at the click point from the VISIBLE canvas
 // (background colour and any images included) and sets it as the recolour
 // colour. So the target colour is picked by clicking instead of from the palette.
@@ -1106,16 +1073,6 @@ async function doRecolorWith(o, px, py, hex, all) {
     o._work = null; retouch.replaceElement(o, out); editor.snapshot();
     setToolStatus('🎨 Recoloured – click more areas, or press the tool button again to pick a new colour');
   } catch (e) { console.error('Recolour:', e); setToolStatus('❌ Error'); }
-}
-
-async function doSwapAllAt(o, px, py) {
-  const hex = document.getElementById('recolor-color')?.value || '#ffffff';
-  try {
-    const out = await recolorSimilarAll(o._element, px, py, hex, 45);
-    o._work = null;
-    retouch.replaceElement(o, out); editor.snapshot();
-    setToolStatus('🎨 All matching areas recoloured – keep clicking or turn the tool off');
-  } catch (e) { console.error('Recolour all:', e); setToolStatus('❌ Error'); }
 }
 
 // One brush step. `endgueltig` only when the mouse button is released:
@@ -1235,7 +1192,7 @@ function clearSelRect() {
     _mqDrawing = false;
     if (!_toolTarget) return;
     _rectEnd = imgPixel(_toolTarget, ev);
-    setToolStatus('✅ Area selected → “🗑 Delete” or “🎨 Recolour”');
+    setToolStatus('✅ Area selected → “🗑 Delete area” or “🎨 Recolour area”');
   };
   ov.addEventListener('pointerup', finish);
   ov.addEventListener('pointercancel', finish);
@@ -1457,6 +1414,19 @@ function addTextblock() {
 
 function isTextblock(o) { return !!(o && o.shapeKind === 'textblock'); }
 
+// What a rebuilt element takes over from the old one: its placement, its look
+// beyond the build (flip, opacity, shadow, slant) and its timing. The rebuilds
+// used to copy only placement and motion - editing a text lost its opacity,
+// its flip, its shadow and its effect colour and tempo.
+const MITNEHMEN = ['angle', 'scaleX', 'scaleY', 'flipX', 'flipY', 'skewX', 'skewY', 'opacity', 'shadow',
+                   'fx', 'fxDelay', 'fxTempo', 'fxColor', 'startAt'];
+function zustandVon(g) {
+  const z = {};
+  MITNEHMEN.forEach(k => { if (g[k] !== undefined) z[k] = g[k]; });
+  z.anim = g.anim ? { ...g.anim } : g.anim;
+  return z;
+}
+
 function rebuildTextblock(g, head, body, over = {}) {
   const c = g.getCenterPoint();
   const firstText = (g._objects || []).find(x => x.type === 'textbox');
@@ -1467,8 +1437,7 @@ function rebuildTextblock(g, head, body, over = {}) {
     color: col, align: g.tbAlign || 'center', check: !!g.tbCheck,
   });
   if (!ng) return null;
-  ng.set({ left: c.x, top: c.y, angle: g.angle, scaleX: g.scaleX, scaleY: g.scaleY,
-           anim: g.anim, fx: g.fx, fxDelay: g.fxDelay, startAt: g.startAt });
+  ng.set({ ...zustandVon(g), left: c.x, top: c.y });
   const idx = editor.canvas.getObjects().indexOf(g);
   editor.canvas.remove(g);
   editor.canvas.add(ng);
@@ -1500,10 +1469,10 @@ function startTextblockEdit(g) {
     <input type="text" id="tb-e-head" placeholder="Heading" style="font-weight:700;font-size:14px;padding:5px;border:1px solid #ccc;border-radius:4px">
     <textarea id="tb-e-body" placeholder="Text" rows="3" style="font-size:13px;padding:5px;border:1px solid #ccc;border-radius:4px;resize:vertical;font-family:inherit"></textarea>
     <div style="display:flex;gap:8px;align-items:center;font-size:11px;color:#666">
-      <label style="display:flex;gap:3px;align-items:center">Schriftgröße
+      <label style="display:flex;gap:3px;align-items:center">Font size
         <input type="number" id="tb-e-size" min="8" step="1" style="width:56px;padding:3px;border:1px solid #ccc;border-radius:4px">
       </label>
-      <label style="display:flex;gap:3px;align-items:center">Breite
+      <label style="display:flex;gap:3px;align-items:center">Width
         <input type="number" id="tb-e-width" min="60" step="10" style="width:64px;padding:3px;border:1px solid #ccc;border-radius:4px">
       </label>
     </div>
@@ -1614,14 +1583,9 @@ function splitChecklist(g) {
     const ziel = circleCentre(parts[i * 3], matrix);
     const ng = buildCheckList([text], opts);
     if (!ng) return;
-    ng.set({
-      left: ziel.x, top: ziel.y,
-      angle: g.angle, scaleX: g.scaleX, scaleY: g.scaleY,
-      // The timing travels along, so a motion already set is not lost. The
-      // start is then staggered per row - that is the whole point.
-      anim: g.anim ? { ...g.anim } : null, fx: g.fx,
-      fxDelay: g.fxDelay, startAt: g.startAt,
-    });
+    // The timing travels along, so a motion already set is not lost. The
+    // start is then staggered per row - that is the whole point.
+    ng.set({ ...zustandVon(g), left: ziel.x, top: ziel.y });
     // Measure instead of trusting the arithmetic: the new row is placed
     // roughly, then shifted so that ITS circle sits exactly where the old one
     // sat. Everything else in a row is fixed relative to that circle, so one
@@ -1654,7 +1618,7 @@ function rebuildChecklist(g, items, over = {}) {
     color: over.color || g.clColor || '#161616',
   });
   if (!ng) return null;
-  ng.set({ left: c.x, top: c.y, angle: g.angle, scaleX: g.scaleX, scaleY: g.scaleY, anim: g.anim, fx: g.fx, fxDelay: g.fxDelay, startAt: g.startAt });
+  ng.set({ ...zustandVon(g), left: c.x, top: c.y });
   const idx = editor.canvas.getObjects().indexOf(g);
   editor.canvas.remove(g);
   editor.canvas.add(ng);
@@ -1679,12 +1643,12 @@ function startChecklistEdit(g) {
     z-index:9999;background:#fff;border:2px solid #F56E28;border-radius:8px;padding:8px;
     box-shadow:0 6px 20px rgba(0,0,0,.3);display:flex;flex-direction:column;gap:5px;width:320px;`;
   box.innerHTML = `
-    <div style="font-size:11px;color:#666">Eine Zeile = ein Haken:</div>
+    <div style="font-size:11px;color:#666">One line = one check:</div>
     <textarea id="cl-e-body" rows="4" style="font-size:13px;padding:5px;border:1px solid #ccc;border-radius:4px;resize:vertical;font-family:inherit"></textarea>
     <div style="display:flex;gap:8px;align-items:center;font-size:11px;color:#666">
-      <label style="display:flex;gap:3px;align-items:center">Schriftgröße
+      <label style="display:flex;gap:3px;align-items:center">Font size
         <input type="number" id="cl-e-size" min="8" step="1" style="width:56px;padding:3px;border:1px solid #ccc;border-radius:4px"></label>
-      <label style="display:flex;gap:3px;align-items:center">Breite
+      <label style="display:flex;gap:3px;align-items:center">Width
         <input type="number" id="cl-e-width" min="60" step="10" style="width:64px;padding:3px;border:1px solid #ccc;border-radius:4px"></label>
     </div>
     <div style="font-size:11px;color:#888">Ctrl+Enter = done, Esc = cancel</div>`;
@@ -1927,6 +1891,54 @@ function frageKnoten(props, x, y) {
   return g;
 }
 function netzVon(o) { return media.fragenNetze(editor).get(o.qwebId || 'q') || [o]; }
+
+/* Duplicate and Delete keep question webs and spotlights in order. A copy of
+   one member joins its web or spotlight at the end, with the next number; a
+   copy of a whole web or spotlight becomes one of its own. Deleting closes the
+   gaps, so the numbers and signs run 1, 2, 3 again. */
+const GRUPPEN_ARTEN = [
+  { ist: media.istFrageKnoten, id: 'qwebId', nr: 'qwebNr', vorsilbe: 'q', gruppen: () => media.fragenNetze(editor),
+    ordnen: k => netzAktualisieren(k) },
+  { ist: media.istSpot, id: 'spotId', nr: 'spotNr', vorsilbe: 's', gruppen: () => media.spotGruppen(editor),
+    ordnen: k => spotOrdnenAnwenden(k) },
+];
+editor.nachDuplikat((quellen, kopien) => {
+  const neu = new Set(kopien);
+  GRUPPEN_ARTEN.forEach(art => {
+    const jeGruppe = new Map();
+    kopien.forEach((c, i) => {
+      if (!art.ist(c)) return;
+      const id = c[art.id] || art.vorsilbe;
+      if (!jeGruppe.has(id)) jeGruppe.set(id, []);
+      jeGruppe.get(id).push(c);
+    });
+    const gruppen = art.gruppen();
+    jeGruppe.forEach((cs, id) => {
+      const alte = (gruppen.get(id) || []).filter(o => !neu.has(o));
+      cs.sort((a, b) => (a[art.nr] || 0) - (b[art.nr] || 0));
+      if (cs.length >= alte.length) {
+        const neueId = art.vorsilbe + Date.now().toString(36) + Math.random().toString(36).slice(2, 5);
+        cs.forEach((c, j) => { c[art.id] = neueId; c[art.nr] = j; });
+      } else {
+        cs.forEach((c, j) => { c[art.nr] = alte.length + j; });
+      }
+    });
+    jeGruppe.forEach(cs => art.ordnen(art.gruppen().get(cs[0][art.id]) || cs));
+  });
+});
+editor.nachLoeschen(weg => {
+  GRUPPEN_ARTEN.forEach(art => {
+    const ids = new Set(weg.filter(art.ist).map(o => o[art.id] || art.vorsilbe));
+    if (!ids.size) return;
+    const gruppen = art.gruppen();
+    ids.forEach(id => {
+      const rest = gruppen.get(id);
+      if (!rest) return;
+      rest.forEach((o, j) => { o[art.nr] = j; });
+      art.ordnen(rest);
+    });
+  });
+});
 // Order, sign and colour after any change - the numbers follow the list.
 function netzAktualisieren(knoten) {
   knoten.forEach((o, i) => {
@@ -2080,6 +2092,7 @@ function spotZeile(k) {
   const aktiv = editor.active();
   row.className = 'anim-row fx-row spot-row' + (k.includes(aktiv) ? ' on' : '');
   row.dataset.spot = e.spotId || 's';
+  hoverZeile(row, k);
   const th = document.createElement('div'); th.className = 'anim-thumb fx-thumb'; th.textContent = '🔦';
   th.title = 'Select the spotlight frame';
   th.onclick = () => editor.selectObj(e);
@@ -2117,11 +2130,15 @@ function spotZeile(k) {
     return inp;
   };
 
-  wahl('Spots', null, [['eins', 'Just one', !film], ['reihe', 'One after another', film]], wert => {
+  wahl('Spots', null, [['eins', 'Just one', !film], ['reihe', 'One after another', film]], async wert => {
     if (wert === 'reihe') { if (!film) spotStarten(k); return; }
     if (!film) return;
     const bleibt = k.includes(aktiv) ? aktiv : e;
-    if (!confirm('Keep only one spot and remove the other ' + (k.length - 1) + '?')) return;
+    const ja = await modal('Just one spot?', 'Keep only one spot and remove the other ' + (k.length - 1) + '?', [
+      { label: 'Keep one', value: true },
+      { label: 'Cancel', value: false },
+    ]);
+    if (!ja) return;
     k.forEach(o => { if (o !== bleibt) editor.canvas.remove(o); });
     bleibt.spotNr = 0;
     editor.canvas.setActiveObject(bleibt);
@@ -2325,8 +2342,7 @@ function rebuildBadge(g, txt) {
     const textColor = old[1]?.fill || '#ffffff';
     ng = buildBadge(kind, txt, fill, textColor);
   }
-  ng.set({ left: c.x, top: c.y, angle: g.angle, scaleX: g.scaleX, scaleY: g.scaleY,
-           anim: g.anim, fx: g.fx, fxDelay: g.fxDelay, startAt: g.startAt });
+  ng.set({ ...zustandVon(g), left: c.x, top: c.y });
   const idx = editor.canvas.getObjects().indexOf(g);
   editor.canvas.remove(g);
   editor.canvas.add(ng);
@@ -2680,7 +2696,13 @@ function renderLayers() {
    (zeichneRahmenHinweise), never on the canvas that gets exported. */
 const _animOffen = { motion: true, effects: true };
 let _rahmenZeigen = true;
-let _rahmenHover = null;
+// What the pointer rests on in the bar: one effect frame, or every member
+// of a question web or spotlight. The hint layer lights these up.
+let _hover = [];
+function hoverZeile(row, liste) {
+  row.onmouseenter = () => { _hover = liste; editor.canvas.requestRenderAll(); };
+  row.onmouseleave = () => { if (_hover === liste) _hover = []; editor.canvas.requestRenderAll(); };
+}
 
 function animGruppe(schluessel, titel, zusatz, anzahl) {
   const d = document.createElement('details');
@@ -2889,8 +2911,7 @@ function effektZeile(o, idx) {
   const row = document.createElement('div');
   row.className = 'anim-row fx-row' + (o === editor.active() ? ' on' : '');
   row.dataset.objIdx = String(idx);
-  row.onmouseenter = () => { _rahmenHover = o; editor.canvas.requestRenderAll(); };
-  row.onmouseleave = () => { if (_rahmenHover === o) _rahmenHover = null; editor.canvas.requestRenderAll(); };
+  hoverZeile(row, [o]);
 
   const th = document.createElement('div'); th.className = 'anim-thumb fx-thumb';
   th.textContent = o.fx === 'magnifier' ? '🔍' : '✨';
@@ -2941,7 +2962,7 @@ function effektZeile(o, idx) {
   const weg = document.createElement('button');
   weg.type = 'button'; weg.className = 'fx-remove'; weg.textContent = '✕ Remove';
   weg.onclick = () => {
-    if (_rahmenHover === o) _rahmenHover = null;
+    _hover = _hover.filter(x => x !== o);
     editor.canvas.remove(o);
     editor.canvas.requestRenderAll();
     editor.snapshot();
@@ -2960,6 +2981,7 @@ function frageZeile(knoten) {
   const aktiv = editor.active();
   row.className = 'anim-row fx-row qweb-row' + (knoten.includes(aktiv) ? ' on' : '');
   row.dataset.qweb = knoten[0].qwebId || 'q';
+  hoverZeile(row, knoten);
   const th = document.createElement('div'); th.className = 'anim-thumb fx-thumb'; th.textContent = '❓';
   th.title = 'Select the first question mark';
   th.onclick = () => editor.selectObj(knoten[0]);
@@ -3054,7 +3076,9 @@ function effektPalette(rahmenListe, netzListe = [], spotListe = []) {
   // A spotlight takes the colour for its frame - all of its frames at once.
   let spotZiel = media.istSpot(aktiv) ? media.spotGruppeVon(editor, aktiv) : null;
   let netzZiel = !spotZiel && media.istFrageKnoten(aktiv) ? netzVon(aktiv) : null;
-  let ziel = (netzZiel || spotZiel) ? null : (media.istEffektRahmen(aktiv) ? aktiv : rahmenListe.find(r => r.fx !== 'magnifier'));
+  // The magnifier shows what lies under it and has no colour of its own.
+  const farbRahmen = r => media.istEffektRahmen(r) && r.fx !== 'magnifier';
+  let ziel = (netzZiel || spotZiel) ? null : (farbRahmen(aktiv) ? aktiv : rahmenListe.find(farbRahmen));
   if (!ziel && !netzZiel && !spotZiel && netzListe.length) netzZiel = netzListe[0];
   if (!ziel && !netzZiel && !spotZiel && spotListe.length) spotZiel = spotListe[0];
   const farbeSetzen = f => {
@@ -3083,7 +3107,7 @@ function effektPalette(rahmenListe, netzListe = [], spotListe = []) {
   hinweis.textContent = spotZiel ? (media.istSpot(aktiv) ? 'paints the selected spotlight' : 'paints the spotlight')
     : netzZiel ? (media.istFrageKnoten(aktiv) ? 'paints the selected question web' : 'paints the question web')
     : !ziel ? 'no frame with a colour'
-    : (media.istEffektRahmen(aktiv) ? 'paints the selected frame' : 'paints the first frame - select another to change it');
+    : (ziel === aktiv ? 'paints the selected frame' : 'paints the first frame - select another to change it');
   zeile.appendChild(hinweis);
   col.appendChild(zeile);
   row.appendChild(th); row.appendChild(col);
@@ -3214,8 +3238,10 @@ function zeichneRahmenHinweise() {
   ctx.clearRect(0, 0, ebene.width, ebene.height);
   // A preview shows the picture as it will be posted - no helper lines in it.
   if (media.effectsRunning()) return;
+  // Removed from the bar while the pointer rested on its row: forget it.
+  if (_hover.some(o => !o.canvas)) _hover = [];
   const rahmen = editor.canvas.getObjects().filter(media.istEffektRahmen);
-  if (!rahmen.length) return;
+  if (!rahmen.length && !_hover.length) return;
   const retina = editor.canvas.getRetinaScaling ? editor.canvas.getRetinaScaling() : 1;
   const vp = editor.canvas.viewportTransform;
   const zoom = editor.canvas.getZoom() || 1;
@@ -3223,7 +3249,7 @@ function zeichneRahmenHinweise() {
                    vp[4] * retina, vp[5] * retina);
   const aktiv = editor.active();
   rahmen.forEach(o => {
-    const hell = o === _rahmenHover;
+    const hell = _hover.includes(o);
     if (!hell && !_rahmenZeigen) return;
     if (o === aktiv && !hell) return;          // the handles already show it
     const b = o.getBoundingRect(true);
@@ -3240,6 +3266,24 @@ function zeichneRahmenHinweise() {
       ctx.textBaseline = 'top'; ctx.textAlign = 'left';
       const w = ctx.measureText(name).width + 12 / zoom;
       const y = Math.max(0, b.top);
+      ctx.fillStyle = '#008591'; ctx.fillRect(b.left, y, w, 18 / zoom);
+      ctx.fillStyle = '#ffffff'; ctx.fillText(name, b.left + 6 / zoom, y + 3 / zoom);
+    }
+    ctx.restore();
+  });
+  // The question marks of a web light up like a frame does.
+  _hover.filter(media.istFrageKnoten).forEach((o, i) => {
+    const b = o.getBoundingRect(true);
+    ctx.save();
+    ctx.fillStyle = 'rgba(0,133,145,0.12)'; ctx.fillRect(b.left, b.top, b.width, b.height);
+    ctx.setLineDash([7 / zoom, 5 / zoom]); ctx.strokeStyle = '#008591'; ctx.lineWidth = 2 / zoom;
+    ctx.strokeRect(b.left, b.top, b.width, b.height);
+    ctx.setLineDash([]);
+    if (!i) {
+      const name = '❓ Question web';
+      ctx.font = `700 ${12 / zoom}px Roboto, Arial, sans-serif`;
+      ctx.textBaseline = 'top'; ctx.textAlign = 'left';
+      const w = ctx.measureText(name).width + 12 / zoom, y = Math.max(0, b.top - 20 / zoom);
       ctx.fillStyle = '#008591'; ctx.fillRect(b.left, y, w, 18 / zoom);
       ctx.fillStyle = '#ffffff'; ctx.fillText(name, b.left + 6 / zoom, y + 3 / zoom);
     }
@@ -3262,7 +3306,7 @@ function zeichneRahmenHinweise() {
   // The magnifier's way, dotted orange: where the glass will travel.
   rahmen.forEach(o => {
     if (o.fx !== 'magnifier' || (o.fxPath || 'still') === 'still') return;
-    if (!_rahmenZeigen && o !== aktiv && o !== _rahmenHover) return;
+    if (!_rahmenZeigen && o !== aktiv && !_hover.includes(o)) return;
     const wege = media.lupenWege(o);
     ctx.save();
     ctx.setLineDash([2 / zoom, 5 / zoom]);
@@ -3525,6 +3569,13 @@ function syncFontSizeInput() {
 // Drop an element's preview image as soon as it changes - only then does it
 // have to be rasterised again.
 editor.canvas.on('object:modified', e => { if (e?.target) e.target.__thumb = null; });
+// Colour, text and style changes go through the selection and end in a
+// snapshot, not in object:modified - the preview then kept the old colour.
+function vorschauVergessen() {
+  const a = editor.canvas.getActiveObject();
+  if (!a) return;
+  (a.type === 'activeSelection' ? a.getObjects() : [a]).forEach(o => { o.__thumb = null; });
+}
 
 // ---- Undo/redo buttons enabled or disabled --------------------------------
 // The rebuilds of the layer bar and the animation bar are batched: a single
@@ -3541,6 +3592,7 @@ function planeUiAufbau() {
 }
 
 editor.onChange(() => {
+  vorschauVergessen();
   const u = document.querySelector('[data-act="undo"]');
   const r = document.querySelector('[data-act="redo"]');
   if (u) u.disabled = !editor.canUndo();
@@ -3594,7 +3646,7 @@ boot('SVG handler', () => {
   }
 });
 boot('Library', () => {
-  if (typeof initLibrary !== 'function') throw new Error('initLibrary fehlt (alte library.js im Browser-Cache? Strg+F5)');
+  if (typeof initLibrary !== 'function') throw new Error('initLibrary missing (old library.js in the browser cache? Ctrl+F5)');
   initLibrary(editor);
 });
 boot('Selection bar', () => renderSelBar());
@@ -3660,7 +3712,7 @@ function fehlendeBilder() {
       if (tpl.width && tpl.height) { editor.setSize(tpl.width, tpl.height); fit(); }
       status('⏳ Loading template…');
       if (await ladeCanvas(tpl.canvas_json, { frisch: true })) {
-        status('Editing template – “💾 Save template” updates it.', '#0E7C86');
+        status('Editing template – “💾 Save” under Template updates it.', '#0E7C86');
       }
       return;
     }

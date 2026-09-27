@@ -150,7 +150,7 @@ function initUpload() {
     const files = [...input.files];
     input.value = '';
     for (const file of files) {
-      melde(`Lade ${file.name}…`);
+      melde(`Loading ${file.name}…`);
       try {
         const fd = new FormData();
         fd.append('file', file);
@@ -163,7 +163,7 @@ function initUpload() {
         if (d.ok) melde(`✓ ${file.name} uploaded`);
         else { melde(`✗ ${d.error || 'Error'}`); toast('Upload failed', 'err'); }
       } catch (e) {
-        melde('✗ Fehler');
+        melde('✗ Error');
         toast('Upload error', 'err');
       }
     }
@@ -372,7 +372,7 @@ function renderImages(grid, items) {
     img.className = 'lib-thumb';
     img.title = item.title || item.name || '';
     img.draggable = true;
-    img.onerror = () => { img.style.opacity = .3; img.title += ' (nicht ladbar)'; };
+    img.onerror = () => { img.style.opacity = .3; img.title += ' (cannot be loaded)'; };
     img.onclick = () => einfuegen(item);
     img.addEventListener('dragstart', e => e.dataTransfer.setData('text/studio-url', item.url));
     grid.appendChild(img);
@@ -452,7 +452,7 @@ async function loadOutput() {
       // "on post" means: the file sits in the Planner folder because it hangs on
       // a post. That is worth showing - otherwise one wonders why some outputs
       // behave differently.
-      el.title = (item.title || item.name || '') + (item.am_post ? ' · am Post' : '');
+      el.title = (item.title || item.name || '') + (item.am_post ? ' · on a post' : '');
       // A thumbnail whose file will not load is greyed out instead of sitting
       // there looking healthy — for videos it used to stay a black rectangle.
       el.onerror = () => {

@@ -59,7 +59,7 @@ export async function nameSicherstellen(editor) {
     // Kollision beim Umbenennen → nachfragen statt still zu überschreiben.
     const gewaehlt = await frageNachNamen({
       vorschlag: eindeutig(sauber, belegt, gespeicherterName), belegt, eigener: gespeicherterName,
-      titel: 'Name schon vergeben',
+      titel: 'Name already taken',
       hinweis: `“${sauber}” already belongs to another output. Please choose a different name.`,
     });
     if (!gewaehlt) { status('Rename cancelled – nothing saved', 'red'); return null; }
@@ -214,7 +214,7 @@ async function _saveImage(editor) {
   // Without a name, nothing is saved.
   const title = await nameSicherstellen(editor);
   if (!title) return false;
-  status('💾 Speichert…');
+  status('💾 Saving…');
 
   let dataUrl, preview;
   try {
@@ -236,7 +236,6 @@ async function _saveImage(editor) {
     lib_item_id: istBildOffen ? (CONFIG.libData?.item_id || null) : null,
     openNcPath: istBildOffen ? (CONFIG.libData?.nc_path || null) : null,
     templateId: editor._templateId || null,
-    folderId: document.getElementById('save-folder')?.value || null,
     canvasJson: buildCanvasJson(editor, preview),
   };
 
@@ -253,10 +252,10 @@ async function _saveImage(editor) {
         // it. The user has to know that before closing the page.
         status('⚠️ ' + d.warning, 'red');
         toast('Image saved – draft not (details above)', 'err');
-        window.alert('Achtung:\n\n' + d.warning);
+        window.alert('Attention:\n\n' + d.warning);
       } else {
         status('✅ Image saved!', 'green');
-        toast('Gespeichert', 'ok');
+        toast('Saved', 'ok');
       }
       // Remember WHAT was just saved. Without it, every further save after a
       // title change creates another duplicate.
@@ -278,7 +277,7 @@ async function _saveImage(editor) {
   }
 }
 
-// Saves an exported moving image (WebM/GIF) into "My outputs" - including the
+// Saves an exported moving image (WebM/GIF) into "Outputs" - including the
 // canvas_json, so it can be opened in the editor again later.
 export async function saveAnimation(editor, blob, ext) {
   await vorschauenUebernehmen(editor.canvas);
@@ -293,8 +292,6 @@ export async function saveAnimation(editor, blob, ext) {
   fd.append('video', blob, safe);
   fd.append('title', title);
   fd.append('canvas_json', buildCanvasJson(editor, preview));
-  const folder = document.getElementById('save-folder')?.value;
-  if (folder) fd.append('folder_id', folder);
   // Send lib_item_id ONLY when the open output has the same format. Otherwise
   // the image entry was repurposed as the GIF entry: the PNG file stayed where
   // it was, but was no longer reachable through any entry and opened without
@@ -314,8 +311,8 @@ export async function saveAnimation(editor, blob, ext) {
     });
     const d = await readJson(res);
     if (d.ok) {
-      status('✅ Gespeichert als „' + title + '"', 'green');
-      toast('Saved to “My outputs”', 'ok');
+      status('✅ Saved as “' + title + '”', 'green');
+      toast('Saved to “Outputs”', 'ok');
       CONFIG.libData = { ...(CONFIG.libData || {}), item_id: d.lib_id ?? null, title,
                          nc_path: d.nc_path ?? null, kind: ext === '.gif' ? 'gif' : 'video' };
       window.dispatchEvent(new CustomEvent('studio:output-changed',
@@ -339,7 +336,7 @@ export function downloadImage(editor) {
     a.download = (document.getElementById('title-input')?.value.trim() || 'studio') + '.png';
     a.click();
   } catch (e) {
-    status('❌ Herunterladen fehlgeschlagen', 'red');
+    status('❌ Download failed', 'red');
     toast('An image is cross-origin – loading via the proxy', 'err');
   }
 }
@@ -382,7 +379,7 @@ export function restoreCanvas(editor, canvasJsonStr, opts = {}) {
   const before = (fabricState.objects || []).length;
   fabricState.objects = (fabricState.objects || []).filter(o => o && _klassOk(o.type));
   if (fabricState.objects.length < before) {
-    console.warn(`restoreCanvas: ${before - fabricState.objects.length} unlesbare(s) Objekt(e) übersprungen`);
+    console.warn(`restoreCanvas: ${before - fabricState.objects.length} unreadable object(s) skipped`);
   }
   // Neutralise damaged text styles - otherwise Fabric crashes while
   // serialising (stylesToArray). Basic formatting is kept.
@@ -442,7 +439,7 @@ export function restoreCanvas(editor, canvasJsonStr, opts = {}) {
     try {
       editor.canvas.loadFromJSON(fabricState, () => finish(true));
     } catch (e) {
-      console.warn('restoreCanvas Fehler:', e);
+      console.warn('restoreCanvas error:', e);
       status('❌ Draft could not be fully loaded', 'red');
       finish(false);
     }
@@ -451,7 +448,7 @@ export function restoreCanvas(editor, canvasJsonStr, opts = {}) {
     // connection it unlocked mid-load and wrote half a state down as the undo
     // baseline.
     timer = setTimeout(() => {
-      console.warn('restoreCanvas: Zeitüberschreitung beim Laden');
+      console.warn('restoreCanvas: timed out while loading');
       status('⚠️ Not all images could be loaded', 'red');
       finish(false);
     }, 20000);

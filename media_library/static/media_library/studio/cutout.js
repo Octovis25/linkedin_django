@@ -4,28 +4,6 @@
 // images vanishing before, or not sitting on the background.
 import { loadImage } from './util.js';
 
-// Checks whether a fabric.Image already has transparency (already cut out).
-// Important: on error we return FALSE (treat the image as NOT cut out) - the
-// old logic wrongly assumed TRUE and skipped the cut-out, which is how images
-// with a box around them ended up on the background.
-export function hasTransparency(imgEl) {
-  try {
-    const w = Math.min(imgEl.naturalWidth || imgEl.width, 200);
-    const h = Math.min(imgEl.naturalHeight || imgEl.height, 200);
-    const c = document.createElement('canvas');
-    c.width = w; c.height = h;
-    const ctx = c.getContext('2d');
-    ctx.drawImage(imgEl, 0, 0, w, h);
-    const d = ctx.getImageData(0, 0, w, h).data;
-    let transp = 0;
-    for (let i = 3; i < d.length; i += 4) if (d[i] < 250) transp++;
-    return transp > w * h * 0.03;   // >3 % transparent → schon freigestellt
-  } catch (e) {
-    console.warn('Transparenz-Check fehlgeschlagen:', e);
-    return false;                    // sicher: als NICHT freigestellt behandeln
-  }
-}
-
 // Removes the background by an EDGE FLOOD FILL: starts at every edge pixel and
 // removes only the background colour CONNECTED to the edge. Enclosed areas (a
 // white coat, icons - even in the same colour as the edge) are kept.
@@ -127,33 +105,6 @@ export function removeBackground(imgEl, { tol = 50, islandMaxPct = 0.6 } = {}) {
     if (region.length <= maxIsland) region.forEach(clear);
   }
 
-  ctx.putImageData(imgData, 0, 0);
-  return loadImage(c.toDataURL('image/png'));
-}
-
-// Removes a light, greyscale "transparency chequerboard" (typical of
-// AI-generated "transparent" images): every light, low-colour (grey or white)
-// pixel becomes transparent, connected or not. Colourful and dark content is
-// kept. Returns Promise<HTMLImageElement>.
-export function removeGrayBackground(imgEl, { minBright = 175, maxSat = 32 } = {}) {
-  const W = imgEl.naturalWidth || imgEl.width;
-  const H = imgEl.naturalHeight || imgEl.height;
-  const c = document.createElement('canvas');
-  c.width = W; c.height = H;
-  const ctx = c.getContext('2d');
-  ctx.drawImage(imgEl, 0, 0, W, H);
-  let imgData;
-  try { imgData = ctx.getImageData(0, 0, W, H); }
-  catch (e) { return Promise.reject(new Error('Image tainted – load via the proxy.')); }
-  const d = imgData.data;
-  for (let i = 0; i < d.length; i += 4) {
-    if (d[i + 3] === 0) continue;
-    const r = d[i], g = d[i + 1], b = d[i + 2];
-    const max = Math.max(r, g, b), min = Math.min(r, g, b);
-    const bright = max;          // Helligkeit
-    const sat = max - min;       // grob: Farbigkeit (0 = grau)
-    if (bright >= minBright && sat <= maxSat) d[i + 3] = 0;  // hell + grau → weg
-  }
   ctx.putImageData(imgData, 0, 0);
   return loadImage(c.toDataURL('image/png'));
 }
