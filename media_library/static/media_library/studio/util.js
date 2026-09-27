@@ -11,6 +11,29 @@ export function toast(msg, kind = '', ms = 2600) {
   t._timer = setTimeout(() => t.classList.remove('show'), ms);
 }
 
+// A colour written the same way for comparing ("#ABC" vs "#abc ").
+export const hexNorm = c => String(c || '').trim().toLowerCase();
+
+// Text safe to put into innerHTML. One helper for the whole Studio - there
+// were three, each escaping a slightly different set of characters.
+export function esc(s) {
+  return String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+}
+
+// The file name for a download: the title field, or "studio".
+export function dateiName(endung) {
+  return (document.getElementById('title-input')?.value.trim() || 'studio') + endung;
+}
+// Hands a file to the browser as a download (a Blob or a data URL).
+export function herunterladen(inhalt, name) {
+  const a = document.createElement('a');
+  const url = typeof inhalt === 'string' ? inhalt : URL.createObjectURL(inhalt);
+  a.href = url;
+  a.download = name;
+  a.click();
+  if (typeof inhalt !== 'string') setTimeout(() => URL.revokeObjectURL(url), 5000);
+}
+
 export function status(msg, color = '#008591') {
   const el = document.getElementById('status-msg');
   if (el) { el.textContent = msg; el.style.color = color; }

@@ -1,7 +1,7 @@
 // io.js - saving and loading. Builds the PNG plus canvas_json and talks to the
 // existing Django backend (studio_save). A reload rebuilds the Fabric state exactly.
 import { URLS, POST_ID, CONFIG, getCookie, proxyUrl } from './config.js';
-import { toast, status, readJson } from './util.js';
+import { toast, status, readJson, herunterladen, dateiName } from './util.js';
 import { fabric, EXTRA_PROPS, Editor } from './editor.js';
 import { beendeVorschauen, vorschauenUebernehmen } from './retouch.js';
 import { vorschlagAusInhalt, vergebeneNamen, eindeutig, entschaerfe, frageNachNamen } from './namen.js';
@@ -339,10 +339,7 @@ export async function saveAnimation(editor, blob, ext) {
 export function downloadImage(editor) {
   if (ladeGuard(editor)) return;
   try {
-    const a = document.createElement('a');
-    a.href = exportPng(editor);
-    a.download = (document.getElementById('title-input')?.value.trim() || 'studio') + '.png';
-    a.click();
+    herunterladen(exportPng(editor), dateiName('.png'));
   } catch (e) {
     status('❌ Download failed', 'red');
     toast('An image is cross-origin – loading via the proxy', 'err');

@@ -4,7 +4,7 @@
 //           (parents recursively too) show their images together in the grid.
 //   BOTTOM: finished Studio outputs - images / GIFs / videos - to work on again.
 import { URLS, getCookie, CONFIG } from './config.js';
-import { toast, readJson } from './util.js';
+import { toast, readJson, esc } from './util.js';
 
 // Async work kicked off from a sync handler. Without this the rejection reaches
 // the global handler in studio.html and paints a red banner over the page for
@@ -12,7 +12,6 @@ import { toast, readJson } from './util.js';
 const guard = (p, what) => Promise.resolve(p).catch(e => console.error('[library] ' + what + ':', e));
 
 // Fehlermeldungen landen im DOM – nie ungeprüft.
-const esc = t => String(t).replace(/[<>&]/g, c => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' }[c]));
 
 // ── Load tiles only once they can be seen ──────────────────────────────────
 // A tile shows the full-size file: a saved output is a 1080x1080 PNG, an asset

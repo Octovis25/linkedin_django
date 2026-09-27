@@ -242,7 +242,7 @@ export async function vorschauenUebernehmen(fabricCanvas) {
 
 // Markierung anwenden. mode: 'recolor' (Farbe) | 'remove' (transparent).
 export function applyMask(obj, mode, color) {
-  const { ctx, canvas: work, W, H } = getWork(obj);
+  const { ctx, W, H } = getWork(obj);
   const mask = getMask(obj);
   if (mode === 'remove') {
     ctx.globalCompositeOperation = 'destination-out';

@@ -1,7 +1,6 @@
 // editor.js - the Fabric canvas: objects, multi-select, snapping, alignment,
 // undo/redo, keyboard control. The stable core of the new Studio.
-import { loadImage, toast } from './util.js';
-import { proxyUrl } from './config.js';
+import { loadImage } from './util.js';
 
 export const fabric = window.fabric;
 if (!fabric) console.error('Fabric.js not loaded!');
@@ -32,6 +31,12 @@ export const EXTRA_PROPS = [
   'tbHead', 'tbBody', 'tbWidth', 'tbSize', 'tbAlign', 'tbCheck', 'tbColor',
   'clItems', 'clWidth', 'clSize', 'clColor',
 ];
+
+// The six corners of a hexagon with its point at the top, radius r, round (0,0).
+export const hexPoints = r => Array.from({ length: 6 }, (_, i) => {
+  const a = (Math.PI / 3) * i - Math.PI / 2;
+  return { x: r * Math.cos(a), y: r * Math.sin(a) };
+});
 
 // Upper limit for the undo history, in bytes. Cut-out and retouched images sit
 // in the JSON as base64 data: URLs - without a budget the history grows into
@@ -236,10 +241,6 @@ export class Editor {
 
   // Wabe (Sechseck, Spitze oben) – Punkte relativ, Fabric setzt die Bounding-Box
   addShape(kind, color = '#F56E28') {
-    const hexPoints = r => Array.from({ length: 6 }, (_, i) => {
-      const a = (Math.PI / 3) * i - Math.PI / 2;
-      return { x: r * Math.cos(a), y: r * Math.sin(a) };
-    });
     const cx = this.width / 2, cy = this.height / 2;
     const common = { left: cx, top: cy, originX: 'center', originY: 'center', shapeKind: kind };
     let obj;

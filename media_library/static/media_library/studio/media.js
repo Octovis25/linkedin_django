@@ -4,7 +4,7 @@
 // see startOf()/elapsedAt() further down.
 // On playback, opacity, position, scale and angle are interpolated over time
 // and the canvas is rendered frame by frame.
-import { toast, status } from './util.js';
+import { toast, status, herunterladen, dateiName } from './util.js';
 import { fabric } from './editor.js';
 import { saveAnimation } from './io.js';
 
@@ -1417,10 +1417,7 @@ async function videoBildgenau(editor, gesamt, breit, hoch) {
   _fxOn = true;
   for (let n = 0; n < anzahl; n++) {
     if (fehler) throw fehler;
-    const t = Math.min(n, letzter) * frameMs;
-    _fxTime = t;
-    editor.canvas.getObjects().forEach(o => applyAt(o, t));
-    editor.canvas.renderAll();
+    bildBei(editor, Math.min(n, letzter) * frameMs);
     bctx.clearRect(0, 0, breit, hoch);
     bctx.drawImage(quelle, 0, 0, breit, hoch);
     const f = new VideoFrame(bild, { timestamp: Math.round(n * schrittUs), duration: Math.round(schrittUs) });
@@ -1439,6 +1436,15 @@ async function videoBildgenau(editor, gesamt, breit, hoch) {
   muxer.finalize();
   _letzteVideoZeiten = zeiten;
   return new Blob([muxer.target.buffer], { type: 'video/webm' });
+}
+
+// One frame of an export: every element and effect at time t, drawn now.
+// The GIF, the frame-by-frame video and the recorder all step through time
+// with this.
+function bildBei(editor, t) {
+  _fxTime = t;
+  editor.canvas.getObjects().forEach(o => applyAt(o, t));
+  editor.canvas.renderAll();
 }
 
 export async function exportVideo(editor, onBlob) {
@@ -1507,13 +1513,11 @@ export async function exportVideo(editor, onBlob) {
         status('🎬 Recording video…');
       }
       const t = n * frameMs;
-      _fxTime = t;
       // The recorder stamps frames with the wall clock. Paused while a frame is
       // drawn, it only counts the 1/30 s the frame is shown - so a slow machine
       // gives the same video, it just takes longer to make.
       if (spur && rec.state === 'recording') rec.pause();
-      editor.canvas.getObjects().forEach(o => applyAt(o, t));
-      editor.canvas.renderAll();
+      bildBei(editor, t);
       if (spur && rec.state === 'paused') rec.resume();
       bildHolen();
       await new Promise(r => setTimeout(r, frameMs));
@@ -1550,14 +1554,7 @@ export async function exportVideo(editor, onBlob) {
 
 // Make a video and download it straight to the computer (instead of "Outputs").
 export async function downloadVideo(editor) {
-  await exportVideo(editor, blob => {
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = (document.getElementById('title-input')?.value.trim() || 'studio') + '.webm';
-    a.click();
-    setTimeout(() => URL.revokeObjectURL(a.href), 5000);
-    toast('Video downloaded', 'ok');
-  });
+  await exportVideo(editor, blob => { herunterladen(blob, dateiName('.webm')); toast('Video downloaded', 'ok'); });
 }
 
 // ---- Export as GIF --------------------------------------------------------
@@ -1625,9 +1622,7 @@ export async function exportGif(editor, onBlob) {
       const gesamtFrames = Math.floor(total / frameMs) + 1;
       let n = 0;
       for (let t = 0; t <= total; t += frameMs) {
-        _fxTime = t;
-        editor.canvas.getObjects().forEach(o => applyAt(o, t));
-        editor.canvas.renderAll();
+        bildBei(editor, t);
         _tctx.clearRect(0, 0, gw, gh);
         _tctx.drawImage(editor.canvas.lowerCanvasEl, 0, 0, gw, gh);
         const bild = _tctx.getImageData(0, 0, gw, gh);
@@ -1685,12 +1680,5 @@ export async function exportGif(editor, onBlob) {
 
 // Make a GIF and download it straight to the computer (instead of "Outputs").
 export async function downloadGif(editor) {
-  await exportGif(editor, blob => {
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = (document.getElementById('title-input')?.value.trim() || 'studio') + '.gif';
-    a.click();
-    setTimeout(() => URL.revokeObjectURL(a.href), 5000);
-    toast('GIF downloaded', 'ok');
-  });
+  await exportGif(editor, blob => { herunterladen(blob, dateiName('.gif')); toast('GIF downloaded', 'ok'); });
 }

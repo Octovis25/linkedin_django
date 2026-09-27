@@ -178,10 +178,12 @@ if (!window.fabric && window.studioZeigeFehler) {
 <script type="importmap">
 {
   "imports": {
+    "{% get_static_prefix %}media_library/studio/animbar.js":    "{% static 'media_library/studio/animbar.js' %}",
     "{% get_static_prefix %}media_library/studio/background.js": "{% static 'media_library/studio/background.js' %}",
     "{% get_static_prefix %}media_library/studio/config.js":     "{% static 'media_library/studio/config.js' %}",
     "{% get_static_prefix %}media_library/studio/cutout.js":     "{% static 'media_library/studio/cutout.js' %}",
     "{% get_static_prefix %}media_library/studio/editor.js":     "{% static 'media_library/studio/editor.js' %}",
+    "{% get_static_prefix %}media_library/studio/elements.js":   "{% static 'media_library/studio/elements.js' %}",
     "{% get_static_prefix %}media_library/studio/io.js":         "{% static 'media_library/studio/io.js' %}",
     "{% get_static_prefix %}media_library/studio/library.js":    "{% static 'media_library/studio/library.js' %}",
     "{% get_static_prefix %}media_library/studio/media.js":      "{% static 'media_library/studio/media.js' %}",
@@ -202,6 +204,8 @@ if (!window.fabric && window.studioZeigeFehler) {
 <link rel="modulepreload" href="{% static 'media_library/studio/media.js' %}">
 <link rel="modulepreload" href="{% static 'media_library/studio/io.js' %}">
 <link rel="modulepreload" href="{% static 'media_library/studio/toolbar.js' %}">
+<link rel="modulepreload" href="{% static 'media_library/studio/animbar.js' %}">
+<link rel="modulepreload" href="{% static 'media_library/studio/elements.js' %}">
 <link rel="modulepreload" href="{% static 'media_library/studio/library.js' %}">
 <link rel="modulepreload" href="{% static 'media_library/studio/background.js' %}">
 <link rel="modulepreload" href="{% static 'media_library/studio/retouch.js' %}">

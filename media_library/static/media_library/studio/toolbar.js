@@ -15,8 +15,7 @@
    Small render helpers. Every spec object has a `t` (type) key.
    --------------------------------------------------------------------------- */
 
-const esc = s => String(s ?? '').replace(/[&<>"]/g, c =>
-  ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+import { esc } from './util.js';
 
 const attr = (name, value) =>
   (value === undefined || value === null || value === false) ? '' : ` ${name}="${esc(value)}"`;
