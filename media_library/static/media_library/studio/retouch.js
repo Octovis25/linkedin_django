@@ -169,7 +169,10 @@ export function hasMask(obj) {
 }
 
 // Live-Vorschau: Arbeitsbild + rote Markierung → nur als Anzeige ins Element.
-export function renderMaskPreview(obj) {
+// `bereich` (image pixels) limits the update to what a brush step touched:
+// the preview used to be rebuilt over the whole image on every mouse move -
+// five full-size draws, at 12 megapixels that is what made marking lag.
+export function renderMaskPreview(obj, bereich = null) {
   const { canvas: work, W, H } = getWork(obj);
   const mask = getMask(obj);
   // Keep the two helper canvases on the object. Before, every mouse move made
@@ -181,18 +184,26 @@ export function renderMaskPreview(obj) {
     obj._prevCv = { tmp, tctx: tmp.getContext('2d'), rc, rctx: rc.getContext('2d') };
   }
   const { tmp, tctx, rc, rctx } = obj._prevCv;
-  tctx.clearRect(0, 0, W, H);
+  // Only a part, and only when the preview on show is this one; otherwise all.
+  let x = 0, y = 0, w = W, h = H;
+  if (bereich && obj._maskPreview && obj._element === tmp) {
+    x = Math.max(0, Math.floor(bereich.x)); y = Math.max(0, Math.floor(bereich.y));
+    w = Math.min(W, Math.ceil(bereich.x + bereich.w)) - x; h = Math.min(H, Math.ceil(bereich.y + bereich.h)) - y;
+    if (w <= 0 || h <= 0) return;
+  }
+  tctx.clearRect(x, y, w, h);
   tctx.globalAlpha = 1;
-  tctx.drawImage(work, 0, 0);
+  tctx.drawImage(work, x, y, w, h, x, y, w, h);
   // red area only where the mask is set
-  rctx.clearRect(0, 0, W, H);
+  rctx.clearRect(x, y, w, h);
   rctx.globalCompositeOperation = 'source-over';
-  rctx.fillStyle = '#ff3b30'; rctx.fillRect(0, 0, W, H);
+  rctx.fillStyle = '#ff3b30'; rctx.fillRect(x, y, w, h);
   rctx.globalCompositeOperation = 'destination-in';
-  rctx.drawImage(mask.canvas, 0, 0);
+  rctx.drawImage(mask.canvas, x, y, w, h, x, y, w, h);
   tctx.globalAlpha = 0.5;
-  tctx.drawImage(rc, 0, 0);
-  obj.setElement(tmp);
+  tctx.drawImage(rc, x, y, w, h, x, y, w, h);
+  tctx.globalAlpha = 1;
+  if (obj._element !== tmp) obj.setElement(tmp);
   obj._maskPreview = true;   // markiert: das ist NUR Anzeige, kein echter Stand
   obj.dirty = true;
 }

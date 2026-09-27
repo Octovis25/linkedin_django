@@ -188,7 +188,7 @@ async function loadUploads() {
       const img = document.createElement('img');
       img.className = 'lib-thumb';
       // Kachel: verkleinerte Fassung. Eingefügt wird weiterhin item.url.
-      img.src = item.thumb || item.url;
+      // Loaded once the tile comes into view, like the asset and output tiles.
       img.title = item.title || item.name || '';
       img.draggable = true;
       img.onerror = () => { img.style.opacity = .3; };
@@ -222,6 +222,7 @@ async function loadUploads() {
       wrap.appendChild(img);
       wrap.appendChild(del);
       grid.appendChild(wrap);
+      spaetLaden(img, item.thumb || item.url);
     });
   } catch (e) {
     // Grund zeigen statt „Fehler": readJson unterscheidet abgelaufene Sitzung,

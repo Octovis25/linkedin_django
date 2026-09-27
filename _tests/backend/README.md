@@ -37,6 +37,7 @@ Ebene höher brauchen keine — die prüfen reine Rechenlogik und laufen überal
 | `test_loeschen.py` | Löschen von Ausgaben, Bibliotheksbildern, Uploads — beide Richtungen: gelingt und gelingt nicht |
 | `test_medien.py` | Medien-Proxy (Medientyp, Bereichsanfragen, Pfadschranke), Vorschaubilder, Ausgabenliste |
 | `test_schema.py` | Nachrüsten fehlender Spalten gegen eine echte Datenbank |
+| `test_studio_listen.py` | Vorlagen- und Ausgabenliste (schlank, Vorschaubilder, passive Vorlagen), Bild speichern als Formular, Ordner bleibt beim erneuten Speichern |
 
 ## Wie die Attrappe funktioniert
 

@@ -6,9 +6,19 @@ import { proxyUrl } from './config.js';
 export const fabric = window.fabric;
 if (!fabric) console.error('Fabric.js not loaded!');
 
-// Object caching off globally: this rules out any "blending" of the old and
-// new image while editing (everything is rendered directly).
-if (fabric) fabric.Object.prototype.objectCaching = false;
+// Object caching off for images and shapes: this rules out any "blending" of
+// the old and new image while retouching (everything is rendered directly).
+// Text and groups (text blocks, checklists, badges, SVGs) keep a cached bitmap
+// instead: redrawing their glyphs on every frame made each render of a busy
+// design about 20 times slower (measured: 7.7 ms against 0.4 ms for 29 texts
+// and groups). Fabric redraws a cache when a property that shows changes.
+// Anything that must be sharp at a larger scale than the screen (the spotlight
+// card) draws vectors - see media.js malOhneCache.
+if (fabric) {
+  fabric.Object.prototype.objectCaching = false;
+  fabric.Text.prototype.objectCaching = true;
+  fabric.Group.prototype.objectCaching = true;
+}
 
 // Properties that go into the snapshot and the canvas JSON.
 // ONE source of truth: io.js imports this list, so undo/redo and saving never
@@ -27,6 +37,8 @@ export const EXTRA_PROPS = [
 // in the JSON as base64 data: URLs - without a budget the history grows into
 // gigabytes and the browser tab dies.
 const MAX_HISTORY_BYTES = 80e6;
+// Marks a reference into the editor's image table inside a history step.
+const BILD_VERWEIS = '§studio-bild:';
 
 export class Editor {
   constructor(canvasEl) {
@@ -43,10 +55,27 @@ export class Editor {
     });
     this.width = canvasEl.width;
     this.height = canvasEl.height;
+    // A web font that arrives after the first render: the cached texts still
+    // show the fallback font. Draw them again once the fonts are there.
+    try {
+      document.fonts?.addEventListener?.('loadingdone', () => {
+        fabric.util.clearFabricFontCache?.();
+        this._fontStand = (this._fontStand || 0) + 1;     // pictures cut from the scene, too
+        this.canvas.getObjects().forEach(o => { o.dirty = true; });
+        this.canvas.requestRenderAll();
+      });
+    } catch (e) { /* no font events - nothing cached wrongly then either */ }
 
     // Undo/Redo-Historie
     this._history = [];
     this._redo = [];
+    // Images in the history are kept once, not once per step: a snapshot
+    // stores a short reference, the data URL sits in this table. A cut-out
+    // 3000 px image used to be copied into every step (13 MB each), so the
+    // 80 MB budget held about five steps.
+    this._bilder = new Map();       // reference -> data URL
+    this._bildIds = new WeakMap();  // image element -> reference
+    this._bildNr = 0;
     this._locked = false;       // verhindert History-Aufzeichnung beim Restore
     this._maxHistory = 30;
     this._loadToken = 0;        // erkennt überholte Ladevorgänge (Doppelklick auf Vorlagen)
@@ -351,27 +380,52 @@ export class Editor {
   }
 
   // ---- Snapping (Kanten/Mitte am Canvas + an anderen Objekten) -------------
+  // The guide lines are drawn on top of the finished frame, not added as
+  // objects: adding and removing two fabric.Lines on every mouse move changed
+  // the object list each time. The edges to snap to are collected once per
+  // drag - the other elements do not move while one is being dragged.
   _enableSnapping() {
     this.canvas.on('object:moving', e => this._doSnap(e.target));
     this.canvas.on('object:modified', () => this._clearSnapLines());
-    this.canvas.on('mouse:up', () => this._clearSnapLines());
+    this.canvas.on('mouse:up', () => { this._snapZiele = null; this._clearSnapLines(); });
+    this.canvas.on('after:render', e => this._malSnapLinien(e && e.ctx));
+  }
+  _malSnapLinien(ctx) {
+    // Only on the visible canvas - never into an export.
+    if (!this._snapLines.length || !ctx || ctx !== this.canvas.contextContainer) return;
+    const v = this.canvas.viewportTransform, z = this.canvas.getZoom() || 1;
+    ctx.save();
+    ctx.transform(v[0], v[1], v[2], v[3], v[4], v[5]);
+    ctx.strokeStyle = '#61CEBC'; ctx.lineWidth = 1 / z;
+    for (const l of this._snapLines) {
+      ctx.beginPath();
+      if (l.vertical) { ctx.moveTo(l.pos, 0); ctx.lineTo(l.pos, this.height); }
+      else { ctx.moveTo(0, l.pos); ctx.lineTo(this.width, l.pos); }
+      ctx.stroke();
+    }
+    ctx.restore();
   }
 
   _doSnap(obj) {
     if (!obj) return;
-    this._clearSnapLines();
+    this._snapLines = [];
     const b = obj.getBoundingRect(true);
     const tol = this.snapTol;
-    // Kandidaten-Linien: Canvas-Kanten + Mitte
-    const vTargets = [0, this.width / 2, this.width];
-    const hTargets = [0, this.height / 2, this.height];
-    // + andere Objektkanten (Raster- und Hilfslinien nie als Ziel!)
-    this.canvas.getObjects().forEach(o => {
-      if (o === obj || o._snap || o._grid) return;
-      const ob = o.getBoundingRect(true);
-      vTargets.push(ob.left, ob.left + ob.width / 2, ob.left + ob.width);
-      hTargets.push(ob.top, ob.top + ob.height / 2, ob.top + ob.height);
-    });
+    if (!this._snapZiele || this._snapZiele.obj !== obj) {
+      // Kandidaten-Linien: Canvas-Kanten + Mitte
+      const vTargets = [0, this.width / 2, this.width];
+      const hTargets = [0, this.height / 2, this.height];
+      // + andere Objektkanten (Raster- und Hilfslinien nie als Ziel!)
+      const drin = obj.type === 'activeSelection' ? new Set(obj.getObjects()) : null;
+      this.canvas.getObjects().forEach(o => {
+        if (o === obj || o._snap || o._grid || (drin && drin.has(o))) return;
+        const ob = o.getBoundingRect(true);
+        vTargets.push(ob.left, ob.left + ob.width / 2, ob.left + ob.width);
+        hTargets.push(ob.top, ob.top + ob.height / 2, ob.top + ob.height);
+      });
+      this._snapZiele = { obj, vTargets, hTargets };
+    }
+    const { vTargets, hTargets } = this._snapZiele;
     const objEdgesX = [b.left, b.left + b.width / 2, b.left + b.width];
     const objEdgesY = [b.top, b.top + b.height / 2, b.top + b.height];
 
@@ -393,18 +447,12 @@ export class Editor {
   }
 
   _drawSnapLine(pos, vertical) {
-    const line = new fabric.Line(
-      vertical ? [pos, 0, pos, this.height] : [0, pos, this.width, pos],
-      { stroke: '#61CEBC', strokeWidth: 1, selectable: false, evented: false, excludeFromExport: true, _snap: true }
-    );
-    this._snapLines.push(line);
-    this.canvas.add(line);
-    this.canvas.bringToFront(line);
+    this._snapLines.push({ pos, vertical });
   }
   _clearSnapLines() {
     if (!this._snapLines.length) return;
-    this._snapLines.forEach(l => this.canvas.remove(l));
     this._snapLines = [];
+    this.canvas.requestRenderAll();
   }
 
   // ---- Raster (Ausricht-Hilfe, wird nie mitgespeichert/exportiert) ---------
@@ -417,6 +465,16 @@ export class Editor {
   // real pixels (excludeFromExport only helps for JSON and SVG), so we hide
   // the grid lines for the moment.
   exportDataURL(opts = {}) {
+    const { multiplier = 1, format = 'png', quality } = opts;
+    const el = this.exportLeinwand(multiplier);
+    return el.toDataURL('image/' + (format === 'jpeg' ? 'jpeg' : format), quality);
+  }
+  // The artboard as a canvas element at design size x multiplier - ONE render.
+  // Saving used to call exportDataURL twice (full picture and preview), and
+  // each call drew the scene three times: renderAll at design size, the export
+  // itself, and the display again. The preview is now scaled from this one
+  // (vorschauAus), and the display redraws once, on the next frame.
+  exportLeinwand(multiplier = 1) {
     const weg = this._grid.filter(l => l.visible !== false);
     weg.forEach(l => (l.visible = false));
     this.canvas.discardActiveObject();
@@ -432,14 +490,28 @@ export class Editor {
     const dispH = this.canvas.getHeight();
     this.canvas.setViewportTransform([1, 0, 0, 1, 0, 0]);
     this.canvas.setDimensions({ width: this.width, height: this.height });
-    this.canvas.renderAll();
-    const url = this.canvas.toDataURL({ format: 'png', multiplier: 1, ...opts });
-    // Anzeige-Zustand (Größe + Zoom/Verschiebung) wiederherstellen
-    this.canvas.setDimensions({ width: dispW, height: dispH });
-    if (vpt) this.canvas.setViewportTransform(vpt);
-    weg.forEach(l => (l.visible = true));
-    this.canvas.requestRenderAll();
-    return url;
+    let el;
+    try {
+      el = this.canvas.toCanvasElement(multiplier);
+    } finally {
+      // Anzeige-Zustand (Größe + Zoom/Verschiebung) wiederherstellen
+      this.canvas.setDimensions({ width: dispW, height: dispH });
+      if (vpt) this.canvas.setViewportTransform(vpt);
+      weg.forEach(l => (l.visible = true));
+      this.canvas.requestRenderAll();
+    }
+    return el;
+  }
+  // A smaller copy of an exported canvas, as a PNG data URL (the preview that
+  // travels inside the layout).
+  static vorschauAus(el, faktor) {
+    const c = document.createElement('canvas');
+    c.width = Math.max(1, Math.round(el.width * faktor));
+    c.height = Math.max(1, Math.round(el.height * faktor));
+    const cx = c.getContext('2d');
+    cx.imageSmoothingQuality = 'high';
+    cx.drawImage(el, 0, 0, c.width, c.height);
+    return c.toDataURL('image/png');
   }
   _clearGrid() {
     this._grid.forEach(l => this.canvas.remove(l));
@@ -489,7 +561,7 @@ export class Editor {
     if (this._locked) return;
     let json;
     try {
-      json = JSON.stringify(this.canvas.toJSON(EXTRA_PROPS));
+      json = this._mitBildVerweisen(() => JSON.stringify(this.canvas.toJSON(EXTRA_PROPS)));
     } catch (e) {
       console.warn('snapshot failed', e);
       // Count it as a change all the same - otherwise the design wrongly counts
@@ -510,8 +582,49 @@ export class Editor {
            (this._bytes() > MAX_HISTORY_BYTES && this._history.length > 2)) {
       this._history.shift();
     }
+    this._bilderAufraeumen();
     this._rev++;
     this._emitChange();
+  }
+
+  // Runs f while fabric.Image hands out references instead of data URLs. Only
+  // for image elements (their picture never changes - a retouch makes a new
+  // element) and only for long sources; a canvas element can still change, so
+  // it is written out as before.
+  _mitBildVerweisen(f) {
+    const proto = fabric.Image.prototype, orig = proto.getSrc, self = this;
+    proto.getSrc = function (filtered) {
+      const el = filtered ? this._element : this._originalElement;
+      if (!el || typeof el.toDataURL === 'function') return orig.call(this, filtered);
+      const id = self._bildIds.get(el);
+      if (id) return id;
+      const src = orig.call(this, filtered);
+      if (typeof src !== 'string' || src.length < 4096) return src;
+      const neu = BILD_VERWEIS + (++self._bildNr);
+      self._bildIds.set(el, neu);
+      self._bilder.set(neu, src);
+      return neu;
+    };
+    try { return f(); } finally { proto.getSrc = orig; }
+  }
+  // References back to data URLs, anywhere in a parsed state (groups,
+  // background image, clip paths).
+  _verweiseAufloesen(wert) {
+    if (Array.isArray(wert)) { wert.forEach(w => this._verweiseAufloesen(w)); return; }
+    if (!wert || typeof wert !== 'object') return;
+    for (const k of Object.keys(wert)) {
+      const v = wert[k];
+      if (k === 'src' && typeof v === 'string' && v.startsWith(BILD_VERWEIS)) wert[k] = this._bilder.get(v) || '';
+      else if (v && typeof v === 'object') this._verweiseAufloesen(v);
+    }
+  }
+  // Drop the images no step refers to any more.
+  _bilderAufraeumen() {
+    if (this._bilder.size < 8) return;
+    const alle = this._history.concat(this._redo).join('\n');
+    for (const id of [...this._bilder.keys()]) {
+      if (!alle.includes('"' + id + '"')) this._bilder.delete(id);
+    }
   }
 
   // The history's actual memory use. Measured on purpose rather than counted
@@ -567,7 +680,9 @@ export class Editor {
     };
     const timer = setTimeout(finish, 8000);
     try {
-      this.canvas.loadFromJSON(json, finish);
+      const zustand = JSON.parse(json);
+      this._verweiseAufloesen(zustand);
+      this.canvas.loadFromJSON(zustand, finish);
     } catch (e) {
       console.warn('_restore error:', e);
       finish();

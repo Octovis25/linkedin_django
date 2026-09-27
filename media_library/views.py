@@ -1093,7 +1093,6 @@ def studio_view(request):
         except Exception as e:
             print("Studio template open:", e)
 
-    folders = _all_folders()
     # Pass Nextcloud base URL for draw.io embed
     try:
         from posts_posted.nc_storage import _get_nc_credentials
@@ -1148,7 +1147,7 @@ def studio_view(request):
 
     return render(request, 'media_library/studio.html', {
         'post_id': post_id, 'post_data': post_data, 'lib_data': lib_data,
-        'folders': folders, 'nc_url': (nc_url_val or '').rstrip('/'),
+        'nc_url': (nc_url_val or '').rstrip('/'),
         'studio_config': studio_config, 'back_url': back_url,
         'brand_extra_colors_json': json.dumps(brand.get('extra_colors', []))})
 
@@ -1542,10 +1541,23 @@ def studio_save(request):
     if request.method != 'POST':
         return JsonResponse({'error': 'POST required'}, status=405)
     _ensure_studio_tables()
-    try:
-        data = json.loads(request.body)
-    except Exception:
-        return JsonResponse({'error': 'Invalid JSON'}, status=400)
+    # Two ways in. The Studio sends a form: the PNG as a file, the layout as a
+    # file part. The old way - JSON with the PNG as base64 text - still works,
+    # for a browser tab that was open before the deploy.
+    bild_datei = None
+    if (request.content_type or '').startswith('multipart/'):
+        data = request.POST.dict()
+        bild_datei = request.FILES.get('image')
+        layout_datei = request.FILES.get('canvasJson')
+        if layout_datei is not None:
+            data['canvasJson'] = layout_datei.read().decode('utf-8')
+        if bild_datei is None:
+            return JsonResponse({'error': 'No image file'}, status=400)
+    else:
+        try:
+            data = json.loads(request.body)
+        except Exception:
+            return JsonResponse({'error': 'Invalid JSON'}, status=400)
 
     import base64, time
     data_url    = data.get('dataUrl', '')
@@ -1584,14 +1596,17 @@ def studio_save(request):
     if not old_nc_path and open_nc:
         old_nc_path = open_nc
 
-    if ',' in data_url:
-        _, b64 = data_url.split(',', 1)
+    if bild_datei is not None:
+        content = bild_datei.read()
     else:
-        b64 = data_url
-    try:
-        content = base64.b64decode(b64)
-    except Exception:
-        return JsonResponse({'error': 'Invalid image data'}, status=400)
+        if ',' in data_url:
+            _, b64 = data_url.split(',', 1)
+        else:
+            b64 = data_url
+        try:
+            content = base64.b64decode(b64)
+        except Exception:
+            return JsonResponse({'error': 'Invalid image data'}, status=400)
 
     # The file name follows the name. After a rename the file gets the new name
     # - before, it stubbornly kept the old one, so file and display name drifted
@@ -1834,9 +1849,23 @@ def studio_save_video(request):
 def studio_api_templates(request):
     _ensure_studio_tables()
     with connection.cursor() as c:
-        # Only active templates in the Studio picker.
-        rows = _safe(c, "SELECT id, title, width, height, colors, canvas_json FROM studio_templates WHERE COALESCE(active,1)=1 ORDER BY created_at DESC") \
-            or _safe(c, "SELECT id, title, width, height, colors FROM studio_templates ORDER BY created_at DESC")
+        # Only active templates in the Studio picker. The layout itself stays in
+        # the database: this list only needs to know THAT there is one. Loading
+        # every canvas_json (base64 images and all) just for that flag made the
+        # Studio's start wait for megabytes nobody used. The MD5 marks the
+        # version, so a template saved again gets a new thumbnail address.
+        # The short query is only the fallback for an old table without the
+        # newer columns - NOT for an empty answer: with every template set to
+        # passive, the "or" used to show all of them again.
+        try:
+            c.execute("""SELECT id, title, width, height, colors,
+                                (canvas_json IS NOT NULL AND canvas_json <> '') AS has_canvas,
+                                nc_path, MD5(CONCAT(nc_path, '|', COALESCE(canvas_json, ''))) AS stand
+                         FROM studio_templates WHERE COALESCE(active,1)=1 ORDER BY created_at DESC""")
+            rows = c.fetchall()
+        except Exception as e:
+            print("Template list, fallback query:", e)
+            rows = _safe(c, "SELECT id, title, width, height, colors FROM studio_templates ORDER BY created_at DESC")
     data = []
     for r in (rows or []):
         colors = []
@@ -1844,10 +1873,16 @@ def studio_api_templates(request):
             try:
                 import json as _j; colors = _j.loads(r[4])
             except Exception: pass
-        has_canvas = bool(len(r) > 5 and r[5])
-        data.append({'id': r[0], 'title': r[1] or '', 'width': r[2], 'height': r[3],
-                     'url': f"/library/studio/template/image/{r[0]}/", 'colors': colors,
-                     'has_canvas': has_canvas})
+        eintrag = {'id': r[0], 'title': r[1] or '', 'width': r[2], 'height': r[3],
+                   'url': f"/library/studio/template/image/{r[0]}/", 'colors': colors,
+                   'has_canvas': bool(len(r) > 5 and r[5])}
+        # A small picture for the tile (about 15 KB instead of the full PNG).
+        if (len(r) > 7 and r[6] and _within_app_folders(r[6])
+                and os.path.splitext(r[6])[1].lower() in VORSCHAU_FAEHIG):
+            from urllib.parse import quote
+            eintrag['thumb'] = "/library/studio/thumb/?p=%s&t=%s&w=%d" % (
+                quote(r[6], safe='/'), (r[7] or '0')[:16], VORSCHAU_BREITEN[0])
+        data.append(eintrag)
     return JsonResponse({'templates': data})
 
 
@@ -2473,9 +2508,17 @@ def studio_api_saved(request):
         like = f"%{q}%"
         q_params = [like, like]
     with connection.cursor() as c:
-        # Load studio images together with their canvas_json to check for animations
+        # Studio images, with a flag for the old animated ones. The check runs in
+        # the database: every layout (base64 images and all) used to travel to
+        # Python and be parsed just to look for "animType" - on every opening
+        # of the Outputs tab and twice after each save. "animType" is the old
+        # key; a value of "none" or "" does not count.
+        _ohne = "REPLACE(REPLACE(REPLACE(REPLACE(COALESCE(si.canvas_json, ''), " \
+                "'\"animType\":\"none\"', ''), '\"animType\": \"none\"', ''), " \
+                "'\"animType\":\"\"', ''), '\"animType\": \"\"', '')"
         img_rows = _safe(c, """SELECT m.id, m.title, m.nc_path,
-                                      si.canvas_json
+                                      (""" + _ohne + """ LIKE '%%"animType":"%%'
+                                       OR """ + _ohne + """ LIKE '%%"animType": "%%') AS has_anim
                                FROM media_library_items m
                                LEFT JOIN studio_images si
                                  ON si.nc_path = m.nc_path
@@ -2490,16 +2533,8 @@ def studio_api_saved(request):
                                FROM media_library_items m
                                WHERE FIND_IN_SET('gif', REPLACE(m.tags,' ',''))""" + q_filter + " ORDER BY m.id DESC", q_params)
 
-    def _has_anim(canvas_json_str):
-        """Return True if any object in canvas_json has an animation set."""
-        if not canvas_json_str:
-            return False
-        try:
-            state = _json.loads(canvas_json_str)
-            return any(o.get('animType') and o.get('animType') != 'none'
-                       for o in (state.get('objects') or []))
-        except Exception:
-            return False
+    def _has_anim(flag):
+        return bool(flag)
 
     # Non-animated Studio images → the images section
     images = [{'id': r[0], 'title': r[1] or '', 'url': f"/library/image/{r[0]}/"}

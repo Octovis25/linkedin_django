@@ -137,6 +137,9 @@ export async function loadTemplateList(editor) {
     (data.templates || []).forEach(t => {
       const img = document.createElement('img');
       img.className = 'tpl-thumb';
+      // The small picture from the server when there is one; the full template
+      // is only fetched once it is applied.
+      img.loading = 'lazy'; img.decoding = 'async';
       img.src = t.thumb || t.url;
       img.title = t.title || '';
       img.onclick = () => applyTemplate(editor, t);

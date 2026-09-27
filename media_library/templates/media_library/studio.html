@@ -193,6 +193,23 @@ if (!window.fabric && window.studioZeigeFehler) {
   }
 }
 </script>
+{# Fetch every module at once. Without this the browser finds each import only
+   after the module that names it has arrived - studio.js, then editor.js and
+   io.js, then util.js ... one round trip after another. After the import map:
+   a module fetched before it would make the browser ignore the map. #}
+<link rel="modulepreload" href="{% static 'media_library/studio/studio.js' %}">
+<link rel="modulepreload" href="{% static 'media_library/studio/editor.js' %}">
+<link rel="modulepreload" href="{% static 'media_library/studio/media.js' %}">
+<link rel="modulepreload" href="{% static 'media_library/studio/io.js' %}">
+<link rel="modulepreload" href="{% static 'media_library/studio/toolbar.js' %}">
+<link rel="modulepreload" href="{% static 'media_library/studio/library.js' %}">
+<link rel="modulepreload" href="{% static 'media_library/studio/background.js' %}">
+<link rel="modulepreload" href="{% static 'media_library/studio/retouch.js' %}">
+<link rel="modulepreload" href="{% static 'media_library/studio/cutout.js' %}">
+<link rel="modulepreload" href="{% static 'media_library/studio/namen.js' %}">
+<link rel="modulepreload" href="{% static 'media_library/studio/ui.js' %}">
+<link rel="modulepreload" href="{% static 'media_library/studio/util.js' %}">
+<link rel="modulepreload" href="{% static 'media_library/studio/config.js' %}">
 <script type="module" src="{% static 'media_library/studio/studio.js' %}"></script>
 
 {% endblock %}

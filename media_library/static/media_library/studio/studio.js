@@ -7,12 +7,14 @@ import * as io from './io.js';
 // Namespace import: if an export is missing (because the browser has an old
 // library.js in its cache, say), the whole module does NOT die here.
 import * as lib from './library.js';
-const { initLibrary, refreshOutput } = lib;
+const { initLibrary } = lib;
 import * as media from './media.js';
 import { removeBackground, floodFillTransparent, recolorRegion, recolorSimilarAll, removeColorGlobal, hasCheckerboardBorder, removeCheckerboard } from './cutout.js';
 import * as retouch from './retouch.js';
 import { buildContext } from './toolbar.js';
 import { mountShell, initUi } from './ui.js';
+// Batched rebuilds of the layer list and the animation bar (see planeUiAufbau).
+let _uiTimer = null, _uiZaehler = 0, _uiGeplant = 0, _ebenenGebaut = 0, _leisteGebaut = 0;
 
 // Build rail, mode panels and the media panel from the declaration in
 // toolbar.js. This has to happen BEFORE anything below looks an element up by
@@ -317,7 +319,9 @@ async function _speichereAls(kind) {
   let ok;
   if (kind === 'gif')        ok = await media.exportGif(editor);
   else if (kind === 'video') ok = await media.exportVideo(editor);
-  else { ok = await io.saveImage(editor); refreshOutput(); }
+  // The outputs list refreshes itself on "studio:output-changed" (io.js) -
+  // the extra call here loaded both lists a second time after every save.
+  else ok = await io.saveImage(editor);
   // Nothing saved (still loading, cancelled, failed)? Then no success message
   // either - it used to overwrite the actual reason immediately.
   if (!ok) return;
@@ -388,7 +392,7 @@ const actions = {
     try {
       if (kind === 'gif') await media.exportGif(editor);
       else if (kind === 'video') await media.exportVideo(editor);
-      else { await io.saveImage(editor); refreshOutput(); }
+      else await io.saveImage(editor);
     } finally {
       _speichertGerade = false;
     }
@@ -693,8 +697,9 @@ async function saveAsTemplate() {
   let dataUrl, canvasJson;
   try {
     retouch.beendeVorschauen(editor.canvas);               // rote Markierung nie mitspeichern
-    const preview = editor.exportDataURL({ multiplier: 0.4 });
-    dataUrl = editor.exportDataURL({ multiplier: 1 });     // Vorschau-PNG (ohne Raster)
+    const el = editor.exportLeinwand(1);                   // one render (ohne Raster)
+    const preview = Editor.vorschauAus(el, 0.4);
+    dataUrl = el.toDataURL('image/png');
     canvasJson = io.buildCanvasJson(editor, preview);      // Layout: Hintergrund + Logo + Textfelder
   } catch (e) { toast('Export failed', 'err'); status('❌ Export failed', 'red'); return; }
   // An empty artboard is nearly always a slip (clicked too early) and would
@@ -1084,7 +1089,8 @@ async function doRecolorWith(o, px, py, hex, all) {
 async function paintAt(o, px, py, endgueltig = false) {
   if (_tool === 'mark') {
     retouch.markAt(o, px, py, _brush);
-    retouch.renderMaskPreview(o);
+    const r = _brush + 2;
+    retouch.renderMaskPreview(o, { x: px - r, y: py - r, w: 2 * r, h: 2 * r });
     editor.canvas.requestRenderAll();
     return;
   }
@@ -2650,6 +2656,7 @@ function layerLabel(o, i) {
   return 'Element ' + i;
 }
 function renderLayers() {
+  _ebenenGebaut = ++_uiZaehler;
   const list = document.getElementById('layers-list');
   if (!list) return;
   const objs = editor.realObjects();
@@ -3115,6 +3122,7 @@ function effektPalette(rahmenListe, netzListe = [], spotListe = []) {
 }
 
 function renderAnimBar() {
+  _leisteGebaut = ++_uiZaehler;
   const bar = document.getElementById('anim-bar');
   if (!bar) return;
   const objs = editor.realObjects();
@@ -3581,12 +3589,19 @@ function vorschauVergessen() {
 // The rebuilds of the layer bar and the animation bar are batched: a single
 // click used to trigger several complete rebuilds one after another
 // (selection cleared → set → snapshot).
-let _uiTimer = null;
+// About twenty actions still call renderLayers()/renderAnimBar() straight
+// after their snapshot, which has already planned the same rebuild: each bar
+// was built twice. A counter tells the planned rebuild whether a bar has been
+// built since it was planned - then it is skipped.
 function planeUiAufbau() {
+  _uiGeplant = ++_uiZaehler;
   if (_uiTimer) return;
   _uiTimer = requestAnimationFrame(() => {
     _uiTimer = null;
-    try { renderLayers(); renderAnimBar(); }
+    try {
+      if (_ebenenGebaut < _uiGeplant) renderLayers();
+      if (_leisteGebaut < _uiGeplant) renderAnimBar();
+    }
     catch (e) { console.error('[studio] UI-Aufbau:', e); }
   });
 }

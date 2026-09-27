@@ -671,7 +671,7 @@ function _nebel(ctx, L, T, W, H, t, farben) {
 
    Glass, then rim, then the handle: flat black, the way the Octovis drawings
    are drawn - no gradients, no gloss on the metal. */
-let _lupenLeinwand = null;
+const _lupenPuffer = new WeakMap();
 
 function _malLupe(ctx, editor, rahmen, z, sek) {
   // The frame is the window; the glass sits where its way has brought it.
@@ -681,24 +681,32 @@ function _malLupe(ctx, editor, rahmen, z, sek) {
   if (r < 6) return;
   const vergroesserung = rahmen.fxZoom > 0 ? rahmen.fxZoom : 1.9;
 
+  // What lies under the glass is drawn once per scene, not once per frame: the
+  // glass travels, the picture beneath it stays. One buffer per magnifier.
   const breit = ctx.canvas.width, hoch = ctx.canvas.height;
-  if (!_lupenLeinwand) _lupenLeinwand = document.createElement('canvas');
-  if (_lupenLeinwand.width !== breit || _lupenLeinwand.height !== hoch) {
-    _lupenLeinwand.width = breit; _lupenLeinwand.height = hoch;
-  }
-  const u = _lupenLeinwand.getContext('2d');
-  u.setTransform(1, 0, 0, 1, 0, 0);
-  u.clearRect(0, 0, breit, hoch);
   const vp = editor.canvas.viewportTransform;
-  u.save();
-  u.transform(vp[0], vp[1], vp[2], vp[3], vp[4], vp[5]);
-  const objekte = editor.canvas.getObjects();
-  for (const o of objekte) {
-    if (o === rahmen) break;               // alles UNTER der Lupe
-    if (o._snap || o._grid) continue;
-    o.render(u);
+  let puffer = _lupenPuffer.get(rahmen);
+  if (!puffer) { puffer = { c: document.createElement('canvas'), stand: null }; _lupenPuffer.set(rahmen, puffer); }
+  const _lupenLeinwand = puffer.c;
+  const stand = szenenStand(editor, rahmen) + '|' + vp.join(',') + '|' + breit + 'x' + hoch;
+  if (puffer.stand !== stand) {
+    if (_lupenLeinwand.width !== breit || _lupenLeinwand.height !== hoch) {
+      _lupenLeinwand.width = breit; _lupenLeinwand.height = hoch;
+    }
+    const u = _lupenLeinwand.getContext('2d');
+    u.setTransform(1, 0, 0, 1, 0, 0);
+    u.clearRect(0, 0, breit, hoch);
+    u.save();
+    u.transform(vp[0], vp[1], vp[2], vp[3], vp[4], vp[5]);
+    const objekte = editor.canvas.getObjects();
+    for (const o of objekte) {
+      if (o === rahmen) break;               // alles UNTER der Lupe
+      if (o._snap || o._grid) continue;
+      o.render(u);
+    }
+    u.restore();
+    puffer.stand = stand;
   }
-  u.restore();
 
   // das Glas
   ctx.save();
@@ -800,18 +808,62 @@ export function spotKopfHoehe(editor, e) {
   return _sp(e, 'spotKopfH') > 0 ? +e.spotKopfH : Math.round(editor.height * 0.17);
 }
 
+// Draws an element as vectors, past its cached bitmap. The cache is made at
+// screen size, so drawn at twice the size it would come out soft. Unlike
+// switching objectCaching off, this leaves the cache and its dirty flag alone.
+export function malOhneCache(o, ctx) {
+  if (o.isNotVisible()) return;
+  ctx.save();
+  o._setupCompositeOperation(ctx);
+  o.transform(ctx);
+  o._setOpacity(ctx);
+  o._setShadow(ctx, o);
+  // A group tells its members that its own transform is already on the
+  // context (Group.render does the same) - otherwise they apply it twice.
+  const gruppe = o.type === 'group';
+  if (gruppe) o._transformDone = true;
+  try { o.drawObject(ctx); } finally { if (gruppe) o._transformDone = false; }
+  ctx.restore();
+}
+
+// What the scene looks like, as a short text: the edit counter (every change
+// that ends in a snapshot), the size, the ground, and where each element sits
+// and how it shows right now. Moving, scaling and every animation step change
+// it; an effect running on its own does not. The pictures below are drawn
+// again only when it changes - they used to be drawn on every frame.
+export function szenenStand(editor, bis = null) {
+  const cv = editor.canvas;
+  let s = (editor._rev || 0) + '.' + (editor._fontStand || 0) + '|' + editor.width + 'x' + editor.height + '|' + cv.backgroundColor
+        + '|' + (cv.backgroundImage ? (cv.backgroundImage.getSrc?.() || 1) : 0);
+  for (const o of cv.getObjects()) {
+    if (o === bis) break;
+    if (o._snap || o._grid || istEffektRahmen(o)) continue;
+    s += '|' + o.left + ',' + o.top + ',' + o.scaleX + ',' + o.scaleY + ',' + o.angle + ',' + o.opacity
+       + ',' + (o.visible === false ? 0 : 1) + (o.flipX ? 1 : 0) + (o.flipY ? 1 : 0)
+       + (typeof o.text === 'string' ? ',' + o.text : '');
+  }
+  return s;
+}
+
 // The picture without the effects, at `skala` x its own size - what the card
 // shows enlarged and what the elements are found in. Background colour and
-// image included; the invisible effect frames are not.
-let _spotLeinwand = null;
-export function spotBild(editor, skala = 1) {
+// image included; the invisible effect frames are not. Two kinds of canvas:
+// one to read pixels from (element search, CPU-backed) and one to draw with
+// (the card - GPU-backed; reading from it would be slow, drawing from the
+// CPU one was).
+const _spotLeinwaende = new Map();
+export function spotBild(editor, skala = 1, lesen = false) {
   const W = editor.width, H = editor.height;
-  if (!_spotLeinwand) _spotLeinwand = document.createElement('canvas');
-  const c = _spotLeinwand;
+  const schluessel = (lesen ? 'lesen' : 'malen') + skala;
+  let e = _spotLeinwaende.get(schluessel);
+  if (!e) { e = { c: document.createElement('canvas'), stand: null }; _spotLeinwaende.set(schluessel, e); }
+  const stand = szenenStand(editor);
+  if (e.stand === stand) return e.c;
+  const c = e.c;
   if (c.width !== Math.round(W * skala) || c.height !== Math.round(H * skala)) {
     c.width = Math.round(W * skala); c.height = Math.round(H * skala);
   }
-  const u = c.getContext('2d', { willReadFrequently: true });
+  const u = c.getContext('2d', lesen ? { willReadFrequently: true } : undefined);
   u.setTransform(1, 0, 0, 1, 0, 0);
   u.clearRect(0, 0, c.width, c.height);
   u.setTransform(skala, 0, 0, skala, 0, 0);
@@ -820,8 +872,10 @@ export function spotBild(editor, skala = 1) {
   if (cv.backgroundImage && cv.backgroundImage.render) cv.backgroundImage.render(u);
   cv.getObjects().forEach(o => {
     if (o._snap || o._grid || istEffektRahmen(o) || o.visible === false) return;
-    o.render(u);
+    malOhneCache(o, u);
   });
+  e.stand = stand;
+  c._grund = new Map();          // ground colours read from this picture
   return c;
 }
 
@@ -898,7 +952,7 @@ export function spotElementeIn(px, W, H) {
 }
 export function spotElemente(editor) {
   const W = Math.round(editor.width), H = Math.round(editor.height);
-  const c = spotBild(editor, 1);
+  const c = spotBild(editor, 1, true);
   const px = c.getContext('2d', { willReadFrequently: true }).getImageData(0, 0, W, H).data;
   return spotElementeIn(px, W, H);
 }
@@ -944,11 +998,18 @@ export function spotOrdnen(liste, art) {
 // Colour of the picture's ground at a spot - the card is filled with it, so
 // the enlarged cut-out does not sit in a white box on a cream picture.
 function _spotGrund(bild, skala, x, y) {
+  // One pixel read per picture and place - a read from a GPU canvas waits for
+  // the GPU, so not on every frame.
+  const px = Math.max(0, Math.round(x * skala) + 2), py = Math.max(0, Math.round(y * skala) + 2);
+  const k = px + ',' + py;
+  if (bild._grund?.has(k)) return bild._grund.get(k);
+  let farbe = '#ffffff';
   try {
-    const d = bild.getContext('2d', { willReadFrequently: true })
-      .getImageData(Math.max(0, Math.round(x * skala) + 2), Math.max(0, Math.round(y * skala) + 2), 1, 1).data;
-    return d[3] > 200 ? `rgb(${d[0]},${d[1]},${d[2]})` : '#ffffff';
-  } catch (e) { return '#ffffff'; }
+    const d = bild.getContext('2d').getImageData(px, py, 1, 1).data;
+    farbe = d[3] > 200 ? `rgb(${d[0]},${d[1]},${d[2]})` : '#ffffff';
+  } catch (e) { /* bleibt weiss */ }
+  bild._grund?.set(k, farbe);
+  return farbe;
 }
 
 function _spotRund(ctx, x, y, w, h, r) {
@@ -1514,6 +1575,12 @@ function loadGifLib() {
   return _gifLibPromise;
 }
 
+function gleichePixel(a, b) {
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false;
+  return true;
+}
+
 export async function exportGif(editor, onBlob) {
   if (!hasAnimations(editor)) { toast('No animations – nothing to export', 'err'); return false; }
   _laufNr++;                         // a preview still running stops here
@@ -1542,7 +1609,12 @@ export async function exportGif(editor, onBlob) {
       workerScript: VENDOR + 'gif.worker.js',
     });
     const _tmp = document.createElement('canvas'); _tmp.width = gw; _tmp.height = gh;
-    const _tctx = _tmp.getContext('2d');
+    const _tctx = _tmp.getContext('2d', { willReadFrequently: true });
+    // A frame like the one before only makes that one last longer. Still
+    // stretches - a pause, a spot that stays forward, the end hold - used to
+    // be stored as dozens of identical frames of 2.5 MB each, and encoded as
+    // many times.
+    let _vorige = null;
 
     editor.canvas.discardActiveObject();
     try {
@@ -1558,7 +1630,14 @@ export async function exportGif(editor, onBlob) {
         editor.canvas.renderAll();
         _tctx.clearRect(0, 0, gw, gh);
         _tctx.drawImage(editor.canvas.lowerCanvasEl, 0, 0, gw, gh);
-        gif.addFrame(_tmp, { copy: true, delay: frameMs });
+        const bild = _tctx.getImageData(0, 0, gw, gh);
+        const pixel = new Uint32Array(bild.data.buffer);
+        if (_vorige && gleichePixel(_vorige, pixel)) {
+          gif.frames[gif.frames.length - 1].delay += frameMs;
+        } else {
+          gif.addFrame(bild, { delay: frameMs });
+          _vorige = pixel;
+        }
         n++;
         // Hand control back to the browser every 12 frames: otherwise the page
         // freezes completely for the whole frame loop - no repaint, no status

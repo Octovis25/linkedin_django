@@ -137,7 +137,7 @@
 <div class="tpl-grid">
   {% for t in templates %}
   <div class="tpl-card{% if not t.active %} passive{% endif %}">
-    <img src="/library/studio/template/image/{{ t.id }}/" alt="{{ t.title }}">
+    <img src="/library/studio/template/image/{{ t.id }}/" alt="{{ t.title }}" loading="lazy" decoding="async">
     <div class="tpl-card-body">
       <div style="display:flex;justify-content:space-between;align-items:center;gap:6px">
         <h3 style="margin:0">{{ t.title }}</h3>

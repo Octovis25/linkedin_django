@@ -98,7 +98,7 @@ const server = http.createServer((req, res) => {
     // Schaltbare Fehlerfälle: die Tests unten stellen SERVER_MODUS um, um zu
     // prüfen, wie sich das Studio bei einem kranken Backend verhält.
     if (SPEICHER_URLS.has(url)) {
-      letzterUpload = { url, laenge: +(req.headers['content-length'] || 0) };
+      letzterUpload = { url, laenge: +(req.headers['content-length'] || 0), typ: req.headers['content-type'] || '' };
       if (SERVER_MODUS === '500') { res.writeHead(500, { 'Content-Type': 'application/json' });
         return res.end(JSON.stringify({ ok: false, error: 'Interner Serverfehler' })); }
       if (SERVER_MODUS === 'html') { res.writeHead(200, { 'Content-Type': 'text/html' });
@@ -2189,6 +2189,155 @@ pruefe('Fragenetz hinzufügen klappt die Effects-Gruppe auf', paE);
   pruefe('Keine deutschen UI-Texte mehr in den Studio-Modulen', funde.length === 0, funde.slice(0, 5).join(' | '));
 }
 await sauber('Paket A');
+
+// ---- Paket B: schneller, ohne dass sich das Bild ändert --------------------
+// Review 27.09.2026. Texte und Gruppen zeichnen aus einem Zwischenbild; der
+// Spotlight und die Lupe malen die Szene nur neu, wenn sie sich ändert.
+await ruhig('Paket B');
+const pbA = await page.evaluate(async () => {
+  const m = await import('/media.js');
+  const ed = window._studioEditor;
+  const warte = ms => new Promise(r => setTimeout(r, ms));
+  ed.clearAll(); ed.setSize(600, 400);
+  ed.canvas.setBackgroundColor('#ffffff', () => {});
+  ed.canvas.setViewportTransform([1, 0, 0, 1, 0, 0]);
+  const t = new fabric.Textbox('XXXXXXXX', { left: 20, top: 20, width: 300, fontSize: 60, fill: '#000000', fontFamily: 'Arial' });
+  const kreis = new fabric.Circle({ radius: 30, fill: '#008591', left: 0, top: 0 });
+  const zeile = new fabric.Textbox('YYYYYY', { left: 70, top: 0, width: 240, fontSize: 50, fill: '#000000', fontFamily: 'Arial' });
+  const g = new fabric.Group([kreis, zeile], { left: 250, top: 200 });
+  ed.canvas.add(t, g); ed.canvas.discardActiveObject(); ed.snapshot();
+  const rot = () => {
+    const c = ed.canvas.lowerCanvasEl, d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data;
+    let n = 0; for (let i = 0; i < d.length; i += 4) if (d[i] > 200 && d[i + 1] < 60 && d[i + 2] < 60) n++;
+    return n;
+  };
+  ed.canvas.renderAll();
+  const cacheText = !!t._cacheCanvas, cacheGruppe = !!g._cacheCanvas;
+  // a colour set on a text and on a member of a group shows at once
+  t.set('fill', '#ff0000'); ed.canvas.renderAll();
+  const rotText = rot();
+  g._objects[1].set('fill', '#ff0000'); ed.canvas.renderAll();
+  const rotBeide = rot();
+  // the spotlight's picture: the group where it is (not twice its offset)
+  const b2 = m.spotBild(ed, 2);
+  const mitte = kreis.getCenterPoint ? g.getCenterPoint() : null;
+  const px = b2.getContext('2d').getImageData(Math.round((g.left + 30) * 2), Math.round((g.top + 30) * 2), 1, 1).data;
+  const teal = px[0] < 40 && px[1] > 110 && px[2] > 120;
+  // drawn again only when the scene changes
+  const stand = typeof m.szenenStand === 'function' ? m.szenenStand : () => Math.random();
+  const nochmal = m.spotBild(ed, 2) === b2 && stand(ed) === stand(ed);
+  const vorher = stand(ed);
+  g.set('left', 260);
+  const nachher = stand(ed);
+  return { cacheText, cacheGruppe, rotText, rotBeide, teal, px: [...px], nochmal, geaendert: vorher !== nachher };
+});
+pruefe('Texte und Gruppen zeichnen aus einem Zwischenbild', pbA.cacheText && pbA.cacheGruppe, JSON.stringify(pbA));
+pruefe('eine neue Textfarbe erscheint sofort', pbA.rotText > 100, pbA.rotText);
+pruefe('auch in einer Gruppe', pbA.rotBeide > pbA.rotText + 100, pbA.rotBeide + ' / ' + pbA.rotText);
+pruefe('Spotlight-Bild: die Gruppe sitzt an ihrem Platz', pbA.teal, JSON.stringify(pbA.px));
+pruefe('Spotlight-Bild bleibt, solange sich nichts ändert, und folgt einer Verschiebung', pbA.nochmal && pbA.geaendert);
+
+// Bild speichern: das PNG geht als Datei, nicht als base64 im JSON.
+letzterUpload = null;
+const pbB = await page.evaluate(async () => {
+  const io = await import('/io.js');
+  io.merkeNamen('Prüfbild');
+  const ok = await io.saveImage(window._studioEditor);
+  return { ok };
+});
+pruefe('Bild speichern schickt ein Formular mit der PNG-Datei',
+  pbB.ok && !!letzterUpload && /multipart\/form-data/.test(letzterUpload.typ || '') && letzterUpload.laenge > 1000,
+  JSON.stringify({ ...pbB, letzterUpload }));
+await sauber('Paket B');
+
+// ---- Paket B, zweiter Teil: Undo-Speicher, ein Aufbau, Hilfslinien, GIF -----
+await ruhig('Paket B2');
+const pbC = await page.evaluate(async () => {
+  const ed = window._studioEditor;
+  const warte = ms => new Promise(r => setTimeout(r, ms));
+  ed.clearAll(); ed.setSize(400, 300);
+  const c = document.createElement('canvas'); c.width = 600; c.height = 450;
+  const x = c.getContext('2d'); const id = x.createImageData(600, 450);
+  for (let i = 0; i < id.data.length; i++) id.data[i] = (i * 7919) % 251;
+  x.putImageData(id, 0, 0);
+  const url = c.toDataURL('image/png');
+  const el = await new Promise(r => { const i = new Image(); i.onload = () => r(i); i.src = url; });
+  ed.canvas.add(new fabric.Image(el, { left: 10, top: 10, scaleX: 0.3, scaleY: 0.3 }));
+  ed.resetHistory();                  // only the steps of this test count
+  for (let k = 0; k < 6; k++) { ed.canvas.add(new fabric.Text('t' + k, { left: 20 * k, top: 200 })); ed.snapshot(); }
+  const bytes = typeof ed._bytes === 'function' ? ed._bytes() : -1;
+  ed.undo(); await warte(400); ed.undo(); await warte(400);
+  const bild = ed.canvas.getObjects().find(o => o.type === 'image');
+  const zurueck = !!bild && bild._element && (bild._element.naturalWidth || bild._element.width) === 600
+                  && bild.getSrc() === url;
+  ed.redo(); await warte(400);
+  const nachRedo = ed.canvas.getObjects().filter(o => o.type === 'image').length;
+  return { bytes, url: url.length, zurueck, nachRedo };
+});
+pruefe('Undo-Schritte tragen ein großes Bild nur einmal', pbC.bytes > 0 && pbC.bytes < pbC.url, JSON.stringify(pbC));
+pruefe('Undo und Redo bringen das Bild vollständig zurück', pbC.zurueck && pbC.nachRedo === 1, JSON.stringify(pbC));
+
+const pbD = await page.evaluate(async () => {
+  const ed = window._studioEditor;
+  const warte = ms => new Promise(r => setTimeout(r, ms));
+  ed.clearAll(); ed.setSize(600, 400);
+  ed.canvas.add(new fabric.Text('Hallo', { left: 20, top: 20 })); ed.snapshot();
+  await warte(100);
+  const bar = document.getElementById('anim-bar');
+  let aufbauten = 0;
+  const beob = new MutationObserver(liste => { if (liste.some(m => m.target === bar && m.removedNodes.length)) aufbauten++; });
+  beob.observe(bar, { childList: true });
+  document.querySelector('[data-mode="effects"]')?.click();
+  document.querySelector('[data-act="add-magnifier"]').click();
+  await warte(300);
+  beob.disconnect();
+  return aufbauten;
+});
+pruefe('Die Animationsleiste wird nach einer Aktion einmal gebaut, nicht zweimal', pbD === 1, pbD);
+
+const pbE = await page.evaluate(async () => {
+  const ed = window._studioEditor;
+  ed.clearAll(); ed.setSize(600, 400);
+  const r = new fabric.Rect({ left: 297, top: 100, width: 10, height: 10, fill: '#000' });
+  const s = new fabric.Rect({ left: 100, top: 300, width: 50, height: 50, fill: '#333' });
+  ed.canvas.add(r, s); ed.canvas.setActiveObject(r);
+  const vorher = ed.canvas.getObjects().length;
+  ed.canvas.fire('object:moving', { target: r });
+  const waehrend = ed.canvas.getObjects().length;
+  const eingerastet = Math.round(r.left + r.width / 2) === 300;
+  ed.canvas.fire('mouse:up', {});
+  return { vorher, waehrend, eingerastet, nachher: ed.canvas.getObjects().length };
+});
+pruefe('Einrasten an der Mitte funktioniert', pbE.eingerastet, JSON.stringify(pbE));
+pruefe('Hilfslinien kommen nicht als Elemente in die Liste', pbE.waehrend === pbE.vorher && pbE.nachher === pbE.vorher, JSON.stringify(pbE));
+
+// In a fresh tab: on the long-used page a second GIF's workers stay silent in
+// this headless browser - with the old code just as with the new.
+const gifSeite = await browser.newPage();
+await gifSeite.goto(`http://127.0.0.1:${PORT}/`, { waitUntil: 'load' });
+await gifSeite.waitForFunction(() => !!window._studioEditor, null, { timeout: 10000 });
+const pbF = await gifSeite.evaluate(async () => {
+  const m = await import('/media.js');
+  const ed = window._studioEditor;
+  ed.clearAll(); ed.setSize(300, 200);
+  ed.canvas.setBackgroundColor('#ffffff', () => {});
+  const t = new fabric.Text('Hi', { left: 40, top: 40, fontSize: 40 });
+  t.anim = { type: 'fadeIn', dur: 400, delay: 0 };
+  ed.canvas.add(t);
+  const len = document.getElementById('video-length');
+  if (len) { len.value = '3'; len.dispatchEvent(new Event('input', { bubbles: true })); }
+  ed.snapshot();
+  let daten = null;
+  const ok = await m.exportGif(ed, b => { daten = b; });
+  const bytes = new Uint8Array(await daten.arrayBuffer());
+  let bilder = 0;
+  for (let i = 0; i + 2 < bytes.length; i++) if (bytes[i] === 0x21 && bytes[i + 1] === 0xF9 && bytes[i + 2] === 0x04) bilder++;
+  if (len) { len.value = ''; len.dispatchEvent(new Event('input', { bubbles: true })); }
+  return { ok, bilder };
+}).catch(e => ({ fehler: String(e).slice(0, 160) }));
+await gifSeite.close();
+pruefe('GIF: gleiche Bilder hintereinander werden eins (3 s, 0,4 s Bewegung)', pbF.ok && pbF.bilder > 2 && pbF.bilder < 15, JSON.stringify(pbF));
+await sauber('Paket B2');
 
 // ---- Video Bild für Bild: auch auf einem langsamen Rechner nichts überspringen --
 // Ortrud: "im fertigen Video bewegt sich die Lupe nicht - sie springt einmal,

@@ -2,7 +2,7 @@
 // existing Django backend (studio_save). A reload rebuilds the Fabric state exactly.
 import { URLS, POST_ID, CONFIG, getCookie, proxyUrl } from './config.js';
 import { toast, status, readJson } from './util.js';
-import { fabric, EXTRA_PROPS } from './editor.js';
+import { fabric, EXTRA_PROPS, Editor } from './editor.js';
 import { beendeVorschauen, vorschauenUebernehmen } from './retouch.js';
 import { vorschlagAusInhalt, vergebeneNamen, eindeutig, entschaerfe, frageNachNamen } from './namen.js';
 
@@ -216,10 +216,16 @@ async function _saveImage(editor) {
   if (!title) return false;
   status('💾 Saving…');
 
-  let dataUrl, preview;
+  // One render for both: the picture and, scaled from it, the preview. It goes
+  // to the server as a file (PNG blob), not as base64 text inside JSON - a
+  // third smaller, and the browser does not have to build a string of several
+  // megabytes first.
+  let png, preview;
   try {
-    dataUrl = exportPng(editor);          // nimmt Markierungs-Vorschauen zurück
-    preview = editor.exportDataURL({ multiplier: 0.4 });
+    beendeVorschauen(editor.canvas);      // rote Markierung nie mitspeichern
+    const el = editor.exportLeinwand(1);
+    preview = Editor.vorschauAus(el, 0.4);
+    png = await new Promise((ok, fehler) => el.toBlob(b => (b ? ok(b) : fehler(new Error('empty'))), 'image/png'));
   } catch (e) {
     status('❌ Export failed (image tainted)', 'red');
     toast('An image is cross-origin – loading via the proxy', 'err');
@@ -230,20 +236,22 @@ async function _saveImage(editor) {
   // save as PNG, the GIF entry used to be repurposed as the image entry, and
   // the GIF file was no longer reachable through any entry.
   const istBildOffen = (CONFIG.libData?.kind || 'image') === 'image';
-  const body = {
-    dataUrl, title,
-    post_id: POST_ID || '',
-    lib_item_id: istBildOffen ? (CONFIG.libData?.item_id || null) : null,
-    openNcPath: istBildOffen ? (CONFIG.libData?.nc_path || null) : null,
-    templateId: editor._templateId || null,
-    canvasJson: buildCanvasJson(editor, preview),
-  };
+  const fd = new FormData();
+  fd.append('image', png, 'studio.png');
+  fd.append('title', title);
+  fd.append('post_id', POST_ID || '');
+  if (istBildOffen && CONFIG.libData?.item_id) fd.append('lib_item_id', CONFIG.libData.item_id);
+  if (istBildOffen && CONFIG.libData?.nc_path) fd.append('openNcPath', CONFIG.libData.nc_path);
+  if (editor._templateId) fd.append('templateId', editor._templateId);
+  // The layout as a file part too: form fields count against the server's
+  // upload limit for plain fields, files do not.
+  fd.append('canvasJson', new Blob([buildCanvasJson(editor, preview)], { type: 'application/json' }), 'layout.json');
 
   try {
     const res = await fetch(URLS.save, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCookie('csrftoken') },
-      body: JSON.stringify(body),
+      headers: { 'X-CSRFToken': getCookie('csrftoken') },
+      body: fd,
     });
     const d = await readJson(res);
     if (d.ok) {
@@ -286,7 +294,7 @@ export async function saveAnimation(editor, blob, ext) {
   const title = await nameSicherstellen(editor);
   if (!title) return { ok: false, error: 'cancelled' };
   let preview = '';
-  try { preview = editor.exportDataURL({ multiplier: 0.4 }); } catch (e) { /* egal */ }
+  try { preview = editor.exportLeinwand(0.4).toDataURL('image/png'); } catch (e) { /* egal */ }
   const safe = title.replace(/[^a-zA-Z0-9_.-]/g, '_') + ext;
   const fd = new FormData();
   fd.append('video', blob, safe);
