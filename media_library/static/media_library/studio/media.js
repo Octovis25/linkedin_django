@@ -94,8 +94,11 @@ export function setAnim(editor, type, dur = 1200, delay = 0) {
 }
 
 export function hasAnimations(editor) {
+  // A spotlight that is still (one frame, Still) is part of the picture.
+  const spots = spotGruppen(editor);
   return editor.canvas.getObjects().some(o =>
-    (o.anim && o.anim.type && o.anim.type !== 'none') || (o.fx && o.fx !== 'none') || istFrageKnoten(o));
+    (o.anim && o.anim.type && o.anim.type !== 'none') || istFrageKnoten(o)
+    || (o.fx && o.fx !== 'none' && !(istSpot(o) && spotStill(spots.get(o.spotId || 's') || [o]))));
 }
 
 /* ---- Question web -----------------------------------------------------------
@@ -246,6 +249,7 @@ export const EFFECT_LABELS = {
   orbit: '💫 Orbit', veil: '🌫 Veil', scan: '📡 Scan', magnifier: '🔍 Magnifier',
   neon: '💠 Neon pulse', rays: '☀️ Rays', glow: '💡 Glow', bubbles: '⭕ Circles',
   confetti: '🎊 Confetti', hearts: '💕 Hearts',
+  spotlight: '🔦 Spotlight',        // not in EFFECTS: a spotlight is added by a click, not picked from a list
 };
 
 /* ---------------------------------------------------------------------------
@@ -736,6 +740,316 @@ function _malLupe(ctx, editor, rahmen, z, sek) {
   ctx.restore();
 }
 
+/* ---- Spotlight -----------------------------------------------------------
+   One element of the picture comes forward as a card - icon and text
+   together - while the rest steps back a little and the heading stays clear
+   (Ortrud, 27.09.2026). Its frame is an effect frame with fx 'spotlight'.
+
+   Frames that share a spotId are one spotlight: a single frame is "Just one"
+   (Still: part of the picture, in a PNG as well; Moving: it comes forward in
+   GIF and video); two or more are "One after another", a little film in
+   spotNr order. The settings sit on every frame of a spotlight alike, only
+   spotSek (how long that one stays) is each frame's own. */
+export const SPOT = 'spotlight';
+export const SPOT_STANDARD = {
+  spotStil: 'karte', spotWo: 'platz', spotRest: 'weich', spotStaerke: 0.35,
+  spotKopf: true, spotKopfH: 0, spotZoom: 1.5, spotBewegung: 'fest', spotRahmen: true,
+  spotReihe: 'klick', spotPause: 0.4, spotEnde: 'alle',
+};
+export const SPOT_SEK = 2.5;
+export function istSpot(o) { return istEffektRahmen(o) && o.fx === SPOT; }
+export function spotGruppen(editor) {
+  const m = new Map();
+  editor.canvas.getObjects().forEach(o => {
+    if (!istSpot(o)) return;
+    const id = o.spotId || 's';
+    if (!m.has(id)) m.set(id, []);
+    m.get(id).push(o);
+  });
+  m.forEach(k => k.sort((a, b) => (a.spotNr || 0) - (b.spotNr || 0)));
+  return m;
+}
+export function spotGruppeVon(editor, o) { return spotGruppen(editor).get(o.spotId || 's') || [o]; }
+const _sp = (e, k) => (e[k] != null && e[k] !== '' ? e[k] : SPOT_STANDARD[k]);
+export function spotWert(e, k) { return _sp(e, k); }
+// A single frame set to Still is picture content, not motion.
+export function spotStill(k) { return k.length === 1 && _sp(k[0], 'spotBewegung') === 'fest'; }
+export function spotSekunden(o) { return o.spotSek > 0 ? +o.spotSek : SPOT_SEK; }
+// One round in ms: a single moving one breathes for 4.5 s; a film is every
+// spot's time plus the pauses, and 1.2 s of the whole picture at the end.
+export function spotRundeMs(k) {
+  if (k.length === 1) return 4500;
+  const pause = +_sp(k[0], 'spotPause');
+  const summe = k.reduce((s, o) => s + spotSekunden(o) + pause, 0);
+  return Math.round((summe + (_sp(k[0], 'spotEnde') === 'alle' ? 1.2 : 0)) * 1000);
+}
+const _weich = x => x <= 0 ? 0 : x >= 1 ? 1 : x < .5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2;
+// Which spot is forward at second `sek`, how far (0..1) and how it breathes.
+export function spotZustand(k, sek, stehend = false) {
+  if (k.length === 1) {
+    if (stehend || _sp(k[0], 'spotBewegung') === 'fest') return { i: 0, f: 1, atem: 1 };
+    const t = ((sek % 4.5) + 4.5) % 4.5;
+    const f = t < .6 ? _weich(t / .6) : t < 3.6 ? 1 : t < 4.1 ? _weich((4.1 - t) / .5) : 0;
+    const atem = (t >= .6 && t < 3.6) ? 1 + .025 * Math.sin((t - .6) / 3 * Math.PI * 2) : 1;
+    return { i: 0, f, atem };
+  }
+  if (stehend) return { i: -1, f: 0, atem: 1 };      // a film: the still picture stays whole
+  const runde = spotRundeMs(k) / 1000, pause = +_sp(k[0], 'spotPause');
+  let t = sek;
+  if (_sp(k[0], 'spotEnde') === 'loop' && runde > 0) t = ((t % runde) + runde) % runde;
+  let von = 0;
+  for (let i = 0; i < k.length; i++) {
+    const d = spotSekunden(k[i]);
+    if (t >= von && t <= von + d) return { i, f: Math.min(_weich((t - von) / .35), _weich((von + d - t) / .35)), atem: 1 };
+    von += d + pause;
+  }
+  return { i: -1, f: 0, atem: 1 };
+}
+export function spotKopfHoehe(editor, e) {
+  return _sp(e, 'spotKopfH') > 0 ? +e.spotKopfH : Math.round(editor.height * 0.17);
+}
+
+// The picture without the effects, at `skala` x its own size - what the card
+// shows enlarged and what the elements are found in. Background colour and
+// image included; the invisible effect frames are not.
+let _spotLeinwand = null;
+export function spotBild(editor, skala = 1) {
+  const W = editor.width, H = editor.height;
+  if (!_spotLeinwand) _spotLeinwand = document.createElement('canvas');
+  const c = _spotLeinwand;
+  if (c.width !== Math.round(W * skala) || c.height !== Math.round(H * skala)) {
+    c.width = Math.round(W * skala); c.height = Math.round(H * skala);
+  }
+  const u = c.getContext('2d', { willReadFrequently: true });
+  u.setTransform(1, 0, 0, 1, 0, 0);
+  u.clearRect(0, 0, c.width, c.height);
+  u.setTransform(skala, 0, 0, skala, 0, 0);
+  const cv = editor.canvas;
+  if (cv.backgroundColor && typeof cv.backgroundColor === 'string') { u.fillStyle = cv.backgroundColor; u.fillRect(0, 0, W, H); }
+  if (cv.backgroundImage && cv.backgroundImage.render) cv.backgroundImage.render(u);
+  cv.getObjects().forEach(o => {
+    if (o._snap || o._grid || istEffektRahmen(o) || o.visible === false) return;
+    o.render(u);
+  });
+  return c;
+}
+
+/* ---- Finding the elements of a flat picture ----------------------------
+   A click should be enough: the frame goes round the icon AND its text.
+   1. Everything clearly unlike the background colour (the corners) is ink.
+   2. Ink with gaps of up to 4 px makes a blob.
+   3. Blobs of at least 40 x 40 px are icons; the rest is text.
+   4. Text lines right under or beside each other become one label.
+   5. Each label goes to the nearest icon, if it is closer than 60 px.
+   Faint shapes behind (an octopus in pale colours) stay under the threshold.
+   Measured on the Clinical Data Management Lifecycle: all nine elements with
+   their whole text. A dark or busy background finds nothing sensible - then
+   the frame is placed at the click and sized by hand. */
+export function spotElementeIn(px, W, H) {
+  const at = (x, y) => (y * W + x) * 4;
+  const ecken = [at(3, 3), at(W - 4, 3), at(3, H - 4), at(W - 4, H - 4)];
+  const bg = [0, 1, 2].map(k => ecken.map(i => px[i + k]).sort((a, b) => a - b)[2]);
+  const C = 2, gw = Math.floor(W / C), gh = Math.floor(H / C);
+  const tinte = new Uint8Array(gw * gh);
+  for (let y = 0; y < gh * C; y++) for (let x = 0; x < gw * C; x++) {
+    const i = at(x, y);
+    if (px[i + 3] < 40) continue;
+    const d = Math.max(Math.abs(px[i] - bg[0]), Math.abs(px[i + 1] - bg[1]), Math.abs(px[i + 2] - bg[2]));
+    if (d > 80) tinte[Math.floor(y / C) * gw + Math.floor(x / C)] = 1;
+  }
+  const lab = new Int32Array(gw * gh).fill(-1), blobs = [];
+  for (let y = 0; y < gh; y++) for (let x = 0; x < gw; x++) {
+    if (!tinte[y * gw + x] || lab[y * gw + x] >= 0) continue;
+    const b = [x, y, x, y, 0], q = [x, y]; lab[y * gw + x] = blobs.length;
+    while (q.length) {
+      const yy = q.pop(), xx = q.pop();
+      if (xx < b[0]) b[0] = xx; if (yy < b[1]) b[1] = yy; if (xx > b[2]) b[2] = xx; if (yy > b[3]) b[3] = yy; b[4]++;
+      for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) {
+        const x2 = xx + dx, y2 = yy + dy;
+        if (x2 < 0 || y2 < 0 || x2 >= gw || y2 >= gh) continue;
+        const j = y2 * gw + x2;
+        if (tinte[j] && lab[j] < 0) { lab[j] = blobs.length; q.push(x2, y2); }
+      }
+    }
+    blobs.push({ x0: b[0] * C, y0: b[1] * C, x1: (b[2] + 1) * C, y1: (b[3] + 1) * C, n: b[4] });
+  }
+  const gross = b => b.x1 - b.x0 >= 40 && b.y1 - b.y0 >= 40;
+  // A blob as big as most of the picture is a frame or a backdrop, not an element.
+  const icons = blobs.filter(b => gross(b) && (b.x1 - b.x0) * (b.y1 - b.y0) < W * H * 0.35);
+  const texte = blobs.filter(b => !gross(b) && b.n > 3).map(b => ({ ...b }));
+  const luecke = (a, b) => [Math.max(0, Math.max(a.x0, b.x0) - Math.min(a.x1, b.x1)),
+                            Math.max(0, Math.max(a.y0, b.y0) - Math.min(a.y1, b.y1))];
+  for (let weiter = true; weiter;) {
+    weiter = false;
+    aussen: for (let i = 0; i < texte.length; i++) for (let j = i + 1; j < texte.length; j++) {
+      const [dx, dy] = luecke(texte[i], texte[j]);
+      if ((dy <= 12 && dx === 0) || (dy === 0 && dx <= 12)) {
+        const a = texte[i], b = texte[j];
+        texte[i] = { x0: Math.min(a.x0, b.x0), y0: Math.min(a.y0, b.y0), x1: Math.max(a.x1, b.x1), y1: Math.max(a.y1, b.y1) };
+        texte.splice(j, 1); weiter = true; break aussen;
+      }
+    }
+  }
+  const teile = icons.map(b => ({ x0: b.x0, y0: b.y0, x1: b.x1, y1: b.y1 }));
+  texte.forEach(t => {
+    let best = -1, bd = 60;
+    icons.forEach((ic, k) => { const [dx, dy] = luecke(t, ic); const d = Math.hypot(dx, dy); if (d < bd) { bd = d; best = k; } });
+    if (best >= 0) {
+      const e = teile[best];
+      e.x0 = Math.min(e.x0, t.x0); e.y0 = Math.min(e.y0, t.y0); e.x1 = Math.max(e.x1, t.x1); e.y1 = Math.max(e.y1, t.y1);
+    }
+  });
+  const rand = 8;
+  return teile.map(e => {
+    const x = Math.max(0, e.x0 - rand), y = Math.max(0, e.y0 - rand);
+    return { x, y, w: Math.min(W, e.x1 + rand) - x, h: Math.min(H, e.y1 + rand) - y };
+  });
+}
+export function spotElemente(editor) {
+  const W = Math.round(editor.width), H = Math.round(editor.height);
+  const c = spotBild(editor, 1);
+  const px = c.getContext('2d', { willReadFrequently: true }).getImageData(0, 0, W, H).data;
+  return spotElementeIn(px, W, H);
+}
+// The element under a click - or the nearest, if the click was just beside it.
+export function spotElementBei(liste, x, y) {
+  let best = null, bd = 30;
+  liste.forEach(e => {
+    const dx = Math.max(0, e.x - x, x - (e.x + e.w)), dy = Math.max(0, e.y - y, y - (e.y + e.h));
+    const d = Math.hypot(dx, dy);
+    if (d < bd) { bd = d; best = e; }
+  });
+  return best;
+}
+
+/* The order of a film. "Around": the element the others sit round at an even
+   distance is the hub and comes first; the rest follow round the circle from
+   the top left (10:30) - to the left and down (links) or to the right
+   (rechts). "zeilen": rows, left to right. Works on anything with x y w h. */
+export function spotOrdnen(liste, art) {
+  const mx = e => e.x + e.w / 2, my = e => e.y + e.h / 2;
+  if (art === 'zeilen') return liste.slice().sort((a, b) => (Math.abs(my(a) - my(b)) < 40 ? mx(a) - mx(b) : my(a) - my(b)));
+  if (art !== 'links' && art !== 'rechts') return liste.slice();
+  let cx = liste.reduce((s, e) => s + mx(e), 0) / liste.length;
+  let cy = liste.reduce((s, e) => s + my(e), 0) / liste.length;
+  let nabe = null, beste = .15;
+  liste.forEach(k => {
+    const d = liste.filter(e => e !== k).map(e => Math.hypot(mx(e) - mx(k), my(e) - my(k)));
+    if (d.length < 3) return;
+    const m = d.reduce((s, v) => s + v, 0) / d.length;
+    const cv = Math.sqrt(d.reduce((s, v) => s + (v - m) * (v - m), 0) / d.length) / m;
+    if (cv < beste) { beste = cv; nabe = k; }
+  });
+  if (nabe) { cx = mx(nabe); cy = my(nabe); }
+  const start = -135 * Math.PI / 180, voll = Math.PI * 2;
+  const schritt = e => {
+    const w = Math.atan2(my(e) - cy, mx(e) - cx);
+    return art === 'links' ? ((start - w) % voll + voll) % voll : ((w - start) % voll + voll) % voll;
+  };
+  const ring = liste.filter(e => e !== nabe).sort((a, b) => schritt(a) - schritt(b));
+  return nabe ? [nabe, ...ring] : ring;
+}
+
+// Colour of the picture's ground at a spot - the card is filled with it, so
+// the enlarged cut-out does not sit in a white box on a cream picture.
+function _spotGrund(bild, skala, x, y) {
+  try {
+    const d = bild.getContext('2d', { willReadFrequently: true })
+      .getImageData(Math.max(0, Math.round(x * skala) + 2), Math.max(0, Math.round(y * skala) + 2), 1, 1).data;
+    return d[3] > 200 ? `rgb(${d[0]},${d[1]},${d[2]})` : '#ffffff';
+  } catch (e) { return '#ffffff'; }
+}
+
+function _spotRund(ctx, x, y, w, h, r) {
+  ctx.beginPath();
+  if (ctx.roundRect) ctx.roundRect(x, y, w, h, r); else ctx.rect(x, y, w, h);
+}
+
+function _malSpot(ctx, editor, k, z, sek, stehend) {
+  const { i, f, atem } = spotZustand(k, sek, stehend);
+  if (i < 0 || f <= 0) return;
+  const e = k[0], s = k[i];
+  const W = editor.width, H = editor.height;
+  // The card is cut from a picture at twice the size for an export; on the
+  // (smaller) screen once is enough, and it is redrawn at every move.
+  const SK = z >= 0.99 ? 2 : 1;
+  const bild = spotBild(editor, SK);
+  const b = s.getBoundingRect(true, true);
+  if (b.width < 4 || b.height < 4) return;
+
+  // The rest steps back - below the heading, which stays clear.
+  const oben = _sp(e, 'spotKopf') !== false ? Math.min(H, spotKopfHoehe(editor, e)) : 0;
+  const staerke = Math.max(0, Math.min(1, +_sp(e, 'spotStaerke')));
+  const rest = _sp(e, 'spotRest');
+  if (rest !== 'aus') {
+    ctx.save();
+    ctx.beginPath(); ctx.rect(0, oben * z, W * z, (H - oben) * z); ctx.clip();
+    if (rest === 'blur') {
+      ctx.filter = `blur(${2.5 * f * z}px)`;
+      ctx.drawImage(bild, 0, oben * SK, W * SK, (H - oben) * SK, 0, oben * z, W * z, (H - oben) * z);
+      ctx.filter = 'none';
+      ctx.fillStyle = `rgba(248,246,240,${staerke * .4 * f})`;
+    } else {
+      ctx.fillStyle = rest === 'dunkel' ? `rgba(14,40,45,${staerke * .6 * f})` : `rgba(248,246,240,${staerke * f})`;
+    }
+    ctx.fillRect(0, oben * z, W * z, (H - oben) * z);
+    ctx.restore();
+  }
+
+  // The card: the element enlarged, where it is or on its way to the middle.
+  const karte = _sp(e, 'spotStil') !== 'ring';
+  const zoom = karte ? (1 + (Math.max(1, +_sp(e, 'spotZoom')) - 1) * f) * atem : 1;
+  let cx = b.left + b.width / 2, cy = b.top + b.height / 2;
+  if (karte && _sp(e, 'spotWo') === 'mitte') { cx += (W / 2 - cx) * f; cy += (Math.max(H / 2, oben + (H - oben) / 2) - cy) * f; }
+  const w = b.width * zoom, h = b.height * zoom, rand = karte ? 12 : 5;
+  cx = Math.min(W - w / 2 - rand - 8, Math.max(w / 2 + rand + 8, cx));
+  cy = Math.min(H - h / 2 - rand - 8, Math.max(h / 2 + rand + 8, cy));
+  const x = cx - w / 2, y = cy - h / 2;
+  ctx.save();
+  if (karte) {
+    ctx.save();
+    ctx.shadowColor = `rgba(0,0,0,${.22 * f})`; ctx.shadowBlur = 26 * f * z; ctx.shadowOffsetY = 8 * f * z;
+    ctx.fillStyle = _spotGrund(bild, SK, b.left, b.top);
+    _spotRund(ctx, (x - rand) * z, (y - rand) * z, (w + 2 * rand) * z, (h + 2 * rand) * z, 16 * z);
+    ctx.fill();
+    ctx.restore();
+    ctx.save();
+    _spotRund(ctx, x * z, y * z, w * z, h * z, 10 * z); ctx.clip();
+    ctx.drawImage(bild, b.left * SK, b.top * SK, b.width * SK, b.height * SK, x * z, y * z, w * z, h * z);
+    ctx.restore();
+  }
+  if (_sp(e, 'spotRahmen') !== false) {
+    ctx.globalAlpha = f;
+    ctx.strokeStyle = e.fxColor || '#008591';
+    ctx.lineWidth = Math.max(1.5, 3 * z);
+    _spotRund(ctx, (x - rand) * z, (y - rand) * z, (w + 2 * rand) * z, (h + 2 * rand) * z, (karte ? 16 : 10) * z);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+// A frame for the spotlight, round a box in picture pixels. Joins spotlight
+// `gruppe` (an array of its frames) or starts a new one.
+export function addSpot(editor, box, gruppe = null) {
+  const erste = gruppe && gruppe[0];
+  const props = { spotId: erste ? erste.spotId : 's' + Date.now().toString(36), spotNr: gruppe ? gruppe.length : 0, spotSek: SPOT_SEK };
+  Object.keys(SPOT_STANDARD).forEach(k => { props[k] = erste ? erste[k] : SPOT_STANDARD[k]; });
+  if (erste && erste.fxColor) props.fxColor = erste.fxColor;
+  const o = new fabric.Rect({
+    left: Math.round(box.x), top: Math.round(box.y), width: Math.max(10, Math.round(box.w)), height: Math.max(10, Math.round(box.h)),
+    fill: 'rgba(0,0,0,0)', stroke: '', strokeWidth: 0,
+    shapeKind: FX_RAHMEN, fx: SPOT, fxTempo: 1, startAt: erste ? (erste.startAt || 0) : 0, ...props,
+    objectCaching: false, lockRotation: true, hasRotatingPoint: false,
+    cornerColor: '#008591', cornerStrokeColor: '#ffffff', cornerSize: 10,
+    transparentCorners: false, borderColor: '#008591', borderDashArray: [5, 4],
+  });
+  o.setControlsVisibility({ mtr: false });
+  editor.canvas.add(o);
+  editor.canvas.setActiveObject(o);
+  editor.canvas.requestRenderAll();
+  return o;
+}
+
 /* A small, live picture of one effect - for the tiles in the Effects tab. Same
    painter as on the artboard, so a tile never promises something the picture
    will not do. */
@@ -773,6 +1087,8 @@ function _drawEffects(ctx, editor, nurLupe = false) {
   const netzGemalt = new Set();
   editor.canvas.getObjects().forEach(o => {
     if (o._snap || o._grid) return;
+    // Spotlights are drawn after everything else - the card lies on top.
+    if (istSpot(o)) return;
     if (istFrageKnoten(o)) {
       const id = o.qwebId || 'q';
       if (!netzGemalt.has(id)) {
@@ -807,6 +1123,13 @@ function _drawEffects(ctx, editor, nurLupe = false) {
     if (gemalt) _obenDrauf(ctx, editor, o);
   });
   netze.forEach(k => _malFragenSchilder(ctx, k, z, netzZeit(k), nurLupe));
+  // Spotlights last. A still one is picture content: always there, start or
+  // not. A moving one or a film honours its Start in a preview.
+  spotGruppen(editor).forEach(k => {
+    if (nurLupe || spotStill(k)) { _malSpot(ctx, editor, k, z, 0, true); return; }
+    if (!hasStarted(k[0], _fxTime)) return;
+    _malSpot(ctx, editor, k, z, elapsedAt(k[0], _fxTime) / _tempo / 1000, false);
+  });
 }
 
 // Registers the 'after:render' hook once (paints the effects over the picture).
@@ -947,6 +1270,15 @@ function animDuration(editor) {
     // second line - up to the same 15 s ceiling as everything else.
     if (o.fx === 'magnifier' && (o.fxPath || 'still') !== 'still') {
       lupenWeg = Math.max(lupenWeg, (startOf(o) + lupenWege(o).total * 1000) * _tempo + 300);
+    }
+    // A spotlight: a still one is no motion; a moving one wants a whole
+    // breath, a film every spot once (cut at the 15 s ceiling like the rest).
+    if (istSpot(o)) {
+      const k = spotGruppeVon(editor, o);
+      if (spotStill(k) || o !== k[0]) return;
+      hasLoop = true;
+      lupenWeg = Math.max(lupenWeg, (startOf(k[0]) + spotRundeMs(k)) * _tempo + 300);
+      return;
     }
     // A question web too: every question gets its turn once.
     if (istFrageKnoten(o)) {

@@ -17,6 +17,8 @@ if (fabric) fabric.Object.prototype.objectCaching = false;
 export const EXTRA_PROPS = [
   'srcUrl', 'originalUrl', 'bgRemoved', 'edited', 'anim', 'shapeKind', 'fx', 'fxDelay', 'fxTempo', 'fxZoom', 'fxColor', 'fxLens', 'fxPath', 'fxLineSec', 'fxPause', 'startAt',
   'qwebId', 'qwebNr', 'qwebText', 'qwebThreads', 'qwebBlink', 'qwebLabel', 'qwebSign', 'qwebColor', 'qwebSpeed', 'svgPart',
+  'spotId', 'spotNr', 'spotSek', 'spotStil', 'spotWo', 'spotRest', 'spotStaerke', 'spotKopf', 'spotKopfH', 'spotZoom',
+  'spotBewegung', 'spotRahmen', 'spotReihe', 'spotPause', 'spotEnde',
   'tbHead', 'tbBody', 'tbWidth', 'tbSize', 'tbAlign', 'tbCheck', 'tbColor',
   'clItems', 'clWidth', 'clSize', 'clColor',
 ];

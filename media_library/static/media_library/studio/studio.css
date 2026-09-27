@@ -507,6 +507,12 @@ main:has(.studio-wrap) { max-width:none; padding:0 1rem; margin-top:.5rem; }
                           border-radius:5px; background:#fff; cursor:pointer; color:#444; }
 .qweb-seg button.on     { background:var(--octo-petrol,#008591); border-color:var(--octo-petrol,#008591);
                           color:#fff; font-weight:600; }
+/* ---- Spotlight row in the bar ---- */
+.spot-eintrag .spot-name { flex:1 1 auto !important; font-size:.7rem; color:#445; }
+.spot-eintrag .spot-sek  { flex:0 0 auto; width:70px; font-size:.68rem; height:23px; padding:0 4px; }
+.spot-knoepfe            { display:flex; gap:6px; margin:2px 0 3px 58px; }
+.spot-knoepfe .qweb-dazu { margin:0; }
+.spot-regler input[type=range] { flex:1; min-width:0; }
 /* Speed sliders: left slow, right fast - the animals say which end is which. */
 .speed-ico              { font-size:11px; flex:0 0 auto; line-height:1; }
 .fx-speed-out           { flex:0 0 auto; min-width:48px; text-align:right; font-size:.62rem; color:#777;

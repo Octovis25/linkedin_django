@@ -236,6 +236,10 @@ bg.renderPalette(document.getElementById('palette-row'), col => {
     if (t && _hex(t.fill) === _hex(col)) t.set('fill', autoContrast(col));
     editor.canvas.requestRenderAll(); editor.snapshot();
   }
+  else if (media.istSpot(o)) {
+    // A spotlight is one thing, however many frames: its frame colour for all.
+    spotEinstellen(media.spotGruppeVon(editor, o), 'fxColor', col);
+  }
   else if (media.istEffektRahmen(o)) {
     // The frame itself has no colour to show - its effect gets it.
     if (o.fx !== 'magnifier') { o.fxColor = col; editor.canvas.requestRenderAll(); editor.snapshot(); renderAnimBar(); }
@@ -373,6 +377,7 @@ const actions = {
   'add-marker': () => addMarker(),
   'add-stamp': () => addStempel(),
   'add-qweb': () => addFragenNetz(),
+  'add-spot': () => spotStarten(),
 
   // Format bewusst neu wählen (fragt wieder).
   'save-as-new': async () => { _saveKind = null; _saveKindVomPost = false; await actions['save-as'](); },
@@ -1975,6 +1980,255 @@ function frageDazu(knoten) {
   return o;
 }
 
+/* ---- Spotlight: click an element, the frame goes round it ----------------
+   "Spotlight" in the Effects tab waits for one click on the picture. The
+   Studio finds the element there - icon and text together - and lays the
+   frame round it (media.spotElemente). Elements selected beforehand (icon and
+   text as elements of their own) get their frame at once. Esc cancels. */
+let _spotWahl = null, _spotListe = [], _spotCursor = null;
+function spotStarten(gruppe = null) {
+  const aktiv = editor.canvas.getActiveObject();
+  if (!gruppe && aktiv && !media.istEffektRahmen(aktiv)
+      && !(aktiv.type === 'activeSelection' && aktiv.getObjects().some(media.istEffektRahmen))) {
+    const b = aktiv.getBoundingRect(true, true);
+    // Something small selected: that is the element. The whole picture as one
+    // image is not - then it is the click that says which part.
+    if (b.width * b.height < editor.width * editor.height * 0.5) {
+      const rand = 8;
+      return spotSetzen({ x: b.left - rand, y: b.top - rand, w: b.width + 2 * rand, h: b.height + 2 * rand }, null);
+    }
+  }
+  _spotListe = media.spotElemente(editor);
+  _spotWahl = { gruppe };
+  _spotCursor = [editor.canvas.defaultCursor, editor.canvas.hoverCursor];
+  editor.canvas.discardActiveObject();
+  editor.canvas.skipTargetFind = true;
+  editor.canvas.selection = false;
+  editor.canvas.defaultCursor = 'crosshair'; editor.canvas.hoverCursor = 'crosshair';
+  editor.canvas.requestRenderAll();
+  toast('Click an icon or its text in the picture - the frame goes round both. Esc cancels.');
+  return null;
+}
+function spotWahlEnde() {
+  if (!_spotWahl) return;
+  _spotWahl = null;
+  editor.canvas.skipTargetFind = false;
+  editor.canvas.selection = true;
+  if (_spotCursor) { editor.canvas.defaultCursor = _spotCursor[0]; editor.canvas.hoverCursor = _spotCursor[1]; }
+}
+editor.canvas.on('mouse:down', e => {
+  if (!_spotWahl) return;
+  const { gruppe } = _spotWahl;
+  spotWahlEnde();
+  const p = editor.canvas.getPointer(e.e);
+  let box = media.spotElementBei(_spotListe, p.x, p.y);
+  if (!box) {
+    const w = Math.round(editor.width * 0.22), h = Math.round(editor.height * 0.16);
+    box = { x: p.x - w / 2, y: p.y - h / 2, w, h };
+    toast('No element found here - the frame sits where you clicked; drag its corners to fit.');
+  }
+  spotSetzen(box, gruppe);
+});
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape' && _spotWahl) { spotWahlEnde(); editor.canvas.requestRenderAll(); toast('Spotlight: cancelled.'); }
+});
+function spotSetzen(box, gruppe) {
+  const o = media.addSpot(editor, box, gruppe);
+  if (gruppe) spotOrdnenAnwenden([...gruppe, o]);
+  editor.snapshot(); renderLayers(); renderAnimBar();
+  if (!gruppe) toast('Spotlight set - the settings are under the canvas.');
+  return o;
+}
+// The numbers follow the chosen order; "As clicked" keeps them as they are.
+function spotOrdnenAnwenden(k) {
+  const art = media.spotWert(k[0], 'spotReihe');
+  const boxen = k.slice().sort((a, b) => (a.spotNr || 0) - (b.spotNr || 0)).map(o => {
+    const b = o.getBoundingRect(true, true);
+    return { x: b.left, y: b.top, w: b.width, h: b.height, o };
+  });
+  const reihe = art === 'klick' ? boxen : media.spotOrdnen(boxen, art);
+  reihe.forEach((b, i) => { b.o.spotNr = i; });
+  editor.canvas.requestRenderAll();
+}
+function spotEinstellen(k, schluessel, wert) {
+  k.forEach(o => { o[schluessel] = wert; });
+  if (schluessel === 'spotReihe') spotOrdnenAnwenden(k);
+  editor.canvas.requestRenderAll();
+  editor.snapshot();
+  renderAnimBar(); renderLayers();
+}
+// Every element of the picture into this spotlight - the ones not framed yet.
+function spotAlle(k) {
+  const liste = media.spotElemente(editor);
+  if (!liste.length) { toast('No elements found in this picture - add them one by one with + Spot.', 'err'); return; }
+  const drin = e => k.some(o => {
+    const b = o.getBoundingRect(true, true), cx = e.x + e.w / 2, cy = e.y + e.h / 2;
+    return cx >= b.left && cx <= b.left + b.width && cy >= b.top && cy <= b.top + b.height;
+  });
+  const gruppe = k.slice();
+  liste.filter(e => !drin(e)).forEach(e => { gruppe.push(media.addSpot(editor, e, gruppe)); });
+  if (media.spotWert(k[0], 'spotReihe') === 'klick') gruppe.forEach(o => { o.spotReihe = 'links'; });
+  spotOrdnenAnwenden(gruppe);
+  editor.canvas.setActiveObject(gruppe[0]);
+  editor.snapshot(); renderLayers(); renderAnimBar();
+  toast(gruppe.length + ' spots - one after another, round the circle.');
+}
+
+function spotZeile(k) {
+  const e = k[0], film = k.length > 1;
+  const row = document.createElement('div');
+  const aktiv = editor.active();
+  row.className = 'anim-row fx-row spot-row' + (k.includes(aktiv) ? ' on' : '');
+  row.dataset.spot = e.spotId || 's';
+  const th = document.createElement('div'); th.className = 'anim-thumb fx-thumb'; th.textContent = '🔦';
+  th.title = 'Select the spotlight frame';
+  th.onclick = () => editor.selectObj(e);
+  const col = document.createElement('div'); col.className = 'anim-col';
+
+  const kopf = document.createElement('div'); kopf.className = 'anim-ctl';
+  kopf.innerHTML = '<span>Effect</span><b class="qweb-titel">Spotlight</b>';
+  col.appendChild(kopf);
+
+  const wahl = (titel, schluessel, optionen, bei) => {
+    const z = document.createElement('div'); z.className = 'anim-ctl';
+    z.innerHTML = '<span>' + titel + '</span>';
+    const seg = document.createElement('span'); seg.className = 'qweb-seg spot-seg'; seg.dataset.key = schluessel;
+    const jetzt = schluessel ? media.spotWert(e, schluessel) : null;
+    optionen.forEach(([wert, text, an]) => {
+      const b = document.createElement('button'); b.type = 'button'; b.textContent = text; b.dataset.v = String(wert);
+      if (an != null ? an : jetzt === wert) b.classList.add('on');
+      b.onclick = () => (bei ? bei(wert) : spotEinstellen(k, schluessel, wert));
+      seg.appendChild(b);
+    });
+    z.appendChild(seg);
+    col.appendChild(z);
+    return z;
+  };
+  const regler = (titel, min, max, schritt, wert, text, setzen) => {
+    const z = document.createElement('label'); z.className = 'anim-ctl spot-regler';
+    z.innerHTML = '<span>' + titel + '</span>';
+    const inp = document.createElement('input');
+    inp.type = 'range'; inp.className = 'tl-slider'; inp.min = min; inp.max = max; inp.step = schritt; inp.value = wert;
+    const aus = document.createElement('span'); aus.className = 'fx-speed-out'; aus.textContent = text(+inp.value);
+    inp.oninput = () => { setzen(+inp.value); aus.textContent = text(+inp.value); editor.canvas.requestRenderAll(); };
+    inp.onchange = () => editor.snapshot();
+    z.appendChild(inp); z.appendChild(aus);
+    col.appendChild(z);
+    return inp;
+  };
+
+  wahl('Spots', null, [['eins', 'Just one', !film], ['reihe', 'One after another', film]], wert => {
+    if (wert === 'reihe') { if (!film) spotStarten(k); return; }
+    if (!film) return;
+    const bleibt = k.includes(aktiv) ? aktiv : e;
+    if (!confirm('Keep only one spot and remove the other ' + (k.length - 1) + '?')) return;
+    k.forEach(o => { if (o !== bleibt) editor.canvas.remove(o); });
+    bleibt.spotNr = 0;
+    editor.canvas.setActiveObject(bleibt);
+    editor.canvas.requestRenderAll(); editor.snapshot(); renderAnimBar(); renderLayers();
+  });
+  // Always in view: with one spot, choosing an order takes every element of
+  // the picture into the film.
+  wahl('Order', 'spotReihe', [['klick', 'As clicked'], ['links', 'Around ↺'], ['rechts', 'Around ↻'], ['zeilen', 'Top to bottom']], wert => {
+    if (!film && wert !== 'klick') { k.forEach(o => { o.spotReihe = wert; }); spotAlle(k); return; }
+    spotEinstellen(k, 'spotReihe', wert);
+  });
+
+  if (film) {
+    k.forEach((o, i) => {
+      const z = document.createElement('div'); z.className = 'anim-ctl qweb-text spot-eintrag';
+      const punkt = document.createElement('span'); punkt.className = 'qweb-dot';
+      punkt.textContent = String(i + 1); punkt.style.background = e.fxColor || '#008591';
+      punkt.title = 'Select this spot'; punkt.onclick = () => editor.selectObj(o);
+      const name = document.createElement('span'); name.className = 'spot-name'; name.textContent = 'Spot ' + (i + 1);
+      const sek = document.createElement('select'); sek.className = 'field spot-sek';
+      for (let v = 1; v <= 8; v += 0.5) {
+        const op = document.createElement('option'); op.value = v; op.textContent = v.toFixed(1) + ' s';
+        if (Math.abs(v - media.spotSekunden(o)) < 0.01) op.selected = true;
+        sek.appendChild(op);
+      }
+      sek.title = 'How long this one stays forward';
+      sek.onchange = () => { o.spotSek = +sek.value; editor.snapshot(); renderAnimBar(); };
+      const schieben = (d, zeichen, titel) => {
+        const b = document.createElement('button'); b.type = 'button'; b.className = 'qweb-weg'; b.textContent = zeichen; b.title = titel;
+        b.disabled = (i + d < 0 || i + d >= k.length);
+        b.onclick = () => {
+          const neu = k.slice(); [neu[i], neu[i + d]] = [neu[i + d], neu[i]];
+          neu.forEach((x, j) => { x.spotNr = j; x.spotReihe = 'klick'; });
+          editor.canvas.requestRenderAll(); editor.snapshot(); renderAnimBar();
+        };
+        return b;
+      };
+      const weg = document.createElement('button'); weg.type = 'button'; weg.className = 'qweb-weg';
+      weg.textContent = '✕'; weg.title = 'Remove this spot';
+      weg.onclick = () => {
+        editor.canvas.remove(o);
+        k.filter(x => x !== o).forEach((x, j) => { x.spotNr = j; });
+        editor.canvas.requestRenderAll(); editor.snapshot(); renderLayers(); renderAnimBar();
+      };
+      z.append(punkt, name, sek, schieben(-1, '↑', 'Earlier'), schieben(1, '↓', 'Later'), weg);
+      col.appendChild(z);
+    });
+  }
+  const knoepfe = document.createElement('div'); knoepfe.className = 'spot-knoepfe';
+  const dazu = document.createElement('button'); dazu.type = 'button'; dazu.className = 'qweb-dazu spot-dazu';
+  dazu.textContent = '+ Spot'; dazu.title = 'Click the next element in the picture';
+  dazu.onclick = () => spotStarten(k);
+  const alle = document.createElement('button'); alle.type = 'button'; alle.className = 'qweb-dazu spot-alle';
+  alle.textContent = '✚ All elements'; alle.title = 'Every element the Studio finds in the picture, one after another';
+  alle.onclick = () => spotAlle(k);
+  knoepfe.append(dazu, alle);
+  col.appendChild(knoepfe);
+
+  if (!film) wahl('Motion', 'spotBewegung', [['fest', 'Still'], ['bewegt', 'Moving']]);
+  wahl('Style', 'spotStil', [['karte', 'Pop out'], ['ring', 'Ring only']]);
+  wahl('Frame', 'spotRahmen', [[true, 'With frame'], [false, 'Without']]);
+  wahl('Where', 'spotWo', [['platz', 'Where it is'], ['mitte', 'To the middle']]);
+  wahl('The rest', 'spotRest', [['weich', 'Softer'], ['dunkel', 'Darker'], ['blur', 'Blurred'], ['aus', 'Unchanged']]);
+  regler('How much', 10, 70, 5, Math.round(media.spotWert(e, 'spotStaerke') * 100), v => v + ' %',
+         v => k.forEach(o => { o.spotStaerke = v / 100; })).classList.add('spot-staerke');
+  wahl('Heading', 'spotKopf', [[true, 'Stays clear'], [false, 'Steps back too']]);
+  if (media.spotWert(e, 'spotKopf') !== false) {
+    regler('Top band', 5, 50, 1, Math.round(media.spotKopfHoehe(editor, e) / editor.height * 100), v => v + ' %',
+           v => k.forEach(o => { o.spotKopfH = Math.round(editor.height * v / 100); })).classList.add('spot-kopf');
+  }
+  regler('Zoom', 1.2, 2.5, 0.1, +media.spotWert(e, 'spotZoom'), v => v.toFixed(1) + '×',
+         v => k.forEach(o => { o.spotZoom = v; })).classList.add('spot-zoom');
+  if (film) {
+    regler('Pause', 0, 2, 0.1, +media.spotWert(e, 'spotPause'), v => v.toFixed(1) + ' s',
+           v => k.forEach(o => { o.spotPause = v; })).classList.add('spot-pause');
+    wahl('At the end', 'spotEnde', [['alle', 'Whole picture'], ['loop', 'Start again']]);
+    const runde = media.spotRundeMs(k) / 1000;
+    const info = document.createElement('div'); info.className = 'anim-ctl';
+    info.innerHTML = '<span></span><span class="fx-round spot-runde">One round: ' + runde.toFixed(1) + ' s'
+      + (runde > 15 ? ' - GIF and video stop at 15 s: shorten the times' : '') + '</span>';
+    col.appendChild(info);
+  }
+  if (!media.spotStill(k)) {
+    const zeit = document.createElement('div'); zeit.className = 'anim-ctl anim-time';
+    zeit.appendChild(startRegler(e));
+    col.appendChild(zeit);
+  }
+
+  const tools = document.createElement('div'); tools.className = 'fx-tools';
+  const waehlen = document.createElement('button');
+  waehlen.type = 'button'; waehlen.className = 'fx-select'; waehlen.textContent = '⌖ Select';
+  waehlen.title = 'Put the handles on the (first) spotlight frame';
+  waehlen.onclick = () => editor.selectObj(k.includes(aktiv) ? aktiv : e);
+  const alleWeg = document.createElement('button');
+  alleWeg.type = 'button'; alleWeg.className = 'fx-remove'; alleWeg.textContent = '✕ Remove';
+  alleWeg.title = 'Remove the whole spotlight';
+  alleWeg.onclick = () => {
+    k.forEach(o => editor.canvas.remove(o));
+    editor.canvas.requestRenderAll(); editor.snapshot();
+    renderAnimBar(); renderLayers();
+  };
+  tools.appendChild(waehlen); tools.appendChild(alleWeg);
+
+  row.appendChild(th); row.appendChild(col); row.appendChild(tools);
+  return row;
+}
+
 function fxWortfeld() {
   const eigen = document.getElementById('fx-text-input');
   if (eigen && eigen.value.trim()) return eigen;
@@ -2364,6 +2618,10 @@ function wireSizeFields() {
 
 // ---- Ebenen-Liste ---------------------------------------------------------
 function layerLabel(o, i) {
+  if (media.istSpot(o)) {
+    const k = media.spotGruppeVon(editor, o);
+    return '🔦 Spotlight' + (k.length > 1 ? ' ' + (k.indexOf(o) + 1) : '');
+  }
   if (media.istEffektRahmen(o)) return (o.fx === 'magnifier' ? '🔍 Magnifier' : '✨ Effect frame');
   if (o.shapeKind === 'marker') return '📍 Marker';
   if (media.istFrageKnoten(o)) return '❓ ' + ((o.qwebText || 'Question').slice(0, 14));
@@ -2786,17 +3044,21 @@ function frageZeile(knoten) {
   return row;
 }
 
-function effektPalette(rahmenListe, netzListe = []) {
+function effektPalette(rahmenListe, netzListe = [], spotListe = []) {
   const row = document.createElement('div'); row.className = 'anim-row fx-palette';
   const th = document.createElement('div'); th.className = 'anim-thumb fx-thumb'; th.textContent = '🎨';
   const col = document.createElement('div'); col.className = 'anim-col';
   const zeile = document.createElement('div'); zeile.className = 'anim-ctl';
   zeile.innerHTML = '<span>Colour</span>';
   const aktiv = editor.active();
-  let netzZiel = media.istFrageKnoten(aktiv) ? netzVon(aktiv) : null;
-  let ziel = netzZiel ? null : (media.istEffektRahmen(aktiv) ? aktiv : rahmenListe.find(r => r.fx !== 'magnifier'));
-  if (!ziel && !netzZiel && netzListe.length) netzZiel = netzListe[0];
+  // A spotlight takes the colour for its frame - all of its frames at once.
+  let spotZiel = media.istSpot(aktiv) ? media.spotGruppeVon(editor, aktiv) : null;
+  let netzZiel = !spotZiel && media.istFrageKnoten(aktiv) ? netzVon(aktiv) : null;
+  let ziel = (netzZiel || spotZiel) ? null : (media.istEffektRahmen(aktiv) ? aktiv : rahmenListe.find(r => r.fx !== 'magnifier'));
+  if (!ziel && !netzZiel && !spotZiel && netzListe.length) netzZiel = netzListe[0];
+  if (!ziel && !netzZiel && !spotZiel && spotListe.length) spotZiel = spotListe[0];
   const farbeSetzen = f => {
+    if (spotZiel) { spotEinstellen(spotZiel, 'fxColor', f || null); return; }
     if (netzZiel) { netzEinstellen(netzZiel, 'qwebColor', f || media.FRAGE_STANDARD.qwebColor); return; }
     if (!ziel) return;
     ziel.fxColor = f; editor.canvas.requestRenderAll(); editor.snapshot(); renderAnimBar();
@@ -2805,20 +3067,21 @@ function effektPalette(rahmenListe, netzListe = []) {
   const standard = document.createElement('button');
   standard.type = 'button'; standard.className = 'fx-swatch fx-swatch-auto'; standard.textContent = 'auto';
   standard.title = 'As the effect is drawn';
-  if ((ziel && !ziel.fxColor) || (netzZiel && _hex(netzZiel[0].qwebColor || '') === _hex(media.FRAGE_STANDARD.qwebColor))) standard.classList.add('on');
+  if ((ziel && !ziel.fxColor) || (spotZiel && !spotZiel[0].fxColor) || (netzZiel && _hex(netzZiel[0].qwebColor || '') === _hex(media.FRAGE_STANDARD.qwebColor))) standard.classList.add('on');
   standard.onclick = () => farbeSetzen(null);
   sw.appendChild(standard);
   bg.getPalette().forEach(f => {
     const b = document.createElement('button');
     b.type = 'button'; b.className = 'fx-swatch'; b.style.background = f; b.title = f;
-    const jetzt = netzZiel ? netzZiel[0].qwebColor : (ziel && ziel.fxColor);
+    const jetzt = spotZiel ? spotZiel[0].fxColor : netzZiel ? netzZiel[0].qwebColor : (ziel && ziel.fxColor);
     if (jetzt && _hex(jetzt) === _hex(f)) b.classList.add('on');
     b.onclick = () => farbeSetzen(f);
     sw.appendChild(b);
   });
   zeile.appendChild(sw);
   const hinweis = document.createElement('span'); hinweis.className = 'anim-name';
-  hinweis.textContent = netzZiel ? (media.istFrageKnoten(aktiv) ? 'paints the selected question web' : 'paints the question web')
+  hinweis.textContent = spotZiel ? (media.istSpot(aktiv) ? 'paints the selected spotlight' : 'paints the spotlight')
+    : netzZiel ? (media.istFrageKnoten(aktiv) ? 'paints the selected question web' : 'paints the question web')
     : !ziel ? 'no frame with a colour'
     : (media.istEffektRahmen(aktiv) ? 'paints the selected frame' : 'paints the first frame - select another to change it');
   zeile.appendChild(hinweis);
@@ -2883,9 +3146,11 @@ function renderAnimBar() {
   const elemente = [], rahmen = [];
   objs.forEach((o, idx) => {
     if (media.istFrageKnoten(o)) return;          // a question web has a row of its own
+    if (media.istSpot(o)) return;                 // so has a spotlight
     (media.istEffektRahmen(o) ? rahmen : elemente).push([o, idx]);
   });
   const netze = [...media.fragenNetze(editor).values()];
+  const spots = [...media.spotGruppen(editor).values()];
 
   const gm = animGruppe('motion', 'Motion', 'what each element does',
                         elemente.length + (elemente.length === 1 ? ' element' : ' elements'));
@@ -2895,8 +3160,9 @@ function renderAnimBar() {
   }
   elemente.forEach(([o, idx]) => gm.appendChild(motionZeile(o, idx)));
   const ge = animGruppe('effects', 'Effects', 'each one lives in a frame',
-                        [rahmen.length || !netze.length ? rahmen.length + (rahmen.length === 1 ? ' frame' : ' frames') : '',
-                         netze.length ? netze.length + (netze.length === 1 ? ' question web' : ' question webs') : '']
+                        [rahmen.length || (!netze.length && !spots.length) ? rahmen.length + (rahmen.length === 1 ? ' frame' : ' frames') : '',
+                         netze.length ? netze.length + (netze.length === 1 ? ' question web' : ' question webs') : '',
+                         spots.length ? spots.length + (spots.length === 1 ? ' spotlight' : ' spotlights') : '']
                           .filter(Boolean).join(' · '));
   // The switch sits in the group's head, but must not fold the group when clicked.
   const schalter = document.createElement('label'); schalter.className = 'fx-show';
@@ -2906,14 +3172,15 @@ function renderAnimBar() {
   schalter.onclick = e => e.stopPropagation();
   kasten.onchange = () => { _rahmenZeigen = kasten.checked; editor.canvas.requestRenderAll(); };
   ge.querySelector('summary').appendChild(schalter);
-  if (!rahmen.length && !netze.length) {
+  if (!rahmen.length && !netze.length && !spots.length) {
     const h = document.createElement('span'); h.className = 'hint';
     h.textContent = 'No effect yet - add one in the ✨ Effects tab.';
     ge.appendChild(h);
   } else {
-    ge.appendChild(effektPalette(rahmen.map(([o]) => o), netze));
+    ge.appendChild(effektPalette(rahmen.map(([o]) => o), netze, spots));
     rahmen.forEach(([o, idx]) => ge.appendChild(effektZeile(o, idx)));
     netze.forEach(k => ge.appendChild(frageZeile(k)));
+    spots.forEach(k => ge.appendChild(spotZeile(k)));
   }
   // Effects first: that is what the picture is built from; Motion comes after.
   bar.appendChild(ge);
@@ -2978,6 +3245,20 @@ function zeichneRahmenHinweise() {
     }
     ctx.restore();
   });
+  // A spotlight's heading band: above the line nothing steps back.
+  if (media.istSpot(aktiv)) {
+    const e = media.spotGruppeVon(editor, aktiv)[0];
+    if (media.spotWert(e, 'spotKopf') !== false) {
+      const y = media.spotKopfHoehe(editor, e);
+      ctx.save();
+      ctx.setLineDash([4 / zoom, 6 / zoom]); ctx.strokeStyle = 'rgba(0,133,145,0.75)'; ctx.lineWidth = 1.2 / zoom;
+      ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(editor.width, y); ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.font = `600 ${11 / zoom}px Roboto, Arial, sans-serif`; ctx.textBaseline = 'bottom'; ctx.textAlign = 'left';
+      ctx.fillStyle = 'rgba(0,133,145,0.9)'; ctx.fillText('heading stays clear', 8 / zoom, y - 3 / zoom);
+      ctx.restore();
+    }
+  }
   // The magnifier's way, dotted orange: where the glass will travel.
   rahmen.forEach(o => {
     if (o.fx !== 'magnifier' || (o.fxPath || 'still') === 'still') return;

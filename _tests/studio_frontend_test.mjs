@@ -1928,6 +1928,127 @@ pruefe('Eine Frage entfernen nummeriert neu', qw.nachWeg === 3 && qw.nrNachWeg =
 pruefe('Remove nimmt das ganze Netz weg', qw.rest === 0, qw.rest);
 await sauber('Question web');
 
+// ---- Spotlight: ein Element nach vorn, Icon und Text zusammen --------------
+// Ortrud, 27.09.2026: "einzelne Bilder vergrößern und hervorheben ... die Texte
+// müssen mit aufpoppen". Ein flaches Bild wird nachgebaut: Überschrift, eine
+// Mitte und fünf Elemente im Kreis, jedes ein Icon mit zweizeiligem Text darunter.
+await ruhig('Spotlight');
+await page.click('[data-mode="effects"]');
+const spA = await page.evaluate(() => {
+  const ed = window._studioEditor;
+  ed.clearAll(); ed.setSize(1024, 766);
+  ed.canvas.setBackgroundColor('#F7F5EF', () => {});
+  ed.canvas.setViewportTransform([1, 0, 0, 1, 0, 0]);
+  ed.canvas.setDimensions({ width: 1024, height: 766 });
+  ed.canvas.add(new fabric.Text('Lifecycle heading', { left: 360, top: 30, fontSize: 36, fill: '#222222', fontFamily: 'Arial' }));
+  const element = (cx, cy, name) => {
+    ed.canvas.add(new fabric.Rect({ left: cx - 28, top: cy - 28, width: 56, height: 56, fill: '#0E7C86' }));
+    ed.canvas.add(new fabric.Textbox(name + '\nsecond line', { left: cx - 45, top: cy + 38, width: 90, fontSize: 13,
+      fill: '#333333', textAlign: 'center', fontFamily: 'Arial' }));
+  };
+  element(512, 330, 'Hub');
+  [[180, 'Left'], [135, 'Low left'], [90, 'Bottom'], [45, 'Low right'], [0, 'Right']].forEach(([w, n]) => {
+    const r = w * Math.PI / 180; element(Math.round(512 + 230 * Math.cos(r)), Math.round(330 + 230 * Math.sin(r)), n);
+  });
+  ed.canvas.discardActiveObject(); ed.canvas.renderAll();
+  document.querySelector('[data-act="add-spot"]').click();
+  const r = ed.canvas.upperCanvasEl.getBoundingClientRect();
+  return { x: r.x, y: r.y, wahl: ed.canvas.skipTargetFind === true };
+});
+// Ein Klick auf den TEXT des Elements unten links (135°): 512+230·cos135 = 349, Text bei y ≈ 493+45
+await page.mouse.click(spA.x + 349, spA.y + 540);
+await page.waitForTimeout(200);
+const spB = await page.evaluate(async () => {
+  const m = await import('/media.js');
+  const ep = (await import('/editor.js')).EXTRA_PROPS;
+  const ed = window._studioEditor;
+  const gruppen = [...m.spotGruppen(ed).values()];
+  const k = gruppen[0] || [];
+  const b = k[0] ? k[0].getBoundingRect(true, true) : { left: 0, top: 0, width: 0, height: 0 };
+  // Icon 321..377 x 465..521; the text's two lines sit centred under it, y 531..~560
+  const umfasst = b.left <= 321 && b.left + b.width >= 377 && b.top <= 465 && b.top + b.height >= 556;
+  const nichtZuGross = b.width < 150 && b.height < 150;
+  const schirm = () => { ed.canvas.discardActiveObject(); ed.canvas.renderAll();
+    const c = ed.canvas.lowerCanvasEl; return c.getContext('2d').getImageData(0, 0, c.width, c.height).data; };
+  const px = (d, x, y) => { const i = (y * 1024 + x) * 4; return [d[i], d[i + 1], d[i + 2]]; };
+  const teal = (d, x0, y0, x1, y1) => { let n = 0; for (let y = y0; y < y1; y++) for (let x = x0; x < x1; x++) {
+    const [r, g, bl] = px(d, x, y); if (r < 60 && g > 100 && g < 150 && bl > 110 && bl < 160) n++; } return n; };
+  const mit = schirm();
+  // Rahmen ausblenden, zum Vergleich
+  k.forEach(o => { o._alt = o.fx; o.fx = null; });
+  const ohne = schirm();
+  k.forEach(o => { o.fx = o._alt; delete o._alt; });
+  schirm();
+  // Die Karte: um das Element herum mehr Teal als im Original (vergrößertes Icon)
+  const tealMit = teal(mit, 250, 400, 450, 620), tealOhne = teal(ohne, 250, 400, 450, 620);
+  // Der Rest tritt zurück (heller) - die Überschrift nicht
+  const restMit = px(mit, 742 - 10, 330 - 10), restOhne = px(ohne, 742 - 10, 330 - 10);   // Icon rechts
+  let kopfGleich = true;
+  for (let y = 25; y < 80; y += 3) for (let x = 360; x < 660; x += 5) {
+    const a = px(mit, x, y), c = px(ohne, x, y); if (Math.abs(a[0] - c[0]) + Math.abs(a[1] - c[1]) + Math.abs(a[2] - c[2]) > 6) kopfGleich = false; }
+  // PNG: die Karte ist Teil des stehenden Bildes
+  const url = ed.exportDataURL(); const img = new Image(); img.src = url; await img.decode();
+  const c2 = document.createElement('canvas'); c2.width = img.width; c2.height = img.height;
+  const x2 = c2.getContext('2d'); x2.drawImage(img, 0, 0);
+  const png = x2.getImageData(0, 0, c2.width, c2.height).data;
+  const tealPng = img.width === 1024 ? teal(png, 250, 400, 450, 620) : -1;
+  const stillAnim = m.hasAnimations(ed);
+  const zeile = document.querySelector('#anim-bar .spot-row');
+  const wahl = (key, v) => zeile && zeile.querySelector('.spot-seg[data-key="' + key + '"] [data-v="' + v + '"]').click();
+  const zeileNeu = () => document.querySelector('#anim-bar .spot-row');
+  // Moving: dann ist es Bewegung
+  wahl('spotBewegung', 'bewegt');
+  const kk = [...m.spotGruppen(ed).values()][0];
+  const bewegt = { anim: m.hasAnimations(ed), f0: m.spotZustand(kk, 0).f, f2: m.spotZustand(kk, 2).f };
+  zeileNeu().querySelector('.spot-seg[data-key="spotBewegung"] [data-v="fest"]').click();
+  // Farbe über die eine Palette
+  const sw = [...document.querySelectorAll('#anim-bar .fx-palette .fx-swatch')].filter(x => !x.classList.contains('fx-swatch-auto'))
+    .find(x => /245, 110, 40|f56e28/i.test(x.style.background));
+  if (sw) sw.click();
+  const farbe = [...m.spotGruppen(ed).values()][0][0].fxColor;
+  const imMotion = document.querySelectorAll('#anim-bar details[data-group="motion"] .anim-row')
+    .length;
+  return { gruppen: gruppen.length, frames: k.length, box: [b.left, b.top, b.width, b.height].map(Math.round).join(','),
+           umfasst, nichtZuGross, tealMit, tealOhne, restMit, restOhne, kopfGleich, tealPng, stillAnim, bewegt, farbe,
+           json: /"fx":"spotlight"/.test(JSON.stringify(ed.canvas.toJSON(ep))) && /"spotBewegung":"fest"/.test(JSON.stringify(ed.canvas.toJSON(ep))),
+           imMotion };
+});
+pruefe('Spotlight wartet auf einen Klick ins Bild', spA.wahl);
+pruefe('Ein Klick auf den Text legt einen Spotlight-Rahmen an', spB.gruppen === 1 && spB.frames === 1, spB.gruppen + '/' + spB.frames);
+pruefe('der Rahmen umfasst Icon UND Text', spB.umfasst, spB.box);
+pruefe('und nicht mehr als dieses eine Element', spB.nichtZuGross, spB.box);
+pruefe('Das Element kommt vergrößert nach vorn (auch ohne Vorschau)', spB.tealMit > spB.tealOhne * 1.5, spB.tealMit + ' / ' + spB.tealOhne);
+pruefe('der Rest tritt zurück', spB.restMit[0] > spB.restOhne[0] + 20, JSON.stringify([spB.restMit, spB.restOhne]));
+pruefe('die Überschrift bleibt klar', spB.kopfGleich);
+pruefe('Still steht im exportierten PNG', spB.tealPng > spB.tealOhne * 1.5, spB.tealPng);
+pruefe('Still ist keine Animation', spB.stillAnim === false);
+pruefe('Moving ist eine: erst klein, dann ganz vorn', spB.bewegt.anim && spB.bewegt.f0 === 0 && spB.bewegt.f2 === 1, JSON.stringify(spB.bewegt));
+pruefe('Die eine Palette färbt den Rahmen', spB.farbe === '#F56E28', spB.farbe);
+pruefe('Spotlight wird gespeichert', spB.json);
+
+// Around: alle Elemente, erst die Mitte, dann im Kreis links herum ab oben links
+const spC = await page.evaluate(async () => {
+  const m = await import('/media.js');
+  const ed = window._studioEditor;
+  document.querySelector('#anim-bar .spot-row .spot-seg[data-key="spotReihe"] [data-v="links"]').click();
+  const k = [...m.spotGruppen(ed).values()][0];
+  const mitte = o => { const b = o.getBoundingRect(true, true); return [Math.round((b.left + b.width / 2) / 10) * 10, Math.round(b.top / 10) * 10]; };
+  const reihe = k.map(o => mitte(o)[0]).join(',');
+  const film = { anim: m.hasAnimations(ed), a: m.spotZustand(k, 1).i, b: m.spotZustand(k, 2.5 + 0.4 + 1).i, runde: m.spotRundeMs(k) };
+  const zeilen = document.querySelectorAll('#anim-bar .spot-row .spot-eintrag').length;
+  // Remove nimmt den ganzen Spotlight weg
+  document.querySelector('#anim-bar .spot-row .fx-remove').click();
+  return { n: k.length, reihe, film, zeilen, rest: m.spotGruppen(ed).size };
+});
+pruefe('Around nimmt alle sechs Elemente in einen Film', spC.n === 6 && spC.zeilen === 6, spC.n + ' / ' + spC.zeilen);
+// Mitte 512, dann links 282, unten links 349, unten 512, unten rechts 675, rechts 742 (auf 10 gerundet)
+pruefe('erst die Mitte, dann im Kreis links herum', spC.reihe === '510,280,350,510,680,740', spC.reihe);
+pruefe('der Film zeigt einen nach dem anderen', spC.film.anim && spC.film.a === 0 && spC.film.b === 1, JSON.stringify(spC.film));
+pruefe('eine Runde: sechs Mal 2,5 s, Pausen und das ganze Bild am Ende',
+  spC.film.runde === Math.round((6 * (2.5 + 0.4) + 1.2) * 1000), spC.film.runde);
+pruefe('Remove nimmt den ganzen Spotlight weg', spC.rest === 0, spC.rest);
+await sauber('Spotlight');
+
 // ---- Video Bild für Bild: auch auf einem langsamen Rechner nichts überspringen --
 // Ortrud: "im fertigen Video bewegt sich die Lupe nicht - sie springt einmal,
 // und das war's". Das Video war die gefilmte Vorschau: Zeit = Wanduhr. Gab der

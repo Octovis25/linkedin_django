@@ -361,6 +361,8 @@ export const PANELS = {
       { t: 'row', items: [
         { t: 'btn', act: 'add-qweb', icon: '❓', label: 'Question web',
           title: 'Question marks you place, tied by threads - each blinks and shows its own text' },
+        { t: 'btn', act: 'add-spot', icon: '🔦', label: 'Spotlight',
+          title: 'Brings one element forward - click it in the picture, icon and text go together' },
       ]},
       { t: 'row', items: [
         { t: 'badge', badge: 'circle', icon: '①', label: 'Circle', title: 'Circle with number or text' },
