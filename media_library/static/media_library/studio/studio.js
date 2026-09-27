@@ -57,14 +57,32 @@ const editor = new Editor(canvasEl);
 window._studioEditor = editor;   // für Debugging in der Konsole
 
 // ---- Canvas in den festen Rahmen einpassen -------------------------------
+// The room inside the host: its outer size minus border and padding.
+// Deliberately not clientWidth/clientHeight - those shrink by 17 px when a
+// scrollbar shows. The old fit took clientWidth - 16 while the padding is
+// 2 x 10 px, so the fitted canvas stuck out by 4 px: a scrollbar came, the
+// canvas shrank, the scrollbar went, the canvas grew again - every frame.
+// On a nearly square stage that made the grey field jitter.
+function platzImHost(host) {
+  const cs = getComputedStyle(host);
+  const px = k => parseFloat(cs[k]) || 0;
+  return {
+    w: host.offsetWidth - px('borderLeftWidth') - px('borderRightWidth')
+       - px('paddingLeft') - px('paddingRight') - 2,
+    h: host.offsetHeight - px('borderTopWidth') - px('borderBottomWidth')
+       - px('paddingTop') - px('paddingBottom') - 2,
+  };
+}
+
 function fit() {
   const host = document.querySelector('.canvas-host');
   if (!host) return;
-  // Lower bound: if the host is invisible just now (clientWidth 0), negative
+  const platz = platzImHost(host);
+  // Lower bound: if the host is invisible just now (width 0), negative
   // sizes would come out - the browser turns those into a billion-pixel bitmap
   // and the tab crashes.
-  const w = Math.max(120, host.clientWidth - 16);
-  const h = Math.max(120, host.clientHeight - 16);
+  const w = Math.max(120, platz.w);
+  const h = Math.max(120, platz.h);
   editor._lastFit = { w, h };
   editor.fitTo(w, h);
   // Fabric remembers where the canvas is. When the canvas moves (a panel opens

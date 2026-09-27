@@ -435,6 +435,33 @@ await page.waitForTimeout(150);
 pruefe('Zoom zurücksetzen funktioniert',
   (await page.evaluate(() => window._studioEditor.zoomFactor())) === 1);
 
+// The grey stage must stand still, also when it is nearly square: the fitted
+// canvas used to stick out by 4 px, a scrollbar came and went every frame and
+// the canvas shrank and grew with it (seen on Render, 27.09.2026).
+const zittern = await page.evaluate(async () => {
+  const host = document.querySelector('.canvas-host');
+  const lc = document.querySelector('canvas.lower-canvas');
+  const hoehe = host.offsetHeight;
+  const aus = [];
+  for (const d of [-30, -15, -8, 0, 8, 15, 30]) {
+    host.style.width = (hoehe + d) + 'px';
+    await new Promise(r => setTimeout(r, 120));
+    const seen = new Set();
+    let bar = false;
+    for (let i = 0; i < 20; i++) {
+      await new Promise(r => requestAnimationFrame(r));
+      seen.add(lc.style.width + 'x' + lc.style.height);
+      if (host.scrollWidth > host.clientWidth || host.scrollHeight > host.clientHeight) bar = true;
+    }
+    if (seen.size > 1 || bar) aus.push(d + ': ' + [...seen].join(' / ') + (bar ? ' scrollbar' : ''));
+  }
+  host.style.width = '';
+  window.dispatchEvent(new Event('resize'));
+  return aus;
+});
+pruefe('Die graue Fläche zittert nicht (auch fast quadratisch, ohne Scrollbalken)',
+  zittern.length === 0, zittern.join(' | '));
+
 await sauber('Pinsel und Zoom');
 
 // ---- 10. Doku im Rail, direkt unter Layers --------------------------------
