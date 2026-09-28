@@ -1,0 +1,5 @@
+{# Stand-in for core/base.html in the backend tests: the pages render their own
+   block, without the portal's navigation, help and styles. #}
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><title>{% block title %}{% endblock %}</title></head>
+<body>{% block content %}{% endblock %}</body></html>

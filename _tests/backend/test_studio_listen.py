@@ -190,3 +190,25 @@ class BildSpeichern(BackendTest):
             }), content_type='application/json')
         self.assertEqual(antwort.status_code, 200, antwort.content[:300])
         self.assertTrue(any(p.endswith('Json_Bild.png') and n == len(PNG_1x1) for p, n in self.pfade))
+
+
+class VorlagenSeite(BackendTest):
+    """The Templates page shows the colour codes: under each template colour
+    right in the page, and the palette as a list (built in the browser)."""
+    URL = '/library/studio/templates/'
+
+    def test_farbcodes_unter_den_vorlagenfarben(self):
+        with connection.cursor() as c:
+            c.execute("INSERT INTO studio_templates (nc_path, title, width, height, colors) "
+                      "VALUES (%s, 'Mit Farben', 1080, 1080, %s)",
+                      [VORLAGEN + '/farben.png', json.dumps(['#008591', '#eb6e08'])])
+        antwort = self.client.get(self.URL)
+        self.assertEqual(antwort.status_code, 200)
+        html = antwort.content.decode()
+        self.assertIn('<code>#008591</code>', html)
+        self.assertIn('<code>#EB6E08</code>', html)      # always upper case
+        self.assertIn('id="farb-liste"', html)
+        import os
+        ziel = os.environ.get('VORLAGEN_HTML')
+        if ziel:
+            open(ziel, 'w', encoding='utf-8').write(html)

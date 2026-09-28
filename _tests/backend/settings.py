@@ -38,7 +38,8 @@ ROOT_URLCONF = '_tests.backend.urls'
 
 TEMPLATES = [{
     'BACKEND': 'django.template.backends.django.DjangoTemplates',
-    'DIRS': [os.path.join(BASE_DIR, '_tests', 'backend')],
+    # BASE_DIR is _tests/ - the stand-in core/base.html lives in _tests/backend/.
+    'DIRS': [os.path.join(BASE_DIR, 'backend')],
     'APP_DIRS': True,
     'OPTIONS': {'context_processors': [
         'django.contrib.auth.context_processors.auth',

@@ -673,6 +673,30 @@ for (const act of ['bg-weiss', 'bg-creme', 'bg-transparent', 'clear-bg']) {
 pruefe('Markenfarben stehen unter dem Panel',
   (await page.locator('#palette-row .swatch, #palette-row button').count()) > 0);
 
+// Pointing at a brand colour shows its code at once: hex and RGB (28.09.2026).
+await page.locator('#palette-row .swatch:not(.add)').nth(2).hover();
+await page.waitForTimeout(80);
+const farbTipp = await page.evaluate(() => {
+  const alle = [...document.querySelectorAll('#palette-row .swatch:not(.add)')];
+  const sw = alle[2];
+  const nachher = getComputedStyle(sw, '::after');
+  return {
+    tips: alle.map(x => x.dataset.tip),
+    title: alle.some(x => x.title),
+    sichtbar: nachher.content,
+    rgb: getComputedStyle(sw).backgroundColor,
+  };
+});
+pruefe('Markenfarbe zeigt beim Zeigen Hex und RGB',
+  farbTipp.tips.length > 0 && farbTipp.tips.every(t => /^#[0-9A-F]{6}\nRGB \d{1,3}, \d{1,3}, \d{1,3}$/.test(t || '')),
+  JSON.stringify(farbTipp.tips));
+pruefe('der Code passt zur Farbe', (() => {
+  const m = /RGB (\d+), (\d+), (\d+)/.exec(farbTipp.tips[2] || '');
+  return !!m && farbTipp.rgb === `rgb(${m[1]}, ${m[2]}, ${m[3]})`;
+})(), farbTipp.tips[2] + ' vs ' + farbTipp.rgb);
+pruefe('sofort sichtbar, ohne den langsamen Browser-Tooltip',
+  /RGB/.test(farbTipp.sichtbar) && !farbTipp.title, farbTipp.sichtbar);
+
 await page.click('[data-act="canvas-size"]');
 await page.waitForTimeout(250);
 pruefe('Canvas-Format öffnet einen Dialog',

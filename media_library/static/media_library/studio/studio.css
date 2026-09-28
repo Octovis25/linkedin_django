@@ -237,6 +237,13 @@ a.manage-link       { font-size:.75rem; color:var(--octo-petrol,#008591); }
 .swatch             { width:22px; height:22px; border-radius:5px; cursor:pointer;
                       border:2px solid #fff; box-shadow:0 0 0 1px #ccc; position:relative; }
 .swatch:hover       { transform:scale(1.12); }
+/* The colour code as soon as the pointer is on a swatch: hex and RGB. Anchored
+   at the swatch's left edge, so the first one does not spill over the rail. */
+.swatch[data-tip]:hover::after { content:attr(data-tip); position:absolute; bottom:calc(100% + 7px);
+                      left:-3px; z-index:30; white-space:pre; pointer-events:none;
+                      background:#1d2b2d; color:#fff; font:600 11px/1.35 ui-monospace,Consolas,monospace;
+                      padding:5px 8px; border-radius:5px; box-shadow:0 2px 6px rgba(0,0,0,.25);
+                      transform:scale(.893); transform-origin:bottom left; }
 .swatch.add         { display:flex; align-items:center; justify-content:center; font-size:14px;
                       color:#888; background:#f4f4f4; box-shadow:0 0 0 1px #ddd; }
 

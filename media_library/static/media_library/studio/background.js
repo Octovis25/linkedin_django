@@ -24,6 +24,17 @@ export function getPalette() {
   return [...new Set([...brand, ...extra, ...custom])];
 }
 
+// "#008591" -> "#008591\nRGB 0, 133, 145" for the swatch's tooltip. Anything
+// that is not a plain six-digit hex just shows as it is.
+export function farbCode(col) {
+  const s = String(col || '').trim();
+  const m = /^#?([0-9a-f]{6})$/i.exec(s);
+  if (!m) return s;
+  const h = m[1].toUpperCase();
+  const rgb = [0, 2, 4].map(i => parseInt(h.slice(i, i + 2), 16)).join(', ');
+  return '#' + h + '\nRGB ' + rgb;
+}
+
 export function addCustomColor(hex) {
   let custom = [];
   try { custom = JSON.parse(localStorage.getItem(PALETTE_KEY) || '[]'); } catch (e) {}
@@ -43,7 +54,10 @@ export function renderPalette(container, onPick) {
     const sw = document.createElement('div');
     sw.className = 'swatch';
     sw.style.background = col;
-    sw.title = col;
+    // Our own tooltip: it shows at once and gives the numbers too. The
+    // browser's title would come a second later on top of it.
+    sw.dataset.tip = farbCode(col);
+    sw.setAttribute('aria-label', farbCode(col).replace('\n', ', '));
     sw.onclick = () => onPick(col);
     container.appendChild(sw);
   });
