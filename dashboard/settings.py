@@ -9,6 +9,19 @@ SECRET_KEY = os.getenv("DJANGO_SECRET_KEY")
 DEBUG = os.getenv("DJANGO_DEBUG", "True").lower() in ("true", "1")
 ALLOWED_HOSTS = os.getenv("DJANGO_ALLOWED_HOSTS", "localhost,127.0.0.1").split(",")
 
+# The address the portal is reached at from outside. Unset: Render's own
+# onrender.com address, as before. With an own domain (e.g.
+# https://portal.octotrial.com) set PUBLIC_BASE_URL on Render - that one
+# variable is enough: its host is allowed, forms from it are trusted, and
+# links in e-mails and the image/video addresses handed to LinkedIn and
+# Make.com follow it. The onrender.com address keeps working alongside.
+PUBLIC_BASE_URL = (os.getenv("PUBLIC_BASE_URL")
+                   or os.getenv("RENDER_EXTERNAL_URL")
+                   or "https://linkedin-django-wd7a.onrender.com").strip().rstrip("/")
+_eigener_host = PUBLIC_BASE_URL.split("://", 1)[-1].split("/", 1)[0].split(":", 1)[0]
+if _eigener_host and _eigener_host not in ALLOWED_HOSTS:
+    ALLOWED_HOSTS.append(_eigener_host)
+
 # Fehler-Tracebacks in die Server-Konsole (Render-Logs) schreiben, auch bei DEBUG=False.
 LOGGING = {
     "version": 1,
@@ -187,6 +200,8 @@ CSRF_TRUSTED_ORIGINS = [
     "https://linkedin-django-wd7a.onrender.com",
     "https://*.onrender.com",
 ]
+if PUBLIC_BASE_URL.startswith("https://") and PUBLIC_BASE_URL not in CSRF_TRUSTED_ORIGINS:
+    CSRF_TRUSTED_ORIGINS.append(PUBLIC_BASE_URL)
 
 # ── Matomo (Web-Statistik) ──────────────────────────────────────────────
 # Matomo laeuft als WordPress-Plugin auf octotrial.com. Der Token hat die Form
@@ -200,7 +215,8 @@ MATOMO_TOKEN = os.getenv("MATOMO_TOKEN", "")
 MATOMO_CACHE_SECONDS = int(os.getenv("MATOMO_CACHE_SECONDS", "900"))  # Live-Ansicht 15 min
 # Adresse der Live-Instanz für den Link im Kopfbereich. Render setzt
 # RENDER_EXTERNAL_URL von selbst; lokal kommt DASHBOARD_URL aus der .env.
-LIVE_URL = os.getenv("RENDER_EXTERNAL_URL") or os.getenv("DASHBOARD_URL", "")
+# With an own domain (PUBLIC_BASE_URL) the link points there instead.
+LIVE_URL = os.getenv("PUBLIC_BASE_URL") or os.getenv("RENDER_EXTERNAL_URL") or os.getenv("DASHBOARD_URL", "")
 
 # Ziele für den Goals-Reiter. Sie werden aus Matomos Besuchsprotokoll
 # abgeleitet - in Matomo selbst muss nichts eingerichtet werden, und die

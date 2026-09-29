@@ -4,4 +4,5 @@ from django.urls import include, path
 
 urlpatterns = [
     path('library/', include('media_library.urls')),
+    path('planner/', include('planner.urls')),
 ]

@@ -278,7 +278,7 @@
               onclick="oeffnePostImReiter({{ p.id }},'{{ p.title|escapejs }}','{{ p.content|escapejs }}','{{ p.status }}','{{ p.planned_date|date:"Y-m-d" }}','{{ p.comment|escapejs }}','{{ p.image|escapejs }}','{{ p.link|escapejs }}','{{ p.planned_time|time:"H:i" }}')">
             {{ p.title|default:p.content|striptags|truncatechars:80 }}
           </td>
-          <td><span class="cat-pill" style="background:{{ t.accent }}">{{ t.name }}</span></td>
+          <td><span class="cat-pill" style="background:{{ t.accent }}">{{ t.name }}</span>{% if p.post_type == 'short' %} <span class="pt-chip pt-chip-short">⚡ Short</span>{% elif p.post_type == 'company' %} <span class="pt-chip pt-chip-company">🏢 Company</span>{% endif %}</td>
           <td><select class="pt-status" data-id="{{ p.id }}" onchange="setStatusInline(this,{{ p.id }})" onclick="event.stopPropagation()" style="background:{{ p.status_bg }};color:{{ p.status_fg }}">{% for s in status_list %}<option value="{{ s.code }}" {% if s.code == p.status %}selected{% endif %}>{{ s.label }}</option>{% endfor %}</select></td>
           <td style="color:#6c757d">{% if p.planned_date %}{{ p.planned_date|date:"d.m.Y" }}{% else %}—{% endif %}</td>
           <td style="text-align:right;white-space:nowrap">
@@ -296,7 +296,7 @@
               onclick="oeffnePostImReiter({{ p.id }},'{{ p.title|escapejs }}','{{ p.content|escapejs }}','{{ p.status }}','{{ p.planned_date|date:"Y-m-d" }}','{{ p.comment|escapejs }}','{{ p.image|escapejs }}','{{ p.link|escapejs }}','{{ p.planned_time|time:"H:i" }}')">
             {{ p.title|default:p.content|striptags|truncatechars:80 }}
           </td>
-          <td><span class="cat-pill" style="background:#888780">Uncategorized</span></td>
+          <td><span class="cat-pill" style="background:#888780">Uncategorized</span>{% if p.post_type == 'short' %} <span class="pt-chip pt-chip-short">⚡ Short</span>{% elif p.post_type == 'company' %} <span class="pt-chip pt-chip-company">🏢 Company</span>{% endif %}</td>
           <td><select class="pt-status" data-id="{{ p.id }}" onchange="setStatusInline(this,{{ p.id }})" onclick="event.stopPropagation()" style="background:{{ p.status_bg }};color:{{ p.status_fg }}">{% for s in status_list %}<option value="{{ s.code }}" {% if s.code == p.status %}selected{% endif %}>{{ s.label }}</option>{% endfor %}</select></td>
           <td style="color:#6c757d">{% if p.planned_date %}{{ p.planned_date|date:"d.m.Y" }}{% else %}—{% endif %}</td>
           <td style="text-align:right;white-space:nowrap">
@@ -361,6 +361,10 @@
       <select id="m-status" class="fselect" style="flex:1">
         {% for s in status_list %}<option value="{{ s.code }}">{{ s.label }}</option>{% endfor %}
       </select>
+    </div>
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+      <label style="font-size:12px;color:#6c757d;white-space:nowrap">Post type</label>
+      <span id="m-type"></span>
     </div>
     <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap">
       <label style="font-size:12px;color:#6c757d;white-space:nowrap">📅 Date</label>
@@ -435,6 +439,10 @@
       <label style="font-size:12px;color:#6c757d;white-space:nowrap">🕐</label>
       <input type="time" id="e-time" step="60" class="fselect" style="width:100px">
     </div>
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+      <label style="font-size:12px;color:#6c757d;white-space:nowrap">Post type</label>
+      <span id="e-type"></span>
+    </div>
     <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
       <div class="img-drop" id="e-thumb"
            onclick="document.getElementById('e-img-input').click()"
@@ -498,6 +506,7 @@
   <img id="img-lightbox-img" src="" alt="Preview">
 </div>
 
+{% include "planner/_post_type.html" %}
 <script>
 const CSRF = '{{ csrf_token }}';
 let selectedColor = 'blue';
@@ -516,6 +525,7 @@ const ALL_POSTS = [
    link:'{{ p.link|escapejs }}',
    time:'{{ p.planned_time|time:"H:i" }}',
    topic:'{{ t.name|escapejs }}',
+   postType:'{{ p.post_type }}',
    topicColor:'{{ t.accent }}'},
   {% endfor %}{% endfor %}
 ];
@@ -811,6 +821,7 @@ function openPostModal(topicId) {
   document.getElementById('m-series-id').value = '';
   if (topicId) document.getElementById('m-topic').value = topicId;
   document.getElementById('m-title').value = '';
+  ptSet('m-type', '');
   document.getElementById('m-status').value = 'Draft';
   document.getElementById('m-date').value = '';
   document.getElementById('m-time').value = '';
@@ -917,7 +928,8 @@ async function savePost() {
     res = await api('/planner/api/post/', {
       action: 'create', topic_id: topicId || null, title, content, status,
       planned_date: date || null, planned_time: time || null,
-      link: link || null, comment: comment || null
+      link: link || null, comment: comment || null,
+      post_type: ptGet('m-type')
     });
   } catch (e) {
     alert('Network/server error while saving: ' + e.message);
@@ -980,7 +992,8 @@ function openStudioForPost(prefix) {
             planned_date: date || null,
             planned_time: time || null,
             comment: comment || null,
-            link: link || null
+            link: link || null,
+            post_type: ptGet('m-type')
           })
         });
         const d = await res.json();
@@ -1008,6 +1021,11 @@ function openEditModal(id, title, content, status, date, comment, image, link, t
   document.getElementById('e-time').value = time || '';
   document.getElementById('e-link').value = link || '';
   document.getElementById('e-comment').value = comment || '';
+  const bekannt = ALL_POSTS.find(x => String(x.id) === String(id));
+  ptSet('e-type', bekannt ? bekannt.postType : '');
+  // Posts without a topic are not in ALL_POSTS: their type is unknown here, so
+  // it is only sent if it was clicked - otherwise saving would clear it.
+  document.getElementById('e-type').dataset.known = bekannt ? '1' : '';
   clearImgPreview('e');
   if (image) showImgPreview('e', `/planner/image/${id}/`);
   document.getElementById('edit-modal').classList.add('open');
@@ -1027,7 +1045,8 @@ async function updatePost() {
     action: 'update', id: parseInt(id), title, content, status,
     planned_date: date || null, planned_time: time || null,
     link: link || null, comment: comment || null,
-    in_pipeline: status === 'Draft' ? 0 : 1
+    in_pipeline: status === 'Draft' ? 0 : 1,
+    ...(document.getElementById('e-type').dataset.known ? { post_type: ptGet('e-type') } : {})
   });
   if (res && res.ok) {
     const imgInput = document.getElementById('e-img-input');

@@ -150,9 +150,44 @@ word, so a published post that was later tidied away still counts as published.
 </style>
 {% endif %}
 
+{% include "planner/_post_type.html" %}
+{# Filter by post type - only in the browser, the list itself stays as it is. #}
+<div id="pt-filter" style="display:flex;gap:8px;align-items:center;margin-bottom:10px;font-size:12px;color:#6c757d">
+  <span>Show:</span>
+  <span class="pt-seg">
+    <button type="button" data-f="" class="on" onclick="ptFilter(this)">All</button>
+    <button type="button" data-f="short" onclick="ptFilter(this)">⚡ Short</button>
+    <button type="button" data-f="company" onclick="ptFilter(this)">🏢 Company</button>
+    <button type="button" data-f="none" onclick="ptFilter(this)">Without type</button>
+  </span>
+  <span id="pt-filter-count"></span>
+</div>
+<script>
+function ptFilter(btn) {
+  const f = btn.dataset.f;
+  btn.parentNode.querySelectorAll('button').forEach(function (b) {
+    b.classList.toggle('on', b === btn);
+    b.style.background = b === btn ? '#008591' : '';
+    b.style.color = b === btn ? '#fff' : '';
+  });
+  let n = 0;
+  document.querySelectorAll('.pe-card').forEach(function (c) {
+    const t = c.dataset.postType || '';
+    const zeigen = !f || (f === 'none' ? !t : t === f);
+    c.style.display = zeigen ? '' : 'none';
+    if (zeigen) n++;
+  });
+  document.getElementById('pt-filter-count').textContent = f ? n + ' shown' : '';
+}
+document.addEventListener('DOMContentLoaded', function () {
+  const b = document.querySelector('#pt-filter button.on');
+  if (b) { b.style.background = '#008591'; b.style.color = '#fff'; }
+});
+</script>
+
 <div style="display:flex;flex-direction:column;gap:8px">
 {% for p in posts %}
-<div class="pe-card" id="post-{{ p.id }}" data-post-id="{{ p.id }}" data-ende="{% if p.linkedin_posted %}posted{% else %}dropped{% endif %}" style="background:#fff;border:0.5px solid #e0e0e0;border-radius:10px;padding:12px 14px">
+<div class="pe-card" id="post-{{ p.id }}" data-post-id="{{ p.id }}" data-post-type="{{ p.post_type }}" data-ende="{% if p.linkedin_posted %}posted{% else %}dropped{% endif %}" style="background:#fff;border:0.5px solid #e0e0e0;border-radius:10px;padding:12px 14px">
   <div style="display:flex;gap:10px;align-items:center">
     {% if p.image %}
     <img src="/planner/image/{{ p.id }}/?v={% now 'U' %}" style="width:56px;height:56px;border-radius:6px;object-fit:cover;flex-shrink:0;cursor:zoom-in" onclick="peLightbox('/planner/image/{{ p.id }}/?v={% now 'U' %}')">
@@ -180,6 +215,7 @@ word, so a published post that was later tidied away still counts as published.
     <div style="flex:1;min-width:0">
       <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:4px">
         <span style="font-size:11px;padding:1px 8px;border-radius:99px;background:{{ p.bg }};color:{{ p.fg }}">{{ p.topic_name }}</span>
+        {% if p.post_type == 'short' %}<span class="pt-chip pt-chip-short">⚡ Short</span>{% elif p.post_type == 'company' %}<span class="pt-chip pt-chip-company">🏢 Company</span>{% endif %}
         {% if p.planned_date %}<span style="font-size:11px;color:#6c757d">📅 {{ p.planned_date|date:"d.m.Y" }}{% if p.planned_time %} 🕐 {{ p.planned_time|time:"H:i" }}{% endif %}</span>{% endif %}
         {# The send time is what this page is about, so it gets its own badge. #}
         {% if p.send_time %}<span style="font-size:11px;padding:1px 8px;border-radius:99px;background:#e8f4fb;color:#0077B5;font-weight:600;border:1px solid #0077B5" title="Goes out ({{ p.send_time_source }})">📤 {{ p.send_time }}</span>{% endif %}
@@ -248,6 +284,10 @@ word, so a published post that was later tidied away still counts as published.
       <select id="pe-status" style="font-size:13px;flex:1;padding:6px 8px;border:0.5px solid #ced4da;border-radius:4px">
         <option value="Draft">Draft</option><option value="Review">Review</option><option value="Ready">Ready</option><option value="Scheduled">Scheduled</option><option value="Posted">Posted</option>
       </select>
+    </div>
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+      <label style="font-size:12px;color:#6c757d;white-space:nowrap">Post type</label>
+      <span id="pe-type"></span>
     </div>
     <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap">
       <label style="font-size:12px;color:#6c757d;white-space:nowrap">📅 Date</label>
@@ -482,6 +522,7 @@ function openCreate() {
   document.getElementById('pe-id').value = '';
   document.getElementById('pe-title').value = '';
   document.getElementById('pe-content').innerHTML = '';
+  ptSet('pe-type', '');
   document.getElementById('pe-status').value = 'Draft';
   document.getElementById('pe-date').value = '';
   document.getElementById('pe-time').value = '';
@@ -646,6 +687,7 @@ function openEdit(id) {
   document.getElementById('pe-id').value = p.id;
   document.getElementById('pe-title').value = p.title;
   document.getElementById('pe-content').innerHTML = p.content || '';
+  ptSet('pe-type', p.post_type || '');
   document.getElementById('pe-status').value = p.status;
   document.getElementById('pe-date').value = p.date || '';
   peSetzeZeit(p.time);
@@ -777,6 +819,7 @@ async function saveEdit() {
       status: document.getElementById('pe-status').value,
       planned_date: document.getElementById('pe-date').value || null,
       planned_time: document.getElementById('pe-time').value || null,
+      post_type: ptGet('pe-type'),
     };
     if (!isNew) payload.id = id;
     const res = await peApi(payload);

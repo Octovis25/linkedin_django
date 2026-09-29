@@ -1,0 +1,46 @@
+{% comment %}
+Post type: a second label next to the topic, with exactly two values (29.09.2026).
+  short   - short posts (Friday, light template, Octo)
+  company - company posts (Monday, dark template, no Octo)
+Included by _post_list.html and planner.html. ptMount() turns an empty element
+into the two buttons; clicking the active one again clears it.
+{% endcomment %}
+<style>
+.pt-seg{display:inline-flex;border:0.5px solid #ced4da;border-radius:6px;overflow:hidden;vertical-align:middle}
+.pt-seg button{font:inherit;font-size:12px;padding:5px 11px;border:0;border-right:0.5px solid #ced4da;background:#fff;color:#495057;cursor:pointer}
+.pt-seg button:last-child{border-right:0}
+.pt-seg button.on[data-v="short"]{background:#FFF1E6;color:#B4530A;font-weight:600}
+.pt-seg button.on[data-v="company"]{background:#005F68;color:#fff;font-weight:600}
+.pt-chip{font-size:11px;padding:1px 8px;border-radius:99px;white-space:nowrap}
+.pt-chip-short{background:#FFF1E6;color:#B4530A}
+.pt-chip-company{background:#E3EEF0;color:#005F68}
+</style>
+<script>
+const PT_LABELS = { short: '⚡ Short post', company: '🏢 Company post' };
+function ptMount(id) {
+  const el = document.getElementById(id);
+  if (!el || el.dataset.ptReady) return;
+  el.dataset.ptReady = '1';
+  el.classList.add('pt-seg');
+  el.dataset.value = '';
+  Object.keys(PT_LABELS).forEach(function (v) {
+    const b = document.createElement('button');
+    b.type = 'button'; b.dataset.v = v; b.textContent = PT_LABELS[v];
+    b.title = v === 'short' ? 'Short post: Friday, light template, Octo'
+                            : 'Company post: Monday, dark template, no Octo';
+    b.onclick = function () { el.dataset.known = '1'; ptSet(id, el.dataset.value === v ? '' : v); };
+    el.appendChild(b);
+  });
+}
+function ptSet(id, v) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  ptMount(id);
+  el.dataset.value = (v === 'short' || v === 'company') ? v : '';
+  el.querySelectorAll('button').forEach(function (b) { b.classList.toggle('on', b.dataset.v === el.dataset.value); });
+}
+function ptGet(id) {
+  const el = document.getElementById(id);
+  return el ? (el.dataset.value || '') : '';
+}
+</script>

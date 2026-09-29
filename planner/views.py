@@ -76,7 +76,20 @@ NACHGERUESTETE_SPALTEN = (
     ('planner_posts', 'linkedin_posted',   'TINYINT(1) NOT NULL DEFAULT 0'),
     ('planner_posts', 'post_scheduled_at', 'DATETIME NULL DEFAULT NULL'),
     ('planner_posts', 'buffer_update_id',  'VARCHAR(100) DEFAULT NULL'),
+    ('planner_posts', 'post_type',         'VARCHAR(16) DEFAULT NULL'),
 )
+
+# A second label next to the topic, with exactly two values (29.09.2026):
+# 'short'   - the short posts (Friday, light template, Octo)
+# 'company' - the company posts (Monday, dark template, no Octo)
+# Empty means "without type" - every post written before the label existed.
+POST_TYPES = ('short', 'company')
+
+
+def post_type_wert(wert):
+    """'short', 'company' or None - anything else counts as "without type"."""
+    wert = (wert or '').strip().lower() if isinstance(wert, str) else ''
+    return wert if wert in POST_TYPES else None
 
 _schema_geprueft = False
 
@@ -217,6 +230,27 @@ def _attach_video_paths(posts_list):
     vid_map = {r[0]: (r[1] or '') for r in rows}
     for p in posts_list:
         p['video_nc_path'] = vid_map.get(p.get('id'), '')
+    # Every list view passes through here, so the post type rides along -
+    # the legacy SELECTs stay untouched.
+    _attach_post_types(posts_list)
+    return posts_list
+
+
+def _attach_post_types(posts_list):
+    """Add 'post_type' ('short', 'company' or '') to built post dictionaries."""
+    ids = [p.get('id') for p in posts_list if p.get('id')]
+    if not ids:
+        return posts_list
+    placeholders = ','.join(['%s'] * len(ids))
+    with connection.cursor() as c:
+        try:
+            c.execute(f"SELECT id, post_type FROM planner_posts WHERE id IN ({placeholders})", ids)
+            rows = c.fetchall()
+        except Exception:
+            rows = []
+    typen = {r[0]: (post_type_wert(r[1]) or '') for r in rows}
+    for p in posts_list:
+        p['post_type'] = typen.get(p.get('id'), '')
     return posts_list
 
 
@@ -236,6 +270,7 @@ def _posts_to_json(posts_list):
             'video_nc_path': p.get('video_nc_path') or '',
             'video': p.get('video_nc_path') or '',
             'topic_id': p.get('topic_id') or 0,
+            'post_type': p.get('post_type') or '',
             'is_oj': bool(p.get('is_oj', False)),
             'link': p.get('link') or '',
             'linkedin_posted': bool(p.get('linkedin_posted', False)),
@@ -862,7 +897,12 @@ def api_post(request):
                              link, in_pipeline, series_id, series_order, comment)
                             VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
                     base_params)
-            return JsonResponse({'ok': True, 'id': c.lastrowid})
+            neue_id = c.lastrowid
+            typ = post_type_wert(data.get('post_type'))
+            if typ:
+                schema_sicherstellen()
+                c.execute("UPDATE planner_posts SET post_type=%s WHERE id=%s", [typ, neue_id])
+            return JsonResponse({'ok': True, 'id': neue_id})
         elif action == 'update':
             status = data.get('status')
             in_pipeline = 0 if status == 'Draft' else 1
@@ -872,16 +912,38 @@ def api_post(request):
                 link_sent = data.get('link')  # None = leer (JS sendet null wenn leer)
                 link_val = (link_sent or '').strip() or None  # '' → None, URL → URL
                 pt = data.get('planned_time') or None
-                c.execute("""UPDATE planner_posts SET topic_id=%s, title=%s, content=%s,
+                c.execute("""UPDATE planner_posts SET title=%s, content=%s,
                             status=%s, planned_date=%s, planned_time=%s, comment=%s, link=%s, in_pipeline=%s WHERE id=%s""",
-                    [data.get('topic_id') or None, data.get('title'),
+                    [data.get('title'),
                      data.get('content'), status,
                      data.get('planned_date') or None, pt,
                      data.get('comment') or None,
                      link_val, in_pipeline, data.get('id')])
+                # The topic only changes when the dialog sends one. The edit
+                # dialog in the Planner has no topic field - its save used to
+                # wipe the topic of every post edited there.
+                if 'topic_id' in data:
+                    c.execute("UPDATE planner_posts SET topic_id=%s WHERE id=%s",
+                              [data.get('topic_id') or None, data.get('id')])
+                # Same for the post type: left alone unless it is sent.
+                if 'post_type' in data:
+                    schema_sicherstellen()
+                    c.execute("UPDATE planner_posts SET post_type=%s WHERE id=%s",
+                              [post_type_wert(data.get('post_type')), data.get('id')])
             except Exception as e:
                 return JsonResponse({'ok': False, 'error': str(e)})
             return JsonResponse({'ok': True})
+        elif action == 'set_type':
+            # Short post / company post / none - for one post or several at once.
+            schema_sicherstellen()
+            ids = data.get('ids') or ([data.get('id')] if data.get('id') else [])
+            ids = [int(i) for i in ids if str(i).isdigit()]
+            if not ids:
+                return JsonResponse({'ok': False, 'error': 'id missing'}, status=400)
+            typ = post_type_wert(data.get('post_type'))
+            platz = ','.join(['%s'] * len(ids))
+            c.execute(f"UPDATE planner_posts SET post_type=%s WHERE id IN ({platz})", [typ] + ids)
+            return JsonResponse({'ok': True, 'post_type': typ or '', 'count': c.rowcount})
         elif action == 'delete':
             pid = data.get('id')
             # If the post was scheduled through Buffer: delete it there first.
@@ -1105,7 +1167,8 @@ def _make_image_token(post_id):
 
 
 def _public_base_url():
-    """Public base URL used for media URLs that Buffer must fetch from the internet."""
+    """Public base URL used for media URLs that Buffer must fetch from the internet.
+    Set in settings from the PUBLIC_BASE_URL variable (own domain) or Render's address."""
     return getattr(settings, 'PUBLIC_BASE_URL', 'https://linkedin-django-wd7a.onrender.com').rstrip('/')
 
 
@@ -2593,7 +2656,7 @@ def api_connect_view(request):
     import hmac as _hmac2, hashlib as _hashlib2
     _secret = (getattr(settings, 'SECRET_KEY', 'fallback'))[:32]
     _trigger_key = _hmac2.new(_secret.encode(), b'trigger-scheduled', _hashlib2.sha256).hexdigest()[:24]
-    trigger_url = f"https://linkedin-django-wd7a.onrender.com/planner/api/trigger-scheduled/?key={_trigger_key}"
+    trigger_url = f"{_public_base_url()}/planner/api/trigger-scheduled/?key={_trigger_key}"
     _attach_video_paths(ready_posts)
 
     return render(request, 'planner/api_connect.html', {
@@ -3458,7 +3521,7 @@ def api_trigger_scheduled(request):
             payload = {'text': content_txt or ''}
             if image:
                 img_token = _make_image_token(pid)
-                base_url = 'https://linkedin-django-wd7a.onrender.com'
+                base_url = _public_base_url()
                 payload['image_url'] = f"{base_url}/planner/public-image/{pid}/{img_token}/"
             resp = _requests.post(wh_url, data=payload, timeout=30)
             if resp.status_code < 400:
