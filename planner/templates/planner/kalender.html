@@ -96,7 +96,8 @@
                                   border-radius:3px; padding:0 4px; }
 
   .kal-strich { align-self:stretch; min-height:21px; border-radius:0 2px 2px 0; }
-  .z-open  .kal-strich { background:repeating-linear-gradient(180deg,#F0A87E 0 3px,transparent 3px 7px); }
+  /* No orange dashes (Ortrud, 30.09.2026) - the occasion's name is orange already. */
+  .z-open  .kal-strich { background:transparent; }
   .z-plan  .kal-strich { background:repeating-linear-gradient(180deg,#E0A030 0 5px,transparent 5px 9px); }
   .z-sched .kal-strich { background:#008591; }
   .z-done  .kal-strich { background:#B9C2C0; }
@@ -183,7 +184,7 @@
 
   .kal-pille { font-size:10px; font-weight:700; padding:1px 7px; border-radius:99px;
                white-space:nowrap; display:inline-block; }
-  .p-open  { color:#C4501A; border:1px dashed #F0A87E; }
+  .p-open  { color:#6B7876; border:1px solid #D9DEDF; }
   .p-plan  { color:#8A5A12; background:#FAEEDA; border:1px dashed #E0A030; }
   .p-sched { color:#00707A; background:#E0F0F1; border:1px solid #008591; }
   .p-done  { color:#7C8886; background:#F4F3EE; border:1px solid #B9C2C0; }
@@ -205,7 +206,7 @@
                    margin-right:5px; vertical-align:-2px; }
   .kal-legende .l-mo { background:rgba(0,133,145,.26); box-shadow:inset 3px 0 0 #005F68; }
   .kal-legende .l-fr { background:rgba(32,184,176,.18); box-shadow:inset 3px 0 0 #20B8B0; }
-  .kal-legende .l-open  { background:repeating-linear-gradient(180deg,#F0A87E 0 3px,transparent 3px 7px); }
+  .kal-legende .l-open  { background:#D9DEDF; }
   .kal-legende .l-plan  { background:repeating-linear-gradient(180deg,#E0A030 0 5px,transparent 5px 9px); }
   .kal-legende .l-sched { background:#008591; }
   .kal-legende .l-done  { background:#B9C2C0; }
