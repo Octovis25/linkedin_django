@@ -34,6 +34,18 @@ returning ones are the point. The matrix is one hue, light to dark.
                     padding:0.35rem 0.6rem; font-size:0.8rem; box-shadow:0 2px 6px rgba(0,0,0,.12); white-space:nowrap; z-index:50; display:none; }
   .zl-sprechblase b { display:block; margin-bottom:0.15rem; color:#222; }
   .zl-sprechblase .punkt { display:inline-block; width:0.55rem; height:0.55rem; border-radius:2px; margin-right:0.3rem; }
+  .zl-blogtabelle td.zl-artikel { white-space:normal; min-width:260px; max-width:420px; }
+  .zl-blogtabelle td.zl-artikel strong { display:block; font-weight:600; }
+  .zl-blogtabelle td.zl-artikel small { color:#8a8a8a; font-size:0.75rem; word-break:break-all; }
+  .zl-spark { display:inline-flex; gap:2px; align-items:flex-end; height:22px; vertical-align:middle; }
+  .zl-spark i { width:7px; background:#0093A1; border-radius:2px 2px 0 0; display:inline-block; min-height:2px; }
+  .zl-spark i.leer { background:#E3E8E8; height:2px; }
+  details.zl-monate { border-bottom:1px solid #f0ede4; padding:0.35rem 0; }
+  details.zl-monate > summary { cursor:pointer; font-size:0.88rem; }
+  table.zl-mini { width:auto; border-collapse:collapse; font-size:0.8rem; margin:0.4rem 0 0 1rem; overflow:visible; border-radius:0; }
+  table.zl-mini th { background:none; color:#777; font-weight:600; padding:0.2rem 0.6rem; text-align:right; }
+  table.zl-mini td { padding:0.2rem 0.6rem; text-align:right; border-bottom:1px solid #f0ede4; font-variant-numeric:tabular-nums; }
+  table.zl-mini th:first-child, table.zl-mini td:first-child { text-align:left; }
   ul.zl-regeln { font-size:0.82rem; color:#555; margin:0.8rem 0 0 1.1rem; padding:0; }
   ul.zl-regeln li { margin:0.2rem 0; }
 </style>
@@ -75,6 +87,90 @@ returning ones are the point. The matrix is one hue, light to dark.
     <li><strong>&#8960; time on page</strong> – average time per view. The last page of a visit has no end time and is not counted.</li>
     <li>From the visit log, humans only, without the places left out above. Without a date range the last six months; at most twelve.</li>
   </ul>
+</div>
+
+<div class="card" id="zl-blog">
+  <h2>Blog articles</h2>
+  <p class="mt-leise">One row per article, humans only, without the places left out. Sort by any column; <strong>Details</strong> opens the months.</p>
+  {% if blog %}
+  <div class="mt-tabelle mt-kurz" style="margin-top:0.5rem">
+    <table class="mt-sortierbar zl-blogtabelle">
+      <thead><tr>
+        <th>Article</th><th class="mt-zahl" title="Readers per month">Months</th>
+        <th class="mt-zahl" title="Different people who read it">Readers</th>
+        <th class="mt-zahl" title="Of those, the ones Matomo had seen before">Returning</th>
+        <th class="mt-zahl" title="Every opening, repeats included">Views</th>
+        <th class="mt-zahl" title="Average reading time; in brackets from how many views it is measured">&#8960; Time</th>
+        <th class="mt-zahl" title="Visits that began on this article">Started here</th>
+        <th title="Where most of its readers came from">Came mostly from</th>
+        <th class="mt-zahl" title="Different readers who came from LinkedIn">From LinkedIn</th>
+        <th></th>
+      </tr></thead>
+      <tbody>
+        {% for a in blog %}
+        <tr>
+          <td class="zl-artikel"><strong>{{ a.titel }}</strong><small>{{ a.seite }}{% if a.erste %} &middot; first read {{ a.erste }}{% else %} &middot; not read in this range{% endif %}</small></td>
+          <td class="mt-zahl" data-sort="{{ a.leser }}"><span class="zl-spark">{% for b in a.balken %}<i{% if not b.wert %} class="leer"{% else %} style="height:{{ b.hoehe }}px"{% endif %} title="{{ b.monat }}: {{ b.wert }}"></i>{% endfor %}</span></td>
+          <td class="mt-zahl">{{ a.leser }}</td>
+          <td class="mt-zahl">{{ a.wieder }}</td>
+          <td class="mt-zahl">{{ a.views }}</td>
+          <td class="mt-zahl" data-sort="{{ a.zeit }}">{{ a.zeit_text }} <span class="mt-leise">({{ a.gemessen }})</span></td>
+          <td class="mt-zahl">{{ a.start }}</td>
+          <td>{{ a.haupt|default:"–" }}</td>
+          <td class="mt-zahl">{{ a.linkedin }}</td>
+          <td><a href="#{{ a.anker }}" class="zl-details-link" data-ziel="{{ a.anker }}">Details</a></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <h3 class="mt-kat" style="margin-top:1.2rem">Month by month</h3>
+  {% for a in blog %}
+  <details class="zl-monate" id="{{ a.anker }}">
+    <summary><strong>{{ a.titel }}</strong> <span class="mt-leise">{{ a.leser }} reader{{ a.leser|pluralize }}</span></summary>
+    <table class="zl-mini">
+      <tr><th>Month</th><th>Readers</th><th>Returning</th><th>Views</th><th>&#8960; Time</th><th>Started here</th>{% for q in quellen %}<th>{{ q }}</th>{% endfor %}</tr>
+      {% for m in a.monate %}
+      <tr><td>{{ m.name }}</td><td>{{ m.leser }}</td><td>{{ m.wieder }}</td><td>{{ m.views }}</td><td>{{ m.zeit_text }}</td><td>{{ m.start }}</td>{% for q in m.quellen %}<td>{{ q }}</td>{% endfor %}</tr>
+      {% endfor %}
+    </table>
+    {% if a.weiter %}<p class="mt-leise" style="margin:0.4rem 0 0">Read next after this article: {% for pfad, anzahl in a.weiter %}{{ pfad }} ({{ anzahl }}){% if not forloop.last %}, {% endif %}{% endfor %}.</p>{% endif %}
+  </details>
+  {% endfor %}
+  {% else %}
+  <p class="mt-leise">No blog articles known yet{% if blog_info.fehler %} – WordPress did not hand out its list of posts. Add the addresses below{% endif %}.</p>
+  {% endif %}
+
+  <ul class="zl-regeln">
+    <li><strong>Readers</strong> – different people; <strong>Returning</strong> – of those, the ones Matomo had seen before; <strong>Views</strong> – every opening.</li>
+    <li><strong>&#8960; Time</strong> – Matomo only knows the reading time when the reader opened another page afterwards; the number in brackets says from how many views it comes. Matomo's heartbeat timer would measure it for everyone.</li>
+    <li><strong>Came mostly from</strong> and the columns in the months: LinkedIn, Search (Google, Bing, …), Direct (no referring page), Other – counted per visit.</li>
+  </ul>
+
+  <details class="mt-orte" style="margin-top:0.9rem">
+    <summary>Which pages count as blog articles{% if blog_info.wordpress is not None %}: {{ blog_info.wordpress }} from WordPress{% else %}: WordPress did not answer{% endif %}{% if blog_eigene %}, {{ blog_eigene|length }} added here{% endif %}</summary>
+    <div class="innen">
+      <p class="mt-leise" style="margin:0.3rem 0 0.5rem">
+        {% if blog_info.wordpress is not None %}Every published WordPress post is recognised automatically (checked once a day).{% else %}WordPress did not hand out its list of posts ({{ blog_info.fehler }}). Add the addresses here instead.{% endif %}
+        Add an address here if a page should count as an article too.</p>
+      <ul>
+        {% for pfad in blog_eigene %}
+        <li><span>{{ pfad }}</span>
+          <form method="post" action="{% url 'matomo:blog' %}">{% csrf_token %}
+            <input type="hidden" name="aktion" value="weg"><input type="hidden" name="pfad" value="{{ pfad }}">
+            <input type="hidden" name="zurueck" value="{{ orte_zurueck }}">
+            <button type="submit" class="weg" title="Remove {{ pfad }}" aria-label="Remove {{ pfad }}">&times;</button>
+          </form></li>
+        {% endfor %}
+      </ul>
+      <form method="post" action="{% url 'matomo:blog' %}" class="dazu">{% csrf_token %}
+        <input type="hidden" name="aktion" value="dazu"><input type="hidden" name="zurueck" value="{{ orte_zurueck }}">
+        <input type="text" name="pfad" maxlength="255" placeholder="/article-address/" aria-label="Address of an article" required>
+        <button type="submit" class="btn">Add</button>
+      </form>
+    </div>
+  </details>
 </div>
 
 <div class="zl-sprechblase" id="zl-tip"></div>
@@ -184,6 +280,18 @@ returning ones are the point. The matrix is one hue, light to dark.
     zeichnen();
   });
   zeichnen();
+
+  /* "Details" in the blog table opens that article's months and scrolls there. */
+  document.querySelectorAll('.zl-details-link').forEach(function (a) {
+    a.addEventListener('click', function (e) {
+      var ziel = document.getElementById(a.dataset.ziel);
+      if (!ziel) return;
+      e.preventDefault();
+      ziel.open = true;
+      ziel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+  });
 })();
 </script>
+{% include "matomo/_sortierung.html" %}
 {% endblock %}

@@ -15,6 +15,7 @@ from django.test import TransactionTestCase, override_settings
 from matomo import views
 
 HOLE = 'matomo.views.client.hole'
+WP = 'matomo.views.client.blog_beitraege'
 
 
 def besuch(wer, tag, stadt='Munich', typ='new', seiten=(('/', 30),), dauer=None):
@@ -38,8 +39,14 @@ class Grundlage(TransactionTestCase):
         super().setUp()
         cache.clear()
         views._orte_tabelle_da = False
+        views._blog_tabelle_da = False
         with connection.cursor() as c:
             c.execute('DROP TABLE IF EXISTS matomo_orte_raus')
+            c.execute('DROP TABLE IF EXISTS matomo_blog_adressen')
+        # WordPress is never asked for real in a test; a test that needs posts sets them.
+        wp = mock.patch(WP, return_value=[])
+        self.wp = wp.start()
+        self.addCleanup(wp.stop)
         self.client.force_login(User.objects.create_user('wa', password='wa'))
 
 
@@ -185,3 +192,137 @@ class Zeitlinie(Grundlage):
             a = self.client.get('/webstats/zeitlinie/?von=2026-09-01&bis=2026-09-30')
         self.assertEqual(200, a.status_code)
         self.assertIn('timeout', a.content.decode())
+
+
+class Blog(Grundlage):
+    ARTIKEL = [
+        {'link': 'https://octotrial.com/clinical-data-management-lifecycle/', 'titel': 'The CDM lifecycle', 'datum': '2026-07-01'},
+        {'link': 'https://octotrial.com/lessons-learned/', 'titel': 'Lessons learned', 'datum': '2026-08-01'},
+    ]
+
+    def log(self):
+        li = dict(referrerName='LinkedIn', referrerType='social')
+        eintraege = [
+            dict(besuch('a', '2026-08-04', seiten=(('/clinical-data-management-lifecycle/', 120), ('/services/', 30))), **li),
+            dict(besuch('b', '2026-09-02', typ='returning', seiten=(('/', 20), ('/clinical-data-management-lifecycle/', 200), ('/contact-page/', 5)))),
+            dict(besuch('b', '2026-09-20', typ='returning', seiten=(('/clinical-data-management-lifecycle', 10),)), referrerType='search', referrerName='Google'),
+            dict(besuch('c', '2026-09-21', seiten=(('/insights/', 15), ('/about-us/', 9)))),
+        ]
+        return eintraege
+
+    def rechnen(self, blog):
+        with mock.patch(HOLE, return_value=self.log()):
+            besuche = views._besuchsprotokoll(dt.date(2026, 8, 1), dt.date(2026, 9, 30))
+        return views.zeitlinie_rechnen(besuche, dt.date(2026, 8, 1), dt.date(2026, 9, 30), blog=blog)
+
+    def test_artikel_ausfuehrlich(self):
+        blog = {'/clinical-data-management-lifecycle/': 'The CDM lifecycle', '/lessons-learned/': 'Lessons learned'}
+        z = self.rechnen(blog)
+        a = {x['seite']: x for x in z['blog']}
+        cdm = a['/clinical-data-management-lifecycle/']
+        self.assertEqual((2, 1, 3), (cdm['leser'], cdm['wieder'], cdm['views']))
+        self.assertEqual(2, cdm['start'])                 # a started on it, and b's second visit
+        self.assertEqual(160, cdm['zeit'])                # (120 + 200) / 2; the 10 s last page does not count
+        self.assertEqual(2, cdm['gemessen'])
+        self.assertEqual(1, cdm['linkedin'])
+        self.assertEqual('Aug 2026', cdm['erste'])
+        self.assertEqual([('/contact-page/', 1), ('/services/', 1)], cdm['weiter'])
+        self.assertEqual([1, 0, 0, 0], cdm['monate'][0]['quellen'])      # LinkedIn in August
+        self.assertEqual([0, 1, 0, 1], cdm['monate'][1]['quellen'])      # September: Google, and one without referrer
+        # an article nobody read is still listed
+        self.assertEqual((0, ''), (a['/lessons-learned/']['leser'], a['/lessons-learned/']['erste']))
+        self.assertEqual('The CDM lifecycle', z['blog'][0]['titel'])
+
+    def test_in_der_matrix_eine_zeile(self):
+        z = self.rechnen({'/clinical-data-management-lifecycle/': '', '/lessons-learned/': ''})
+        namen = [r['seite'] for r in z['seiten']]
+        self.assertIn('Blog – all articles (2)', namen)
+        self.assertNotIn('/clinical-data-management-lifecycle/', namen)
+        self.assertIn('/insights/', namen)                # the overview page stays a page
+        zeile = next(r for r in z['seiten'] if r['seite'].startswith('Blog'))
+        self.assertEqual([1, 1], zeile['u'])
+
+    def test_quelle(self):
+        self.assertEqual('LinkedIn', views.quelle_art({'herkunft': 'LinkedIn', 'herkunft_typ': 'social'}))
+        self.assertEqual('LinkedIn', views.quelle_art({'herkunft': 'lnkd.in', 'herkunft_typ': 'website'}))
+        self.assertEqual('Search', views.quelle_art({'herkunft': 'Google', 'herkunft_typ': 'search'}))
+        self.assertEqual('Direct', views.quelle_art({'herkunft': 'Direct Entry', 'herkunft_typ': 'direct'}))
+        self.assertEqual('Other', views.quelle_art({'herkunft': 'example.com', 'herkunft_typ': 'website'}))
+
+    def test_wordpress_und_eigene_liste(self):
+        self.wp.return_value = self.ARTIKEL
+        self.client.post('/webstats/blog/', {'aktion': 'dazu', 'pfad': 'https://octotrial.com/clinical-trial-conduct'})
+        artikel, info = views.blog_artikel()
+        self.assertEqual({'/clinical-data-management-lifecycle/', '/lessons-learned/', '/clinical-trial-conduct/'}, set(artikel))
+        self.assertEqual('The CDM lifecycle', artikel['/clinical-data-management-lifecycle/'])
+        self.assertEqual(2, info['wordpress'])
+        self.client.post('/webstats/blog/', {'aktion': 'weg', 'pfad': '/clinical-trial-conduct/'})
+        self.assertEqual([], views.blog_eigene())
+
+    def test_wordpress_antwortet_nicht(self):
+        self.wp.side_effect = views.client.MatomoError('WordPress posts: HTTP 401')
+        self.client.post('/webstats/blog/', {'aktion': 'dazu', 'pfad': '/lessons-learned/'})
+        artikel, info = views.blog_artikel()
+        self.assertEqual(['/lessons-learned/'], list(artikel))
+        self.assertIn('HTTP 401', info['fehler'])
+
+    def test_blog_zurueck_nur_ins_portal(self):
+        a = self.client.post('/webstats/blog/', {'aktion': 'dazu', 'pfad': '/x/', 'zurueck': 'https://evil.example/'})
+        self.assertEqual('/webstats/zeitlinie/', a['Location'])
+        self.client.post('/webstats/blog/', {'aktion': 'dazu', 'pfad': '/'})     # the home page is never an article
+        self.assertEqual(['/x/'], views.blog_eigene())
+
+    def test_seite(self):
+        self.wp.return_value = self.ARTIKEL
+        with mock.patch(HOLE, return_value=self.log()):
+            html = self.client.get('/webstats/zeitlinie/?von=2026-08-01&bis=2026-09-30').content.decode()
+        self.assertIn('<h2>Blog articles</h2>', html)
+        self.assertIn('The CDM lifecycle', html)
+        self.assertIn('not read in this range', html)       # Lessons learned
+        self.assertIn('2 from WordPress', html)
+        self.assertIn('class="mt-sortierbar zl-blogtabelle"', html)
+        import json
+        daten = json.loads(html.split('id="zl-daten" type="application/json">', 1)[1].split('</script>', 1)[0])
+        self.assertIn('Blog – all articles (2)', [z['seite'] for z in daten['seiten']])
+
+    def test_neuer_artikel_rechnet_neu(self):
+        with mock.patch(HOLE, return_value=self.log()) as hole:
+            self.client.get('/webstats/zeitlinie/?von=2026-08-01&bis=2026-09-30')
+            self.wp.return_value = self.ARTIKEL
+            self.client.get('/webstats/zeitlinie/?von=2026-08-01&bis=2026-09-30')
+        self.assertEqual(2, hole.call_count)
+
+
+class WordPressListe(TransactionTestCase):
+    """client.blog_beitraege against a stand-in for WordPress's REST API."""
+
+    def setUp(self):
+        cache.clear()
+
+    def antwort(self, status, daten):
+        a = mock.Mock(status_code=status)
+        a.json.return_value = daten
+        return a
+
+    @override_settings(MATOMO_URL='https://octotrial.com', MATOMO_TOKEN='u:p')
+    def test_seiten_titel_und_cache(self):
+        erste = [{'link': 'https://octotrial.com/p%d/' % i, 'title': {'rendered': 'A &amp; B %d' % i}, 'date': '2026-09-01T10:00:00'} for i in range(100)]
+        zweite = [{'link': 'https://octotrial.com/letzter/', 'title': {'rendered': 'Last &#8211; one'}, 'date': '2026-09-02T10:00:00'}]
+        with mock.patch('matomo.client.requests.get', side_effect=[self.antwort(200, erste), self.antwort(200, zweite)]) as get:
+            liste = views.client.blog_beitraege()
+            nochmal = views.client.blog_beitraege()
+        self.assertEqual(2, get.call_count)                  # two pages, then from the cache
+        self.assertEqual(101, len(liste))
+        self.assertEqual('A & B 0', liste[0]['titel'])
+        self.assertEqual('Last – one', liste[-1]['titel'])
+        self.assertEqual('2026-09-02', liste[-1]['datum'])
+        self.assertEqual(liste, nochmal)
+
+    @override_settings(MATOMO_URL='https://octotrial.com', MATOMO_TOKEN='u:p')
+    def test_fehler_wird_eine_stunde_gemerkt(self):
+        with mock.patch('matomo.client.requests.get', return_value=self.antwort(401, {'code': 'rest_forbidden'})) as get:
+            with self.assertRaises(views.client.MatomoError):
+                views.client.blog_beitraege()
+            with self.assertRaises(views.client.MatomoError):
+                views.client.blog_beitraege()
+        self.assertEqual(1, get.call_count)

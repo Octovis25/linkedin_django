@@ -14,6 +14,7 @@ urlpatterns = [
     path("protokoll/", views.protokoll, name="protokoll"),
     path("zeitlinie/", views.zeitlinie, name="zeitlinie"),
     path("orte/", views.orte_aendern, name="orte"),
+    path("blog/", views.blog_aendern, name="blog"),
     path("suchbegriffe/", views.suchbegriffe, name="suchbegriffe"),
     path("archiv/", views.archiv, name="archiv"),
     path("archiv/<int:pk>/", views.archiv_detail, name="archiv_detail"),

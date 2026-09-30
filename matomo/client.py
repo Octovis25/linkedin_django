@@ -60,6 +60,68 @@ def _cache_key(pfad: str, params: dict) -> str:
     return "matomo:" + hashlib.sha1(roh.encode()).hexdigest()
 
 
+def blog_beitraege(*, cache_seconds: int = 86400):
+    """Alle veröffentlichten WordPress-Beiträge als [{"link", "titel", "datum"}].
+
+    Warum (30.09.2026): Die Blogartikel liegen direkt unter der Domain, genau
+    wie die Seiten - an der Adresse allein ist ein Artikel nicht zu erkennen.
+    WordPress weiß es. /wp-json/wp/v2/posts ist normalerweise öffentlich; der
+    Zugang geht trotzdem mit, falls ein Plugin die Liste nur Angemeldeten zeigt.
+
+    Einmal am Tag abgefragt. Gibt WordPress die Liste nicht heraus, kommt ein
+    MatomoError - und eine Stunde lang wird es nicht erneut versucht, damit
+    nicht jeder Seitenaufruf auf eine Zeitüberschreitung wartet.
+    """
+    import html
+
+    key, fehler_key = "matomo:wp-beitraege", "matomo:wp-beitraege:fehler"
+    treffer = cache.get(key)
+    if treffer is not None:
+        return treffer
+    alter_fehler = cache.get(fehler_key)
+    if alter_fehler:
+        raise MatomoError(alter_fehler)
+
+    try:
+        auth = _zugang()
+    except MatomoError:
+        auth = None
+    raus = []
+    try:
+        for seite in range(1, 6):                       # höchstens 500 Beiträge
+            antwort = requests.get(
+                f"{_basis()}/wp-json/wp/v2/posts",
+                params={"per_page": 100, "page": seite, "_fields": "link,title,date"},
+                auth=auth, timeout=getattr(settings, "MATOMO_TIMEOUT", 30),
+                headers={"User-Agent": "octovis-matomo-bridge"},
+            )
+            if antwort.status_code == 400 and seite > 1:
+                break                                   # hinter der letzten Seite
+            if antwort.status_code >= 400:
+                raise MatomoError(f"WordPress posts: HTTP {antwort.status_code}")
+            daten = antwort.json()
+            if not isinstance(daten, list):
+                raise MatomoError("WordPress posts: unexpected answer")
+            for b in daten:
+                if not isinstance(b, dict) or not b.get("link"):
+                    continue
+                titel = b.get("title")
+                titel = titel.get("rendered", "") if isinstance(titel, dict) else str(titel or "")
+                raus.append({"link": b["link"], "titel": html.unescape(titel).strip(),
+                             "datum": str(b.get("date") or "")[:10]})
+            if len(daten) < 100:
+                break
+    except MatomoError as e:
+        cache.set(fehler_key, str(e), 3600)
+        raise
+    except (requests.RequestException, ValueError) as e:
+        cache.set(fehler_key, f"WordPress posts: {e}", 3600)
+        raise MatomoError(f"WordPress posts: {e}")
+
+    cache.set(key, raus, cache_seconds)
+    return raus
+
+
 def hole(pfad: str, *, cache_seconds: int | None = None, **params):
     """Ruft eine Route unterhalb von /wp-json/matomo/v1/ auf.
 

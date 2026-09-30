@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import datetime as dt
+import hashlib
+import json
 
 from urllib.parse import urlsplit
 
@@ -1153,7 +1155,27 @@ def seiten_pfad(url):
     return pfad
 
 
-def zeitlinie_rechnen(besuche, von, bis, seiten_max=ZEITLINIE_SEITEN):
+QUELLEN = ("LinkedIn", "Search", "Direct", "Other")
+
+
+def quelle_art(besuch):
+    """Woher ein Besuch kam, in vier Gruppen: LinkedIn, Search, Direct, Other."""
+    name = str(besuch.get("herkunft") or "").lower()
+    typ = str(besuch.get("herkunft_typ") or "").lower()
+    if "linkedin" in name or "lnkd.in" in name:
+        return "LinkedIn"
+    if typ == "search":
+        return "Search"
+    if typ == "direct" or name.startswith(("direct", "direkt")):
+        return "Direct"
+    return "Other"
+
+
+def _zeit_text(sek):
+    return f"{sek // 60}:{sek % 60:02d}" if sek else "–"
+
+
+def zeitlinie_rechnen(besuche, von, bis, seiten_max=ZEITLINIE_SEITEN, blog=None):
     """Menschen pro Monat (neu / wiederkehrend) und je Seite und Monat
     Unique Besucher, wiederkehrende davon und die mittlere Zeit auf der Seite.
 
@@ -1162,13 +1184,33 @@ def zeitlinie_rechnen(besuche, von, bis, seiten_max=ZEITLINIE_SEITEN):
       „returning“ führt
     - Zeit: timeSpent je Seitenaufruf. Die letzte Seite eines Besuchs hat kein
       Ende, ihre Zeit wäre geraten - sie zählt nicht zum Durchschnitt.
+
+    blog: {pfad: titel} der Blogartikel (30.09.2026). Sie werden in der
+    Seitenmatrix zu einer Zeile „Blog – all articles“ und bekommen eine eigene,
+    ausführliche Liste - auch Artikel, die im Zeitraum niemand gelesen hat.
     """
+    blog = blog or {}
     monate = monate_zwischen(von, bis)
     platz = {m: i for i, m in enumerate(monate)}
     n = len(monate)
     alle = [set() for _ in monate]
     wieder = [set() for _ in monate]
     seiten = {}
+
+    def eintrag(pfad, titel=""):
+        e = seiten.get(pfad)
+        if e is None:
+            e = seiten[pfad] = {"titel": titel,
+                                "alle": [set() for _ in monate],
+                                "wieder": [set() for _ in monate],
+                                "zeit": [0] * n, "gezaehlt": [0] * n,
+                                "views": [0] * n, "start": [0] * n,
+                                "quelle": [dict.fromkeys(QUELLEN, 0) for _ in monate],
+                                "linkedin": set(), "weiter": {}}
+        return e
+
+    for pfad in blog:
+        eintrag(pfad)
 
     for b in besuche:
         if b.get("ist_bot"):
@@ -1181,39 +1223,97 @@ def zeitlinie_rechnen(besuche, von, bis, seiten_max=ZEITLINIE_SEITEN):
         alle[i].add(wer)
         if kehrt_wieder:
             wieder[i].add(wer)
+        quelle = quelle_art(b)
         aufrufe = [a for a in b.get("aktionen_liste") or []
                    if a.get("typ") == "action" and a.get("url")]
+        pfade = [seiten_pfad(a["url"]) for a in aufrufe]
+        gesehen = set()
         for k, a in enumerate(aufrufe):
-            pfad = seiten_pfad(a["url"])
-            e = seiten.get(pfad)
-            if e is None:
-                e = seiten[pfad] = {"titel": a.get("titel") or "",
-                                    "alle": [set() for _ in monate],
-                                    "wieder": [set() for _ in monate],
-                                    "zeit": [0] * n, "gezaehlt": [0] * n}
+            pfad = pfade[k]
+            e = eintrag(pfad, a.get("titel") or "")
+            if not e["titel"]:
+                e["titel"] = a.get("titel") or ""
             e["alle"][i].add(wer)
+            e["views"][i] += 1
             if kehrt_wieder:
                 e["wieder"][i].add(wer)
+            if k == 0:
+                e["start"][i] += 1
             zeit = a.get("zeit")
             if zeit is not None and k < len(aufrufe) - 1:
                 e["zeit"][i] += int(zeit)
                 e["gezaehlt"][i] += 1
+            if k < len(aufrufe) - 1 and pfade[k + 1] != pfad:
+                e["weiter"][pfade[k + 1]] = e["weiter"].get(pfade[k + 1], 0) + 1
+            # Herkunft je Besuch einmal pro Seite, nicht je Aufruf
+            if pfad not in gesehen:
+                gesehen.add(pfad)
+                e["quelle"][i][quelle] += 1
+                if quelle == "LinkedIn":
+                    e["linkedin"].add(wer)
 
-    reihenfolge = sorted(seiten, key=lambda p: (-len(set().union(*seiten[p]["alle"])), p))
-    oben, rest = reihenfolge[:seiten_max], reihenfolge[seiten_max:]
+    def union(eintraege, feld, i):
+        return set().union(*(e[feld][i] for e in eintraege))
 
     def zeile(name, titel, eintraege):
-        u = [len(set().union(*(e["alle"][i] for e in eintraege))) for i in range(n)]
-        r = [len(set().union(*(e["wieder"][i] for e in eintraege))) for i in range(n)]
+        u = [len(union(eintraege, "alle", i)) for i in range(n)]
+        r = [len(union(eintraege, "wieder", i)) for i in range(n)]
         t = []
         for i in range(n):
             gezaehlt = sum(e["gezaehlt"][i] for e in eintraege)
             t.append(round(sum(e["zeit"][i] for e in eintraege) / gezaehlt) if gezaehlt else 0)
         return {"seite": name, "titel": titel, "u": u, "r": r, "t": t}
 
-    zeilen = [zeile(p, seiten[p]["titel"], [seiten[p]]) for p in oben]
+    def leser_gesamt(eintraege):
+        return len(set().union(*(e["alle"][i] for e in eintraege for i in range(n))))
+
+    normal = [p for p in seiten if p not in blog]
+    reihenfolge = sorted(normal, key=lambda p: (-leser_gesamt([seiten[p]]), p))
+    zeilen = [(leser_gesamt([seiten[p]]), zeile(p, seiten[p]["titel"], [seiten[p]]))
+              for p in reihenfolge[:seiten_max]]
+    rest = reihenfolge[seiten_max:]
+    if blog:
+        artikel = [seiten[p] for p in blog]
+        zeilen.append((leser_gesamt(artikel),
+                       zeile(f"Blog – all articles ({len(blog)})", "", artikel)))
+    zeilen.sort(key=lambda z: -z[0])
+    zeilen = [z for _, z in zeilen]
     if rest:
         zeilen.append(zeile(f"Other pages ({len(rest)})", "", [seiten[p] for p in rest]))
+
+    # Die Blogliste: eine Zeile je Artikel, ausführlich.
+    blogliste = []
+    for pfad, titel in blog.items():
+        e = seiten[pfad]
+        leser = set().union(*e["alle"])
+        zurueck = set().union(*e["wieder"])
+        gezaehlt = sum(e["gezaehlt"])
+        quellen = {q: sum(m[q] for m in e["quelle"]) for q in QUELLEN}
+        haupt = max(QUELLEN, key=lambda q: quellen[q]) if any(quellen.values()) else ""
+        u = [len(x) for x in e["alle"]]
+        hoch = max(u + [1])
+        erste = next((monate[i] for i in range(n) if u[i]), "")
+        zeit = round(sum(e["zeit"]) / gezaehlt) if gezaehlt else 0
+        blogliste.append({
+            "seite": pfad, "titel": titel or e["titel"] or pfad,
+            "anker": "blog-" + hashlib.sha1(pfad.encode()).hexdigest()[:10],
+            "erste": (f"{MONATSNAMEN[int(erste[5:]) - 1]} {erste[:4]}" if erste else ""),
+            "leser": len(leser), "wieder": len(zurueck), "views": sum(e["views"]),
+            "zeit": zeit, "zeit_text": _zeit_text(zeit), "gemessen": gezaehlt,
+            "start": sum(e["start"]), "haupt": haupt, "linkedin": len(e["linkedin"]),
+            "balken": [{"hoehe": round(22 * x / hoch) if x else 0, "wert": x,
+                        "monat": f"{MONATSNAMEN[int(m[5:]) - 1]} {m[:4]}"}
+                       for x, m in zip(u, monate)],
+            "monate": [{
+                "name": f"{MONATSNAMEN[int(m[5:]) - 1]} {m[:4]}",
+                "leser": u[i], "wieder": len(e["wieder"][i]), "views": e["views"][i],
+                "zeit_text": _zeit_text(round(e["zeit"][i] / e["gezaehlt"][i]) if e["gezaehlt"][i] else 0),
+                "start": e["start"][i],
+                "quellen": [e["quelle"][i][q] for q in QUELLEN],
+            } for i, m in enumerate(monate)],
+            "weiter": sorted(e["weiter"].items(), key=lambda x: (-x[1], x[0]))[:3],
+        })
+    blogliste.sort(key=lambda z: (-z["leser"], -z["views"], z["seite"]))
 
     return {
         "monate": [{
@@ -1224,12 +1324,82 @@ def zeitlinie_rechnen(besuche, von, bis, seiten_max=ZEITLINIE_SEITEN):
             "neu": len(alle[i]) - len(wieder[i]),
         } for i, m in enumerate(monate)],
         "seiten": zeilen,
+        "blog": blogliste,
     }
 
 
+# ── Welche Adressen Blogartikel sind (30.09.2026) ────────────────────────
+#
+# Die Artikel liegen direkt unter der Domain wie die Seiten. Erkannt werden sie
+# aus WordPress selbst (client.blog_beitraege, einmal am Tag). Dazu eine
+# kleine eigene Liste - für den Fall, dass WordPress die Beiträge nicht
+# herausgibt, oder für Seiten, die wie ein Artikel zählen sollen.
+_blog_tabelle_da = False
+
+
+def _blog_tabelle():
+    global _blog_tabelle_da
+    if _blog_tabelle_da:
+        return
+    with connection.cursor() as c:
+        c.execute("""CREATE TABLE IF NOT EXISTS matomo_blog_adressen (
+                         id INT AUTO_INCREMENT PRIMARY KEY,
+                         pfad VARCHAR(255) NOT NULL UNIQUE,
+                         angelegt DATETIME DEFAULT CURRENT_TIMESTAMP
+                     ) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci""")
+    _blog_tabelle_da = True
+
+
+def blog_eigene():
+    """Die im Portal eingetragenen Blog-Adressen."""
+    try:
+        _blog_tabelle()
+        with connection.cursor() as c:
+            c.execute("SELECT pfad FROM matomo_blog_adressen ORDER BY pfad")
+            return [r[0] for r in c.fetchall()]
+    except Exception as e:
+        print("matomo, blog addresses:", e)
+        return []
+
+
+def blog_artikel():
+    """({pfad: titel}, info) - aus WordPress und der eigenen Liste zusammen."""
+    artikel, info = {}, {"wordpress": None, "fehler": ""}
+    try:
+        beitraege = client.blog_beitraege()
+        info["wordpress"] = len(beitraege)
+        for b in beitraege:
+            pfad = seiten_pfad(b["link"])
+            if pfad and pfad != "/":
+                artikel[pfad] = b.get("titel") or ""
+    except Exception as e:
+        info["fehler"] = str(e)
+    for pfad in blog_eigene():
+        artikel.setdefault(pfad, "")
+    return artikel, info
+
+
+@require_POST
+@login_required
+def blog_aendern(request):
+    """Eine Adresse als Blogartikel eintragen oder wieder austragen."""
+    pfad = seiten_pfad((request.POST.get("pfad") or "").strip())[:255]
+    aktion = request.POST.get("aktion")
+    if pfad and pfad != "/" and aktion in ("dazu", "weg"):
+        _blog_tabelle()
+        with connection.cursor() as c:
+            if aktion == "dazu":
+                c.execute("INSERT IGNORE INTO matomo_blog_adressen (pfad) VALUES (%s)", [pfad])
+            else:
+                c.execute("DELETE FROM matomo_blog_adressen WHERE pfad = %s", [pfad])
+    zurueck = request.POST.get("zurueck") or ""
+    if not zurueck.startswith("/webstats/"):
+        zurueck = "/webstats/zeitlinie/"
+    return redirect(zurueck)
+
 @login_required
 def zeitlinie(request):
-    """Menschen und Seiten pro Monat."""
+    """Menschen und Seiten pro Monat, dazu die Blogartikel ausführlich."""
     heute = timezone.localdate()
     hinweis = None
     if request.GET.get("von") or request.GET.get("bis"):
@@ -1243,34 +1413,39 @@ def zeitlinie(request):
 
     alle_orte = _alle_orte(request)
     orte = ausgeschlossene_orte()
-    schluessel = "matomo:zeitlinie:%s:%s:%s:%s" % (
-        von.isoformat(), bis.isoformat(), int(alle_orte),
-        "|".join(ort_normal(o) for o in orte))
+    blog, blog_info = blog_artikel()
+    # Ortsliste und Blogliste stecken im Schlüssel: ändert sich eine, wird neu gerechnet.
+    schluessel = "matomo:zeitlinie:" + hashlib.sha1(json.dumps(
+        [von.isoformat(), bis.isoformat(), alle_orte,
+         [ort_normal(o) for o in orte], sorted(blog.items())]).encode()).hexdigest()
     fehler, ergebnis = None, cache.get(schluessel)
     if ergebnis is None:
         try:
             # cache_seconds=0: das Rohprotokoll eines Jahres bleibt nicht im Speicher.
             besuche = _besuchsprotokoll(von, bis, cache_seconds=0, alle_orte=alle_orte)
-            ergebnis = zeitlinie_rechnen(besuche, von, bis)
+            ergebnis = zeitlinie_rechnen(besuche, von, bis, blog=blog)
             ergebnis["versteckt"] = besuche.versteckt
             ergebnis["abgeschnitten"] = _abgeschnitten(besuche)
             del besuche
-            # Die Ortsliste steckt im Schlüssel: Ändert sie sich, wird neu gerechnet.
             cache.set(schluessel, ergebnis, ZEITLINIE_CACHE)
         except Exception as e:
-            fehler, ergebnis = str(e), {"monate": [], "seiten": [], "versteckt": 0,
-                                        "abgeschnitten": False}
+            fehler, ergebnis = str(e), {"monate": [], "seiten": [], "blog": [],
+                                        "versteckt": 0, "abgeschnitten": False}
 
     zaehlhilfe = Besuche()
     zaehlhilfe.versteckt = ergebnis.get("versteckt", 0)
     return render(request, "matomo/zeitlinie.html", {
         **_zeitraum_kontext(von, bis, hinweis),
         "zeitlinie": {"monate": ergebnis["monate"], "seiten": ergebnis["seiten"]},
+        "monate": ergebnis["monate"],
+        "blog": ergebnis.get("blog", []),
+        "blog_info": blog_info,
+        "blog_eigene": blog_eigene(),
+        "quellen": QUELLEN,
         "abgeschnitten": ergebnis.get("abgeschnitten"),
         **_orte_kontext(request, zaehlhilfe),
         "fehler": fehler,
     })
-
 
 @login_required
 def archiv(request):
