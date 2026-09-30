@@ -541,6 +541,16 @@ pruefe('no link hardcodes the calendar address', not HART, HART[:3])
 pruefe('the links are built from the one address instead',
        '{{ basis }}' in VORLAGE and 'BASIS +' in VORLAGE)
 pruefe('and the page says which half it is showing', '{% if nur_oj %}' in VORLAGE)
+# The x next to a world day (30.09.2026) takes it out of one year. The OJ
+# calendar has no world days, and it must not grow a control for them.
+_weg = [z for z in VORLAGE.splitlines() if 'class="kal-weg"' in z]
+pruefe('every world day in the calendar has its x', len(_weg) == 2, len(_weg))
+pruefe('and only on the planner calendar',
+       all(z.index('{% if not nur_oj %}') < z.index('class="kal-weg"') for z in _weg if '{% if not nur_oj %}' in z)
+       and all('{% if not nur_oj %}' in z for z in _weg))
+pruefe('the x hides the year, it does not delete or switch off',
+       "closest('.kal-weg')" in VORLAGE and "action: 'hide_year', id: id, jahr: JAHR" in VORLAGE)
+pruefe('and the list itself is still loaded from the server', 'listeLaden();' in VORLAGE)
 
 print('\n=== No list page shows OJ posts by accident ===')
 # The split is only worth anything if every page honours it. A new list view
@@ -551,6 +561,7 @@ print('\n=== No list page shows OJ posts by accident ===')
 AUSNAHMEN = {
     # takes ids that a filtered query already produced
     'COALESCE(video_nc_path': 'video paths for posts already fetched',
+    'SELECT id, post_type FROM planner_posts WHERE id IN': 'post types for posts already fetched',
     # what gets published automatically is a decision, not a display question
     "status = 'Scheduled'": 'the automatic send - Ortrud has not ruled on it',
 }
@@ -568,7 +579,7 @@ for knoten in ast.walk(ast.parse(SRC_VIEWS)):
     ungefiltert.append('line %s: %s' % (knoten.lineno, ' '.join(text.split())[:60]))
 
 pruefe('every list query on planner_posts honours is_oj', not ungefiltert, ungefiltert[:2])
-pruefe('and the two known exceptions are still the only ones',
+pruefe('and the known exceptions are still the only ones',
        all(any(m in k.value for m in AUSNAHMEN)
            for k in ast.walk(ast.parse(SRC_VIEWS))
            if isinstance(k, ast.Constant) and isinstance(k.value, str)

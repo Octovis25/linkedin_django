@@ -89,6 +89,19 @@
   .kal-anlass { color:#F56E28; font-weight:600; }
   .kal-anlass .punkt { display:inline-block; width:5px; height:5px; border-radius:1px;
                        background:#F56E28; margin-right:5px; vertical-align:middle; }
+  /* One x per occasion (30.09.2026): takes it out of this year only - the same
+     as unticking "In <year>" in the list. button.kal-weg, so base.html's
+     button styles do not win. */
+  .kal-anlass button.kal-weg { visibility:hidden; width:16px; height:16px; padding:0; margin:0 0 0 4px;
+                               border:1px solid #d6d2c6; border-radius:50%; background:#fff; color:#6B7876;
+                               font-size:11px; line-height:13px; font-weight:400; cursor:pointer; vertical-align:1px; }
+  .kal-zeile:hover .kal-anlass button.kal-weg, .kal-anlass button.kal-weg:focus { visibility:visible; }
+  .kal-anlass button.kal-weg:hover { color:#c0392b; border-color:#c0392b; }
+  .kal-toast { position:fixed; left:50%; bottom:22px; transform:translateX(-50%); z-index:50;
+               background:#1d2b2d; color:#fff; font-size:13px; padding:9px 14px; border-radius:6px;
+               box-shadow:0 2px 8px rgba(0,0,0,.25); }
+  .kal-toast button { border:0; background:none; color:#65FBFB; cursor:pointer; font-size:13px;
+                      margin-left:10px; padding:0; text-decoration:underline; }
   .kal-post .nr { color:#A8B0AE; font-variant-numeric:tabular-nums; margin-right:5px; }
   .kal-post a { color:inherit; text-decoration:none; }
   .kal-zeile:hover .kal-post a { text-decoration:underline; text-underline-offset:2px; }
@@ -237,6 +250,7 @@
   }
 </style>
 
+<div id="kal-toast" class="kal-toast" role="status" hidden></div>
 <div class="kal-wrap">
 
   <div class="kal-top">
@@ -303,7 +317,7 @@
             {% if forloop.first %}
               <span class="kal-datum"><b>{{ t.tag|stringformat:"02d" }}.</b> {{ t.wochentag }}</span>
               <span class="kal-anlass"{% if t.anlass_titel %} title="{{ t.anlass_titel }}"{% endif %}>
-                {% if t.anlass_text %}<span class="punkt"></span>{{ t.anlass_text }}{% endif %}</span>
+                {% for a in t.termine %}<span class="kal-termin"><span class="punkt"></span>{{ a.name }}{% if not nur_oj %}<button type="button" class="kal-weg" data-id="{{ a.id }}" data-name="{{ a.name }}" title="Remove from {{ jahr }}. It stays in the list and comes back next year." aria-label="Remove {{ a.name }} from {{ jahr }}">&times;</button>{% endif %}</span>{% if not forloop.last %}, {% endif %}{% endfor %}</span>
             {% else %}
               <span class="kal-datum"></span><span class="kal-anlass"></span>
             {% endif %}
@@ -327,7 +341,7 @@
             <span class="kal-strich"></span>
             <span class="kal-datum"><b>{{ t.tag|stringformat:"02d" }}.</b> {{ t.wochentag }}</span>
             <span class="kal-anlass"{% if t.anlass_titel %} title="{{ t.anlass_titel }}"{% endif %}>
-              {% if t.anlass_text %}<span class="punkt"></span>{{ t.anlass_text }}{% endif %}</span>
+              {% for a in t.termine %}<span class="kal-termin"><span class="punkt"></span>{{ a.name }}{% if not nur_oj %}<button type="button" class="kal-weg" data-id="{{ a.id }}" data-name="{{ a.name }}" title="Remove from {{ jahr }}. It stays in the list and comes back next year." aria-label="Remove {{ a.name }} from {{ jahr }}">&times;</button>{% endif %}</span>{% if not forloop.last %}, {% endif %}{% endfor %}</span>
             <span class="kal-post">
               {% if t.termine %}<span class="nix">nothing planned</span>{% endif %}
               {% for v in t.vorschlaege %}<button type="button" class="kal-vorschlag" data-id="{{ v.id }}" data-datum="{{ t.iso }}"
@@ -742,6 +756,37 @@
 
   listeLaden();
   }   // end of the recurring-dates wiring
+
+  /* ---------- taking an occasion out of this year ----------
+     The x next to a world day in the calendar. hide_year stores one
+     exception for this year; the list keeps the date and next year shows it
+     again. After the reload a note says what happened and offers Undo. */
+  document.addEventListener('click', function (e) {
+    var weg = e.target && e.target.closest ? e.target.closest('.kal-weg') : null;
+    if (!weg) return;
+    var id = +weg.dataset.id, name = weg.dataset.name || '';
+    sende({ action: 'hide_year', id: id, jahr: JAHR }).then(function (a) {
+      if (a.error) { window.alert(a.error); return; }
+      try { sessionStorage.setItem('kalWeg', JSON.stringify({ id: id, name: name, jahr: JAHR })); } catch (x) {}
+      location.reload();
+    });
+  });
+  var weggenommen = null;
+  try {
+    weggenommen = JSON.parse(sessionStorage.getItem('kalWeg') || 'null');
+    sessionStorage.removeItem('kalWeg');
+  } catch (x) { weggenommen = null; }
+  var toast = document.getElementById('kal-toast');
+  if (weggenommen && toast && weggenommen.jahr === JAHR) {
+    toast.innerHTML = '\u201c' + schuetzen(weggenommen.name) + '\u201d removed from ' + JAHR +
+                      ' \u00b7 still in the list<button type="button">Undo</button>';
+    toast.hidden = false;
+    toast.querySelector('button').onclick = function () {
+      sende({ action: 'show_year', id: weggenommen.id, jahr: JAHR })
+        .then(function () { location.reload(); });
+    };
+    setTimeout(function () { toast.hidden = true; }, 10000);
+  }
 
   // Which month to open on is the server's decision now (?m=, else the
   // current month in the current year), so the answer survives a reload and

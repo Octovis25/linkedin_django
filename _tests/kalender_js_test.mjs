@@ -40,10 +40,12 @@ const NUR_IM_PLANNER = new Set(['kal-zur-liste', 'kal-regeln', 'kal-liste',
   'nf-weekday', 'nf-nth', 'nf-weeks', 'nf-easter', 'nf-lead', 'nf-series']);
 
 function element(id) {
+  const knopf = { onclick: null };
   return {
     id, dataset: { start: '9' }, value: '9', hidden: false, textContent: '',
     innerHTML: '', classList: { toggle() {}, contains: () => false },
     addEventListener() {}, querySelectorAll: () => [], closest: () => null,
+    querySelector: () => knopf, knopf,
     scrollIntoView() {}, onclick: null, onchange: null,
   };
 }
@@ -52,12 +54,13 @@ function laufen(mitListe, fetchErgebnis) {
   const gefragt = [];
   const gesendet = [];
   const lauscher = {};
+  const elemente = {};
   const document = {
     addEventListener(art, fn) { (lauscher[art] = lauscher[art] || []).push(fn); },
     getElementById(id) {
       gefragt.push(id);
       if (!mitListe && NUR_IM_PLANNER.has(id)) return null;
-      return element(id);
+      return (elemente[id] = elemente[id] || element(id));
     },
     querySelectorAll: () => [],
     querySelector: () => null,
@@ -73,6 +76,7 @@ function laufen(mitListe, fetchErgebnis) {
   gefragt.lauscher = lauscher;
   gefragt.gesendet = gesendet;
   gefragt.window = window;
+  gefragt.elemente = elemente;
   return gefragt;
 }
 
@@ -246,6 +250,72 @@ await pruefeAsync('a refusal from the server reloads instead of jumping', async 
   ausloesen(lauf, 'change', ziel('kal-verschieben', { id: '53' }, '2026-09-24'));
   await warten(); await warten();
   if (lauf.window.location.href !== 'RELOAD') throw new Error(lauf.window.location.href);
+});
+
+console.log('\n=== The x next to a world day: out of this year only ===');
+// The note after the reload comes from sessionStorage. Node has none, so a
+// stand-in is put where the browser keeps it, and taken away again after.
+function ablage(inhalt) {
+  const speicher = Object.assign({}, inhalt || {});
+  return {
+    speicher,
+    getItem: k => (k in speicher ? speicher[k] : null),
+    setItem: (k, v) => { speicher[k] = String(v); },
+    removeItem: k => { delete speicher[k]; },
+  };
+}
+await pruefeAsync('a click on the x hides the date in this year and reloads', async () => {
+  globalThis.sessionStorage = ablage();
+  try {
+    const lauf = laufen(true, { ok: true });
+    ausloesen(lauf, 'click', ziel('kal-weg', { id: '12', name: 'International Coffee Day' }));
+    await warten(); await warten();
+    const s = lauf.gesendet.find(d => d.action === 'hide_year');
+    if (!s || s.id !== 12 || s.jahr !== 2026) throw new Error(JSON.stringify(lauf.gesendet));
+    if (lauf.gesendet.some(d => d.action === 'delete' || d.action === 'set_active'))
+      throw new Error('it touched the list itself');
+    if (lauf.window.location.href !== 'RELOAD') throw new Error(lauf.window.location.href);
+    const notiz = JSON.parse(globalThis.sessionStorage.getItem('kalWeg'));
+    if (notiz.id !== 12 || notiz.jahr !== 2026) throw new Error(JSON.stringify(notiz));
+    return 'hide_year, then a note for after the reload';
+  } finally { delete globalThis.sessionStorage; }
+});
+await pruefeAsync('a refusal leaves the page as it is', async () => {
+  globalThis.sessionStorage = ablage();
+  try {
+    const lauf = laufen(true, { error: 'Which date, and which year?' });
+    ausloesen(lauf, 'click', ziel('kal-weg', { id: '12', name: 'X' }));
+    await warten(); await warten();
+    if (lauf.window.location.href === 'RELOAD') throw new Error('reloaded as if it had worked');
+    if (globalThis.sessionStorage.getItem('kalWeg')) throw new Error('left a note for nothing');
+  } finally { delete globalThis.sessionStorage; }
+});
+await pruefeAsync('after the reload: the note, escaped, with an Undo that shows it again', async () => {
+  globalThis.sessionStorage = ablage({ kalWeg: JSON.stringify({ id: 12, name: 'Tea & "<b>Coffee</b>"', jahr: 2026 }) });
+  try {
+    const lauf = laufen(true, { ok: true });
+    const toast = lauf.elemente['kal-toast'];
+    if (!toast || toast.hidden) throw new Error('no note shown');
+    if (toast.innerHTML.includes('<b>')) throw new Error('name not escaped: ' + toast.innerHTML);
+    if (!toast.innerHTML.includes('Tea &amp; &quot;&lt;b&gt;Coffee')) throw new Error(toast.innerHTML);
+    if (globalThis.sessionStorage.getItem('kalWeg')) throw new Error('the note would show again on the next load');
+    toast.knopf.onclick();
+    await warten(); await warten();
+    const s = lauf.gesendet.find(d => d.action === 'show_year');
+    if (!s || s.id !== 12 || s.jahr !== 2026) throw new Error(JSON.stringify(lauf.gesendet));
+    return 'Undo sends show_year';
+  } finally { delete globalThis.sessionStorage; }
+});
+await pruefeAsync('a note from another year is not shown here', async () => {
+  globalThis.sessionStorage = ablage({ kalWeg: JSON.stringify({ id: 12, name: 'X', jahr: 2027 }) });
+  try {
+    const lauf = laufen(true, { ok: true });
+    if (lauf.elemente['kal-toast'].innerHTML) throw new Error('shown: ' + lauf.elemente['kal-toast'].innerHTML);
+  } finally { delete globalThis.sessionStorage; }
+});
+await pruefeAsync('no sessionStorage at all (private window): the page still runs', async () => {
+  const lauf = laufen(false, { ok: true });
+  return lauf.length + ' elements asked for';
 });
 
 console.log('\n' + gut + ' ok, ' + schlecht + ' failed');
