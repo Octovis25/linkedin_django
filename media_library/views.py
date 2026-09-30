@@ -2459,6 +2459,63 @@ def studio_nc_image_proxy(request):
 
 
 @login_required
+def studio_post_draft(request):
+    """Attaches a prepared design to a planner post - without an output file.
+
+    Claude builds a draft in the Studio page (logged in as the user) and hands
+    it over here. The next time the Studio opens for this post, the design is
+    on the canvas: every text, colour and motion can be changed there and
+    saved as usual. Nextcloud's desktop sync is not involved, so the draft is
+    there at once.
+
+    A NEW row is written; earlier designs of the post stay in the table. It
+    points at the file that currently hangs on the post - studio_view looks for
+    that file first and takes the newest row, so this design wins.
+    """
+    if request.method != 'POST':
+        return JsonResponse({'ok': False, 'error': 'POST required'}, status=405)
+    try:
+        daten = json.loads(request.body or b'{}')
+    except ValueError:
+        return JsonResponse({'ok': False, 'error': 'Invalid JSON'}, status=400)
+    try:
+        post_id = int(daten.get('post_id'))
+    except (TypeError, ValueError):
+        return JsonResponse({'ok': False, 'error': 'post_id missing'}, status=400)
+    canvas_json = daten.get('canvas_json') or ''
+    if not isinstance(canvas_json, str) or not canvas_json or len(canvas_json) > POST_DRAFT_MAX:
+        return JsonResponse({'ok': False, 'error': 'canvas_json missing or too large'}, status=400)
+    try:
+        zustand = json.loads(canvas_json)
+    except ValueError:
+        return JsonResponse({'ok': False, 'error': 'canvas_json unreadable'}, status=400)
+    if not isinstance(zustand, dict) or not isinstance((zustand.get('fabric') or zustand).get('objects'), list):
+        return JsonResponse({'ok': False, 'error': 'canvas_json has no objects'}, status=400)
+
+    _ensure_studio_tables()
+    with connection.cursor() as c:
+        rows = _safe(c, """SELECT title, image, COALESCE(video_nc_path,''), COALESCE(gif_nc_path,'')
+                             FROM planner_posts WHERE id=%s""", [post_id])
+    if not rows:
+        return JsonResponse({'ok': False, 'error': 'Post not found'}, status=404)
+    titel, bild, video, gif = rows[0]
+    titel = str(daten.get('title') or titel or f'Post {post_id}')[:200]
+    # The same order studio_view uses to find the post's design.
+    datei = bild or video or gif or ''
+    # Embedded images (the logo, say) go to Nextcloud once, from the server.
+    canvas_json = _optimize_canvas_json(canvas_json, NC_STUDIO_LIBRARY_FOLDER, titel)
+    with connection.cursor() as c:
+        c.execute("INSERT INTO studio_images (nc_path, title, canvas_json, post_id) VALUES (%s,%s,%s,%s)",
+                  [datei, titel, canvas_json, post_id])
+        neu_id = c.lastrowid
+    return JsonResponse({'ok': True, 'id': neu_id, 'post_id': post_id, 'nc_path': datei, 'title': titel})
+
+
+# A design with its images in it can be a few MB; more is not a draft.
+POST_DRAFT_MAX = 20 * 1024 * 1024
+
+
+@login_required
 def studio_video_template_delete(request, tpl_id):
     if request.method != 'POST':
         return JsonResponse({'error': 'POST required'}, status=405)

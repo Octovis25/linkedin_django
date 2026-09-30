@@ -29,6 +29,7 @@ urlpatterns = [
     path('studio/save/',                  views.studio_save,            name='studio_save'),
     path('studio/save-video/',            views.studio_save_video,      name='studio_save_video'),
     path('studio/api/templates/',         views.studio_api_templates,   name='studio_api_templates'),
+    path('studio/api/post-draft/',        views.studio_post_draft,      name='studio_post_draft'),
     path('studio/api/library/',           views.studio_api_library,     name='studio_api_library'),
     path('studio/api/saved/',             views.studio_api_saved,       name='studio_api_saved'),
     path('studio/api/post-image/<int:post_id>/', views.studio_api_post_image, name='studio_api_post_image'),
