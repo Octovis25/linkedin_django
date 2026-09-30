@@ -644,6 +644,43 @@ def _zustand(termine, posts):
     return 'plan'
 
 
+# Posting days (Ortrud, 30.09.2026): a company post every Monday, a short post
+# every Friday. The calendar marks both, so a gap is seen at a glance.
+POSTTAGE = {0: ('mo', 'Company post'), 4: ('fr', 'Short post')}
+
+
+def posttag_fuer(tag, nur_oj=False):
+    """('mo', 'Company post'), ('fr', 'Short post') or ('', '') for a day.
+
+    The OJ calendar has no posting days - they belong to the planner."""
+    if nur_oj:
+        return ('', '')
+    return POSTTAGE.get(tag.weekday(), ('', ''))
+
+
+def erwartet_am(posttag, posts):
+    """Is a posting day still waiting for its post?
+
+    Any post fills it, whatever its type - except one that was discarded
+    (Archive and never sent), which is no post at all."""
+    if not posttag:
+        return False
+    return not any(not (p.get('status') == 'Archive' and not p.get('veroeffentlicht'))
+                   for p in posts)
+
+
+def tageszustand(termine, posts, erwartet=False):
+    """_zustand, plus 'frei': an empty posting day with no occasion on it.
+
+    Kept apart from 'open' on purpose: open is orange and means "an occasion
+    with nothing on it"; frei is drawn in the day's own colour (petrol or
+    turquoise) - Ortrud: "without the aggressive orange"."""
+    zustand = _zustand(termine, posts)
+    if erwartet and zustand == 'none':
+        return 'frei'
+    return zustand
+
+
 def jahres_tage(jahr, nur_oj=False):
     """Every single day of the year - all 365 of them, empty ones included.
 
@@ -664,6 +701,8 @@ def jahres_tage(jahr, nur_oj=False):
     tag = date(jahr, 1, 1)
     while tag.year == jahr:
         eintrag = nach_tag.get(tag, {'termine': [], 'posts': []})
+        posttag, erwartet_text = posttag_fuer(tag, nur_oj)
+        erwartet = erwartet_am(posttag, eintrag['posts'])
         tage.append({
             'datum': tag,
             'iso': tag.isoformat(),
@@ -675,7 +714,10 @@ def jahres_tage(jahr, nur_oj=False):
             'heute': tag == heute,
             'termine': eintrag['termine'],
             'posts': eintrag['posts'],
-            'zustand': _zustand(eintrag['termine'], eintrag['posts']),
+            'zustand': tageszustand(eintrag['termine'], eintrag['posts'], erwartet),
+            'posttag': posttag,
+            'erwartet': erwartet,
+            'erwartet_text': erwartet_text,
             # Flattened for the row: the names in the cell, the rules in the
             # tooltip, so one day never grows into a paragraph.
             'anlass_text': ', '.join(t['name'] for t in eintrag['termine']),
@@ -722,6 +764,11 @@ def kalender_view(request, jahr=None, nur_oj=False):
             'nr': nr, 'name': name, 'tage': im_monat,
             'posts': sum(len(t['posts']) for t in im_monat),
             'offen': sum(1 for t in im_monat if t['zustand'] == 'open'),
+            # Posting days in the month, and how many already have their post.
+            'mo_alle': sum(1 for t in im_monat if t['posttag'] == 'mo'),
+            'mo_voll': sum(1 for t in im_monat if t['posttag'] == 'mo' and not t['erwartet']),
+            'fr_alle': sum(1 for t in im_monat if t['posttag'] == 'fr'),
+            'fr_voll': sum(1 for t in im_monat if t['posttag'] == 'fr' and not t['erwartet']),
             'ohne_medium': sum(1 for t in im_monat for p in t['posts'] if p.get('ohne_medium')),
         })
 

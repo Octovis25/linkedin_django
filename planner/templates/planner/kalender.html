@@ -64,6 +64,34 @@
   .kal-zeile:hover { background:rgba(80,70,40,.06); }
   .kal-zeile.we { background:rgba(120,100,50,.035); }
   .kal-zeile.we:hover { background:rgba(80,70,40,.08); }
+  /* Posting days (30.09.2026): Monday = company post in petrol, Friday = short
+     post in turquoise. Tints over the month colour, so they work on all four;
+     Monday stronger and bluer, Friday lighter and greener. An empty one is drawn
+     in its own colour, not in the orange of an open occasion. */
+  .kal-zeile.pt-mo { background:rgba(0,133,145,.20); }
+  .kal-zeile.pt-fr { background:rgba(32,184,176,.12); }
+  .kal-zeile.pt-mo:hover { background:rgba(0,133,145,.27); }
+  .kal-zeile.pt-fr:hover { background:rgba(32,184,176,.19); }
+  .kal-tagchip { display:inline-block; font-size:9.5px; font-weight:700; color:#fff; border-radius:3px;
+                 padding:0 4px; margin-left:5px; vertical-align:1px; line-height:14px; }
+  .pt-mo .kal-tagchip { background:#005F68; }
+  .pt-fr .kal-tagchip { background:#1FA9A2; }
+  .pt-mo .kal-datum b { color:#005F68; font-weight:700; }
+  .pt-fr .kal-datum b { color:#127D77; font-weight:700; }
+  .z-frei .kal-datum { color:#6B7876; }
+  .pt-mo.z-frei .kal-strich { background:repeating-linear-gradient(180deg,#005F68 0 3px,transparent 3px 7px); }
+  .pt-fr.z-frei .kal-strich { background:repeating-linear-gradient(180deg,#20B8B0 0 3px,transparent 3px 7px); }
+  .kal-erwartet { font-size:12.5px; font-weight:600; white-space:nowrap; }
+  .pt-mo .kal-erwartet { color:#005F68; }
+  .pt-fr .kal-erwartet { color:#127D77; }
+  .pt-mo .p-frei { color:#005F68; border:1px dashed #005F68; }
+  .pt-fr .p-frei { color:#127D77; border:1px dashed #20B8B0; }
+  .kal-zaehler { display:inline-block; font-size:11px; font-weight:600; border-radius:99px; padding:1px 8px; margin-left:10px; color:#fff; }
+  .kal-zaehler.mo { background:#005F68; }
+  .kal-zaehler.fr { background:#1FA9A2; }
+  .kal-zaehler.luecke { background:transparent; }
+  .kal-zaehler.mo.luecke { color:#005F68; box-shadow:inset 0 0 0 1.5px #005F68; }
+  .kal-zaehler.fr.luecke { color:#127D77; box-shadow:inset 0 0 0 1.5px #20B8B0; }
   .kal-zeile.heute .kal-datum b { background:var(--octo-petrol); color:#fff;
                                   border-radius:3px; padding:0 4px; }
 
@@ -175,6 +203,8 @@
                  margin:10px 2px 0; font-size:12px; color:#6B7876; }
   .kal-legende i { width:4px; height:13px; border-radius:1px; display:inline-block;
                    margin-right:5px; vertical-align:-2px; }
+  .kal-legende .l-mo { background:rgba(0,133,145,.26); box-shadow:inset 3px 0 0 #005F68; }
+  .kal-legende .l-fr { background:rgba(32,184,176,.18); box-shadow:inset 3px 0 0 #20B8B0; }
   .kal-legende .l-open  { background:repeating-linear-gradient(180deg,#F0A87E 0 3px,transparent 3px 7px); }
   .kal-legende .l-plan  { background:repeating-linear-gradient(180deg,#E0A030 0 5px,transparent 5px 9px); }
   .kal-legende .l-sched { background:#008591; }
@@ -293,7 +323,7 @@
     <div class="kal-filter" id="kal-filter">
       <button data-f="alle" class="aktiv">Every day</button>
       <button data-f="voll">Only days with something</button>
-      {% if not nur_oj %}<button data-f="offen">Still open</button>{% endif %}
+      {% if not nur_oj %}<button data-f="offen">Still open</button><button data-f="posttag" title="Mondays and Fridays that are still waiting for their post">Mon &amp; Fri still empty</button>{% endif %}
     </div>
     {% comment %}The lists under the calendar are a long scroll away since the months
        run on (Ortrud, 25.09.2026) - so the way there starts up here.{% endcomment %}
@@ -319,17 +349,17 @@
     <div class="kal-monat" data-monat="{{ m.nr }}">
       <div class="kal-mkopf">
         <b>{{ m.name }} {{ jahr }}</b>
-        <span>{{ m.posts }} post{{ m.posts|pluralize }}{% if m.offen %} &middot; {{ m.offen }} open{% endif %}{% if m.ohne_medium %} &middot; <span class="ohne-medium">&#9888; {{ m.ohne_medium }} without image / video</span>{% endif %}</span>
+        <span>{{ m.posts }} post{{ m.posts|pluralize }}{% if m.offen %} &middot; {{ m.offen }} open{% endif %}{% if m.ohne_medium %} &middot; <span class="ohne-medium">&#9888; {{ m.ohne_medium }} without image / video</span>{% endif %}{% if m.mo_alle %}<span class="kal-zaehler mo{% if m.mo_voll < m.mo_alle %} luecke{% endif %}" title="Mondays with a post / Mondays in {{ m.name }}">Mon {{ m.mo_voll }}/{{ m.mo_alle }}</span>{% endif %}{% if m.fr_alle %}<span class="kal-zaehler fr{% if m.fr_voll < m.fr_alle %} luecke{% endif %}" title="Fridays with a post / Fridays in {{ m.name }}">Fri {{ m.fr_voll }}/{{ m.fr_alle }}</span>{% endif %}</span>
       </div>
 
       {% for t in m.tage %}
         {% if t.posts %}
           {% for p in t.posts %}
-          <div class="kal-zeile z-{{ p.zustand }}{% if t.wochenende %} we{% endif %}{% if t.heute %} heute{% endif %}"
-               data-monat="{{ t.monat }}" data-zustand="{{ p.zustand }}" data-tag="{{ t.iso }}">
+          <div class="kal-zeile z-{{ p.zustand }}{% if t.wochenende %} we{% endif %}{% if t.heute %} heute{% endif %}{% if t.posttag %} pt-{{ t.posttag }}{% endif %}"
+               data-monat="{{ t.monat }}" data-zustand="{{ p.zustand }}" data-tag="{{ t.iso }}"{% if t.erwartet %} data-erwartet="1"{% endif %}>
             <span class="kal-strich"></span>
             {% if forloop.first %}
-              <span class="kal-datum"><b>{{ t.tag|stringformat:"02d" }}.</b> {{ t.wochentag }}</span>
+              <span class="kal-datum"><b>{{ t.tag|stringformat:"02d" }}.</b> {{ t.wochentag }}{% if t.posttag == 'mo' %}<span class="kal-tagchip" title="Monday: company post">M</span>{% elif t.posttag == 'fr' %}<span class="kal-tagchip" title="Friday: short post">F</span>{% endif %}</span>
               <span class="kal-anlass"{% if t.anlass_titel %} title="{{ t.anlass_titel }}"{% endif %}>
                 {% for a in t.termine %}<span class="kal-termin"><span class="punkt"></span>{{ a.name }}{% if not nur_oj %}<button type="button" class="kal-weg" data-id="{{ a.id }}" data-name="{{ a.name }}" title="Remove from {{ jahr }}. It stays in the list and comes back next year." aria-label="Remove {{ a.name }} from {{ jahr }}">&times;</button>{% endif %}</span>{% if not forloop.last %}, {% endif %}{% endfor %}</span>
             {% else %}
@@ -350,19 +380,19 @@
           </div>
           {% endfor %}
         {% else %}
-          <div class="kal-zeile z-{{ t.zustand }}{% if t.wochenende %} we{% endif %}{% if t.heute %} heute{% endif %}"
-               data-monat="{{ t.monat }}" data-zustand="{{ t.zustand }}" data-tag="{{ t.iso }}">
+          <div class="kal-zeile z-{{ t.zustand }}{% if t.wochenende %} we{% endif %}{% if t.heute %} heute{% endif %}{% if t.posttag %} pt-{{ t.posttag }}{% endif %}"
+               data-monat="{{ t.monat }}" data-zustand="{{ t.zustand }}" data-tag="{{ t.iso }}"{% if t.erwartet %} data-erwartet="1"{% endif %}>
             <span class="kal-strich"></span>
-            <span class="kal-datum"><b>{{ t.tag|stringformat:"02d" }}.</b> {{ t.wochentag }}</span>
+            <span class="kal-datum"><b>{{ t.tag|stringformat:"02d" }}.</b> {{ t.wochentag }}{% if t.posttag == 'mo' %}<span class="kal-tagchip" title="Monday: company post">M</span>{% elif t.posttag == 'fr' %}<span class="kal-tagchip" title="Friday: short post">F</span>{% endif %}</span>
             <span class="kal-anlass"{% if t.anlass_titel %} title="{{ t.anlass_titel }}"{% endif %}>
               {% for a in t.termine %}<span class="kal-termin"><span class="punkt"></span>{{ a.name }}{% if not nur_oj %}<button type="button" class="kal-weg" data-id="{{ a.id }}" data-name="{{ a.name }}" title="Remove from {{ jahr }}. It stays in the list and comes back next year." aria-label="Remove {{ a.name }} from {{ jahr }}">&times;</button>{% endif %}</span>{% if not forloop.last %}, {% endif %}{% endfor %}</span>
             <span class="kal-post">
-              {% if t.termine %}<span class="nix">nothing planned</span>{% endif %}
+              {% if t.erwartet %}<span class="kal-erwartet" title="Every {% if t.posttag == 'mo' %}Monday a company post{% else %}Friday a short post{% endif %} is planned.">&#9675; {{ t.erwartet_text }} expected</span>{% elif t.termine %}<span class="nix">nothing planned</span>{% endif %}
               {% for v in t.vorschlaege %}<button type="button" class="kal-vorschlag" data-id="{{ v.id }}" data-datum="{{ t.iso }}"
                       title="#{{ v.id }} {{ v.title }} has no date yet. Click to plan it for this day.">&#8627; #{{ v.id }} {{ v.title }}</button>{% endfor %}
               <a class="kal-neu" href="/planner/?new=1&amp;datum={{ t.iso }}&amp;back={{ basis }}{{ jahr }}/">+ post</a>
             </span>
-            <span>{% if t.zustand == 'open' %}<span class="kal-pille p-open">Open</span>{% endif %}</span>
+            <span>{% if t.zustand == 'open' %}<span class="kal-pille p-open">Open</span>{% elif t.zustand == 'frei' %}<span class="kal-pille p-frei">Open</span>{% endif %}</span>
             <span class="kal-zeit"></span>
           </div>
         {% endif %}
@@ -372,7 +402,7 @@
   </div>
 
   <div class="kal-legende">
-    {% if not nur_oj %}<span><i class="l-open"></i>Open</span>{% endif %}
+    {% if not nur_oj %}<span><i class="l-open"></i>Open</span><span><i class="l-mo"></i>Monday &ndash; company post</span><span><i class="l-fr"></i>Friday &ndash; short post</span>{% endif %}
     <span><i class="l-plan"></i>Planned &ndash; can still move</span>
     <span><i class="l-sched"></i>Scheduled &ndash; Buffer has it</span>
     <span><i class="l-done"></i>Published</span>
@@ -572,7 +602,8 @@
             || (monat === -1 && +z.dataset.monat >= AB_MONAT);
       var z2 = zustand === 'alle'
             || (zustand === 'voll' && z.dataset.zustand !== 'none')
-            || (zustand === 'offen' && z.dataset.zustand === 'open');
+            || (zustand === 'offen' && z.dataset.zustand === 'open')
+            || (zustand === 'posttag' && z.dataset.erwartet === '1');
       z.hidden = !(z1 && z2);
     }
     // A month whose rows are all hidden should not keep its heading around.

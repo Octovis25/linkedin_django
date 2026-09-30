@@ -903,5 +903,36 @@ pruefe('and one to the drafts, opening them on the way',
        'data-ziel="kal-ohne-offen" data-klappe="kal-ohne-klappe"' in VORLAGE
        and 'id="kal-ohne-offen"' in VORLAGE and 'klappe.open = true' in VORLAGE)
 
+print('\n=== Monday and Friday: the posting days ===')
+# Ortrud, 30.09.2026: "Monday petrol, Friday turquoise - there we expect a post,
+# so I can see at a glance whether something is in." Without the orange.
+exec(compile(listen_holen('POSTTAGE'), 'planner/kalender.py (cut out)', 'exec'), RAUM)
+for name in ('posttag_fuer', 'erwartet_am', 'tageszustand'):
+    exec(compile(herausschneiden(name), 'planner/kalender.py (cut out)', 'exec'), RAUM)
+posttag_fuer, erwartet_am, tageszustand = RAUM['posttag_fuer'], RAUM['erwartet_am'], RAUM['tageszustand']
+
+pruefe('Monday 5.10.2026 is a company-post day', posttag_fuer(date(2026, 10, 5)) == ('mo', 'Company post'))
+pruefe('Friday 9.10.2026 is a short-post day', posttag_fuer(date(2026, 10, 9)) == ('fr', 'Short post'))
+pruefe('the other five days are not',
+       all(posttag_fuer(date(2026, 10, d))[0] == '' for d in (6, 7, 8, 10, 11)))
+pruefe('every Monday and Friday of a whole year, and nothing else',
+       sum(1 for i in range(365) if posttag_fuer(date(2026, 1, 1) + timedelta(days=i))[0]) == 104)   # 2026: 52 Mondays, 52 Fridays
+pruefe('the OJ calendar has no posting days', posttag_fuer(date(2026, 10, 5), nur_oj=True) == ('', ''))
+pruefe('an empty Monday is waiting for its post', erwartet_am('mo', []))
+pruefe('any post fills it, whatever its type', not erwartet_am('mo', [{'status': 'Draft'}]))
+pruefe('a discarded one does not', erwartet_am('fr', [{'status': 'Archive', 'veroeffentlicht': False}]))
+pruefe('an archived one that went out does', not erwartet_am('fr', [{'status': 'Archive', 'veroeffentlicht': True}]))
+pruefe('a Tuesday never waits', not erwartet_am('', []))
+pruefe('empty posting day without an occasion: frei, not open', tageszustand([], [], True) == 'frei')
+pruefe('with an occasion on it: still open', tageszustand([{'name': 'X'}], [], True) == 'open')
+pruefe('an ordinary empty day stays none', tageszustand([], [], False) == 'none')
+pruefe('frei is drawn in the day colour, not in orange',
+       '.pt-mo.z-frei .kal-strich' in VORLAGE and '.pt-fr.z-frei .kal-strich' in VORLAGE
+       and '.z-frei .kal-strich { background:repeating-linear-gradient(180deg,#F0A87E' not in VORLAGE)
+pruefe('the filter "Mon & Fri still empty" is wired',
+       'data-f="posttag"' in VORLAGE and "zustand === 'posttag' && z.dataset.erwartet === '1'" in VORLAGE)
+pruefe('and the OJ calendar does not get it',
+       '{% if not nur_oj %}<button data-f="offen">Still open</button><button data-f="posttag"' in VORLAGE)
+
 print('\n%d ok, %d failed' % (gut, schlecht))
 sys.exit(1 if schlecht else 0)
