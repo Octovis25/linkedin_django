@@ -754,6 +754,105 @@ def kalender_view(request, jahr=None, nur_oj=False):
     })
 
 
+# ------------------------------------------------------------ drag and drop
+
+# The statuses a post can be put back to by Undo. Scheduled is not among them:
+# a post only is scheduled when Buffer (or Make) holds it, and Undo cannot give
+# Buffer its slot back. It comes back as Ready instead - schedule it again.
+UNDO_STATUS = ('Draft', 'Review', 'Ready', 'Posted', 'Archive')
+
+
+def _post_lage(c, pid):
+    """Everything the calendar has to know about one post before it moves it."""
+    try:
+        c.execute("""SELECT COALESCE(status,''), COALESCE(linkedin_posted,0), COALESCE(is_oj,0),
+                            planned_date, COALESCE(in_pipeline,0), post_scheduled_at,
+                            COALESCE(buffer_update_id,'')
+                     FROM planner_posts WHERE id=%s""", [pid])
+        zeile = c.fetchone()
+    except Exception:
+        # An older database without buffer_update_id.
+        c.execute("""SELECT COALESCE(status,''), COALESCE(linkedin_posted,0), COALESCE(is_oj,0),
+                            planned_date, COALESCE(in_pipeline,0), post_scheduled_at, ''
+                     FROM planner_posts WHERE id=%s""", [pid])
+        zeile = c.fetchone()
+    if not zeile:
+        return None
+    status, flagge, ist_oj, geplant, pipeline, angesetzt, buffer_id = zeile
+    # Read Buffer's rows the same way the page does (and set_post_date does).
+    gesendet_iso, wartet = '', False
+    try:
+        c.execute("""SELECT COALESCE(sent_at,'')
+                     FROM buffer_posts_posted WHERE planner_post_id=%s""", [pid])
+        for (stempel,) in c.fetchall():
+            if (stempel or '').strip():
+                gesendet_iso = gesendet_iso or stempel
+            else:
+                wartet = True
+    except Exception:
+        pass
+    return {
+        'id': pid, 'status': status, 'ist_oj': bool(ist_oj),
+        'planned_date': geplant, 'in_pipeline': 1 if pipeline else 0,
+        'buffer_id': (buffer_id or '').strip(), 'wartet': wartet,
+        'raus': ist_veroeffentlicht({'status': status, 'linkedin_posted': flagge},
+                                    _tag_aus_iso(gesendet_iso), wartet),
+        # post_scheduled_at is what we told Buffer (or Make) - either way the
+        # post would go out on its own, so it counts as "held".
+        'bei_buffer': bool(angesetzt) or wartet,
+    }
+
+
+def _buffer_hindernis(lage, token_da):
+    """Why a held post cannot be taken back from Buffer - or '' if it can.
+
+    Asked for every post first, before anything is deleted, so one refusal does
+    not leave the other posts half done."""
+    if not lage['bei_buffer']:
+        return ''
+    if lage['wartet'] and not lage['buffer_id']:
+        return ('#%s is at Buffer, but its Buffer id is not known here. '
+                'Delete it in Buffer first, then move it.' % lage['id'])
+    if lage['buffer_id'] and not token_da:
+        return 'No Buffer token is set up - #%s cannot be deleted at Buffer.' % lage['id']
+    return ''
+
+
+def _von_buffer_nehmen(c, lage, buffer_token):
+    """Delete a held post at Buffer, then forget the slot on our side too.
+
+    The same as "cancel" in the editor (cancel_linkedin in views.py), plus the
+    one thing that one leaves behind: Buffer's own unsent row, which would keep
+    showing the post as scheduled on its old day."""
+    if lage['buffer_id']:
+        from .views import _buffer_delete_post
+        try:
+            _buffer_delete_post(buffer_token, lage['buffer_id'])
+        except Exception as fehler:
+            # Already gone at Buffer is what we wanted anyway.
+            if 'not found' not in str(fehler).lower():
+                return 'Buffer did not delete #%s: %s' % (lage['id'], fehler)
+    try:
+        c.execute("""UPDATE planner_posts SET post_scheduled_at=NULL, buffer_update_id=NULL
+                     WHERE id=%s""", [lage['id']])
+    except Exception:
+        c.execute('UPDATE planner_posts SET post_scheduled_at=NULL WHERE id=%s', [lage['id']])
+    try:
+        c.execute("""UPDATE buffer_posts_posted SET planner_post_id=NULL
+                     WHERE planner_post_id=%s AND COALESCE(sent_at,'')=''""", [lage['id']])
+    except Exception:
+        pass
+    return ''
+
+
+def _iso_tag(roh):
+    """'2026-10-16' -> date, '' -> None. Anything else raises ValueError."""
+    roh = (roh or '').strip()
+    if not roh:
+        return None
+    return date(*[int(x) for x in roh.split('-')])
+
+
 @csrf_exempt
 @login_required
 def kalender_api(request):
@@ -952,6 +1051,111 @@ def kalender_api(request):
                                     status=400)
             c.execute('UPDATE planner_posts SET planned_date=%s WHERE id=%s', [neuer_tag, pid])
         return JsonResponse({'ok': True, 'bei_buffer': wartet})
+
+    if aktion == 'drop_post':
+        # Drag and drop (Ortrud, 30.09.2026): "I drag the post I want there onto
+        # the day, and the one already on it disappears into Review without a
+        # date." datum '' = dropped on "take it out of the calendar".
+        # weichen = the posts the page showed on that day; the page decides,
+        # because the page is what she was looking at.
+        try:
+            pid = int(daten.get('id'))
+            neuer_tag = _iso_tag(daten.get('datum'))
+            weichen = [int(x) for x in (daten.get('weichen') or [])]
+        except (TypeError, ValueError):
+            return JsonResponse({'error': 'Which post, and which day?'}, status=400)
+        weichen = [w for w in dict.fromkeys(weichen) if w != pid]
+        if len(weichen) > 10:
+            return JsonResponse({'error': 'Too many posts on one day'}, status=400)
+        with connection.cursor() as c:
+            lagen = {}
+            for i in [pid] + weichen:
+                lage = _post_lage(c, i)
+                # An OJ post is moved from the OJ calendar only, and that one is
+                # for administrators - the same rule as for looking at it.
+                if not lage or (lage['ist_oj'] and not request.user.is_superuser):
+                    return JsonResponse({'error': 'No such post: #%s' % i}, status=404)
+                if lage['raus']:
+                    return JsonResponse(
+                        {'error': '#%s has gone out - it cannot be moved or pushed aside' % i},
+                        status=400)
+                lagen[i] = lage
+            # The two halves are never mixed, not even by pushing aside.
+            if any(lagen[w]['ist_oj'] != lagen[pid]['ist_oj'] for w in weichen):
+                return JsonResponse({'error': 'OJ and planner posts do not share days'}, status=400)
+
+            bei = [i for i in [pid] + weichen if lagen[i]['bei_buffer']]
+            # Deleting at Buffer cannot be undone, so it is asked for, every time.
+            # The page asks before sending; this is for when it did not know.
+            if bei and not daten.get('buffer_ok'):
+                return JsonResponse({'frage': 'buffer', 'bei_buffer': bei}, status=409)
+
+            token = ''
+            if any(lagen[i]['buffer_id'] for i in bei):
+                from .views import _li_get_superuser_token
+                tok = _li_get_superuser_token() or {}
+                token = tok.get('buffer_token') or ''
+            for i in bei:
+                hindernis = _buffer_hindernis(lagen[i], bool(token))
+                if hindernis:
+                    return JsonResponse({'error': hindernis}, status=400)
+
+            vorher = [{'id': i,
+                       'planned_date': lagen[i]['planned_date'].isoformat()
+                                       if lagen[i]['planned_date'] else '',
+                       'status': lagen[i]['status'],
+                       'in_pipeline': lagen[i]['in_pipeline']}
+                      for i in [pid] + weichen]
+            geloescht = []
+            for i in bei:
+                fehler = _von_buffer_nehmen(c, lagen[i], token)
+                if fehler:
+                    return JsonResponse({'error': fehler, 'buffer_geloescht': geloescht,
+                                         'vorher': vorher}, status=502)
+                geloescht.append(i)
+
+            for w in weichen:
+                c.execute("""UPDATE planner_posts SET planned_date=NULL, status='Review',
+                                    in_pipeline=1 WHERE id=%s""", [w])
+            if neuer_tag is None:
+                c.execute("""UPDATE planner_posts SET planned_date=NULL, status='Review',
+                                    in_pipeline=1 WHERE id=%s""", [pid])
+            elif pid in bei:
+                # Its Buffer slot is gone; the content was already approved.
+                c.execute("""UPDATE planner_posts SET planned_date=%s, status='Ready',
+                                    in_pipeline=1 WHERE id=%s""", [neuer_tag, pid])
+            else:
+                c.execute('UPDATE planner_posts SET planned_date=%s WHERE id=%s',
+                          [neuer_tag, pid])
+        return JsonResponse({'ok': True, 'vorher': vorher, 'buffer_geloescht': geloescht})
+
+    if aktion == 'undo_drop':
+        # Puts back dates and statuses exactly as drop_post found them - but
+        # not a Buffer slot, and so not "Scheduled" either (see UNDO_STATUS).
+        eintraege = daten.get('vorher')
+        if not isinstance(eintraege, list) or not eintraege or len(eintraege) > 11:
+            return JsonResponse({'error': 'Nothing to undo'}, status=400)
+        with connection.cursor() as c:
+            neu = []
+            for e in eintraege:
+                try:
+                    i = int(e.get('id'))
+                    tag = _iso_tag(e.get('planned_date'))
+                    status = str(e.get('status') or '')
+                except (AttributeError, TypeError, ValueError):
+                    return JsonResponse({'error': 'Could not read what to undo'}, status=400)
+                if status == 'Scheduled':
+                    status = 'Ready'
+                if status not in UNDO_STATUS:
+                    return JsonResponse({'error': 'Unknown status: %s' % status}, status=400)
+                lage = _post_lage(c, i)
+                if not lage or (lage['ist_oj'] and not request.user.is_superuser):
+                    return JsonResponse({'error': 'No such post: #%s' % i}, status=404)
+                neu.append((tag, status, 1 if e.get('in_pipeline') else 0, i))
+            for zeile in neu:
+                c.execute("""UPDATE planner_posts SET planned_date=%s, status=%s, in_pipeline=%s
+                             WHERE id=%s""", list(zeile))
+        return JsonResponse({'ok': True})
 
     if aktion in ('hide_year', 'show_year'):
         # This is the whole of option C: one row per deviation, per year.

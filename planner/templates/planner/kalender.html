@@ -97,6 +97,18 @@
                                font-size:11px; line-height:13px; font-weight:400; cursor:pointer; vertical-align:1px; }
   .kal-zeile:hover .kal-anlass button.kal-weg, .kal-anlass button.kal-weg:focus { visibility:visible; }
   .kal-anlass button.kal-weg:hover { color:#c0392b; border-color:#c0392b; }
+  /* Drag and drop (30.09.2026). */
+  .kal-griff { color:#B8BFBE; margin-right:4px; font-size:12px; cursor:grab; flex:0 0 auto; }
+  .kal-post[draggable="true"], .kal-ohne li[draggable="true"] { cursor:grab; }
+  .kal-zeile.kal-ziel-ok { background:#E3F6F4; box-shadow:inset 0 0 0 2px #20B8B0; }
+  .kal-zeile.kal-ziel-nein { background:#FDECEA; box-shadow:inset 0 0 0 2px #c0392b; }
+  .kal-post.kal-weicht a { text-decoration:line-through; color:#B4530A; }
+  .kal-ablage { position:fixed; left:50%; bottom:18px; transform:translateX(-50%); z-index:60;
+                background:#fff; border:2px dashed #B9C2C0; color:#1d2b2d; padding:12px 22px;
+                border-radius:8px; font-size:13px; box-shadow:0 2px 10px rgba(0,0,0,.15);
+                max-width:90vw; text-align:center; }
+  .kal-ablage.aktiv { border-color:#20B8B0; background:#E3F6F4; }
+  .kal-ablage .info { display:block; font-size:12px; color:#005F68; margin-top:3px; min-height:1em; }
   .kal-toast { position:fixed; left:50%; bottom:22px; transform:translateX(-50%); z-index:50;
                background:#1d2b2d; color:#fff; font-size:13px; padding:9px 14px; border-radius:6px;
                box-shadow:0 2px 8px rgba(0,0,0,.25); }
@@ -251,6 +263,8 @@
 </style>
 
 <div id="kal-toast" class="kal-toast" role="status" hidden></div>
+{# Shown only while a post is being dragged: drop here = no date, back to Review. It also says what a drop on the day below the mouse would do. #}
+<div id="kal-ablage" class="kal-ablage" hidden>&#10554; Drop here to take it out of the calendar &ndash; no date, back to Review<span class="info" id="kal-ablage-info"></span></div>
 <div class="kal-wrap">
 
   <div class="kal-top">
@@ -312,7 +326,7 @@
         {% if t.posts %}
           {% for p in t.posts %}
           <div class="kal-zeile z-{{ p.zustand }}{% if t.wochenende %} we{% endif %}{% if t.heute %} heute{% endif %}"
-               data-monat="{{ t.monat }}" data-zustand="{{ p.zustand }}">
+               data-monat="{{ t.monat }}" data-zustand="{{ p.zustand }}" data-tag="{{ t.iso }}">
             <span class="kal-strich"></span>
             {% if forloop.first %}
               <span class="kal-datum"><b>{{ t.tag|stringformat:"02d" }}.</b> {{ t.wochentag }}</span>
@@ -321,8 +335,8 @@
             {% else %}
               <span class="kal-datum"></span><span class="kal-anlass"></span>
             {% endif %}
-            <span class="kal-post" title="{{ p.title }}">
-              <span class="nr">#{{ p.id }}</span>
+            <span class="kal-post" title="{{ p.title }}" data-post="{{ p.id }}" data-titel="{{ p.title }}"{% if p.verschiebbar %} draggable="true"{% if p.bei_buffer %} data-buffer="{{ p.send_time|default:'yes' }}"{% endif %}{% else %} data-raus="1"{% endif %}>
+              {% if p.verschiebbar %}<span class="kal-griff" aria-hidden="true" title="Drag onto another day">&#10303;</span>{% endif %}<span class="nr">#{{ p.id }}</span>
               <a href="{{ p.editor }}&amp;back={{ basis }}{{ jahr }}/">{{ p.title }}</a>
               {% if p.topic_name %}<span class="thema" style="background:{{ p.bg }};color:{{ p.fg }}">{{ p.topic_name }}</span>{% endif %}
               {% if p.ohne_medium %}<span class="ohne-medium" title="No image, GIF or video on this post yet - open it and add one.">&#9888; no image / video</span>{% endif %}
@@ -337,7 +351,7 @@
           {% endfor %}
         {% else %}
           <div class="kal-zeile z-{{ t.zustand }}{% if t.wochenende %} we{% endif %}{% if t.heute %} heute{% endif %}"
-               data-monat="{{ t.monat }}" data-zustand="{{ t.zustand }}">
+               data-monat="{{ t.monat }}" data-zustand="{{ t.zustand }}" data-tag="{{ t.iso }}">
             <span class="kal-strich"></span>
             <span class="kal-datum"><b>{{ t.tag|stringformat:"02d" }}.</b> {{ t.wochentag }}</span>
             <span class="kal-anlass"{% if t.anlass_titel %} title="{{ t.anlass_titel }}"{% endif %}>
@@ -394,8 +408,8 @@
          field at the end of its line.</p>
       <ul>
         {% for p in ohne_datum_offen %}
-        <li>
-          <span class="nr">#{{ p.id }}</span>
+        <li data-post="{{ p.id }}" data-titel="{{ p.title }}" draggable="true">
+          <span class="kal-griff" aria-hidden="true" title="Drag onto a day in the calendar">&#10303;</span><span class="nr">#{{ p.id }}</span>
           <a href="{{ p.editor }}&amp;back={{ basis }}{{ jahr }}/">{{ p.title }}</a>
           {% if p.topic_name %}<span class="thema" style="background:{{ p.bg }};color:{{ p.fg }}">{{ p.topic_name }}</span>{% endif %}
           <span class="wann">{{ p.status }}{% if p.created_at %} &middot; written {{ p.created_at|date:"d.m.Y" }}{% endif %}</span>
@@ -786,6 +800,153 @@
         .then(function () { location.reload(); });
     };
     setTimeout(function () { toast.hidden = true; }, 10000);
+  }
+
+  /* ---------- drag and drop (30.09.2026) ----------
+     Ortrud: "I drag the post I want there onto the day, and the one already on
+     it disappears into Review without a date." Rows carry their day
+     (data-tag), posts carry data-post; a published one carries data-raus and
+     blocks its day, one Buffer holds carries data-buffer. The server does the
+     work (drop_post) and hands back what it changed, for Undo. */
+  var ablage = document.getElementById('kal-ablage');
+  var ablageInfo = document.getElementById('kal-ablage-info');
+  var gezogen = null;
+
+  function tagText(iso) { return iso ? iso.slice(8, 10) + '.' + iso.slice(5, 7) + '.' : ''; }
+  function ablageText(text) { if (ablageInfo) ablageInfo.textContent = text; }
+  function zeilenAm(tag) { return document.querySelectorAll('.kal-zeile[data-tag="' + tag + '"]'); }
+  function titelVon(id) {
+    var el = document.querySelector('[data-post="' + id + '"]');
+    return el ? (el.dataset.titel || '') : '';
+  }
+  function lageAm(tag) {
+    var lage = { weichen: [], fest: false, buffer: [] };
+    zeilenAm(tag).forEach(function (zeile) {
+      zeile.querySelectorAll('[data-post]').forEach(function (p) {
+        if (!gezogen || p.dataset.post === gezogen.id) return;
+        if (p.dataset.raus) { lage.fest = true; return; }
+        lage.weichen.push(p.dataset.post);
+        if (p.dataset.buffer) lage.buffer.push(p.dataset.post);
+      });
+    });
+    return lage;
+  }
+  function markierungWeg() {
+    document.querySelectorAll('.kal-ziel-ok, .kal-ziel-nein, .kal-weicht').forEach(function (x) {
+      x.classList.remove('kal-ziel-ok', 'kal-ziel-nein', 'kal-weicht');
+    });
+  }
+  function bufferFrage(ids, g, datum) {
+    var zeilen = ids.map(function (i) {
+      var el = document.querySelector('[data-post="' + i + '"]');
+      var wann = el && el.dataset.buffer && el.dataset.buffer !== 'yes' ? ' (' + el.dataset.buffer + ')' : '';
+      return '#' + i + ' ' + titelVon(i) + wann;
+    });
+    return 'Delete at Buffer too?\n\n' + zeilen.join('\n') + '\n\n' +
+      (ids.length > 1 ? 'These are' : 'This is') + ' at Buffer and will be deleted there, so ' +
+      (ids.length > 1 ? 'they do' : 'it does') + ' not go out on ' + (ids.length > 1 ? 'their' : 'its') + ' own.\n' +
+      (ids.indexOf(String(g.id)) >= 0 && datum
+        ? '#' + g.id + ' goes to Ready on ' + tagText(datum) + ' - schedule it again from there.\n' : '') +
+      'Undo brings back the dates, not the Buffer slot.';
+  }
+
+  function ablegen(g, datum, weichen, bufferOk) {
+    sende({ action: 'drop_post', id: +g.id, datum: datum,
+            weichen: weichen.map(Number), buffer_ok: !!bufferOk })
+      .then(function (a) {
+        if (a.frage === 'buffer') {
+          if (!window.confirm(bufferFrage((a.bei_buffer || []).map(String), g, datum))) return;
+          ablegen(g, datum, weichen, true);
+          return;
+        }
+        if (a.error) { window.alert(a.error); location.reload(); return; }
+        var text = datum
+          ? '#' + g.id + ' now on ' + tagText(datum) +
+            (weichen.length ? ' · #' + weichen.join(', #') + ' to Review, no date' : '')
+          : '#' + g.id + ' taken out of the calendar · now Review, no date';
+        if (a.buffer_geloescht && a.buffer_geloescht.length) {
+          text += ' · deleted at Buffer: #' + a.buffer_geloescht.join(', #');
+        }
+        try {
+          sessionStorage.setItem('kalDrop', JSON.stringify({ text: text, vorher: a.vorher || [], jahr: JAHR }));
+        } catch (x) {}
+        location.reload();
+      });
+  }
+
+  document.addEventListener('dragstart', function (e) {
+    var q = e.target && e.target.closest ? e.target.closest('[data-post][draggable="true"]') : null;
+    if (!q) return;
+    var zeile = q.closest ? q.closest('.kal-zeile') : null;
+    gezogen = { id: q.dataset.post, buffer: q.dataset.buffer || '',
+                tag: zeile && zeile.dataset ? (zeile.dataset.tag || '') : '' };
+    try { e.dataTransfer.setData('text/plain', '#' + gezogen.id); e.dataTransfer.effectAllowed = 'move'; } catch (x) {}
+    if (ablage) { ablage.hidden = false; ablage.classList.remove('aktiv'); }
+    ablageText('');
+  });
+  document.addEventListener('dragend', function () {
+    gezogen = null;
+    markierungWeg();
+    if (ablage) { ablage.hidden = true; ablage.classList.remove('aktiv'); }
+  });
+  document.addEventListener('dragover', function (e) {
+    if (!gezogen || !e.target || !e.target.closest) return;
+    markierungWeg();
+    if (e.target.closest('#kal-ablage')) {
+      e.preventDefault();
+      ablage.classList.add('aktiv');
+      ablageText('#' + gezogen.id + ' leaves the calendar' + (gezogen.buffer ? ' - and is deleted at Buffer' : ''));
+      return;
+    }
+    if (ablage) ablage.classList.remove('aktiv');
+    var z = e.target.closest('.kal-zeile[data-tag]');
+    if (!z) { ablageText(''); return; }
+    var tag = z.dataset.tag, lage = lageAm(tag);
+    zeilenAm(tag).forEach(function (r) { r.classList.add(lage.fest ? 'kal-ziel-nein' : 'kal-ziel-ok'); });
+    if (lage.fest) { ablageText(tagText(tag) + ' has a published post - that day cannot be taken'); return; }
+    e.preventDefault();
+    lage.weichen.forEach(function (i) {
+      var el = document.querySelector('.kal-zeile [data-post="' + i + '"]');
+      if (el) el.classList.add('kal-weicht');
+    });
+    ablageText(tagText(tag) + ': #' + gezogen.id + ' goes here' +
+      (lage.weichen.length ? ' · #' + lage.weichen.join(', #') + ' to Review, no date' : '') +
+      ((lage.buffer.length || gezogen.buffer) ? ' · deleted at Buffer' : ''));
+  });
+  document.addEventListener('drop', function (e) {
+    if (!gezogen || !e.target || !e.target.closest) return;
+    var g = gezogen;
+    var aufAblage = !!e.target.closest('#kal-ablage');
+    var z = aufAblage ? null : e.target.closest('.kal-zeile[data-tag]');
+    if (!aufAblage && !z) return;
+    e.preventDefault();
+    var datum = aufAblage ? '' : z.dataset.tag;
+    var lage = aufAblage ? { weichen: [], fest: false, buffer: [] } : lageAm(datum);
+    if (lage.fest) return;
+    if (!aufAblage && datum === g.tag) return;          // back onto its own day
+    var bei = lage.buffer.slice();
+    if (g.buffer) bei.unshift(g.id);
+    if (bei.length && !window.confirm(bufferFrage(bei, g, datum))) return;
+    ablegen(g, datum, lage.weichen, bei.length > 0);
+  });
+
+  // After the reload: what the drop did, with Undo.
+  var abgelegt = null;
+  try {
+    abgelegt = JSON.parse(sessionStorage.getItem('kalDrop') || 'null');
+    sessionStorage.removeItem('kalDrop');
+  } catch (x) { abgelegt = null; }
+  var dropToast = document.getElementById('kal-toast');
+  if (abgelegt && dropToast && abgelegt.jahr === JAHR) {
+    dropToast.innerHTML = schuetzen(abgelegt.text) + '<button type="button">Undo</button>';
+    dropToast.hidden = false;
+    dropToast.querySelector('button').onclick = function () {
+      sende({ action: 'undo_drop', vorher: abgelegt.vorher }).then(function (a) {
+        if (a.error) { window.alert(a.error); }
+        location.reload();
+      });
+    };
+    setTimeout(function () { dropToast.hidden = true; }, 12000);
   }
 
   // Which month to open on is the server's decision now (?m=, else the
