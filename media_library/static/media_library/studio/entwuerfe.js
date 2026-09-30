@@ -51,7 +51,10 @@ function datumText(iso) {
   return isNaN(d) ? iso : `${TAGE[d.getDay()]} ${d.getDate()} ${MONATE[d.getMonth()]}`;
 }
 
-function aktuellerPost() { return CONFIG.postId || (CONFIG.postData && CONFIG.postData.id) || null; }
+// Django hands postId over as the text from the address ("140"), postData.id
+// as a number - the draft names give numbers. Compared as text, "140" never
+// matched 140, and the button stayed away.
+function aktuellerPost() { return Number(CONFIG.postId || (CONFIG.postData && CONFIG.postData.id)) || null; }
 
 async function oeffnen(e) {
   const ok = await modal(`Open “${esc(e.titel)}”?`,

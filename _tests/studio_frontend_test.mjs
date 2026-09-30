@@ -139,7 +139,9 @@ const server = http.createServer((req, res) => {
   }
   // The Studio opened from a post: the same page, with a post in its config.
   if (POST_SEITEN[url]) {
+    // Like Django: postId is the text from the address, postData.id a number.
     let html = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8')
+      .replace('"postId": null', '"postId": ' + JSON.stringify(String(POST_SEITEN[url].id)))
       .replace('"postData": null', '"postData": ' + JSON.stringify(POST_SEITEN[url]));
     // The Django template puts the post banner above the Studio; index.html has
     // it cut out. The draft posts need it - that is where the button goes.
