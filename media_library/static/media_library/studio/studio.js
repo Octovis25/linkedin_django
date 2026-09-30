@@ -15,6 +15,7 @@ import { buildContext } from './toolbar.js';
 import { mountShell, initUi } from './ui.js';
 import { initElemente, hexEcken, hexStempel, hexAlleWeg, hexFarbenNachziehen, isTextblock, netzVon, istMarke, spotStarten, spotEinstellen, rebuildTextblock, netzEinstellen, markenGroesse, isChecklist, isBadge, groesseSetzen, autoContrast, spotAlle, splitChecklist, rebuildChecklist, netzAktualisieren, importSvgText, frageZeichenFuer, frageDazu, buildTextblock, buildCheckList, addTextblock, addStempel, addMarker, addFragenNetz, addBadge } from './elements.js';
 import { initAnimBar, renderLayers, renderAnimBar, planeUiAufbau, layerLabel, oeffneEffekte } from './animbar.js';
+import { initEntwuerfe } from './entwuerfe.js';
 
 // Build rail, mode panels and the media panel from the declaration in
 // toolbar.js. This has to happen BEFORE anything below looks an element up by
@@ -1826,6 +1827,12 @@ boot('Library', () => {
   if (typeof initLibrary !== 'function') throw new Error('initLibrary missing (old library.js in the browser cache? Ctrl+F5)');
   initLibrary(editor);
 });
+// Prepared drafts: opened like a template - one step that Undo takes back.
+boot('Drafts', () => initEntwuerfe(async json => {
+  const ok = await ladeCanvas(json);
+  fit();
+  return ok;
+}));
 boot('Selection bar', () => renderSelBar());
 boot('Retouch panel', () => updateRetouchPanel());
 boot('Shell', () => initUi());

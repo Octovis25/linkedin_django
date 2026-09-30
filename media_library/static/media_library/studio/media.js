@@ -13,6 +13,7 @@ export const ANIM_TYPES = [
   'slideLeft', 'slideRight', 'slideUp', 'slideDown',
   'zoomIn', 'zoomOut', 'bounce',
   'pulse', 'float', 'spin', 'flash', 'wobble', 'shake',
+  'popIn', 'drawOn', 'grow',
 ];
 // Menschliche Beschriftung + Gruppierung (einmalig = spielt einmal, endlos = Schleife)
 export const ANIM_LABELS = {
@@ -23,7 +24,23 @@ export const ANIM_LABELS = {
   pulse: 'Pulse (loop)', float: 'Float (loop)',
   spin: 'Spin (loop)', flash: 'Flash (loop)',
   wobble: 'Wobble (loop)', shake: 'Shake (loop)',
+  popIn: 'Pop in', drawOn: 'Draw on', grow: 'Grow',
 };
+// How the Motion list is grouped. Every type in ANIM_TYPES appears exactly once.
+export const ANIM_GROUPS = [
+  ['', ['none']],
+  ['Come in', ['fadeIn', 'slideLeft', 'slideRight', 'slideUp', 'slideDown', 'zoomIn', 'popIn', 'drawOn', 'grow']],
+  ['Go out', ['fadeOut', 'zoomOut']],
+  ['Keep moving', ['bounce', 'pulse', 'float', 'spin', 'flash', 'wobble', 'shake']],
+];
+// Motions after which an element has "arrived" - only those can carry a
+// second step (anim.then) that keeps it moving until the end.
+export const ARRIVE_TYPES = new Set(['fadeIn', 'slideLeft', 'slideRight', 'slideUp', 'slideDown',
+                                     'zoomIn', 'popIn', 'drawOn', 'grow', 'bounce']);
+export const THEN_TYPES = ['float', 'pulse'];
+// Grow: which point of the element stays put while it grows out of it.
+export const GROW_FROM = { left: ['left', 'center'], right: ['right', 'center'],
+                           top: ['center', 'top'], bottom: ['center', 'bottom'] };
 // Motions that never end. They are driven by the wall clock instead of by a
 // progress ratio, which is why they need their own Start handling in applyAt().
 export const LOOP_TYPES = new Set(['pulse', 'float', 'spin', 'flash', 'wobble', 'shake']);
@@ -1238,6 +1255,25 @@ export function applyAt(o, t) {
     case 'slideDown':  o.set({ top: b.top - 220 * (1 - ease), opacity: b.opacity * ease }); break;
     case 'zoomIn':     o.set({ scaleX: b.scaleX * (0.3 + 0.7 * ease), scaleY: b.scaleY * (0.3 + 0.7 * ease), opacity: b.opacity * ease }); break;
     case 'zoomOut':    o.set({ scaleX: b.scaleX * (1.7 - 0.7 * ease), scaleY: b.scaleY * (1.7 - 0.7 * ease), opacity: b.opacity * ease }); break;
+    case 'popIn': {    // zoom in that overshoots a little and settles, around the centre
+      const mitte = o.getCenterPoint();
+      const s = 0.3 + 0.7 * zurueckFedern(p);
+      o.set({ scaleX: b.scaleX * s, scaleY: b.scaleY * s, opacity: b.opacity * Math.min(1, p * 2.5) });
+      o.setPositionByOrigin(mitte, 'center', 'center');
+      break;
+    }
+    case 'grow': {     // grows out of one side; that side stays where it is
+      const [ox, oy] = GROW_FROM[o.anim.from] || GROW_FROM.left;
+      const anker = o.getPointByOrigin(ox, oy);
+      const f = Math.max(0.001, ease);
+      o.set(ox !== 'center' ? { scaleX: b.scaleX * f } : { scaleY: b.scaleY * f });
+      o.setPositionByOrigin(anker, ox, oy);
+      break;
+    }
+    case 'drawOn':
+      if (canDraw(o)) zeichneBis(o, ease);
+      else o.set({ opacity: b.opacity * ease });   // nothing to draw: fade in
+      break;
     case 'bounce': {   // hüpft einmal rein
       const bo = Math.abs(Math.sin(p * Math.PI * 2)) * (1 - p);
       o.set({ top: b.top - 60 * bo, opacity: b.opacity * Math.min(1, p * 2) }); break;
@@ -1250,11 +1286,108 @@ export function applyAt(o, t) {
     case 'wobble': o.set({ angle: b.angle + 6 * Math.sin(tt * 4) }); break;
     case 'shake':  o.set({ left: b.left + 5 * Math.sin(tt * 25) }); break;
   }
+  // Then: once it has arrived, keep it gently moving until the end.
+  const then = o.anim.then;
+  if (then && ARRIVE_TYPES.has(type)) {
+    const nach = (t - delay - dur) / 1000 / _tempo;
+    if (nach > 0) {
+      if (then === 'float') o.set({ top: o.top + 5 * Math.sin(nach * 2.4) });
+      else if (then === 'pulse') {
+        const mitte = o.getCenterPoint(), k = 1 + 0.035 * Math.sin(nach * 3.2);
+        o.set({ scaleX: o.scaleX * k, scaleY: o.scaleY * k });
+        o.setPositionByOrigin(mitte, 'center', 'center');
+      }
+    }
+  }
   o.setCoords();
 }
 
+// easeOutBack: runs a little past 1 and comes back - the "landing" of Pop in.
+function zurueckFedern(x) {
+  const c = 1.70158;
+  return 1 + (c + 1) * Math.pow(x - 1, 3) + c * Math.pow(x - 1, 2);
+}
+
+/* ---- Draw on ----------------------------------------------------------------
+   A stroke is revealed from its start to its end by a dash pattern: the visible
+   length is one long dash, the rest one long gap. A dashed line keeps its own
+   pattern - it is repeated up to the visible length. Parts without a stroke (an
+   arrowhead, say) appear at the very end. Everything is put back afterwards.
+--------------------------------------------------------------------------- */
+function hatStrich(o) { return !!(o && o.stroke && o.strokeWidth > 0 && o.type !== 'textbox' && o.type !== 'text' && o.type !== 'i-text'); }
+export function canDraw(o) {
+  if (!o) return false;
+  if (o.type === 'group') return (o._objects || []).some(canDraw);
+  return hatStrich(o) && strichLaenge(o) > 0;
+}
+export function strichLaenge(o) {
+  const w = o.width || 0, h = o.height || 0;
+  switch (o.type) {
+    case 'line': return Math.hypot((o.x2 || 0) - (o.x1 || 0), (o.y2 || 0) - (o.y1 || 0));
+    case 'polyline': case 'polygon': {
+      const pt = o.points || []; let l = 0;
+      for (let i = 1; i < pt.length; i++) l += Math.hypot(pt[i].x - pt[i - 1].x, pt[i].y - pt[i - 1].y);
+      if (o.type === 'polygon' && pt.length > 2) l += Math.hypot(pt[0].x - pt[pt.length - 1].x, pt[0].y - pt[pt.length - 1].y);
+      return l;
+    }
+    case 'rect': return 2 * (w + h);
+    case 'circle': return 2 * Math.PI * (o.radius || 0);
+    case 'ellipse': {   // Ramanujan
+      const a = o.rx || 0, c = o.ry || 0;
+      return Math.PI * (3 * (a + c) - Math.sqrt((3 * a + c) * (a + 3 * c)));
+    }
+    case 'triangle': return w + 2 * Math.hypot(w / 2, h);
+    case 'path': {
+      try { return (fabric.util.getPathSegmentsInfo(o.path) || []).reduce((s, i) => s + (i.length || 0), 0); }
+      catch (e) { return 2 * (w + h); }
+    }
+    default: return 0;
+  }
+}
+// The dash pattern that shows exactly `s` of the stroke.
+export function strichBis(muster, s) {
+  const LANG = 1e6;
+  if (!(s > 0)) return [0, LANG];
+  if (!muster || !muster.length) return [s, LANG];
+  const m = muster.length % 2 ? muster.concat(muster) : muster;
+  if (!m.some(v => v > 0)) return [s, LANG];
+  const aus = []; let summe = 0, i = 0;
+  while (summe < s && aus.length < 4000) {
+    const v = Math.min(m[i % m.length], s - summe);
+    aus.push(v); summe += v; i++;
+  }
+  if (aus.length % 2) aus.push(LANG); else aus.push(0, LANG);
+  return aus;
+}
+function zeichneBis(o, p) {
+  if (o.type === 'group') { (o._objects || []).forEach(k => zeichneBis(k, p)); o.dirty = true; return; }
+  if (!hatStrich(o)) {
+    if (o.__zOpa === undefined) o.__zOpa = o.opacity;
+    o.set('opacity', o.__zOpa * Math.max(0, Math.min(1, (p - 0.85) / 0.15)));
+    return;
+  }
+  if (o.__zDash === undefined) {
+    o.__zDash = o.strokeDashArray || null;
+    o.__zOff = o.strokeDashOffset || 0;
+    o.__zLen = strichLaenge(o);
+  }
+  if (p >= 1) o.set({ strokeDashArray: o.__zDash, strokeDashOffset: o.__zOff });
+  else o.set({ strokeDashArray: strichBis(o.__zDash, o.__zLen * p), strokeDashOffset: 0 });
+}
+function zeichnenZurueck(o) {
+  if (o.type === 'group') { (o._objects || []).forEach(zeichnenZurueck); o.dirty = true; }
+  if (o.__zOpa !== undefined) { o.set('opacity', o.__zOpa); delete o.__zOpa; }
+  if (o.__zDash !== undefined) {
+    o.set({ strokeDashArray: o.__zDash, strokeDashOffset: o.__zOff });
+    delete o.__zDash; delete o.__zOff; delete o.__zLen;
+  }
+}
+
 function resetAnim(editor) {
-  editor.canvas.getObjects().forEach(o => { if (o._base) { o.set(o._base); o.setCoords(); delete o._base; } });
+  editor.canvas.getObjects().forEach(o => {
+    if (o._base) { o.set(o._base); o.setCoords(); delete o._base; }
+    zeichnenZurueck(o);
+  });
   editor.canvas.requestRenderAll();
 }
 
@@ -1340,7 +1473,7 @@ function animDuration(editor) {
     }
     if (o.anim) {
       max = Math.max(max, (startOf(o) + (o.anim.dur || 1200)) * _tempo + 300);
-      if (LOOP_TYPES.has(o.anim.type)) hasLoop = true;
+      if (LOOP_TYPES.has(o.anim.type) || o.anim.then) hasLoop = true;
     }
     // A late effect needs room after its Start, otherwise an effect set to
     // begin at 2.5 s never appears in a 4 s export.

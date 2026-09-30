@@ -143,13 +143,18 @@ function feld(titel) {
   return l;
 }
 
+const START_MAX = 10000;
+const sekunden = ms => (Math.round(+ms / 100) / 10).toFixed(1) + ' s';
 function startRegler(o) {
   const delWrap = feld('Start');
-  const del = schieber('', 0, 3000, 100, media.startOf(o), 'Start delay: when it begins');
+  // Up to 10 s: a video of 8-10 s has elements that start after 3 s (the old
+  // end of this slider), and touching the slider pulled them back to 3 s.
+  const del = schieber('', 0, Math.max(START_MAX, media.startOf(o)), 100, media.startOf(o), 'Start delay: when it begins');
+  const wert = el('span', 'anim-start-wert', sekunden(media.startOf(o)));
   // One slider, both systems. It used to write only into o.anim.delay, so
   // with Motion = none it silently did nothing at all.
-  del.oninput = () => media.setStart(o, del.value);
-  delWrap.appendChild(del);
+  del.oninput = () => { media.setStart(o, del.value); wert.textContent = sekunden(del.value); };
+  delWrap.append(del, wert);
   return delWrap;
 }
 
@@ -276,18 +281,36 @@ function motionZeile(o, idx) {
   const selRow = document.createElement('label'); selRow.className = 'anim-ctl';
   selRow.innerHTML = '<span>Motion</span>';
   const sel = document.createElement('select'); sel.className = 'field';
-  media.ANIM_TYPES.forEach(t => {
-    const op = document.createElement('option'); op.value = t;
-    op.textContent = media.ANIM_LABELS[t] || t;
-    if ((o.anim?.type || 'none') === t) op.selected = true; sel.appendChild(op);
-  });
+  bewegungsListe(sel, o.anim?.type || 'none', media.canDraw(o));
+  // From (Grow) and Then (every "come in" motion) - only where they apply.
+  const extra = el('span', 'anim-extra');
+  const extrasZeigen = () => {
+    extra.innerHTML = '';
+    const t = o.anim?.type;
+    if (t === 'grow') {
+      extra.append(extraWahl('From', 'anim-from', [['left', 'left'], ['right', 'right'], ['top', 'top'], ['bottom', 'bottom']],
+                             o.anim.from || 'left', v => { o.anim.from = v; }));
+    }
+    if (t && media.ARRIVE_TYPES.has(t)) {
+      extra.append(extraWahl('Then', 'anim-then', [['', '—'], ...media.THEN_TYPES.map(k => [k, k])],
+                             o.anim.then || '', v => { if (v) o.anim.then = v; else delete o.anim.then; }));
+    }
+  };
   sel.onchange = () => {
     const t = sel.value;
-    o.anim = (t && t !== 'none') ? { type: t, dur: o.anim?.dur || 1200 } : null;
+    // From and Then are kept when the motion changes, so trying out another
+    // motion does not lose them.
+    const alt = o.anim || {};
+    o.anim = (t && t !== 'none') ? { type: t, dur: alt.dur || 1200 } : null;
+    if (o.anim && alt.from) o.anim.from = alt.from;
+    if (o.anim && alt.then) o.anim.then = alt.then;
     media.setStart(o, media.startOf(o));   // eine Quelle fuer beide Systeme
+    extrasZeigen();
     editor.snapshot();
   };
   selRow.appendChild(sel);
+  selRow.appendChild(extra);
+  extrasZeigen();
   const name = document.createElement('span');
   name.className = 'anim-name'; name.textContent = layerLabel(o, idx + 1);
   selRow.appendChild(name);
@@ -314,11 +337,7 @@ function musterZeile(hexe) {
   const selRow = el('label', 'anim-ctl');
   selRow.innerHTML = '<span>Motion</span>';
   const sel = el('select', 'field hex-motion');
-  media.ANIM_TYPES.forEach(t => {
-    const op = el('option', null, media.ANIM_LABELS[t] || t); op.value = t;
-    if ((e.anim?.type || 'none') === t) op.selected = true;
-    sel.appendChild(op);
-  });
+  bewegungsListe(sel, e.anim?.type || 'none', media.canDraw(e));
   const starts = () => {
     const basis = media.startOf(e), folge = e.hexFolge === 'reihe';
     hexe.forEach((o, i) => media.setStart(o, basis + (folge ? i * 250 : 0)));
@@ -348,6 +367,34 @@ function musterZeile(hexe) {
   col.appendChild(zeit);
   row.append(th, col);
   return row;
+}
+
+// The Motion list, grouped (Come in / Go out / Keep moving). "Draw on" is
+// greyed out for an element without a line - unless it already has it.
+function bewegungsListe(sel, aktuell, zeichenbar) {
+  media.ANIM_GROUPS.forEach(([titel, typen]) => {
+    const ziel = titel ? el('optgroup') : sel;
+    if (titel) ziel.label = titel;
+    typen.forEach(t => {
+      const op = el('option', null, media.ANIM_LABELS[t] || t); op.value = t;
+      if (t === 'drawOn' && !zeichenbar && aktuell !== 'drawOn') {
+        op.disabled = true; op.title = 'Only for lines, arrows and outlines';
+      }
+      if (aktuell === t) op.selected = true;
+      ziel.appendChild(op);
+    });
+    if (titel) sel.appendChild(ziel);
+  });
+}
+// A small labelled drop-down next to the motion ("From", "Then").
+function extraWahl(titel, cls, optionen, wert, setzen) {
+  const l = el('label', 'anim-extra-item');
+  l.append(el('span', null, titel));
+  const s = el('select', 'field ' + cls);
+  optionen.forEach(([v, text]) => { const op = el('option', null, text); op.value = v; if (v === wert) op.selected = true; s.appendChild(op); });
+  s.onchange = () => { setzen(s.value); editor.snapshot(); };
+  l.append(s);
+  return l;
 }
 
 // ---- Building blocks shared by the effect rows ------------------------------

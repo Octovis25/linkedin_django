@@ -460,6 +460,7 @@ export const MEDIA_TABS = [
   { id: 'upload',  label: 'Upload' },
   { id: 'assets',  label: 'Assets' },
   { id: 'outputs', label: 'Outputs' },
+  { id: 'drafts',  label: 'Drafts' },
 ];
 
 export const MEDIA = {
@@ -487,6 +488,12 @@ export const MEDIA = {
       { t: 'out', out: 'Videos', label: 'Videos' },
     ]},
     { t: 'mount', id: 'output-grid', cls: 'lib-grid', placeholder: 'Loading…' },
+  ],
+  // Prepared drafts from Studio_Work/Drafts (see entwuerfe.js).
+  drafts: [
+    { t: 'hint', text: 'Prepared drafts from Nextcloud (Studio_Work/Drafts). Click one to open it on the canvas.' },
+    { t: 'btn', id: 'draft-reload', wide: true, icon: '🔄', label: 'Reload list' },
+    { t: 'mount', id: 'draft-grid', cls: 'draft-list', placeholder: 'Loading…' },
   ],
 };
 

@@ -29,12 +29,38 @@ const POST_SEITEN = {
   '/post-video':  { ...POST_GRUND, video: 'Planner/Videos/a.webm', video_url: '/api/a.webm', canvas_json: POST_LAYOUT },
   '/post-upload': { ...POST_GRUND, video: 'Planner/Videos/b.webm', video_url: '/api/b.webm' },
   '/post-bild':   { ...POST_GRUND, image: 'Planner/a.png', image_url: '/api/a.png', canvas_json: POST_LAYOUT },
+  // Posts without a design of their own - one has a prepared draft in Drafts.
+  '/post-entwurf':      { ...POST_GRUND, id: 140, image: 'Planner/m.png', image_url: '/api/m.png' },
+  '/post-ohne-entwurf': { ...POST_GRUND, id: 555, image: 'Planner/n.png', image_url: '/api/n.png' },
 };
+// Prepared drafts in Studio_Work/Drafts: the folder listing and the files.
+let ENTWURF_ABRUFE = 0;
+const ENTWURF_JSON = JSON.stringify({ version: 2, width: 500, height: 400, videoLength: 9, objects: [], previewDataUrl: '',
+  fabric: { version: '5.3.0', background: '#008591', objects: [
+    { type: 'textbox', text: 'Entwurf', left: 40, top: 40, width: 200, fontSize: 30, fill: '#ffffff', anim: { type: 'fadeIn', dur: 600 } },
+    { type: 'rect', left: 40, top: 120, width: 200, height: 20, fill: '#65FBFB', anim: { type: 'grow', dur: 800, from: 'left', then: 'float' }, startAt: 400 },
+  ] } });
 
 const server = http.createServer((req, res) => {
   const url = req.url.split('?')[0];
   // Stub the backend: every /api/ call answers with empty, well-formed JSON so
   // the boot steps run through instead of dying on a 404.
+  if (url === '/api/nc-browse' && /Drafts/.test(decodeURIComponent(req.url))) {
+    ENTWURF_ABRUFE++;
+    const d = 'Marketing & Design/Octotrial_Assets/Studio_Work/Drafts/';
+    const eintrag = n => ({ name: n, title: n.replace(/\.png$/, ''), url: '/api/nc-image?p=' + encodeURIComponent(d + n), nc_path: d + n });
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    return res.end(JSON.stringify({ items: [eintrag('post140_2026-10-05_hidden_workload.png'),
+      eintrag('post141_2026-10-12_not_more_reports.png'), eintrag('kaputt.png'), eintrag('post140_alt_preview.png')], subfolders: [] }));
+  }
+  if (url === '/api/nc-image' && /Drafts/.test(decodeURIComponent(req.url))) {
+    const p = new URL(req.url, 'http://x').searchParams.get('p') || '';
+    if (/\.json$/.test(p)) {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      return res.end(/kaputt/.test(p) ? '{"version":2, kaputt' : ENTWURF_JSON);
+    }
+    res.writeHead(404); return res.end();
+  }
   if (url.startsWith('/api/')) {
     // The Videos output folder answers with one entry whose file does not
     // exist, so the "broken video thumbnail" case is reproducible.
@@ -113,8 +139,14 @@ const server = http.createServer((req, res) => {
   }
   // The Studio opened from a post: the same page, with a post in its config.
   if (POST_SEITEN[url]) {
-    const html = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8')
+    let html = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8')
       .replace('"postData": null', '"postData": ' + JSON.stringify(POST_SEITEN[url]));
+    // The Django template puts the post banner above the Studio; index.html has
+    // it cut out. The draft posts need it - that is where the button goes.
+    if (/entwurf/.test(url)) {
+      html = html.replace('<div class="studio-wrap">', '<div class="post-banner"><div class="post-info"><strong>Post</strong></div>'
+        + '<div class="post-actions"><button type="button" class="tbtn">🖼 Background</button></div></div><div class="studio-wrap">');
+    }
     res.writeHead(200, { 'Content-Type': 'text/html' });
     return res.end(html);
   }
@@ -2632,6 +2664,306 @@ const dialogNachKlick = async (p, sel) => {
   }));
   await b.p.close();
 }
+
+// ---- Neue Bewegungen: Draw on, Grow, Pop in, Then ---------------------------
+await ruhig('Neue Bewegungen');
+const nb = await page.evaluate(async () => {
+  const m = await import('/media.js');
+  const F = window.fabric;
+  const ed = window._studioEditor;
+  ed.clearAll(); ed.setSize(400, 300);
+  ed.canvas.setBackgroundColor('#ffffff', () => {});
+  const r = {};
+  const setze = (o, typ, dur, start, extra = {}) => { o.anim = { type: typ, dur, ...extra }; m.setStart(o, start); return o; };
+  // Pixel eines Objekts für sich gerendert (Alpha an einer Stelle der Linie).
+  const alpha = (o, xr) => {
+    const c = o.toCanvasElement();
+    return c.getContext('2d').getImageData(Math.round(c.width * xr), Math.round(c.height / 2), 1, 1).data[3];
+  };
+
+  // A. Draw on - eine volle Linie
+  const linie = setze(new F.Line([20, 100, 220, 100], { stroke: '#00aaaa', strokeWidth: 6 }), 'drawOn', 1000, 0);
+  ed.canvas.add(linie);
+  m.applyAt(linie, 0);
+  r.linieStart = [alpha(linie, 0.1), alpha(linie, 0.9)];
+  m.applyAt(linie, 500);
+  r.linieMitte = [alpha(linie, 0.1), alpha(linie, 0.8), alpha(linie, 0.95)];
+  m.applyAt(linie, 1100);
+  r.linieEnde = [alpha(linie, 0.1), alpha(linie, 0.95), linie.strokeDashArray];
+
+  // gestrichelt: das eigene Muster bleibt, sichtbar sind ~87.5 % von 200
+  const strich = setze(new F.Line([20, 150, 220, 150], { stroke: '#00aaaa', strokeWidth: 4, strokeDashArray: [8, 8] }), 'drawOn', 1000, 0);
+  ed.canvas.add(strich);
+  m.applyAt(strich, 500);
+  const d = strich.strokeDashArray;
+  r.strichMitte = { anfang: d.slice(0, 4), sichtbar: d.slice(0, -1).reduce((s, v) => s + v, 0), gerade: d.length % 2 === 0 };
+  m.applyAt(strich, 1200);
+  r.strichEnde = strich.strokeDashArray;
+
+  // Pfeil: Linie zeichnet sich, die Spitze (ohne Strich) kommt am Ende
+  const spitze = new F.Polygon([{ x: 240, y: 60 }, { x: 225, y: 52 }, { x: 225, y: 68 }], { fill: '#00aaaa' });
+  const pfeil = setze(new F.Group([new F.Line([150, 60, 225, 60], { stroke: '#00aaaa', strokeWidth: 4 }), spitze]), 'drawOn', 1000, 0);
+  ed.canvas.add(pfeil);
+  m.applyAt(pfeil, 400);
+  r.pfeilMitte = { spitze: spitze.opacity, strich: pfeil._objects[0].strokeDashArray && pfeil._objects[0].strokeDashArray[0] };
+  m.applyAt(pfeil, 1100);
+  r.pfeilEnde = { spitze: spitze.opacity, strich: pfeil._objects[0].strokeDashArray };
+
+  // C. Was lässt sich zeichnen?
+  r.kann = {
+    linie: m.canDraw(linie), pfeil: m.canDraw(pfeil),
+    text: m.canDraw(new F.Textbox('Hi', { stroke: '#000', strokeWidth: 1 })),
+    flaeche: m.canDraw(new F.Rect({ width: 10, height: 10, fill: '#f00' })),
+    umriss: m.canDraw(new F.Rect({ width: 10, height: 10, fill: '', stroke: '#f00', strokeWidth: 2 })),
+  };
+  r.strichBis = [m.strichBis(null, 50), m.strichBis([8, 8], 20), m.strichBis([5], 12), m.strichBis([8, 8], 0)];
+
+  // D. Grow - die gewählte Seite bleibt stehen
+  const kante = (o, t, von, ursprung = {}) => {
+    const b = setze(new F.Rect({ left: 50, top: 200, width: 100, height: 20, fill: '#f60', strokeWidth: 0, ...ursprung }), 'grow', 1000, 0, { from: von });
+    ed.canvas.add(b);
+    m.applyAt(b, t);
+    const k = b.getBoundingRect(true, true);
+    ed.canvas.remove(b);
+    return { l: +k.left.toFixed(1), r: +(k.left + k.width).toFixed(1), o: +k.top.toFixed(1), u: +(k.top + k.height).toFixed(1),
+             w: +k.width.toFixed(1), h: +k.height.toFixed(1) };
+  };
+  r.wachsen = {
+    links: kante(null, 500, 'left'), rechts: kante(null, 500, 'right'), unten: kante(null, 500, 'bottom'),
+    mitteLinks: kante(null, 500, 'left', { originX: 'center', originY: 'center', left: 100, top: 210 }),
+    anfang: kante(null, 0, 'left'), ende: kante(null, 1000, 'left'),
+  };
+
+  // E. Pop in - schwingt über und landet, um die Mitte
+  const pop = setze(new F.Rect({ left: 250, top: 40, width: 60, height: 40, fill: '#08a', strokeWidth: 0 }), 'popIn', 1000, 0);
+  ed.canvas.add(pop);
+  const mitte0 = pop.getCenterPoint();
+  let maxS = 0, maxVersatz = 0;
+  for (let t = 0; t <= 1000; t += 25) {
+    m.applyAt(pop, t);
+    maxS = Math.max(maxS, pop.scaleX);
+    const c = pop.getCenterPoint();
+    if (t > 0) maxVersatz = Math.max(maxVersatz, Math.hypot(c.x - mitte0.x, c.y - mitte0.y));
+  }
+  m.applyAt(pop, 1000);
+  r.pop = { maxS, maxVersatz, ende: pop.scaleX, deckend: pop.opacity };
+
+  // F. Then - erst nach dem Ankommen
+  const schweb = setze(new F.Rect({ left: 300, top: 200, width: 40, height: 40, fill: '#0a8' }), 'fadeIn', 500, 200, { then: 'float' });
+  const ohne = setze(new F.Rect({ left: 300, top: 250, width: 40, height: 40, fill: '#0a8' }), 'fadeIn', 500, 200);
+  const puls = setze(new F.Rect({ left: 350, top: 200, width: 40, height: 40, fill: '#0a8' }), 'popIn', 500, 0, { then: 'pulse' });
+  const aus = setze(new F.Rect({ left: 350, top: 250, width: 40, height: 40, fill: '#0a8' }), 'fadeOut', 500, 0, { then: 'float' });
+  ed.canvas.add(schweb, ohne, puls, aus);
+  const tops = t => { [schweb, ohne, puls, aus].forEach(o => m.applyAt(o, t)); return [schweb.top, ohne.top, puls.scaleX, aus.top]; };
+  r.dann = { vorher: tops(650), nachher: tops(1300) };
+
+  // Die Wiedergabe setzt alles zurück - auch die Strichmuster.
+  const vl = document.getElementById('video-length'); const alt = vl ? vl.value : '';
+  if (vl) vl.value = 1;
+  m.previewAnimation(ed);
+  await new Promise(res => setTimeout(res, 150));
+  r.waehrend = m.effectsRunning();
+  const t0 = performance.now();
+  while (m.effectsRunning() && performance.now() - t0 < 8000) await new Promise(res => setTimeout(res, 50));
+  if (vl) vl.value = alt;
+  r.zurueck = { strich: strich.strokeDashArray, linie: linie.strokeDashArray, spitze: spitze.opacity,
+                reste: ed.canvas.getObjects().some(o => o.__zDash !== undefined || (o._objects || []).some(k => k.__zDash !== undefined || k.__zOpa !== undefined)),
+                schweb: schweb.top, pop: pop.scaleX };
+  return r;
+});
+pruefe('Draw on: vor dem Start ist nichts von der Linie zu sehen', nb.linieStart[0] === 0 && nb.linieStart[1] === 0, nb.linieStart);
+pruefe('Draw on: zur Hälfte ist der Anfang da, das Ende noch nicht', nb.linieMitte[0] > 200 && nb.linieMitte[1] > 200 && nb.linieMitte[2] === 0, nb.linieMitte);
+pruefe('Draw on: am Ende ist die ganze Linie da, ohne Strichmuster', nb.linieEnde[0] > 200 && nb.linieEnde[1] > 200 && !nb.linieEnde[2], JSON.stringify(nb.linieEnde));
+pruefe('Draw on gestrichelt: das eigene Muster 8/8 bleibt', JSON.stringify(nb.strichMitte.anfang) === '[8,8,8,8]', JSON.stringify(nb.strichMitte));
+pruefe('und sichtbar sind 87.5 % der Linie', Math.abs(nb.strichMitte.sichtbar - 175) < 0.5 && nb.strichMitte.gerade, nb.strichMitte.sichtbar);
+pruefe('am Ende steht wieder genau [8, 8]', JSON.stringify(nb.strichEnde) === '[8,8]', JSON.stringify(nb.strichEnde));
+pruefe('Pfeil: die Spitze wartet, bis die Linie fast fertig ist', nb.pfeilMitte.spitze === 0 && nb.pfeilMitte.strich > 0, JSON.stringify(nb.pfeilMitte));
+pruefe('Pfeil: am Ende sind Spitze und Linie ganz da', nb.pfeilEnde.spitze === 1 && !nb.pfeilEnde.strich, JSON.stringify(nb.pfeilEnde));
+pruefe('Draw on gibt es für Linie, Pfeil und Umriss - nicht für Text oder Fläche',
+  nb.kann.linie && nb.kann.pfeil && nb.kann.umriss && !nb.kann.text && !nb.kann.flaeche, JSON.stringify(nb.kann));
+pruefe('Das Strichmuster bis zu einer Länge stimmt',
+  JSON.stringify(nb.strichBis) === JSON.stringify([[50, 1e6], [8, 8, 4, 1e6], [5, 5, 2, 1e6], [0, 1e6]]), JSON.stringify(nb.strichBis));
+const W = nb.wachsen;
+pruefe('Grow von links: die linke Kante bleibt, die Breite wächst', Math.abs(W.links.l - 50) < 0.6 && Math.abs(W.links.w - 87.5) < 1, JSON.stringify(W.links));
+pruefe('Grow von rechts: die rechte Kante bleibt', Math.abs(W.rechts.r - 150) < 0.6 && W.rechts.w < 95, JSON.stringify(W.rechts));
+pruefe('Grow von unten: die Unterkante bleibt, die Breite nicht angetastet', Math.abs(W.unten.u - 220) < 0.6 && W.unten.h < 19 && Math.abs(W.unten.w - 100) < 0.6, JSON.stringify(W.unten));
+pruefe('Grow auch bei einem Element mit Mittelpunkt als Ursprung', Math.abs(W.mitteLinks.l - 50) < 0.6 && W.mitteLinks.w < 95, JSON.stringify(W.mitteLinks));
+pruefe('Grow: vor dem Start nicht zu sehen, am Ende volle Größe', W.anfang.w < 1 && Math.abs(W.ende.w - 100) < 0.6, JSON.stringify([W.anfang, W.ende]));
+pruefe('Pop in schwingt über (mehr als 103 %)', nb.pop.maxS > 1.03 && nb.pop.maxS < 1.2, nb.pop.maxS);
+pruefe('Pop in bleibt dabei in der Mitte stehen', nb.pop.maxVersatz < 0.5, nb.pop.maxVersatz);
+pruefe('Pop in landet genau auf der eigenen Größe', Math.abs(nb.pop.ende - 1) < 1e-6 && nb.pop.deckend === 1, JSON.stringify(nb.pop));
+pruefe('Then: vor dem Ankommen ruht das Element', nb.dann.vorher[0] === 200, JSON.stringify(nb.dann));
+pruefe('Then float: danach schwebt es', Math.abs(nb.dann.nachher[0] - 200) > 0.5, JSON.stringify(nb.dann.nachher));
+pruefe('ohne Then bleibt es stehen', nb.dann.nachher[1] === 250, nb.dann.nachher[1]);
+pruefe('Then pulse: danach atmet es', Math.abs(nb.dann.nachher[2] - 1) > 0.005, nb.dann.nachher[2]);
+pruefe('Then nach einem Ausblenden tut nichts', nb.dann.nachher[3] === 250, nb.dann.nachher[3]);
+pruefe('Die Vorschau lief', nb.waehrend === true);
+pruefe('Nach der Vorschau ist alles wie vorher (Strichmuster, Spitze, Lage, Größe)',
+  JSON.stringify(nb.zurueck.strich) === '[8,8]' && !nb.zurueck.linie && nb.zurueck.spitze === 1 && !nb.zurueck.reste
+  && nb.zurueck.schweb === 200 && nb.zurueck.pop === 1, JSON.stringify(nb.zurueck));
+
+// Die Motion-Zeile: Gruppen, From, Then, Start bis 10 s
+const nbUi = await page.evaluate(async () => {
+  const m = await import('/media.js');
+  const io = await import('/io.js');
+  const F = window.fabric;
+  const ed = window._studioEditor;
+  ed.clearAll(); ed.setSize(400, 300);
+  const linie = new F.Line([20, 50, 200, 50], { stroke: '#00aaaa', strokeWidth: 4 });
+  const text = new F.Textbox('Hallo', { left: 20, top: 100, width: 120, fontSize: 20 });
+  const balken = new F.Rect({ left: 20, top: 200, width: 100, height: 12, fill: '#f60' });
+  balken.anim = { type: 'fadeIn', dur: 800 }; m.setStart(balken, 6700);
+  ed.canvas.add(linie, text, balken);
+  (await import('/animbar.js')).renderAnimBar();
+  await new Promise(r => setTimeout(r, 300));
+  const zeile = o => document.querySelector('#anim-bar .anim-row[data-obj-idx="' + ed.realObjects().indexOf(o) + '"]');
+  const wahl = o => zeile(o).querySelector('.anim-ctl select');
+  const r = {};
+  r.gruppen = [...wahl(linie).querySelectorAll('optgroup')].map(g => g.label);
+  r.alleEinmal = [...wahl(linie).options].map(o => o.value).sort().join() === [...m.ANIM_TYPES].sort().join();
+  r.zeichnenLinie = wahl(linie).querySelector('option[value="drawOn"]').disabled;
+  r.zeichnenText = wahl(text).querySelector('option[value="drawOn"]').disabled;
+  // Start: 6.7 s steht da und lässt sich bis 10 s schieben
+  const st = zeile(balken).querySelectorAll('.anim-time-item input')[1];
+  r.start = { max: +st.max, wert: +st.value, text: zeile(balken).querySelector('.anim-start-wert')?.textContent };
+  st.value = 8200; st.dispatchEvent(new Event('input', { bubbles: true }));
+  r.startNeu = { startAt: balken.startAt, text: zeile(balken).querySelector('.anim-start-wert')?.textContent };
+  // Grow wählen -> From und Then erscheinen
+  const w = wahl(balken);
+  w.value = 'grow'; w.dispatchEvent(new Event('change', { bubbles: true }));
+  const von = zeile(balken).querySelector('select.anim-from'), dann = zeile(balken).querySelector('select.anim-then');
+  r.growFelder = { von: !!von, dann: !!dann };
+  von.value = 'right'; von.dispatchEvent(new Event('change', { bubbles: true }));
+  dann.value = 'float'; dann.dispatchEvent(new Event('change', { bubbles: true }));
+  r.growAnim = JSON.stringify(balken.anim);
+  // Pop in: From verschwindet, Then bleibt, From wird aufgehoben
+  w.value = 'popIn'; w.dispatchEvent(new Event('change', { bubbles: true }));
+  r.pop = { von: !!zeile(balken).querySelector('select.anim-from'), dann: zeile(balken).querySelector('select.anim-then')?.value, anim: JSON.stringify(balken.anim) };
+  // Fade out: kein Then
+  w.value = 'fadeOut'; w.dispatchEvent(new Event('change', { bubbles: true }));
+  r.aus = { dann: !!zeile(balken).querySelector('select.anim-then'), leer: getComputedStyle(zeile(balken).querySelector('.anim-extra')).display };
+  // Speichern und wieder öffnen: From und Then bleiben
+  w.value = 'grow'; w.dispatchEvent(new Event('change', { bubbles: true }));
+  const json = io.buildCanvasJson(ed, '');
+  await io.restoreCanvas(ed, json, { frisch: true });
+  const b2 = ed.realObjects().find(o => o.type === 'rect');
+  r.geladen = JSON.stringify({ type: b2.anim.type, from: b2.anim.from, then: b2.anim.then, start: b2.startAt });
+  return r;
+});
+pruefe('Die Motion-Liste ist gruppiert', JSON.stringify(nbUi.gruppen) === '["Come in","Go out","Keep moving"]', JSON.stringify(nbUi.gruppen));
+pruefe('und enthält jede Bewegung genau einmal', nbUi.alleEinmal);
+pruefe('Draw on ist für eine Linie wählbar, für Text ausgegraut', nbUi.zeichnenLinie === false && nbUi.zeichnenText === true);
+pruefe('Start zeigt 6.7 s und reicht bis 10 s', nbUi.start.max === 10000 && nbUi.start.wert === 6700 && nbUi.start.text === '6.7 s', JSON.stringify(nbUi.start));
+pruefe('Start lässt sich auf 8.2 s schieben', nbUi.startNeu.startAt === 8200 && nbUi.startNeu.text === '8.2 s', JSON.stringify(nbUi.startNeu));
+pruefe('Grow zeigt From und Then', nbUi.growFelder.von && nbUi.growFelder.dann, JSON.stringify(nbUi.growFelder));
+pruefe('From und Then landen in der Bewegung', /"from":"right"/.test(nbUi.growAnim) && /"then":"float"/.test(nbUi.growAnim), nbUi.growAnim);
+pruefe('Pop in: kein From-Feld, Then bleibt erhalten', !nbUi.pop.von && nbUi.pop.dann === 'float', JSON.stringify(nbUi.pop));
+pruefe('Fade out: kein Then, das leere Feld nimmt keinen Platz', !nbUi.aus.dann && nbUi.aus.leer === 'none', JSON.stringify(nbUi.aus));
+pruefe('Gespeichert und wieder geöffnet: From, Then und Start sind noch da',
+  nbUi.geladen === JSON.stringify({ type: 'grow', from: 'right', then: 'float', start: 8200 }), nbUi.geladen);
+await sauber('Neue Bewegungen');
+
+// ---- Vorbereitete Entwürfe (Reiter Drafts, Knopf im Post-Banner) ------------
+await ruhig('Entwürfe');
+ENTWURF_ABRUFE = 0;
+const ew = await page.evaluate(async () => {
+  const ed = window._studioEditor;
+  ed.clearAll(); ed.setSize(300, 200);
+  ed.addText('Vorher', { left: 20, top: 20 });
+  const warte = ms => new Promise(r => setTimeout(r, ms));
+  const r = { vorher: ed.realObjects().length };
+  document.querySelector('#media-tabs [data-media="drafts"]').click();
+  await warte(400);
+  const kacheln = () => [...document.querySelectorAll('#draft-grid .draft-tile')];
+  r.kacheln = kacheln().map(k => k.querySelector('b').textContent + ' | ' + k.querySelector('small').textContent);
+  r.kopf = [...document.querySelectorAll('#draft-grid .draft-head')].map(h => h.textContent);
+  r.sichtbar = !document.querySelector('[data-media-panel="drafts"]').hidden;
+  // Klick -> Rückfrage; Abbrechen lässt alles, wie es ist
+  kacheln()[0].click(); await warte(150);
+  r.frage = document.querySelector('.studio-modal h4')?.textContent;
+  [...document.querySelectorAll('.studio-modal button')].find(b => b.textContent === 'Cancel').click();
+  await warte(200);
+  r.nachAbbruch = ed.realObjects().length;
+  // Öffnen
+  kacheln()[0].click(); await warte(150);
+  [...document.querySelectorAll('.studio-modal button')].find(b => b.textContent === 'Open draft').click();
+  const t0 = performance.now();
+  while (ed.realObjects().length === r.vorher && performance.now() - t0 < 5000) await warte(50);
+  await warte(300);
+  r.geoeffnet = { n: ed.realObjects().length, groesse: [ed.width, ed.height], text: ed.realObjects().map(o => o.text).filter(Boolean),
+                  laenge: document.getElementById('video-length')?.value, status: document.getElementById('status-msg')?.textContent,
+                  anim: JSON.stringify(ed.realObjects().find(o => o.type === 'rect')?.anim) };
+  // Undo holt das Vorherige zurück
+  document.querySelector('[data-act="undo"]').click();
+  await warte(500);
+  r.nachUndo = ed.realObjects().map(o => o.text || o.type);
+  // Ein kaputter Entwurf: nichts wird angetastet
+  const vorKaputt = ed.realObjects().length;
+  kacheln().find(k => k.querySelector('b').textContent === 'Kaputt').click(); await warte(150);
+  [...document.querySelectorAll('.studio-modal button')].find(b => b.textContent === 'Open draft').click();
+  await warte(600);
+  r.kaputt = { n: ed.realObjects().length === vorKaputt, status: document.getElementById('status-msg')?.textContent };
+  // Noch einmal auf den Reiter: die Liste kommt aus dem Merker
+  document.querySelector('#media-tabs [data-media="upload"]').click();
+  document.querySelector('#media-tabs [data-media="drafts"]').click();
+  await warte(300);
+  r.abrufeNachZweitemMal = 'x';
+  document.getElementById('draft-reload').click();
+  await warte(300);
+  return r;
+});
+pruefe('Der Reiter Drafts zeigt die vorbereiteten Entwürfe (ohne Hilfsbilder)', ew.sichtbar && ew.kacheln.length === 3, JSON.stringify(ew.kacheln));
+pruefe('Titel, Post und Datum kommen aus dem Dateinamen', ew.kacheln.includes('Hidden workload | #140 · Mon 5 Oct'), JSON.stringify(ew.kacheln));
+pruefe('Ohne Post gibt es keine Rubrik "For this post"', !ew.kopf.includes('For this post'), JSON.stringify(ew.kopf));
+pruefe('Ein Klick fragt erst nach', /Open “/.test(ew.frage || ''), ew.frage);
+pruefe('Abbrechen lässt den Canvas, wie er ist', ew.nachAbbruch === ew.vorher, ew.nachAbbruch);
+pruefe('Öffnen legt den Entwurf auf den Canvas, in seiner Größe',
+  ew.geoeffnet.n === 2 && ew.geoeffnet.groesse.join('x') === '500x400' && ew.geoeffnet.text.includes('Entwurf'), JSON.stringify(ew.geoeffnet));
+pruefe('mit seinen Bewegungen', /"type":"grow"/.test(ew.geoeffnet.anim || '') && /"then":"float"/.test(ew.geoeffnet.anim || ''), ew.geoeffnet.anim);
+pruefe('und seiner Videolänge', ew.geoeffnet.laenge === '9', ew.geoeffnet.laenge);
+pruefe('Die Statuszeile sagt, was geöffnet wurde', /opened/.test(ew.geoeffnet.status || ''), ew.geoeffnet.status);
+pruefe('Undo holt den Canvas von vorher zurück', JSON.stringify(ew.nachUndo) === '["Vorher"]', JSON.stringify(ew.nachUndo));
+pruefe('Ein unlesbarer Entwurf ändert nichts und sagt es', ew.kaputt.n && /could not be opened/.test(ew.kaputt.status || ''), JSON.stringify(ew.kaputt));
+pruefe('Die Liste wird nur einmal geholt, "Reload list" holt sie neu', ENTWURF_ABRUFE === 2, ENTWURF_ABRUFE);
+
+// Aus einem Post geöffnet: der Knopf im Banner, der eigene Entwurf zuerst
+const ewPost = async (url) => {
+  const p = await browser.newPage({ viewport: { width: 1600, height: 950 } });
+  const fehlerHier = [];
+  p.on('pageerror', e => fehlerHier.push(e.message));
+  await p.goto(`http://127.0.0.1:${PORT}${url}`, { waitUntil: 'load' });
+  await p.waitForFunction(() => !!window._studioEditor, null, { timeout: 10000 });
+  await p.waitForTimeout(600);
+  const r = await p.evaluate(async () => {
+    const b = document.getElementById('open-draft-btn');
+    const r = { knopf: b ? b.textContent : null, imBanner: !!(b && b.closest('.post-banner .post-actions')) };
+    document.querySelector('#media-tabs [data-media="drafts"]').click();
+    await new Promise(res => setTimeout(res, 400));
+    const erste = document.querySelector('#draft-grid .draft-tile');
+    r.kopf = [...document.querySelectorAll('#draft-grid .draft-head')].map(h => h.textContent);
+    r.erste = erste ? erste.querySelector('b').textContent : '';
+    r.chip = !!(erste && erste.querySelector('.draft-chip'));
+    if (b) {
+      b.click(); await new Promise(res => setTimeout(res, 150));
+      [...document.querySelectorAll('.studio-modal button')].find(x => x.textContent === 'Open draft').click();
+      const ed = window._studioEditor, t0 = performance.now();
+      while (ed.realObjects().length === 0 && performance.now() - t0 < 5000) await new Promise(res => setTimeout(res, 50));
+      r.geladen = ed.realObjects().length;
+    }
+    return r;
+  });
+  r.fehler = fehlerHier;
+  await p.close();
+  return r;
+};
+const ep = await ewPost('/post-entwurf');
+pruefe('Post mit Entwurf: der Knopf "Open prepared draft" steht im Banner', ep.knopf === '✏️ Open prepared draft' && ep.imBanner, JSON.stringify(ep));
+pruefe('Im Reiter steht der Entwurf dieses Posts oben, markiert', ep.kopf[0] === 'For this post' && ep.erste === 'Hidden workload' && ep.chip, JSON.stringify(ep));
+pruefe('Der Knopf öffnet ihn', ep.geladen === 2, ep.geladen);
+const eo = await ewPost('/post-ohne-entwurf');
+pruefe('Post ohne Entwurf: kein Knopf', eo.knopf === null, JSON.stringify(eo));
+pruefe('Kein Fehler auf den Post-Seiten mit Entwürfen', !ep.fehler.length && !eo.fehler.length, [...ep.fehler, ...eo.fehler].join(' | '));
+await sauber('Entwürfe');
 
 // ---- Ausgabe --------------------------------------------------------------
 console.log('\n===== ERGEBNIS =====');

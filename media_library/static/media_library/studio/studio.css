@@ -517,3 +517,23 @@ main:has(.studio-wrap) { max-width:none; padding:0 1rem; margin-top:.5rem; }
 .ctl-out                { font-size:.68rem; color:var(--st-muted); min-width:34px; }
 .ctl-row .tl-slider     { flex:1 1 90px; min-width:70px; }
 .tbtn.on                { background:#e4f3f1; border-color:var(--octo-petrol,#008591); font-weight:700; }
+
+/* New motions: From (Grow) / Then next to the motion, start value in seconds. */
+.anim-ctl > .anim-extra { flex:0 0 auto; display:flex; gap:6px; align-items:center; }
+.anim-extra:empty       { display:none !important; }
+.anim-extra-item        { display:flex; align-items:center; gap:3px; color:#777; font-size:.64rem; }
+.anim-ctl .anim-extra select { flex:0 0 auto; width:68px; }
+.anim-start-wert        { flex:0 0 36px !important; font-size:.62rem; color:#777; text-align:right; font-variant-numeric:tabular-nums; }
+
+/* Drafts tab: prepared drafts from Studio_Work/Drafts (entwuerfe.js). */
+.draft-list             { display:flex; flex-direction:column; gap:6px; max-height:60vh; overflow-y:auto; margin-top:6px; }
+.draft-head             { font-size:.62rem; letter-spacing:.06em; text-transform:uppercase; color:#6b7a7c; margin:6px 0 0; }
+.draft-tile             { display:flex; gap:8px; align-items:center; text-align:left; width:100%; padding:5px;
+                          border:1px solid #e1e5e5; border-radius:6px; background:#fff; cursor:pointer; font:inherit; }
+.draft-tile:hover       { border-color:var(--octo-petrol,#008591); }
+.draft-tile img         { width:58px; height:58px; flex:0 0 58px; border-radius:4px; object-fit:cover; background:#eef1f2; }
+.draft-text             { display:flex; flex-direction:column; min-width:0; }
+.draft-text b           { font-size:.74rem; line-height:1.25; }
+.draft-text small       { font-size:.64rem; color:#8a9799; margin-top:2px; }
+.draft-chip             { align-self:flex-start; margin-top:3px; font-size:.6rem; font-weight:700; color:#005F68;
+                          background:#E3EEF0; border-radius:99px; padding:1px 7px; }

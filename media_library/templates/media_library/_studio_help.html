@@ -245,7 +245,7 @@
           <b>Every speed slider runs the same way: left slow 🐢, right fast 🐇.</b></li>
     </ul>
 
-    <h3 style="color:#0e7c86;margin-bottom:.2rem">Media panel (right, three tabs)</h3>
+    <h3 style="color:#0e7c86;margin-bottom:.2rem">Media panel (right, four tabs)</h3>
     <ul style="margin:.2rem 0 .9rem 1.1rem;padding:0">
       <li><b>Upload</b> – <b>📤 Upload image</b> or <b>📐 Import SVG</b>. Tick
           <b>insert as one object</b> to keep an SVG whole; without it ribbons, shapes and icons
@@ -257,6 +257,12 @@
       <li><b>Outputs</b> – your finished <b>Images / GIFs / Videos</b>. A video tile plays
           when you point at it. Click to reopen; <b>✕</b> deletes the output, and with it the
           file in Nextcloud.</li>
+      <li><b>Drafts</b> – drafts prepared outside the Studio (by Claude, for example), from the
+          Nextcloud folder <i>Studio_Work/Drafts</i>. Click one and confirm: it opens on the
+          canvas and every text, colour and motion can be changed. <b>Undo</b> brings back what
+          was there before. A draft whose name starts with <i>post140_</i> belongs to post #140:
+          opened from that post, the Studio shows <b>✏️ Open prepared draft</b> in the post
+          banner and lists it first under <b>For this post</b>.</li>
     </ul>
 
     <!-- Worked example -->
@@ -555,15 +561,19 @@
         <li><b>Build the post first</b> (image + text), exactly as above.</li>
         <li><b>Add movement.</b> In the bar under the canvas, group <b>Motion</b>: give an
             element a <b>Motion</b> (e.g. <i>Fade in</i>, <i>In from bottom</i>) and a
-            <b>Speed</b>. Repeat for other elements.</li>
+            <b>Speed</b>. Repeat for other elements. Also there: <i>Pop in</i> (lands with a
+            small overshoot), <i>Draw on</i> (a line or arrow draws itself – only for lines,
+            arrows and outlines) and <i>Grow</i> (grows out of one side; <b>From</b> picks the
+            side). After any motion that brings an element in, <b>Then</b> can keep it moving:
+            <i>float</i> or <i>pulse</i>, until the video ends.</li>
         <li><b>Add effects.</b> Mode <b>✨ Effects</b>: click a picture (e.g. <i>Network</i>,
             <i>Confetti</i>). It lands in a frame over the whole image – drag and size the
             frame to where the effect should be. Several frames on one picture are fine.</li>
         <li><b>Stagger the elements.</b> <b>Start</b> says when that element begins, in
-            milliseconds from the first frame. It applies to <b>Motion</b> and to
+            seconds from the first frame (up to 10 s; the value stands next to the slider). It applies to <b>Motion</b> and to
             <b>effect frames</b> alike, including the looping ones (<i>Pulse</i>, <i>Float</i>,
             <i>Spin</i>…): until its Start is reached the element simply rests. Give three
-            similar elements 0, 600 and 1200 and they come in one after another instead of
+            similar elements 0, 0.6 and 1.2 s and they come in one after another instead of
             moving in lockstep.</li>
         <li><b>Too fast? Use the tempo.</b> <b>Tempo</b>, top right in the same bar, changes
             <i>every</i> Speed and <i>every</i> Start at once – left slow 🐢, right fast 🐇.
