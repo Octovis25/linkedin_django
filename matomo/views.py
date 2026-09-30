@@ -2,11 +2,16 @@ from __future__ import annotations
 
 import datetime as dt
 
+from urllib.parse import urlsplit
+
 from django.conf import settings
 from django.contrib.auth.decorators import login_required
+from django.core.cache import cache
+from django.db import connection
+from django.shortcuts import get_object_or_404, redirect, render
 from django.http import JsonResponse
-from django.shortcuts import get_object_or_404, render
 from django.utils import timezone
+from django.views.decorators.http import require_POST
 
 from . import client
 from .models import MatomoLauf, MatomoSnapshot
@@ -33,6 +38,116 @@ WOCHENTAGE = ["Monday", "Tuesday", "Wednesday", "Thursday",
 
 MAX_TAGE = 400          # Schutz vor versehentlich riesigen Abfragen
 BESUCHS_LIMIT = 2000    # so viele Einzelbesuche holen wir höchstens
+
+
+# ── Orte, die nicht mitzählen (30.09.2026) ───────────────────────────────
+#
+# Ortrud: „Herzogenaurach und Wasserburg am Inn für die Statistik rausrechnen.“
+# Eine kleine Tabelle statt eines Django-Modells: Render führt beim Deploy kein
+# migrate aus, eine neue Modelltabelle käme dort nie an. Die Tabelle legt sich
+# beim ersten Aufruf selbst an, mit den beiden Orten als Startliste - genau
+# einmal; wer später alle entfernt, bekommt sie nicht wieder aufgedrängt.
+ORTE_START = ("Herzogenaurach", "Wasserburg am Inn")
+_orte_tabelle_da = False
+
+
+def _orte_tabelle():
+    global _orte_tabelle_da
+    if _orte_tabelle_da:
+        return
+    with connection.cursor() as c:
+        c.execute("SHOW TABLES LIKE 'matomo_orte_raus'")
+        if c.fetchone() is None:
+            c.execute("""CREATE TABLE matomo_orte_raus (
+                             id INT AUTO_INCREMENT PRIMARY KEY,
+                             stadt VARCHAR(120) NOT NULL UNIQUE,
+                             angelegt DATETIME DEFAULT CURRENT_TIMESTAMP
+                         ) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci""")
+            for ort in ORTE_START:
+                c.execute("INSERT INTO matomo_orte_raus (stadt) VALUES (%s)", [ort])
+    _orte_tabelle_da = True
+
+
+def ausgeschlossene_orte():
+    """Die Städte, deren Besuche nicht mitzählen, alphabetisch."""
+    try:
+        _orte_tabelle()
+        with connection.cursor() as c:
+            c.execute("SELECT stadt FROM matomo_orte_raus ORDER BY stadt")
+            return [r[0] for r in c.fetchall()]
+    except Exception as e:
+        print("matomo, excluded places:", e)
+        return []
+
+
+def ort_normal(stadt):
+    """Vergleichsform einer Stadt: ohne Groß/klein und doppelte Leerzeichen."""
+    return " ".join(str(stadt or "").split()).casefold()
+
+
+def orte_filtern(besuche, orte):
+    """(behalten, ausgelassen) - ein Besuch fällt raus, wenn seine Stadt in `orte` ist."""
+    raus = {ort_normal(o) for o in orte if ort_normal(o)}
+    if not raus:
+        return list(besuche), 0
+    behalten = [b for b in besuche if ort_normal(b.get("stadt")) not in raus]
+    return behalten, len(besuche) - len(behalten)
+
+
+class Besuche(list):
+    """Die Besuchsliste, dazu was beim Holen auffiel.
+
+    roh       - so viele Besuche hat Matomo geliefert (für „abgeschnitten“)
+    versteckt - so viele davon kamen aus einem ausgeschlossenen Ort
+    """
+    roh = 0
+    versteckt = 0
+
+
+def _alle_orte(request):
+    """?alle_orte=1 - die ausgeschlossenen Orte ausnahmsweise mitzählen."""
+    return request.GET.get("alle_orte") == "1"
+
+
+def _orte_kontext(request, besuche):
+    """Was die aufklappbare Liste „Left out of the statistics“ braucht."""
+    ohne = request.GET.copy()
+    ohne.pop("alle_orte", None)
+    mit = request.GET.copy()
+    mit["alle_orte"] = "1"
+    return {
+        "orte_liste": ausgeschlossene_orte(),
+        "orte_versteckt": getattr(besuche, "versteckt", 0),
+        "alle_orte": _alle_orte(request),
+        "orte_link_mit": "?" + mit.urlencode(),
+        "orte_link_ohne": "?" + ohne.urlencode(),
+        "orte_zurueck": request.get_full_path(),
+    }
+
+
+def _abgeschnitten(besuche):
+    return getattr(besuche, "roh", len(besuche)) >= BESUCHS_LIMIT
+
+
+@require_POST
+@login_required
+def orte_aendern(request):
+    """Einen Ort in die Liste aufnehmen oder wieder herausnehmen."""
+    stadt = " ".join((request.POST.get("stadt") or "").split())[:120]
+    aktion = request.POST.get("aktion")
+    if stadt and aktion in ("dazu", "weg"):
+        _orte_tabelle()
+        with connection.cursor() as c:
+            if aktion == "dazu":
+                c.execute("SELECT stadt FROM matomo_orte_raus")
+                if ort_normal(stadt) not in {ort_normal(r[0]) for r in c.fetchall()}:
+                    c.execute("INSERT INTO matomo_orte_raus (stadt) VALUES (%s)", [stadt])
+            else:
+                c.execute("DELETE FROM matomo_orte_raus WHERE stadt = %s", [stadt])
+    zurueck = request.POST.get("zurueck") or ""
+    if not zurueck.startswith("/webstats/"):
+        zurueck = "/webstats/"
+    return redirect(zurueck)
 
 
 # ── Zeitraum ─────────────────────────────────────────────────────────────
@@ -207,7 +322,7 @@ def _erstes(quelle, *namen):
     return None
 
 
-def _besuchsprotokoll(von, bis, limit=BESUCHS_LIMIT, cache_seconds=300):
+def _besuchsprotokoll(von, bis, limit=BESUCHS_LIMIT, cache_seconds=300, alle_orte=False):
     """Alle Einzelbesuche im Zeitraum, bewertet als Mensch oder Bot.
 
     Die Regel wird PRO BESUCHER angewandt, nicht pro Besuch: Wer sich bei
@@ -228,7 +343,7 @@ def _besuchsprotokoll(von, bis, limit=BESUCHS_LIMIT, cache_seconds=300):
                 flach.extend(wert)
         roh = flach
     if not isinstance(roh, list):
-        return []
+        return Besuche()
 
     besuche = []
     for b in roh:
@@ -262,6 +377,8 @@ def _besuchsprotokoll(von, bis, limit=BESUCHS_LIMIT, cache_seconds=300):
                 "typ": (a.get("type") or "action").lower(),
                 "url": a.get("url") or "",
                 "titel": a.get("pageTitle") or "",
+                # Sekunden auf der Seite; None, wenn Matomo nichts gemessen hat
+                "zeit": _zahl(a.get("timeSpent")),
             })
 
         erste = ""
@@ -302,7 +419,16 @@ def _besuchsprotokoll(von, bis, limit=BESUCHS_LIMIT, cache_seconds=300):
             "aktionen_liste": aktionen_liste,
             # dieser einzelne Besuch für sich betrachtet
             "besuch_auffaellig": int(dauer) == 0 and int(aktionen) <= 1,
+            # Matomo: war dieser Besucher schon einmal da?
+            "wiederkehrend": str(b.get("visitorType") or "").lower() == "returning",
         })
+
+    # Ausgeschlossene Orte VOR der Bot-Regel entfernen: Ein eigener Besuch soll
+    # auch nicht darüber entscheiden, ob ein Besucher als Mensch gilt.
+    roh_anzahl = len(besuche)
+    versteckt = 0
+    if not alle_orte:
+        besuche, versteckt = orte_filtern(besuche, ausgeschlossene_orte())
 
     # Pro Besucher entscheiden
     menschliche_besucher = {
@@ -314,7 +440,10 @@ def _besuchsprotokoll(von, bis, limit=BESUCHS_LIMIT, cache_seconds=300):
         b["nachtraeglich_mensch"] = b["besuch_auffaellig"] and not b["ist_bot"]
 
     besuche.sort(key=lambda b: b["sortier"], reverse=True)
-    return besuche
+    ergebnis = Besuche(besuche)
+    ergebnis.roh = roh_anzahl
+    ergebnis.versteckt = versteckt
+    return ergebnis
 
 
 def _haeufigkeit(besuche, felder, titel=None, sortiere_nach_name=False, ordnung=None):
@@ -523,7 +652,7 @@ def uebersicht(request):
     fehler, verlauf, kategorien, besuche = None, {}, {}, []
 
     try:
-        besuche = _besuchsprotokoll(von, bis)
+        besuche = _besuchsprotokoll(von, bis, alle_orte=_alle_orte(request))
     except Exception as e:
         fehler = str(e)
 
@@ -554,6 +683,7 @@ def uebersicht(request):
         "kategorien": dict(sorted(kategorien.items())),
         "anzahl_berichte": sum(len(v) for v in kategorien.values()),
         "letzter_lauf": MatomoLauf.objects.first(),
+        **_orte_kontext(request, besuche),
         "fehler": fehler,
     })
 
@@ -566,9 +696,9 @@ def besucher(request):
     if nur not in ("alle", "menschen", "bots"):
         nur = "alle"
 
-    fehler, alle = None, []
+    fehler, alle = None, Besuche()
     try:
-        alle = _besuchsprotokoll(von, bis)
+        alle = _besuchsprotokoll(von, bis, alle_orte=_alle_orte(request))
     except Exception as e:
         fehler = str(e)
 
@@ -640,7 +770,8 @@ def besucher(request):
         "tabellen": tabellen, "leute": leute,
         "raster": _stundenraster(besuche),
         "verlauf": _verlauf(besuche, von, bis),
-        "abgeschnitten": len(alle) >= BESUCHS_LIMIT,
+        "abgeschnitten": _abgeschnitten(alle),
+        **_orte_kontext(request, alle),
         "fehler": fehler,
     })
 
@@ -706,11 +837,13 @@ def protokoll(request):
     stunde = request.GET.get("stunde", "")
     stunde = stunde if stunde.isdigit() and 0 <= int(stunde) <= 23 else ""
 
-    fehler, besuche = None, []
+    fehler, besuche = None, Besuche()
     try:
-        besuche = _besuchsprotokoll(von, bis)
+        besuche = _besuchsprotokoll(von, bis, alle_orte=_alle_orte(request))
     except Exception as e:
         fehler = str(e)
+    orte = _orte_kontext(request, besuche)
+    abgeschnitten = _abgeschnitten(besuche)
 
     gesamt = len(besuche)
     bots = sum(1 for b in besuche if b["ist_bot"])
@@ -729,7 +862,8 @@ def protokoll(request):
         **_zeitraum_kontext(von, bis, hinweis),
         "besuche": besuche, "gesamt": gesamt, "bots": bots,
         "menschen": gesamt - bots, "angezeigt": len(besuche), "nur": nur,
-        "abgeschnitten": gesamt >= BESUCHS_LIMIT,
+        "abgeschnitten": abgeschnitten,
+        **orte,
         "fehler": fehler,
     })
 
@@ -906,9 +1040,13 @@ def ziele(request):
     regeln = getattr(settings, "MATOMO_ZIELE", None) or STANDARD_ZIELE
 
     fehler, besuche, vorbesuche = None, [], []
+    alle_orte = _alle_orte(request)
+    roh = Besuche()
     try:
-        besuche = [b for b in _besuchsprotokoll(von, bis) if not b["ist_bot"]]
-        vorbesuche = [b for b in _besuchsprotokoll(vor_von, vor_bis) if not b["ist_bot"]]
+        roh = _besuchsprotokoll(von, bis, alle_orte=alle_orte)
+        besuche = [b for b in roh if not b["ist_bot"]]
+        vorbesuche = [b for b in _besuchsprotokoll(vor_von, vor_bis, alle_orte=alle_orte)
+                      if not b["ist_bot"]]
     except Exception as e:
         fehler = str(e)
 
@@ -962,6 +1100,174 @@ def ziele(request):
         "vor_von": vor_von.isoformat(), "vor_bis": vor_bis.isoformat(),
         "herkunft": aufschluesselung("herkunft", "Referrer"),
         "einstieg": aufschluesselung("erste_seite", "Entry page"),
+        **_orte_kontext(request, roh),
+        "fehler": fehler,
+    })
+
+
+# ── Zeitleiste: Menschen und Seiten pro Monat (30.09.2026) ───────────────
+#
+# Ortrud: „eine grafische Übersicht, wie lange welche Seite, wie viele unique
+# Besucher, wie viele wiederkehren, und das pro Monat.“ Alles aus dem
+# Besuchsprotokoll, nur Menschen, ohne die ausgeschlossenen Orte.
+#
+# Render-Grenzen (512 MB, knappe Bandbreite): Ein Jahr Protokoll sind einige MB
+# JSON. Das Rohprotokoll wird dafür NICHT zwischengespeichert, nur das
+# Ergebnis - ein paar KB - für 30 Minuten. Die Seite selbst schickt nur diese
+# Zahlen; gezeichnet wird im Browser, ohne Bibliothek.
+
+ZEITLINIE_MONATE = 12      # höchstens so viele Monate auf einmal
+ZEITLINIE_STANDARD = 6     # ohne Angabe: die letzten sechs Monate
+ZEITLINIE_SEITEN = 12      # so viele Seiten als eigene Zeile, der Rest als „Other pages“
+ZEITLINIE_CACHE = 1800
+MONATSNAMEN = ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
+               "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+
+
+def monats_anfang(tag, zurueck=0):
+    """Der Erste des Monats, `zurueck` Monate vor dem von `tag`."""
+    jahr, monat = tag.year, tag.month - zurueck
+    while monat < 1:
+        monat += 12
+        jahr -= 1
+    return dt.date(jahr, monat, 1)
+
+
+def monate_zwischen(von, bis):
+    """['2026-04', '2026-05', ...] - jeder Monat, den von..bis berührt."""
+    raus, d = [], monats_anfang(von)
+    while d <= bis:
+        raus.append(f"{d.year}-{d.month:02d}")
+        d = monats_anfang(dt.date(d.year + (d.month == 12), d.month % 12 + 1, 1))
+    return raus
+
+
+def seiten_pfad(url):
+    """'/services/' aus 'https://octotrial.com/services?x=1#top' - eine Seite, ein Schlüssel."""
+    if not url:
+        return ""
+    pfad = urlsplit(str(url)).path or "/"
+    letzter = pfad.rsplit("/", 1)[-1]
+    if not pfad.endswith("/") and "." not in letzter:
+        pfad += "/"
+    return pfad
+
+
+def zeitlinie_rechnen(besuche, von, bis, seiten_max=ZEITLINIE_SEITEN):
+    """Menschen pro Monat (neu / wiederkehrend) und je Seite und Monat
+    Unique Besucher, wiederkehrende davon und die mittlere Zeit auf der Seite.
+
+    - unique: verschiedene visitorIds; fünf Besuche einer Person zählen einmal
+    - wiederkehrend: in diesem Monat mit einem Besuch, den Matomo als
+      „returning“ führt
+    - Zeit: timeSpent je Seitenaufruf. Die letzte Seite eines Besuchs hat kein
+      Ende, ihre Zeit wäre geraten - sie zählt nicht zum Durchschnitt.
+    """
+    monate = monate_zwischen(von, bis)
+    platz = {m: i for i, m in enumerate(monate)}
+    n = len(monate)
+    alle = [set() for _ in monate]
+    wieder = [set() for _ in monate]
+    seiten = {}
+
+    for b in besuche:
+        if b.get("ist_bot"):
+            continue
+        i = platz.get(str(b.get("datum", ""))[:7])
+        if i is None:
+            continue
+        wer = b.get("besucher") or f"ohne-kennung-{id(b)}"
+        kehrt_wieder = bool(b.get("wiederkehrend"))
+        alle[i].add(wer)
+        if kehrt_wieder:
+            wieder[i].add(wer)
+        aufrufe = [a for a in b.get("aktionen_liste") or []
+                   if a.get("typ") == "action" and a.get("url")]
+        for k, a in enumerate(aufrufe):
+            pfad = seiten_pfad(a["url"])
+            e = seiten.get(pfad)
+            if e is None:
+                e = seiten[pfad] = {"titel": a.get("titel") or "",
+                                    "alle": [set() for _ in monate],
+                                    "wieder": [set() for _ in monate],
+                                    "zeit": [0] * n, "gezaehlt": [0] * n}
+            e["alle"][i].add(wer)
+            if kehrt_wieder:
+                e["wieder"][i].add(wer)
+            zeit = a.get("zeit")
+            if zeit is not None and k < len(aufrufe) - 1:
+                e["zeit"][i] += int(zeit)
+                e["gezaehlt"][i] += 1
+
+    reihenfolge = sorted(seiten, key=lambda p: (-len(set().union(*seiten[p]["alle"])), p))
+    oben, rest = reihenfolge[:seiten_max], reihenfolge[seiten_max:]
+
+    def zeile(name, titel, eintraege):
+        u = [len(set().union(*(e["alle"][i] for e in eintraege))) for i in range(n)]
+        r = [len(set().union(*(e["wieder"][i] for e in eintraege))) for i in range(n)]
+        t = []
+        for i in range(n):
+            gezaehlt = sum(e["gezaehlt"][i] for e in eintraege)
+            t.append(round(sum(e["zeit"][i] for e in eintraege) / gezaehlt) if gezaehlt else 0)
+        return {"seite": name, "titel": titel, "u": u, "r": r, "t": t}
+
+    zeilen = [zeile(p, seiten[p]["titel"], [seiten[p]]) for p in oben]
+    if rest:
+        zeilen.append(zeile(f"Other pages ({len(rest)})", "", [seiten[p] for p in rest]))
+
+    return {
+        "monate": [{
+            "schluessel": m,
+            "name": f"{MONATSNAMEN[int(m[5:]) - 1]} {m[:4]}",
+            "kurz": MONATSNAMEN[int(m[5:]) - 1],
+            "alle": len(alle[i]), "wieder": len(wieder[i]),
+            "neu": len(alle[i]) - len(wieder[i]),
+        } for i, m in enumerate(monate)],
+        "seiten": zeilen,
+    }
+
+
+@login_required
+def zeitlinie(request):
+    """Menschen und Seiten pro Monat."""
+    heute = timezone.localdate()
+    hinweis = None
+    if request.GET.get("von") or request.GET.get("bis"):
+        von, bis, hinweis = _zeitfenster(request)
+    else:
+        bis = heute
+        von = monats_anfang(heute, ZEITLINIE_STANDARD - 1)
+    if len(monate_zwischen(von, bis)) > ZEITLINIE_MONATE:
+        von = monats_anfang(bis, ZEITLINIE_MONATE - 1)
+        hinweis = f"The timeline shows at most {ZEITLINIE_MONATE} months."
+
+    alle_orte = _alle_orte(request)
+    orte = ausgeschlossene_orte()
+    schluessel = "matomo:zeitlinie:%s:%s:%s:%s" % (
+        von.isoformat(), bis.isoformat(), int(alle_orte),
+        "|".join(ort_normal(o) for o in orte))
+    fehler, ergebnis = None, cache.get(schluessel)
+    if ergebnis is None:
+        try:
+            # cache_seconds=0: das Rohprotokoll eines Jahres bleibt nicht im Speicher.
+            besuche = _besuchsprotokoll(von, bis, cache_seconds=0, alle_orte=alle_orte)
+            ergebnis = zeitlinie_rechnen(besuche, von, bis)
+            ergebnis["versteckt"] = besuche.versteckt
+            ergebnis["abgeschnitten"] = _abgeschnitten(besuche)
+            del besuche
+            # Die Ortsliste steckt im Schlüssel: Ändert sie sich, wird neu gerechnet.
+            cache.set(schluessel, ergebnis, ZEITLINIE_CACHE)
+        except Exception as e:
+            fehler, ergebnis = str(e), {"monate": [], "seiten": [], "versteckt": 0,
+                                        "abgeschnitten": False}
+
+    zaehlhilfe = Besuche()
+    zaehlhilfe.versteckt = ergebnis.get("versteckt", 0)
+    return render(request, "matomo/zeitlinie.html", {
+        **_zeitraum_kontext(von, bis, hinweis),
+        "zeitlinie": {"monate": ergebnis["monate"], "seiten": ergebnis["seiten"]},
+        "abgeschnitten": ergebnis.get("abgeschnitten"),
+        **_orte_kontext(request, zaehlhilfe),
         "fehler": fehler,
     })
 

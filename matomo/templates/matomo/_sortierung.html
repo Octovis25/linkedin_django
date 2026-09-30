@@ -122,6 +122,12 @@ Alles im Browser, ohne Nachladen und ohne fremde Bibliothek.
         liste.appendChild(o);
       });
 
+      // A column can start on one value (Individual visitors: Type = Human,
+      // 30.09.2026). Only if that value is there - otherwise the table would
+      // open empty and look broken.
+      var vorwahl = kopf.cells[i] && kopf.cells[i].dataset ? kopf.cells[i].dataset.vorwahl : '';
+      if (vorwahl && (vorwahl in werte)) { liste.value = vorwahl; }
+
       liste.addEventListener('change', filtern);
       zelle.appendChild(liste);
       listen.push(liste);
