@@ -17,8 +17,30 @@ an empty element, styled like the topic select; the default is "no type".
 .pt-chip-company{background:#E3EEF0;color:#005F68}
 /* .post-nr: the post number (#152), so a post can be named in a conversation */
 .post-nr{display:inline-block;font:600 11px/1.6 ui-monospace,Consolas,monospace;color:#6c757d;background:#f1f3f4;border-radius:4px;padding:0 5px;white-space:nowrap;vertical-align:1px}
+/* ?focus=<id>: the post you come back to from the Studio lights up briefly */
+.post-focus, .post-focus > td { background:#FFF3E6 !important; transition:background .5s; }
 </style>
 <script>
+// Back from the Studio the address ends in ?focus=<id>: scroll to that post
+// (card or table row) and light it up for a moment, so you see where you were.
+// The parameter is then dropped, so a reload does not do it again.
+if (!window._postFokus) {
+  window._postFokus = true;
+  document.addEventListener('DOMContentLoaded', function () {
+    const fid = new URLSearchParams(location.search).get('focus');
+    if (!fid || !/^\d+$/.test(fid)) return;
+    const el = document.getElementById('post-' + fid) || document.getElementById('prow-' + fid);
+    try {
+      const adresse = new URL(location.href);
+      adresse.searchParams.delete('focus');
+      history.replaceState(null, '', adresse.pathname + adresse.search + adresse.hash);
+    } catch (e) {}
+    if (!el) return;
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    el.classList.add('post-focus');
+    setTimeout(function () { el.classList.remove('post-focus'); }, 2500);
+  });
+}
 const PT_LABELS = { short: '⚡ Short post', company: '🏢 Company post' };
 function ptMount(id) {
   const el = document.getElementById(id);

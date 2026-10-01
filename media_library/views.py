@@ -967,12 +967,15 @@ def studio_view(request):
             from urllib.parse import quote as _q
             with connection.cursor() as c:
                 rows = _safe(c, """SELECT id, title, image, content,
-                                          COALESCE(gif_nc_path,''), COALESCE(video_nc_path,'')
+                                          COALESCE(gif_nc_path,''), COALESCE(video_nc_path,''),
+                                          COALESCE(status,'')
                                      FROM planner_posts WHERE id=%s""", [post_id])
                 if rows:
                     r = rows[0]
+                    # status: leaving the Studio without a known origin goes to
+                    # the planner tab of this status (Ready -> /planner/ready/).
                     post_data = {'id': r[0], 'title': r[1] or '', 'image': r[2] or '', 'content': (r[3] or '')[:120],
-                                 'gif': r[4] or '', 'video': r[5] or ''}
+                                 'gif': r[4] or '', 'video': r[5] or '', 'status': r[6] or ''}
                     # What a file is, the file decides - not the column it sits
                     # in. A .gif parked in video_nc_path was announced as
                     # "Video" and as "no GIF" in the same breath, and the button
@@ -1141,14 +1144,30 @@ def studio_view(request):
 
     # The "back" target is the page we came from (the referrer). Do not jump back
     # into the Studio itself; fall back to the overview instead.
-    back_url = request.META.get('HTTP_REFERER', '') or ''
-    if not back_url or '/library/studio/' in back_url:
+    # The browser sends the referrer as a full address (https://host/planner/ready/),
+    # but leaving the Studio accepts only a path on this site - so every origin
+    # was thrown away and "back" always ended on the planner start page. Only
+    # the path (and query) of a referrer from this very host is kept.
+    from urllib.parse import urlparse as _urlparse
+    back_url = ''
+    try:
+        _ref = _urlparse(request.META.get('HTTP_REFERER', '') or '')
+        if _ref.path.startswith('/') and (not _ref.netloc or _ref.netloc == request.get_host()):
+            back_url = _ref.path + ('?' + _ref.query if _ref.query else '')
+    except ValueError:
+        back_url = ''
+    if '/library/studio/' in back_url:
+        back_url = ''
+    # The real origin, or '' - "back to the post" then picks the tab of the
+    # post's status instead of the overview.
+    back_herkunft = back_url
+    if not back_url:
         back_url = '/planner/uebersicht/'
 
     return render(request, 'media_library/studio.html', {
         'post_id': post_id, 'post_data': post_data, 'lib_data': lib_data,
         'nc_url': (nc_url_val or '').rstrip('/'),
-        'studio_config': studio_config, 'back_url': back_url,
+        'studio_config': studio_config, 'back_url': back_url, 'back_herkunft': back_herkunft,
         'brand_extra_colors_json': json.dumps(brand.get('extra_colors', []))})
 
 

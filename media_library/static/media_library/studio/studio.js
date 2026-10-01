@@ -352,6 +352,30 @@ async function _speichereAls(kind) {
 }
 
 // ---- Toolbar-Aktionen (data-act) -----------------------------------------
+// Where "back to the post" leads: the planner list the Studio was opened from,
+// with ?focus=<id> so the list scrolls to the post and lights it up. Without a
+// usable origin (opened from a link, say) the tab that fits the post's status.
+const PLANNER_LISTEN = [
+  [/^\/planner\/draft\//, 'Draft'], [/^\/planner\/pipeline\//, 'Review'],
+  [/^\/planner\/ready\//, 'Ready'], [/^\/planner\/scheduled\//, 'Scheduled'],
+  [/^\/planner\/archive\//, 'Archive'], [/^\/planner\/all\//, 'All'],
+  [/^\/planner\/uebersicht\//, 'Overview'], [/^\/planner\/?$/, 'Planner'],
+];
+const STATUS_LISTE = {
+  Draft: '/planner/draft/', Review: '/planner/pipeline/', Ready: '/planner/ready/',
+  Scheduled: '/planner/scheduled/', Posted: '/planner/archive/', Archive: '/planner/archive/',
+};
+export function zurueckZumPost(herkunft, postId, status) {
+  const mitFokus = pfad => pfad + '?focus=' + encodeURIComponent(postId);
+  const pfad = String(herkunft || '').split(/[?#]/)[0];
+  for (const [muster, name] of PLANNER_LISTEN) {
+    if (muster.test(pfad)) return { url: mitFokus(pfad), name };
+  }
+  const liste = STATUS_LISTE[status];
+  if (liste) return { url: mitFokus(liste), name: status === 'Posted' ? 'Archive' : status };
+  return { url: mitFokus('/planner/'), name: 'Planner' };
+}
+
 const actions = {
   'save-as':   async () => {
     const titleEl = document.getElementById('title-input');
@@ -622,26 +646,21 @@ const actions = {
       // canvas that is tied to nothing. Following the referrer answered
       // neither: the Studio opens in a tab of its own, so it landed on a second
       // copy of the very page the post is already open in.
+      // data-herkunft: the page the Studio was opened from, empty when unknown.
+      const herkunft = btn ? (btn.getAttribute('data-herkunft') || '') : url;
+      const ziel = zurueckZumPost(herkunft, postId, CONFIG.postData && CONFIG.postData.status);
       const wahl = await modal('Leave the Studio', 'Where do you want to go?', [
-        { label: '\u2190 To post #' + postId, value: 'post' },
+        { label: '\u2190 Back to ' + ziel.name + ' (#' + postId + ')', value: 'post' },
         { label: '\ud83c\udd95 Empty canvas', value: 'blank' },
         { label: 'Stay here', value: false },
       ]);
       if (!wahl) return;
-      // Back to the post means back to the list you came from. Without a
-      // `back` the post page falls back to the full overview - which is sorted
-      // newest first, so it opens on what is already published. That is never
-      // where someone who was just drawing wants to end up, so the overview is
-      // the one origin we refuse; anything else in the planner is kept.
-      const ueberblick = /\/planner\/uebersicht\//i.test(url);
-      const herkunft = (!ueberblick && /^\/planner\//i.test(url)) ? url : '/planner/';
-      // The empty canvas is also the only way to let go of the post: without
-      // post_id in the address nothing is attached any more, and the next save
-      // goes to the library.
-      url = (wahl === 'post')
-        ? ('/planner/?edit=' + encodeURIComponent(postId)
-           + '&back=' + encodeURIComponent(herkunft))
-        : '/library/studio/';
+      // Back to the post means back to the list you came from, with the post
+      // highlighted there - not into its edit dialog, which nobody leaving the
+      // Studio was asking for. The empty canvas is also the only way to let go
+      // of the post: without post_id in the address nothing is attached any
+      // more, and the next save goes to the library.
+      url = (wahl === 'post') ? ziel.url : '/library/studio/';
     }
     window.location.href = url;
   },

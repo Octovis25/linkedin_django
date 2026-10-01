@@ -2966,6 +2966,58 @@ const eo = await ewPost('/post-ohne-entwurf');
 pruefe('Post ohne Entwurf: kein Knopf', eo.knopf === null, JSON.stringify(eo));
 pruefe('Kein Fehler auf den Post-Seiten mit Entwürfen', !ep.fehler.length && !eo.fehler.length, [...ep.fehler, ...eo.fehler].join(' | '));
 await sauber('Entwürfe');
+// ---- Zurück zum Post --------------------------------------------------------
+// "Back to the post" used to end on the planner start page with the edit dialog
+// open: the referrer came as a full address and the Studio only took paths.
+// Now it goes to the list the Studio came from, with ?focus=<id>.
+console.log('\n--- Zurück zum Post ---');
+const zp = await browser.newPage({ viewport: { width: 1600, height: 950 } });
+const zpFehler = [];
+zp.on('pageerror', e => zpFehler.push(e.message));
+await zp.goto(`http://127.0.0.1:${PORT}/post-video`, { waitUntil: 'load' });
+await zp.waitForFunction(() => !!window._studioEditor, null, { timeout: 10000 });
+const zr = await zp.evaluate(async () => {
+  const { zurueckZumPost: z } = await import('/studio.js');
+  const r = {
+    ready: z('/planner/ready/', 152, 'Ready'),
+    mitQuery: z('/planner/ready/?von=x#oben', 152, 'Ready'),
+    review: z('/planner/pipeline/', 9, 'Ready'),
+    ueberblick: z('/planner/uebersicht/', 9, 'Ready'),
+    start: z('/planner/', 9, 'Draft'),
+    kalender: z('/planner/kalender/', 9, 'Review'),
+    ohne: z('', 9, 'Posted'),
+    unbekannt: z('https://fremd.example/planner/ready/', 9, 'Planned'),
+  };
+  // The leave dialog names where it goes: without a known origin (no
+  // data-herkunft) the planner, with one the list it names.
+  const verlassen = async () => {
+    document.querySelector('[data-act="go-back"]').click();
+    await new Promise(res => setTimeout(res, 200));
+    const knoepfe = [...document.querySelectorAll('.studio-modal button')];
+    const text = (knoepfe[0] || {}).textContent;
+    const bleiben = knoepfe.find(x => x.textContent === 'Stay here');
+    if (bleiben) bleiben.click();
+    await new Promise(res => setTimeout(res, 200));
+    return text;
+  };
+  r.knopf = await verlassen();
+  document.querySelector('[data-act="go-back"]').setAttribute('data-herkunft', '/planner/ready/');
+  r.knopfReady = await verlassen();
+  return r;
+});
+pruefe('Aus Ready: zurück nach Ready, Post im Fokus', zr.ready.url === '/planner/ready/?focus=152' && zr.ready.name === 'Ready', JSON.stringify(zr.ready));
+pruefe('Alte Abfrage und Anker der Herkunft fallen weg', zr.mitQuery.url === '/planner/ready/?focus=152', zr.mitQuery.url);
+pruefe('Die Herkunft zählt, nicht der Status (Review-Liste)', zr.review.url === '/planner/pipeline/?focus=9' && zr.review.name === 'Review', JSON.stringify(zr.review));
+pruefe('Übersicht als Herkunft bleibt Übersicht', zr.ueberblick.url === '/planner/uebersicht/?focus=9', zr.ueberblick.url);
+pruefe('Planner-Startseite als Herkunft bleibt Startseite', zr.start.url === '/planner/?focus=9', zr.start.url);
+pruefe('Andere Herkunft (Kalender): der Reiter zum Status', zr.kalender.url === '/planner/pipeline/?focus=9' && zr.kalender.name === 'Review', JSON.stringify(zr.kalender));
+pruefe('Keine Herkunft, Status Posted: Archive', zr.ohne.url === '/planner/archive/?focus=9' && zr.ohne.name === 'Archive', JSON.stringify(zr.ohne));
+pruefe('Fremde Adresse, unbekannter Status: Planner', zr.unbekannt.url === '/planner/?focus=9', zr.unbekannt.url);
+pruefe('Der Verlassen-Dialog sagt, wohin es geht', zr.knopf === '\u2190 Back to Planner (#7)', zr.knopf);
+pruefe('Aus Ready geöffnet: der Dialog nennt Ready', zr.knopfReady === '\u2190 Back to Ready (#7)', zr.knopfReady);
+pruefe('Kein Fehler beim Zurück', !zpFehler.length, zpFehler.join(' | '));
+await zp.close();
+await sauber('Zurück zum Post');
 
 // ---- Ausgabe --------------------------------------------------------------
 console.log('\n===== ERGEBNIS =====');
