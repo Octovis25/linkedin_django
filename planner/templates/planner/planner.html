@@ -276,7 +276,7 @@
           <td class="pt-title" style="border-left:3px solid {{ t.accent }}"
               title="Open this post in the tab of its status"
               onclick="oeffnePostImReiter({{ p.id }},'{{ p.title|escapejs }}','{{ p.content|escapejs }}','{{ p.status }}','{{ p.planned_date|date:"Y-m-d" }}','{{ p.comment|escapejs }}','{{ p.image|escapejs }}','{{ p.link|escapejs }}','{{ p.planned_time|time:"H:i" }}')">
-            {{ p.title|default:p.content|striptags|truncatechars:80 }}
+            <span class="post-nr" title="Post number">#{{ p.id }}</span> {{ p.title|default:p.content|striptags|truncatechars:80 }}
           </td>
           <td>{% if p.post_type == 'short' %}<span class="pt-chip pt-chip-short">⚡ Short</span> {% elif p.post_type == 'company' %}<span class="pt-chip pt-chip-company">🏢 Company</span> {% endif %}<span class="cat-pill" style="background:{{ t.accent }}">{{ t.name }}</span></td>
           <td><select class="pt-status" data-id="{{ p.id }}" onchange="setStatusInline(this,{{ p.id }})" onclick="event.stopPropagation()" style="background:{{ p.status_bg }};color:{{ p.status_fg }}">{% for s in status_list %}<option value="{{ s.code }}" {% if s.code == p.status %}selected{% endif %}>{{ s.label }}</option>{% endfor %}</select></td>
@@ -294,7 +294,7 @@
           <td class="pt-title" style="border-left:3px solid #888780"
               title="Open this post in the tab of its status"
               onclick="oeffnePostImReiter({{ p.id }},'{{ p.title|escapejs }}','{{ p.content|escapejs }}','{{ p.status }}','{{ p.planned_date|date:"Y-m-d" }}','{{ p.comment|escapejs }}','{{ p.image|escapejs }}','{{ p.link|escapejs }}','{{ p.planned_time|time:"H:i" }}')">
-            {{ p.title|default:p.content|striptags|truncatechars:80 }}
+            <span class="post-nr" title="Post number">#{{ p.id }}</span> {{ p.title|default:p.content|striptags|truncatechars:80 }}
           </td>
           <td>{% if p.post_type == 'short' %}<span class="pt-chip pt-chip-short">⚡ Short</span> {% elif p.post_type == 'company' %}<span class="pt-chip pt-chip-company">🏢 Company</span> {% endif %}<span class="cat-pill" style="background:#888780">Uncategorized</span></td>
           <td><select class="pt-status" data-id="{{ p.id }}" onchange="setStatusInline(this,{{ p.id }})" onclick="event.stopPropagation()" style="background:{{ p.status_bg }};color:{{ p.status_fg }}">{% for s in status_list %}<option value="{{ s.code }}" {% if s.code == p.status %}selected{% endif %}>{{ s.label }}</option>{% endfor %}</select></td>

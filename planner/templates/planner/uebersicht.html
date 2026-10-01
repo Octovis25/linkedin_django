@@ -24,6 +24,8 @@
   .ov-noimg   { width:40px; height:40px; border-radius:7px; background:#f4f5f7; display:flex; align-items:center;
                 justify-content:center; color:#c3c3c3; font-size:17px; }
   .ov-title   { font-weight:500; }
+  /* the post number (#152), so a post can be named in a conversation */
+  .post-nr    { display:inline-block; font:600 11px/1.6 ui-monospace,Consolas,monospace; color:#6c757d; background:#f1f3f4; border-radius:4px; padding:0 5px; white-space:nowrap; vertical-align:1px; }
   a.ov-title  { color:var(--octo-petrol,#008591); text-decoration:none; }
   a.ov-title:hover { color:var(--octo-orange,#F56E28); text-decoration:underline; }
   .ov-clk     { cursor:pointer; }
@@ -117,6 +119,7 @@
           {% endif %}
         </td>
         <td class="c-title">
+          <span class="post-nr" title="Post number">#{{ p.id }}</span>
           {% if p.link %}<a class="ov-title" href="{{ p.link }}" target="_blank" rel="noopener" title="Open published post">{{ p.title }} <span style="font-size:11px;color:#999">↗</span></a>
           {% else %}<a class="ov-title" href="/planner/?edit={{ p.id }}" title="Open post">{{ p.title }}</a>{% endif %}
         </td>

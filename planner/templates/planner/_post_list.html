@@ -214,6 +214,7 @@ document.addEventListener('DOMContentLoaded', function () {
     {% endif %}
     <div style="flex:1;min-width:0">
       <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:4px">
+        <span class="post-nr" title="Post number">#{{ p.id }}</span>
         {% if p.post_type == 'short' %}<span class="pt-chip pt-chip-short">⚡ Short</span>{% elif p.post_type == 'company' %}<span class="pt-chip pt-chip-company">🏢 Company</span>{% endif %}
         <span style="font-size:11px;padding:1px 8px;border-radius:99px;background:{{ p.bg }};color:{{ p.fg }}">{{ p.topic_name }}</span>
         {% if p.planned_date %}<span style="font-size:11px;color:#6c757d">📅 {{ p.planned_date|date:"d.m.Y" }}{% if p.planned_time %} 🕐 {{ p.planned_time|time:"H:i" }}{% endif %}</span>{% endif %}
