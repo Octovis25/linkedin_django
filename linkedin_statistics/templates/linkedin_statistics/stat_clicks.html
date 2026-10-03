@@ -46,6 +46,11 @@
 .clk .scroll{overflow-x:auto}
 .clk #clk-scatter svg{touch-action:none;cursor:crosshair;user-select:none}
 .clk #clk-scatter .pt.off{opacity:.18}
+.clk #clk-scatter .pt.hid{display:none}
+.clk .lgsel button{font:inherit;font-size:.78rem;color:var(--ink);background:#fff;border:1px solid var(--line);border-radius:14px;padding:2px 10px 2px 8px;cursor:pointer}
+.clk .lgsel button[aria-pressed="false"]{color:#9aa5a6;background:#f3f5f5;text-decoration:line-through}
+.clk .lgsel button[aria-pressed="false"] i{opacity:.3}
+.clk .lgsel button:hover{border-color:#9aa5a6}
 .clk #clk-scatter .pt.on{stroke:#161616;stroke-width:1.5}
 .clk #clk-sel{margin-top:8px}
 .clk #clk-sel .selhead{display:flex;gap:10px;align-items:center;flex-wrap:wrap;font-size:.84rem;margin-bottom:4px}
@@ -69,7 +74,7 @@
  <div class="card">
   <h2>1 · Clicks vs. impressions</h2>
   <p class="note">One mark = one post. Both axes on a log scale, line = fitted relation.</p>
-  <div class="legend" style="margin-top:6px"><span><i style="background:#0093A1"></i>Company post</span><span><i style="background:#EB6E08;border-radius:2px;transform:rotate(45deg) scale(.85)"></i>Short post</span><span><i style="background:#B7BFBD"></i>no type</span></div>
+  <div class="legend lgsel" id="clk-lg" style="margin-top:6px"><button type="button" data-f="company" aria-pressed="true"><i style="background:#0093A1"></i>Company post</button><button type="button" data-f="short" aria-pressed="true"><i style="background:#EB6E08;border-radius:2px;transform:rotate(45deg) scale(.85)"></i>Short post</button><button type="button" data-f="none" aria-pressed="true"><i style="background:#B7BFBD"></i>no type</button><span class="note">click to show or hide</span></div>
   <div id="clk-scatter"></div>
   <p class="note">Drag a box around points to list those posts.</p>
   <div id="clk-sel"></div>
@@ -169,7 +174,7 @@ function brush(svg) {
   if (!start) return;
   const q = pt(e), x0 = Math.min(start.x, q.x), x1 = Math.max(start.x, q.x), y0 = Math.min(start.y, q.y), y1 = Math.max(start.y, q.y);
   start = null;
-  const marks = [...svg.querySelectorAll('.pt')];
+  const marks = [...svg.querySelectorAll('.pt:not(.hid)')];
   if (x1 - x0 < 4 && y1 - y0 < 4) { box.remove(); box = null; marks.forEach(m => m.classList.remove('on', 'off')); showSelection([]); return; }
   const hit = marks.filter(m => { const x = +m.dataset.x, y = +m.dataset.y; return x >= x0 - 3 && x <= x1 + 3 && y >= y0 - 3 && y <= y1 + 3; });
   marks.forEach(m => { const on = hit.includes(m); m.classList.toggle('on', on); m.classList.toggle('off', !on); });
@@ -203,10 +208,22 @@ if (M) {
   // company first, short on top: the smaller series stays visible
   [...S].sort((a, b) => (a.fm === 'short') - (b.fm === 'short')).forEach(p => { const k = P.indexOf(p), j = ((k * 37) % 7 - 3) * 0.6, x = X(p.imp), y = Y(p.cl) + j, c = FCOL[p.fm] || '#B7BFBD';
    s += p.fm === 'short'
-    ? `<rect class="pt" data-i="${k}" data-x="${x.toFixed(1)}" data-y="${y.toFixed(1)}" x="${(x - 4.6).toFixed(1)}" y="${(y - 4.6).toFixed(1)}" width="9.2" height="9.2" rx="1.5" transform="rotate(45 ${x.toFixed(1)} ${y.toFixed(1)})" fill="${c}" fill-opacity=".9" stroke="#fff" stroke-width="1.5"/>`
-    : `<circle class="pt" data-i="${k}" data-x="${x.toFixed(1)}" data-y="${y.toFixed(1)}" cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="5" fill="${c}" fill-opacity=".75" stroke="#fff" stroke-width="1.5"/>`; });
+    ? `<rect class="pt" data-f="${p.fm || 'none'}" data-i="${k}" data-x="${x.toFixed(1)}" data-y="${y.toFixed(1)}" x="${(x - 4.6).toFixed(1)}" y="${(y - 4.6).toFixed(1)}" width="9.2" height="9.2" rx="1.5" transform="rotate(45 ${x.toFixed(1)} ${y.toFixed(1)})" fill="${c}" fill-opacity=".9" stroke="#fff" stroke-width="1.5"/>`
+    : `<circle class="pt" data-f="${p.fm || 'none'}" data-i="${k}" data-x="${x.toFixed(1)}" data-y="${y.toFixed(1)}" cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="5" fill="${c}" fill-opacity=".75" stroke="#fff" stroke-width="1.5"/>`; });
   s += '</svg>'; $('clk-scatter').innerHTML = s;
   brush($('clk-scatter').querySelector('svg'));
+  // legend: click a type to show or hide its points (at least one stays visible)
+  const lg = $('clk-lg');
+  lg.querySelectorAll('button').forEach(b => b.onclick = () => {
+   const on = b.getAttribute('aria-pressed') === 'true';
+   if (on && [...lg.querySelectorAll('button[aria-pressed="true"]')].filter(x => x.style.display !== 'none').length === 1) return;
+   b.setAttribute('aria-pressed', on ? 'false' : 'true');
+   const hidden = [...lg.querySelectorAll('button[aria-pressed="false"]')].map(x => x.dataset.f);
+   $('clk-scatter').querySelectorAll('.pt').forEach(m => m.classList.toggle('hid', hidden.includes(m.dataset.f)));
+   window.clkClearBrush();
+  });
+  const present = new Set(P.filter(p => p.imp > 0).map(p => p.fm || 'none'));
+  lg.querySelectorAll('button').forEach(b => { if (!present.has(b.dataset.f)) b.style.display = 'none'; });
   $('clk-scatter').querySelectorAll('.pt').forEach(el => { const p = P[+el.dataset.i]; hover(el, `<b>${p.d}</b> · ${p.fm ? FMT[p.fm] + ' post · ' : ''}${esc(NAME[p.tp])}${p.v ? ' · video' : ''}<br>${esc(p.t)}…<br>${p.imp} impressions · ${p.cl} clicks · expected ${p.ex}`); });
  })();
  // 2 model bars
