@@ -153,7 +153,8 @@ def clicks(request):
                      p['imp'], p['clicks'], p.get('expected'), p['title'][:90], p['topic'],
                      p['source'], p['id'], p['url'], p['format'], p['format_source']])
     ev_rows = [[p['date'].strftime('%d.%m.%y'), p['date'].isoformat(), p['imp'], p['clicks'],
-                p['title'][:90], p['source'], p['id'], p['url']] for p in events]
+                p['title'][:90], p['source'], p['id'], p['url'], p['format'], p['format_source']]
+               for p in events]
     data = {'rows': rows, 'events': ev_rows,
             'topics': [{'key': k, 'name': n} for k, n in clicks_topics.TOPICS],
             'formats': [{'key': k, 'name': n} for k, n in clicks_topics.FORMATS]}

@@ -44,6 +44,14 @@
 .clk .pill{display:inline-block;font-size:.72rem;padding:1px 7px;border-radius:9px;background:#e6f4f5;color:var(--petrol)}
 .clk .dv{font-weight:700}.clk .dv.up{color:var(--up)}.clk .dv.down{color:var(--down)}
 .clk .scroll{overflow-x:auto}
+.clk #clk-scatter svg{touch-action:none;cursor:crosshair;user-select:none}
+.clk #clk-scatter .pt.off{opacity:.18}
+.clk #clk-scatter .pt.on{stroke:#161616;stroke-width:1.5}
+.clk #clk-sel{margin-top:8px}
+.clk #clk-sel .selhead{display:flex;gap:10px;align-items:center;flex-wrap:wrap;font-size:.84rem;margin-bottom:4px}
+.clk #clk-sel button{font:inherit;font-size:.8rem;border:1px solid var(--line);background:#fff;border-radius:6px;padding:1px 8px;cursor:pointer}
+.clk #clk-sel table{font-size:.82rem}
+.clk #clk-sel th,.clk #clk-sel td{padding:4px 6px}
 .clk a.pl{color:inherit;text-decoration:none}.clk a.pl:hover{text-decoration:underline}
 #clk-tip{position:fixed;pointer-events:none;background:#161616;color:#fff;font-size:.78rem;padding:6px 8px;border-radius:6px;max-width:320px;display:none;z-index:999}
 </style>
@@ -63,6 +71,8 @@
   <p class="note">One mark = one post. Both axes on a log scale, line = fitted relation.</p>
   <div class="legend" style="margin-top:6px"><span><i style="background:#0093A1"></i>Company post</span><span><i style="background:#EB6E08;border-radius:2px;transform:rotate(45deg) scale(.85)"></i>Short post</span><span><i style="background:#B7BFBD"></i>no type</span></div>
   <div id="clk-scatter"></div>
+  <p class="note">Drag a box around points to list those posts.</p>
+  <div id="clk-sel"></div>
   <div class="answer">Reach alone explains <b>{{ explained_imp }} %</b> of the differences in clicks <span class="stat">R² = {{ r2|floatformat:2 }}</span> (log scale). Twice the impressions ≈ {{ double|floatformat:1 }}× the clicks.</div>
  </div>
  <div class="card">
@@ -97,11 +107,11 @@
 
 <div class="card">
  <h2 id="clk-lt"></h2>
- <p class="note"><b>Expected</b> = clicks a post usually gets with its impressions, date and format (video or not). <b>vs expected</b> = what the content added. Topic and post type can be changed right in the table; <span class="src">auto</span> = topic suggested from the text, <span class="src">suggested</span> = post type suggested from the picture, <span class="src">planner</span> = type from the Planner.</p>
+ <p class="note"><b>Expected</b> = clicks a post usually gets with its impressions, date and format (video or not). <b>vs expected</b> = what the content added. Topic and type (short / company post) can be changed right in the table; <span class="src">auto</span> = topic suggested from the text, <span class="src">suggested</span> = type suggested from the picture, <span class="src">planner</span> = type from the Planner.</p>
  <div class="filters">
   <label>At least <input type="number" id="clk-thr" value="3" min="0" max="50"> clicks</label>
   <label>Topic <select id="clk-top"><option value="">All</option></select></label>
-  <label>Post <select id="clk-fmt"><option value="">All</option><option value="short">Short</option><option value="company">Company</option><option value="-">no type</option></select></label>
+  <label>Type <select id="clk-fmt"><option value="">All</option><option value="short">Short</option><option value="company">Company</option><option value="-">no type</option></select></label>
   <label>Type <select id="clk-typ"><option value="">All</option><option value="1">Video</option><option value="0">No video</option></select></label>
   <label>From <input type="month" id="clk-von"></label>
   <label>To <input type="month" id="clk-bis"></label>
@@ -136,6 +146,48 @@ const P = DATA.rows.map(r => ({ d: r[0], date: new Date(r[1]), v: r[2], imp: r[3
   dv: r[5] == null ? null : r[4] - r[5], ctr: r[3] ? r[4] / r[3] * 100 : 0 }));
 const M = DATA.model;
 
+// Drag a box in the scatter: the posts inside are listed under the chart.
+function brush(svg) {
+ const NS = 'http://www.w3.org/2000/svg';
+ const pt = e => { const m = svg.getScreenCTM().inverse(), q = new DOMPoint(e.clientX, e.clientY).matrixTransform(m); return { x: q.x, y: q.y }; };
+ let start = null, box = null;
+ svg.addEventListener('pointerdown', e => {
+  if (e.button !== 0) return;
+  start = pt(e); svg.setPointerCapture(e.pointerId);
+  if (box) box.remove();
+  box = document.createElementNS(NS, 'rect');
+  box.setAttribute('fill', 'rgba(0,95,104,.08)'); box.setAttribute('stroke', '#005F68'); box.setAttribute('stroke-dasharray', '4 3');
+  svg.appendChild(box); e.preventDefault();
+ });
+ svg.addEventListener('pointermove', e => {
+  if (!start) return;
+  const q = pt(e);
+  box.setAttribute('x', Math.min(start.x, q.x)); box.setAttribute('y', Math.min(start.y, q.y));
+  box.setAttribute('width', Math.abs(q.x - start.x)); box.setAttribute('height', Math.abs(q.y - start.y));
+ });
+ svg.addEventListener('pointerup', e => {
+  if (!start) return;
+  const q = pt(e), x0 = Math.min(start.x, q.x), x1 = Math.max(start.x, q.x), y0 = Math.min(start.y, q.y), y1 = Math.max(start.y, q.y);
+  start = null;
+  const marks = [...svg.querySelectorAll('.pt')];
+  if (x1 - x0 < 4 && y1 - y0 < 4) { box.remove(); box = null; marks.forEach(m => m.classList.remove('on', 'off')); showSelection([]); return; }
+  const hit = marks.filter(m => { const x = +m.dataset.x, y = +m.dataset.y; return x >= x0 - 3 && x <= x1 + 3 && y >= y0 - 3 && y <= y1 + 3; });
+  marks.forEach(m => { const on = hit.includes(m); m.classList.toggle('on', on); m.classList.toggle('off', !on); });
+  showSelection(hit.map(m => P[+m.dataset.i]));
+ });
+ window.clkClearBrush = () => { if (box) { box.remove(); box = null; } svg.querySelectorAll('.pt').forEach(m => m.classList.remove('on', 'off')); showSelection([]); };
+}
+function showSelection(list) {
+ const el = $('clk-sel');
+ if (!list.length) { el.innerHTML = ''; return; }
+ const sum = (k) => list.reduce((a, p) => a + (p[k] || 0), 0), imp = sum('imp'), cl = sum('cl');
+ el.innerHTML = `<div class="selhead"><b>${list.length} post${list.length === 1 ? '' : 's'} selected</b><span class="note">${imp} impressions · ${cl} clicks · click rate ${imp ? (cl / imp * 100).toFixed(1) : '0.0'} %</span><button type="button" id="clk-sel-x">✕ clear</button></div>`
+  + '<div class="scroll"><table><tr><th>Date</th><th>First line of the post</th><th>Topic</th><th>Type</th><th class="n">Impr.</th><th class="n">Clicks</th><th class="n">Expected</th><th class="n">vs exp.</th></tr>'
+  + [...list].sort((a, b) => b.date - a.date).map(p => `<tr><td>${p.d}</td><td>${p.url ? `<a class="pl" href="${esc(p.url)}" target="_blank" rel="noopener">${esc(p.t)}…</a>` : esc(p.t) + '…'}</td><td>${esc(NAME[p.tp])}</td><td>${p.fm ? FMT[p.fm] : '–'}</td><td class="n">${p.imp}</td><td class="n"><b>${p.cl}</b></td><td class="n">${p.ex == null ? '–' : p.ex.toFixed(1)}</td><td class="n">${p.dv == null ? '–' : `<span class="dv ${p.dv >= 0 ? 'up' : 'down'}">${p.dv >= 0 ? '+' : '−'}${Math.abs(p.dv).toFixed(1)}</span>`}</td></tr>`).join('')
+  + '</table></div>';
+ $('clk-sel-x').onclick = () => window.clkClearBrush();
+}
+
 if (M) {
  // 1 scatter
  (() => { const S = P.filter(p => p.imp > 0), W = 560, H = 300, L = 46, B = 36, T = 10, R = 10, lx = Math.log10;
@@ -151,9 +203,10 @@ if (M) {
   // company first, short on top: the smaller series stays visible
   [...S].sort((a, b) => (a.fm === 'short') - (b.fm === 'short')).forEach(p => { const k = P.indexOf(p), j = ((k * 37) % 7 - 3) * 0.6, x = X(p.imp), y = Y(p.cl) + j, c = FCOL[p.fm] || '#B7BFBD';
    s += p.fm === 'short'
-    ? `<rect class="pt" data-i="${k}" x="${(x - 4.6).toFixed(1)}" y="${(y - 4.6).toFixed(1)}" width="9.2" height="9.2" rx="1.5" transform="rotate(45 ${x.toFixed(1)} ${y.toFixed(1)})" fill="${c}" fill-opacity=".9" stroke="#fff" stroke-width="1.5"/>`
-    : `<circle class="pt" data-i="${k}" cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="5" fill="${c}" fill-opacity=".75" stroke="#fff" stroke-width="1.5"/>`; });
+    ? `<rect class="pt" data-i="${k}" data-x="${x.toFixed(1)}" data-y="${y.toFixed(1)}" x="${(x - 4.6).toFixed(1)}" y="${(y - 4.6).toFixed(1)}" width="9.2" height="9.2" rx="1.5" transform="rotate(45 ${x.toFixed(1)} ${y.toFixed(1)})" fill="${c}" fill-opacity=".9" stroke="#fff" stroke-width="1.5"/>`
+    : `<circle class="pt" data-i="${k}" data-x="${x.toFixed(1)}" data-y="${y.toFixed(1)}" cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="5" fill="${c}" fill-opacity=".75" stroke="#fff" stroke-width="1.5"/>`; });
   s += '</svg>'; $('clk-scatter').innerHTML = s;
+  brush($('clk-scatter').querySelector('svg'));
   $('clk-scatter').querySelectorAll('.pt').forEach(el => { const p = P[+el.dataset.i]; hover(el, `<b>${p.d}</b> · ${p.fm ? FMT[p.fm] + ' post · ' : ''}${esc(NAME[p.tp])}${p.v ? ' · video' : ''}<br>${esc(p.t)}…<br>${p.imp} impressions · ${p.cl} clicks · expected ${p.ex}`); });
  })();
  // 2 model bars
@@ -186,7 +239,7 @@ function draw() {
  const thr = +$('clk-thr').value, tp = $('clk-top').value, fm = $('clk-fmt').value, typ = $('clk-typ').value, von = $('clk-von').value, bis = $('clk-bis').value, q = $('clk-such').value.trim().toLowerCase();
  const end = bis ? new Date(new Date(bis + '-01').setMonth(new Date(bis + '-01').getMonth() + 1)) : null;
  const S = P.filter(p => p.cl >= thr && (!tp || p.tp === tp) && (!fm || (fm === '-' ? !p.fm : p.fm === fm)) && (typ === '' || p.v === +typ) && (!von || p.date >= new Date(von + '-01')) && (!end || p.date < end) && (!q || p.t.toLowerCase().includes(q)));
- const cols = [['date', 'Date'], ['t', 'First line of the post'], ['tp', 'Topic'], ['fm', 'Post'], ['v', 'Video'], ['imp', 'Impressions', 'n'], ['cl', 'Clicks', 'n'], ['ex', 'Expected', 'n'], ['dv', 'vs expected', 'n'], ['ctr', 'Click rate', 'n']];
+ const cols = [['date', 'Date'], ['t', 'First line of the post'], ['tp', 'Topic'], ['fm', 'Type'], ['v', 'Video'], ['imp', 'Impressions', 'n'], ['cl', 'Clicks', 'n'], ['ex', 'Expected', 'n'], ['dv', 'vs expected', 'n'], ['ctr', 'Click rate', 'n']];
  const val = (p, k) => k === 'tp' ? NAME[p.tp] : k === 'fm' ? (p.fm || 'zz') : (p[k] == null ? -1e9 : p[k]);
  const so = [...S].sort((a, b) => { const x = val(a, sortKey), y = val(b, sortKey); return (x > y ? 1 : x < y ? -1 : 0) * sortDir; });
  $('clk-lt').textContent = `${M ? '5 · ' : ''}${S.length} posts with at least ${thr} clicks`;
@@ -208,11 +261,11 @@ function bindTopic(root) {
   } catch (e) { sel.disabled = false; alertLine('Could not save the topic: ' + e.message); }
  });
 }
-// [d, iso, imp, clicks, title, source, id, url]
-const EV = (DATA.events || []).map(r => ({ d: r[0], date: new Date(r[1]), imp: r[2], cl: r[3], t: r[4], src: r[5], id: r[6], url: r[7], tp: 'EV', ctr: r[2] ? r[3] / r[2] * 100 : 0 }));
+// [d, iso, imp, clicks, title, source, id, url, format, format source]
+const EV = (DATA.events || []).map(r => ({ d: r[0], date: new Date(r[1]), imp: r[2], cl: r[3], t: r[4], src: r[5], id: r[6], url: r[7], fm: r[8] || '', fsrc: r[9] || '', tp: 'EV', ctr: r[2] ? r[3] / r[2] * 100 : 0 }));
 if ($('clk-events')) {
- $('clk-events').innerHTML = '<tr><th>Date</th><th>First line of the post</th><th class="n">Impressions</th><th class="n">Clicks</th><th class="n">Click rate</th><th>Topic</th></tr>'
-  + EV.map(p => `<tr><td>${p.d}</td><td>${p.url ? `<a class="pl" href="${esc(p.url)}" target="_blank" rel="noopener">${esc(p.t)}…</a>` : esc(p.t) + '…'}</td><td class="n">${p.imp}</td><td class="n"><b>${p.cl}</b></td><td class="n">${p.ctr.toFixed(1)} %</td><td>${topicSelect(p)}</td></tr>`).join('');
+ $('clk-events').innerHTML = '<tr><th>Date</th><th>First line of the post</th><th class="n">Impressions</th><th class="n">Clicks</th><th class="n">Click rate</th><th>Type</th><th>Topic</th></tr>'
+  + EV.map(p => `<tr><td>${p.d}</td><td>${p.url ? `<a class="pl" href="${esc(p.url)}" target="_blank" rel="noopener">${esc(p.t)}…</a>` : esc(p.t) + '…'}</td><td class="n">${p.imp}</td><td class="n"><b>${p.cl}</b></td><td class="n">${p.ctr.toFixed(1)} %</td><td>${formatSelect(p)}</td><td>${topicSelect(p)}</td></tr>`).join('');
  bindTopic($('clk-events'));
 }
 ['clk-thr', 'clk-top', 'clk-fmt', 'clk-typ', 'clk-von', 'clk-bis', 'clk-such'].forEach(id => $(id).addEventListener('input', draw));
