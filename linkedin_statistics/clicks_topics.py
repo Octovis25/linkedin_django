@@ -88,52 +88,95 @@ HOOK_NAMES = {'q': 'question', 'n': 'number', 'w': '“We…”', 's': 'statemen
 _START = None
 
 
-def start_list():
+def _start():
+    """The list of 03.10.2026: {post_id: {'topic': key, 'format': short|company}}."""
     global _START
     if _START is None:
         path = os.path.join(os.path.dirname(__file__), 'topics_start.json')
         try:
             with open(path, encoding='utf-8') as f:
-                _START = {str(k): v for k, v in json.load(f).items() if v in TOPIC_NAMES}
+                _START = {str(k): v for k, v in json.load(f).items() if isinstance(v, dict)}
         except (OSError, ValueError):
             _START = {}
     return _START
 
 
+def start_list():
+    """post_id -> topic key, from the list of 03.10.2026."""
+    return {k: v['topic'] for k, v in _start().items() if v.get('topic') in TOPIC_NAMES}
+
+
+def start_formats():
+    """post_id -> 'short' | 'company', suggested on 03.10.2026 from the post
+    picture (light template with Octo = short, petrol = company). Before 2026
+    there were no short posts."""
+    return {k: v['format'] for k, v in _start().items() if v.get('format') in FORMAT_NAMES}
+
+
+# Post format: the two series of the posting rhythm (Planner field post_type).
+FORMATS = [('short', 'Short'), ('company', 'Company')]
+FORMAT_NAMES = dict(FORMATS)
+
 _TABLE_READY = False
 
 
 def ensure_table():
-    """The table is created on first use (Render runs no migrate on deploy)."""
+    """The table is created on first use (Render runs no migrate on deploy).
+    One row per post with a manual choice; either column may be empty."""
     global _TABLE_READY
     if _TABLE_READY:
         return
     with connection.cursor() as c:
         c.execute("""CREATE TABLE IF NOT EXISTS linkedin_post_topics (
-            post_id    VARCHAR(64) NOT NULL PRIMARY KEY,
-            topic      VARCHAR(8)  NOT NULL,
-            updated_at DATETIME    DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+            post_id     VARCHAR(64) NOT NULL PRIMARY KEY,
+            topic       VARCHAR(8)  NULL,
+            post_format VARCHAR(8)  NULL,
+            updated_at  DATETIME    DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
         )""")
+        # a table from the first version (topic only, NOT NULL)
+        c.execute("""SELECT COLUMN_NAME FROM information_schema.COLUMNS
+                     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'linkedin_post_topics'""")
+        spalten = {r[0].lower() for r in c.fetchall()}
+        if 'post_format' not in spalten:
+            c.execute("ALTER TABLE linkedin_post_topics ADD COLUMN post_format VARCHAR(8) NULL")
+            c.execute("ALTER TABLE linkedin_post_topics MODIFY topic VARCHAR(8) NULL")
     _TABLE_READY = True
 
 
-def manual_topics():
+def manual_choices():
+    """(post_id -> topic, post_id -> format) set in the Clicks table."""
     ensure_table()
     with connection.cursor() as c:
-        c.execute("SELECT post_id, topic FROM linkedin_post_topics")
-        return {str(p): t for p, t in c.fetchall() if t in TOPIC_NAMES}
+        c.execute("SELECT post_id, topic, post_format FROM linkedin_post_topics")
+        rows = c.fetchall()
+    topics = {str(p): t for p, t, f in rows if t in TOPIC_NAMES}
+    formats = {str(p): f for p, t, f in rows if f in FORMAT_NAMES}
+    return topics, formats
+
+
+def manual_topics():
+    return manual_choices()[0]
+
+
+def _set(post_id, column, value):
+    ensure_table()
+    with connection.cursor() as c:
+        c.execute(f"INSERT INTO linkedin_post_topics (post_id, {column}) VALUES (%s, %s) "
+                  f"ON DUPLICATE KEY UPDATE {column} = VALUES({column})", [post_id, value or None])
+        # nothing left to remember: the post falls back to list, Planner or rules
+        c.execute("DELETE FROM linkedin_post_topics WHERE post_id = %s "
+                  "AND topic IS NULL AND post_format IS NULL", [post_id])
 
 
 def set_topic(post_id, topic):
     """topic '' removes the manual choice - the post falls back to the list
     or the rules."""
-    ensure_table()
-    with connection.cursor() as c:
-        if not topic:
-            c.execute("DELETE FROM linkedin_post_topics WHERE post_id = %s", [post_id])
-        else:
-            c.execute("INSERT INTO linkedin_post_topics (post_id, topic) VALUES (%s, %s) "
-                      "ON DUPLICATE KEY UPDATE topic = VALUES(topic)", [post_id, topic])
+    _set(post_id, 'topic', topic)
+
+
+def set_format(post_id, fmt):
+    """fmt '' removes the manual choice - back to the Planner or the list."""
+    _set(post_id, 'post_format', fmt)
 
 
 EVENTS = 'EV'
@@ -157,3 +200,16 @@ def resolve(post_id, text, first_line, category, manual):
     if pid in start:
         return start[pid], 'checked'
     return suggest(text, first_line, category), 'auto'
+
+
+def resolve_format(post_id, manual, planner):
+    """(format or '', source): manual > Planner post_type > list of 03.10.2026."""
+    pid = str(post_id)
+    if pid in manual:
+        return manual[pid], 'manual'
+    if pid in planner:
+        return planner[pid], 'planner'
+    start = start_formats()
+    if pid in start:
+        return start[pid], 'suggested'
+    return '', ''

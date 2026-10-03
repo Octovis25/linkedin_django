@@ -249,6 +249,17 @@ def analyse(posts, topic_keys, seed=7, n_boot=2000):
         lr_len = lr_test(a, b)
         lr_len['n'] = len(idx)
 
+    # short vs company post (the two weekly series); unknown counts as company
+    fmt = np.array([1.0 if p.get('format') == 'short' else 0.0 for p in P])
+    res_format = None
+    if MIN_GROUP <= fmt.sum() <= n - MIN_GROUP:
+        m_fmt = nb_fit(y, np.c_[X_vid, fmt])
+        bf, sf = m_fmt['beta'][-1], m_fmt['se'][-1]
+        res_format = {'factor': float(math.exp(bf)), 'lo': float(math.exp(bf - 1.96 * sf)),
+                      'hi': float(math.exp(bf + 1.96 * sf)), 'p': lr_test(m_vid, m_fmt)['p'],
+                      'n_short': int(fmt.sum()),
+                      'n_known': sum(1 for p in P if p.get('format') in ('short', 'company'))}
+
     # reach on its own, log-log (clicks + 1), for the scatter line and R²
     ly = np.log(y + 1.0)
     slope, intercept = np.polyfit(lim, ly, 1)
@@ -288,6 +299,7 @@ def analyse(posts, topic_keys, seed=7, n_boot=2000):
                   'groups': len(topics_present), 'per_topic': per_topic},
         'hook': {'p': lr_hook['p'] if lr_hook else None},
         'length': lr_len,
+        'format': res_format,
         'expected': [float(e) for e in expected],
         'posts': P,
     }
