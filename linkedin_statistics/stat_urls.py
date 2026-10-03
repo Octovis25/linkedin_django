@@ -1,5 +1,5 @@
 from django.urls import path
-from . import stat_views
+from . import stat_clicks, stat_views
 app_name = 'linkedin_statistics'
 urlpatterns = [
     path('',                          stat_views.overview,       name='overview'),
@@ -8,4 +8,6 @@ urlpatterns = [
     path('posts/',                    stat_views.posts,          name='posts'),
     path('post-image/<str:post_id>/', stat_views.post_image,    name='post_image'),
     path('video/',                   stat_views.video_comparison, name='video'),
+    path('clicks/',                  stat_clicks.clicks,        name='clicks'),
+    path('clicks/topic/',            stat_clicks.clicks_topic,  name='clicks_topic'),
 ]

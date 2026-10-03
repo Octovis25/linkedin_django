@@ -1,0 +1,212 @@
+{% extends "base.html" %}
+{% block title %}Statistics – Clicks{% endblock %}
+{% block content %}
+<style>
+.clk{--ink:#161616;--muted:#5f6b6d;--line:#e3e7e7;--up:#0093A1;--down:#B9563A;--grey:#B7BFBD;--petrol:#005F68;display:grid;gap:16px;color:var(--ink)}
+.clk .top{display:flex;justify-content:space-between;align-items:flex-end;gap:12px;flex-wrap:wrap}
+.clk h1{font-size:1.5rem;margin:0;color:var(--petrol)}
+.clk h2{font-size:1.05rem;margin:0 0 4px;color:var(--petrol)}
+.clk .note{font-size:.82rem;color:var(--muted);margin:0}
+.clk .meta{font-size:.8rem;color:var(--muted);text-align:right}
+.clk .card{background:#fff;border:1px solid var(--line);border-radius:12px;padding:16px;min-width:0}
+.clk .two{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:16px}
+@media(max-width:900px){.clk .two{grid-template-columns:1fr}}
+.clk svg{display:block;width:100%;height:auto;overflow:visible}
+.clk .stat{display:inline-block;font-weight:700;background:#eef6f7;border-radius:6px;padding:1px 7px;font-size:.85rem}
+.clk .answer{border-left:3px solid var(--petrol);background:#f3f7f7;border-radius:6px;padding:9px 12px;font-size:.88rem;margin:10px 0 0}
+.clk .mods{display:grid;gap:9px;margin-top:10px}
+.clk .mods .r{display:grid;grid-template-columns:200px 1fr 56px;gap:10px;align-items:center;font-size:.86rem}
+.clk .mods .t{position:relative;height:18px;background:#eef1f1;border-radius:5px;overflow:hidden}
+.clk .mods .t b{position:absolute;left:0;top:0;bottom:0;background:var(--up)}
+.clk .mods .t i{position:absolute;top:0;bottom:0;background:repeating-linear-gradient(135deg,#9fd3d8 0 5px,#c9e8eb 5px 10px)}
+.clk .mods .t i.real{background:#7cc4cb}
+.clk .mods .v{text-align:right;font-variant-numeric:tabular-nums;font-weight:600}
+@media(max-width:600px){.clk .mods .r{grid-template-columns:120px 1fr 44px}}
+.clk table{width:100%;border-collapse:collapse;font-size:.86rem;margin:0}
+.clk th,.clk td{text-align:left;padding:7px 8px;border-bottom:1px solid var(--line);vertical-align:middle;background:none}
+.clk th{font-size:.74rem;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);font-weight:600;white-space:nowrap}
+.clk table.tests{margin-top:10px;font-size:.84rem}
+.clk table.list th{cursor:pointer;user-select:none}
+.clk table.list th.on{color:var(--petrol)}
+.clk td.n,.clk th.n{text-align:right;font-variant-numeric:tabular-nums}
+.clk .legend{display:flex;gap:14px;flex-wrap:wrap;font-size:.78rem;color:var(--muted)}
+.clk .legend i{display:inline-block;width:11px;height:11px;border-radius:50%;margin-right:5px;vertical-align:-1px}
+.clk #clk-bubbles text{pointer-events:none}
+.clk .ev{display:inline-block;font-size:.74rem;border-radius:9px;padding:1px 8px;font-weight:600}
+.clk .ev.clear{background:#e1f2f4;color:#00616b}.clk .ev.weak{background:#f0f2f2;color:#5f6b6d}.clk .ev.moderate{background:#fdf1e6;color:#9a5a1c}
+.clk .filters{display:flex;gap:8px;flex-wrap:wrap;align-items:center;font-size:.86rem;margin:8px 0 10px}
+.clk .filters label{display:flex;gap:6px;align-items:center;background:#fff;border:1px solid var(--line);border-radius:8px;padding:5px 9px;margin:0;font-weight:400}
+.clk .filters input[type=number],.clk .filters input[type=month],.clk .filters input[type=search],.clk .filters select{font:inherit;font-size:.86rem;border:1px solid var(--line);border-radius:6px;padding:2px 6px;background:#fff;width:auto;margin:0}
+.clk .filters input[type=number]{width:56px}.clk .filters input[type=search]{width:160px}
+.clk select.tp{font:inherit;font-size:.84rem;border:1px solid transparent;border-radius:6px;padding:1px 2px;background:transparent;width:auto;max-width:190px;margin:0}
+.clk select.tp:hover,.clk select.tp:focus{border-color:var(--line);background:#fff}
+.clk .src{font-size:.7rem;color:var(--muted);margin-left:2px}
+.clk .pill{display:inline-block;font-size:.72rem;padding:1px 7px;border-radius:9px;background:#e6f4f5;color:var(--petrol)}
+.clk .dv{font-weight:700}.clk .dv.up{color:var(--up)}.clk .dv.down{color:var(--down)}
+.clk .scroll{overflow-x:auto}
+.clk a.pl{color:inherit;text-decoration:none}.clk a.pl:hover{text-decoration:underline}
+#clk-tip{position:fixed;pointer-events:none;background:#161616;color:#fff;font-size:.78rem;padding:6px 8px;border-radius:6px;max-width:320px;display:none;z-index:999}
+</style>
+
+<div class="clk">
+<div class="top">
+ <div><h1>Clicks</h1><p class="note">Is a post getting more clicks because it reached more people, or because its content did unusually well for that reach?</p></div>
+ {% if res %}<div class="meta">Analysed posts: {{ res.n }} · Total clicks: {{ res.clicks }}<br>Period: {{ res.first|date:"M Y" }} – {{ res.last|date:"M Y" }} · Negative-binomial models{% if events.n %}<br>Events &amp; Seasons left out: {{ events.n }} posts (table at the end){% endif %}</div>{% endif %}
+</div>
+
+{% if not res %}
+<div class="card"><p class="note">Fewer than 15 posts with impressions – too few for the models. Upload the LinkedIn Excel under <i>Data</i> first.</p></div>
+{% else %}
+<div class="two">
+ <div class="card">
+  <h2>1 · Clicks vs. impressions</h2>
+  <p class="note">One dot = one post. Both axes on a log scale, line = fitted relation.</p>
+  <div id="clk-scatter"></div>
+  <div class="answer">Reach alone explains <b>{{ explained_imp }} %</b> of the differences in clicks <span class="stat">R² = {{ r2|floatformat:2 }}</span> (log scale). Twice the impressions ≈ {{ double|floatformat:1 }}× the clicks.</div>
+ </div>
+ <div class="card">
+  <h2>2 · Does topic add explanatory value?</h2>
+  <p class="note">Share of the differences between posts explained, model by model.</p>
+  <div class="mods" id="clk-mods"></div>
+  <table class="tests">
+   <tr><th>Comparison</th><th class="n">Likelihood-ratio test</th><th class="n">AIC</th></tr>
+   {% for name, p, a, b in tests %}<tr><td>{{ name }}</td><td class="n">{% if p is not None %}p = {{ p|floatformat:3 }}{% else %}–{% endif %}</td><td class="n">{% if b is not None %}{{ a|floatformat:0 }} → {{ b|floatformat:0 }} ({% if b < a %}better{% else %}worse{% endif %}){% else %}–{% endif %}</td></tr>{% endfor %}
+  </table>
+  <div class="answer">{{ verdict_topic|safe }}</div>
+ </div>
+</div>
+
+<div class="card">
+ <div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;align-items:flex-start">
+  <div><h2>3 · Topics</h2><p class="note">Circle size = clicks of the topic. Inside: clicks and performance vs. expected for this reach, date and format.</p></div>
+  <div class="legend"><span><i style="background:var(--up)"></i>above expected (95 % range above 0)</span><span><i style="background:var(--down)"></i>below expected</span><span><i style="background:var(--grey)"></i>no clear difference or fewer than 5 posts</span></div>
+ </div>
+ <div id="clk-bubbles"></div>
+ <p class="note">Hover a circle for the 95 % range. With several topics, one or two can look clear by chance – watch them over time before drawing conclusions.</p>
+</div>
+
+<div class="card">
+ <h2>4 · Other factors, adjusted for impressions and date</h2>
+ <div class="scroll"><table>
+  <tr><th>Factor</th><th>Effect</th><th>Evidence</th><th>Detail</th></tr>
+  {% for name, effect, ev, detail in factors %}<tr><td>{{ name }}</td><td><b>{{ effect }}</b></td><td><span class="ev {{ ev }}">{{ ev }}</span></td><td class="note">{{ detail }}</td></tr>{% endfor %}
+ </table></div>
+</div>
+{% endif %}
+
+<div class="card">
+ <h2 id="clk-lt"></h2>
+ <p class="note"><b>Expected</b> = clicks a post usually gets with its impressions, date and format (video or not). <b>vs expected</b> = what the content added. The topic can be changed right in the table; <span class="src">auto</span> marks a suggestion from the text.</p>
+ <div class="filters">
+  <label>At least <input type="number" id="clk-thr" value="3" min="0" max="50"> clicks</label>
+  <label>Topic <select id="clk-top"><option value="">All</option></select></label>
+  <label>Type <select id="clk-typ"><option value="">All</option><option value="1">Video</option><option value="0">No video</option></select></label>
+  <label>From <input type="month" id="clk-von"></label>
+  <label>To <input type="month" id="clk-bis"></label>
+  <label><input type="search" id="clk-such" placeholder="Search posts…"></label>
+ </div>
+ <div class="scroll"><table class="list" id="clk-list"></table></div>
+</div>
+{% if events.n %}
+<div class="card">
+ <h2>Events &amp; Seasons – not in the analysis</h2>
+ <p class="note">Advent, Christmas, Easter, world days … {{ events.n }} posts · {{ events.imp }} impressions · {{ events.clicks }} clicks{% if events.ctr is not None %} · click rate {{ events.ctr|floatformat:1 }} %{% endif %}. Wrongly here? Change the topic and the post moves back into the analysis.</p>
+ <div class="scroll"><table class="list" id="clk-events"></table></div>
+</div>
+{% endif %}
+</div>
+<div id="clk-tip"></div>
+
+{{ data|json_script:"clk-data" }}
+<script>
+(function () {
+const DATA = JSON.parse(document.getElementById('clk-data').textContent);
+const TOPICS = DATA.topics, NAME = Object.fromEntries(TOPICS.map(t => [t.key, t.name]));
+const $ = id => document.getElementById(id);
+const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const tip = $('clk-tip');
+const hover = (el, html) => { el.addEventListener('mousemove', e => { tip.innerHTML = html; tip.style.display = 'block'; tip.style.left = Math.min(e.clientX + 12, innerWidth - 330) + 'px'; tip.style.top = (e.clientY + 14) + 'px'; }); el.addEventListener('mouseleave', () => tip.style.display = 'none'); };
+const csrf = (document.cookie.match(/csrftoken=([^;]+)/) || [])[1] || '';
+// [d, iso, video, imp, clicks, expected, title, topic, source, id, url]
+const P = DATA.rows.map(r => ({ d: r[0], date: new Date(r[1]), v: r[2], imp: r[3], cl: r[4], ex: r[5], t: r[6], tp: r[7], src: r[8], id: r[9], url: r[10],
+  dv: r[5] == null ? null : r[4] - r[5], ctr: r[3] ? r[4] / r[3] * 100 : 0 }));
+const M = DATA.model;
+
+if (M) {
+ // 1 scatter
+ (() => { const S = P.filter(p => p.imp > 0), W = 560, H = 300, L = 46, B = 36, T = 10, R = 10, lx = Math.log10;
+  const xmin = lx(Math.max(1, Math.min(...S.map(p => p.imp)) * 0.8)), xmax = lx(Math.max(...S.map(p => p.imp)) * 1.2), ymax = lx(Math.max(...S.map(p => p.cl)) + 2);
+  const X = v => L + (W - L - R) * (lx(v) - xmin) / (xmax - xmin), Y = v => H - B - (H - B - T) * lx(v + 1) / ymax;
+  let s = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Clicks against impressions">`;
+  [10, 20, 50, 100, 200, 500, 1000, 2000, 5000].filter(g => lx(g) >= xmin && lx(g) <= xmax).forEach(g => s += `<line x1="${X(g)}" x2="${X(g)}" y1="${T}" y2="${H - B}" stroke="#eef1f1"/><text x="${X(g)}" y="${H - B + 16}" font-size="11" text-anchor="middle" fill="#5f6b6d">${g}</text>`);
+  [0, 1, 3, 5, 10, 20, 50, 100].filter(g => lx(g + 1) <= ymax).forEach(g => s += `<line x1="${L}" x2="${W - R}" y1="${Y(g)}" y2="${Y(g)}" stroke="#eef1f1"/><text x="${L - 6}" y="${Y(g) + 4}" font-size="11" text-anchor="end" fill="#5f6b6d">${g}</text>`);
+  s += `<text x="${(W + L) / 2}" y="${H - 4}" font-size="11.5" text-anchor="middle" fill="#5f6b6d">Impressions</text><text transform="translate(12 ${(H - B) / 2}) rotate(-90)" font-size="11.5" text-anchor="middle" fill="#5f6b6d">Clicks</text>`;
+  const f = i => Math.exp(M.scatter.intercept + M.scatter.slope * Math.log(i)) - 1, pts = [];
+  for (let i = Math.pow(10, xmin); i <= Math.pow(10, xmax); i *= 1.08) pts.push(`${X(i).toFixed(1)},${Y(Math.max(0, f(i))).toFixed(1)}`);
+  s += `<polyline points="${pts.join(' ')}" fill="none" stroke="#005F68" stroke-width="2"/>`;
+  S.forEach((p, i) => { const j = ((i * 37) % 7 - 3) * 0.6; s += `<circle class="pt" data-i="${P.indexOf(p)}" cx="${X(p.imp).toFixed(1)}" cy="${(Y(p.cl) + j).toFixed(1)}" r="5" fill="#0093A1" fill-opacity=".75" stroke="#fff" stroke-width="1.5"/>`; });
+  s += '</svg>'; $('clk-scatter').innerHTML = s;
+  $('clk-scatter').querySelectorAll('.pt').forEach(el => { const p = P[+el.dataset.i]; hover(el, `<b>${p.d}</b> · ${esc(NAME[p.tp])}${p.v ? ' · video' : ''}<br>${esc(p.t)}…<br>${p.imp} impressions · ${p.cl} clicks · expected ${p.ex}`); });
+ })();
+ // 2 model bars
+ $('clk-mods').innerHTML = M.explained.map(([n, a, b]) => { const A = Math.round(a * 100), Bv = Math.round(b * 100);
+  return `<div class="r"><span>${n}</span><div class="t"><b style="width:${A}%"></b>${Bv ? `<i class="${M.topic_clear ? 'real' : ''}" style="left:${A}%;width:${Bv}%"></i>` : ''}</div><span class="v">${A + Bv} %</span></div>`; }).join('')
+  + (M.topic_clear ? '' : '<p class="note" style="margin-top:2px">Striped = gain that is not distinguishable from chance.</p>');
+ // 3 bubbles
+ (() => { const W = 1180, H = 430, items = M.per_topic.map(t => ({ ...t, r: 32 + Math.sqrt(t.clicks) * 8 })).sort((a, b) => b.r - a.r), placed = [], cx = W / 2, cy = H / 2;
+  items.forEach(it => { for (let a = 0, rr = 0; rr < 900; a += 0.12, rr = 4 * a) { const x = cx + rr * Math.cos(a) * 1.9, y = cy + rr * Math.sin(a) * 0.8; if (x - it.r < 4 || x + it.r > W - 4 || y - it.r < 4 || y + it.r > H - 4) continue; if (placed.every(q => Math.hypot(q.x - x, q.y - y) >= q.r + it.r + 5)) { it.x = x; it.y = y; placed.push(it); break; } } });
+  const clear = t => t.n >= 5 && (t.lo > 0 || t.hi < 0);
+  const col = t => !clear(t) ? 'var(--grey)' : t.lo > 0 ? 'var(--up)' : 'var(--down)';
+  let s = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Topics as circles">`;
+  placed.forEach((t, i) => { const c = col(t), fg = clear(t) ? '#fff' : '#161616', sz = Math.max(10.5, Math.min(17, t.r / 4.6, (t.r * 1.75) / (t.name.length * 0.6))), pct = (t.pct > 0 ? '+' : t.pct < 0 ? '−' : '±') + Math.abs(t.pct) + ' %';
+   s += `<g class="bb" data-i="${i}"><circle cx="${t.x}" cy="${t.y}" r="${t.r}" fill="${c}" fill-opacity="${clear(t) ? .9 : .35}" stroke="#fff" stroke-width="2"/>`
+    + `<text x="${t.x}" y="${t.y - sz * 0.9}" font-size="${sz}" font-weight="700" text-anchor="middle" fill="${fg}">${esc(t.name)}</text>`
+    + `<text x="${t.x}" y="${t.y + sz * 0.35}" font-size="${sz * 0.95}" text-anchor="middle" fill="${fg}">${t.clicks} clicks</text>`
+    + `<text x="${t.x}" y="${t.y + sz * 1.55}" font-size="${sz * 0.95}" font-weight="700" text-anchor="middle" fill="${fg}">${pct} vs exp.</text></g>`; });
+  s += '</svg>'; $('clk-bubbles').innerHTML = s;
+  $('clk-bubbles').querySelectorAll('.bb').forEach(el => { const t = placed[+el.dataset.i]; hover(el, `<b>${esc(t.name)}</b><br>${t.n} posts · ${t.clicks} clicks · expected ${t.expected}<br>vs expected ${t.pct > 0 ? '+' : ''}${t.pct} % (95 % range ${t.lo} … ${t.hi} %)${t.n < 5 ? '<br>too few posts to judge' : ''}`); });
+ })();
+}
+
+// 5 table
+const tsel = $('clk-top'); TOPICS.filter(t => t.key !== 'EV').forEach(t => tsel.insertAdjacentHTML('beforeend', `<option value="${t.key}">${esc(t.name)}</option>`));
+const topicSelect = p => `<select class="tp" data-id="${esc(p.id)}" aria-label="Topic">${TOPICS.map(t => `<option value="${t.key}"${t.key === p.tp ? ' selected' : ''}>${esc(t.name)}</option>`).join('')}</select>${p.src === 'auto' ? '<span class="src">auto</span>' : ''}`;
+let sortKey = M ? 'dv' : 'cl', sortDir = -1;
+function draw() {
+ const thr = +$('clk-thr').value, tp = $('clk-top').value, typ = $('clk-typ').value, von = $('clk-von').value, bis = $('clk-bis').value, q = $('clk-such').value.trim().toLowerCase();
+ const end = bis ? new Date(new Date(bis + '-01').setMonth(new Date(bis + '-01').getMonth() + 1)) : null;
+ const S = P.filter(p => p.cl >= thr && (!tp || p.tp === tp) && (typ === '' || p.v === +typ) && (!von || p.date >= new Date(von + '-01')) && (!end || p.date < end) && (!q || p.t.toLowerCase().includes(q)));
+ const cols = [['date', 'Date'], ['t', 'First line of the post'], ['tp', 'Topic'], ['v', 'Type'], ['imp', 'Impressions', 'n'], ['cl', 'Clicks', 'n'], ['ex', 'Expected', 'n'], ['dv', 'vs expected', 'n'], ['ctr', 'Click rate', 'n']];
+ const val = (p, k) => k === 'tp' ? NAME[p.tp] : (p[k] == null ? -1e9 : p[k]);
+ const so = [...S].sort((a, b) => { const x = val(a, sortKey), y = val(b, sortKey); return (x > y ? 1 : x < y ? -1 : 0) * sortDir; });
+ $('clk-lt').textContent = `${M ? '5 · ' : ''}${S.length} posts with at least ${thr} clicks`;
+ $('clk-list').innerHTML = '<tr>' + cols.map(([k, l, c]) => `<th data-k="${k}" class="${c || ''} ${sortKey === k ? 'on' : ''}">${l}${sortKey === k ? (sortDir < 0 ? ' ↓' : ' ↑') : ''}</th>`).join('') + '</tr>'
+  + so.map(p => `<tr><td>${p.d}</td><td>${p.url ? `<a class="pl" href="${esc(p.url)}" target="_blank" rel="noopener">${esc(p.t)}…</a>` : esc(p.t) + '…'}</td><td>${topicSelect(p)}</td><td>${p.v ? '<span class="pill">video</span>' : ''}</td><td class="n">${p.imp}</td><td class="n"><b>${p.cl}</b></td><td class="n">${p.ex == null ? '–' : p.ex.toFixed(1)}</td><td class="n">${p.dv == null ? '–' : `<span class="dv ${p.dv >= 0 ? 'up' : 'down'}">${p.dv >= 0 ? '+' : '−'}${Math.abs(p.dv).toFixed(1)}</span>`}</td><td class="n">${p.ctr.toFixed(1)} %</td></tr>`).join('');
+ $('clk-list').querySelectorAll('th').forEach(th => th.onclick = () => { const k = th.dataset.k; if (sortKey === k) sortDir *= -1; else { sortKey = k; sortDir = (k === 't' || k === 'tp') ? 1 : -1; } draw(); });
+ bindTopic($('clk-list'));
+}
+const DATA_URL = '{% url "linkedin_statistics:clicks_topic" %}';
+function alertLine(msg) { $('clk-lt').insertAdjacentHTML('afterend', `<p class="note" style="color:#B9563A">${esc(msg)}</p>`); }
+function bindTopic(root) {
+ root.querySelectorAll('select.tp').forEach(sel => sel.onchange = async () => {
+  sel.disabled = true;
+  try {
+   const r = await fetch(DATA_URL, { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf }, body: JSON.stringify({ post_id: sel.dataset.id, topic: sel.value }) });
+   const j = await r.json().catch(() => ({}));
+   if (!r.ok || !j.ok) throw new Error(j.error || ('HTTP ' + r.status));
+   location.reload();   // the models change with the topic
+  } catch (e) { sel.disabled = false; alertLine('Could not save the topic: ' + e.message); }
+ });
+}
+// [d, iso, imp, clicks, title, source, id, url]
+const EV = (DATA.events || []).map(r => ({ d: r[0], date: new Date(r[1]), imp: r[2], cl: r[3], t: r[4], src: r[5], id: r[6], url: r[7], tp: 'EV', ctr: r[2] ? r[3] / r[2] * 100 : 0 }));
+if ($('clk-events')) {
+ $('clk-events').innerHTML = '<tr><th>Date</th><th>First line of the post</th><th class="n">Impressions</th><th class="n">Clicks</th><th class="n">Click rate</th><th>Topic</th></tr>'
+  + EV.map(p => `<tr><td>${p.d}</td><td>${p.url ? `<a class="pl" href="${esc(p.url)}" target="_blank" rel="noopener">${esc(p.t)}…</a>` : esc(p.t) + '…'}</td><td class="n">${p.imp}</td><td class="n"><b>${p.cl}</b></td><td class="n">${p.ctr.toFixed(1)} %</td><td>${topicSelect(p)}</td></tr>`).join('');
+ bindTopic($('clk-events'));
+}
+['clk-thr', 'clk-top', 'clk-typ', 'clk-von', 'clk-bis', 'clk-such'].forEach(id => $(id).addEventListener('input', draw));
+draw();
+})();
+</script>
+{% endblock %}
