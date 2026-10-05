@@ -321,12 +321,10 @@ class Ansichten(TransactionTestCase):
         q = '?von=2026-09-01&bis=2026-09-30'
         ueber, h = self.get('/webstats/' + q)
         besucher, _ = self.get('/webstats/besucher/' + q)
-        ziele, _ = self.get('/webstats/ziele/' + q)
         zeit, _ = self.get('/webstats/zeitlinie/' + q)
         self.assertEqual(5, ueber.context['k']['besuche'])
         self.assertEqual(5, len(besucher.context['besuche']))
         self.assertEqual(ueber.context['k'], besucher.context['k'])
-        self.assertEqual(5, ziele.context['besuche'])
         daten = json.loads(zeit.content.decode().split('id="zl-daten" type="application/json">', 1)[1].split('</script>', 1)[0])
         self.assertEqual(5, sum(m['alle'] for m in daten['monate']))         # one month: IDs = 5
         self.assertEqual(ueber.context['ausgeschlossen_zahl'], zeit.context['ausgeschlossen_zahl'])
@@ -337,10 +335,60 @@ class Ansichten(TransactionTestCase):
         q = '?von=2026-09-01&bis=2026-09-30&umfang=human_unclear'
         ueber, _ = self.get('/webstats/' + q)
         besucher, _ = self.get('/webstats/besucher/' + q)
-        ziele, _ = self.get('/webstats/ziele/' + q)
         self.assertEqual(8, ueber.context['k']['besuche'])                  # + u1, u2, s1
         self.assertEqual(8, len(besucher.context['besuche']))
-        self.assertEqual(8, ziele.context['besuche'])
+
+    def test_menschen_und_bots_je_tag(self):
+        r, _ = self.get('/webstats/besucher/?von=2026-09-01&bis=2026-09-30')
+        kl, sonder = r.context['kl'], r.context['sonder']
+        # without own devices, previews and the location rule: o1, o2, e1, e2
+        self.assertEqual((5, 3, 2, 0, 4), (kl['human'], kl['unclear'], kl['automation'], kl['own'], sonder))
+        self.assertEqual(14, kl['human'] + kl['unclear'] + kl['automation'] + sonder)
+        summen = {x['feld']: x['summe'] for x in r.context['verlauf']['reihen']}
+        self.assertEqual({'menschen': 5, 'unklar': 3, 'bots': 2}, summen)    # the curve = the tiles
+        raster = r.context['raster']
+        self.assertEqual((5, 2, 3), (raster['menschen']['summe'], raster['bots']['summe'], raster['unklar']))
+        html = r.content.decode()
+        self.assertIn('Humans and bots per day', html)
+        self.assertIn('Exclusions and classification', html)                # the full rules: here
+        self.assertIn('klasse=automation', html)                             # a bot cell opens those visits
+
+    def test_uebersicht_nur_eine_zeile_zu_den_ausschluessen(self):
+        r, _ = self.get('/webstats/?von=2026-09-01&bis=2026-09-30')
+        html = r.content.decode()
+        self.assertNotIn('Exclusions and classification', html)
+        self.assertIn('rules and exclusions on Visitors', html)
+        self.assertIn('<strong>5</strong> visits counted · 9 not counted', html)
+        self.assertNotIn('Humans and bots per day', html)
+
+    def test_klassenfilter(self):
+        r, _ = self.get('/webstats/besucher/?von=2026-09-01&bis=2026-09-30&ausgeschlossen=1&klasse=automation')
+        self.assertEqual({'h1', 'f1'}, {v['besucher'] for v in r.context['besuche']})
+
+    def test_alte_reiter_leiten_weiter(self):
+        for alt, neu in (('/webstats/ziele/?von=2026-09-01', '/webstats/?von=2026-09-01'),
+                         ('/webstats/seiten/?von=2026-09-01', '/webstats/berichte/?von=2026-09-01&teil=seiten'),
+                         ('/webstats/suchbegriffe/', '/webstats/berichte/?teil=suche'),
+                         ('/webstats/ki/', '/webstats/berichte/?teil=ki')):
+            self.assertEqual(neu, self.client.get(alt)['Location'], alt)
+
+    def test_matomo_berichte_ein_reiter(self):
+        def hole(pfad, **kw):
+            if pfad == 'api/processed_report':
+                return {'reportData': [{'label': '/', 'nb_visits': 3}], 'columns': {'nb_visits': 'Visits'}}
+            if pfad == 'api/report_metadata':
+                return [{'category': 'Actions', 'name': 'Page URLs', 'module': 'Actions', 'action': 'getPageUrls'}]
+            return []
+        with mock.patch(HOLE, side_effect=hole) as h:
+            seiten = self.client.get('/webstats/berichte/?von=2026-09-01&bis=2026-09-30')
+        self.assertEqual(6, h.call_count)                                   # only the chosen part is fetched
+        html = seiten.content.decode()
+        self.assertIn('Most visited pages', html)
+        self.assertIn('Different data basis.', html)
+        self.assertIn('name="teil" value="seiten"', html)                   # the date form keeps the part
+        with mock.patch(HOLE, side_effect=hole):
+            alle = self.client.get('/webstats/berichte/?teil=alle').content.decode()
+        self.assertIn('Every report Matomo offers (1)', alle)
 
     def test_ausgeschlossene_anzeigen(self):
         r, _ = self.get('/webstats/besucher/?von=2026-09-01&bis=2026-09-30&ausgeschlossen=1')

@@ -180,10 +180,7 @@ up, so it moved right; Collectives became a sub-entry under Data.
     <a href="/webstats/" {% if request.path == '/webstats/' %}class="active"{% endif %}>Overview</a>
     <a href="/webstats/besucher/" {% if '/besucher' in request.path %}class="active"{% endif %}>Visitors</a>
     <a href="/webstats/zeitlinie/" {% if '/zeitlinie' in request.path %}class="active"{% endif %}>Timeline</a>
-    <a href="/webstats/seiten/" {% if '/seiten' in request.path %}class="active"{% endif %}>Pages</a>
-    <a href="/webstats/ziele/" {% if '/ziele' in request.path %}class="active"{% endif %}>Goals</a>
-    <a href="/webstats/suchbegriffe/" {% if '/suchbegriffe' in request.path %}class="active"{% endif %}>Search terms</a>
-    <a href="/webstats/ki/" {% if '/webstats/ki/' in request.path %}class="active"{% endif %}>AI</a>
+    <a href="/webstats/berichte/" {% if '/berichte' in request.path or '/webstats/json/' in request.path %}class="active"{% endif %}>Matomo reports</a>
     <a href="/webstats/archiv/" {% if '/archiv' in request.path %}class="active"{% endif %}>Archive</a>
   </div>
   {% endif %}

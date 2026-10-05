@@ -17,6 +17,7 @@ urlpatterns = [
     path("blog/", views.blog_aendern, name="blog"),
     path("eigen/", views.eigen_aendern, name="eigen"),
     path("suchbegriffe/", views.suchbegriffe, name="suchbegriffe"),
+    path("berichte/", views.berichte, name="berichte"),
     path("archiv/", views.archiv, name="archiv"),
     path("archiv/<int:pk>/", views.archiv_detail, name="archiv_detail"),
     path("json/<str:modul>/<str:aktion>/", views.api_proxy, name="json"),

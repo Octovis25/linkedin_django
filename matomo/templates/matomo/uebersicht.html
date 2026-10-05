@@ -33,9 +33,7 @@
 
   <div class="mt-kacheln">
     <div class="mt-kachel"><div class="bez">Visits counted</div><div class="zahl">{{ k.besuche }}</div>
-      <div class="unter">{{ k.aufrufe }} pageview{{ k.aufrufe|pluralize }}</div></div>
-    <div class="mt-kachel"><div class="bez">Distinct visitor IDs</div><div class="zahl">{{ k.besucher_ids }}</div>
-      <div class="unter">Matomo IDs, not people</div></div>
+      <div class="unter">{{ k.besucher_ids }} visitor ID{{ k.besucher_ids|pluralize }} · {{ k.aufrufe }} pageview{{ k.aufrufe|pluralize }}</div></div>
     <div class="mt-kachel"><div class="bez">Reached an offer page</div><div class="zahl">{{ k.angebot.n }}</div>
       <div class="unter">of {{ k.angebot.von }} visits</div></div>
     <div class="mt-kachel"><div class="bez">Reached the contact page</div><div class="zahl">{{ k.kontaktseite.n }}</div>
@@ -85,7 +83,7 @@
   <p class="mt-leise"><strong>Unknown source / direct access:</strong> {{ unbekannt_erklaert }}
     Visitor IDs per row do not add up to the total: one ID can arrive from several sources.</p>
   {% else %}
-  <p class="mt-leise">No visits recorded in this period{% if ausgeschlossen_zahl %} that count – {{ ausgeschlossen_zahl }} were left out, see “Exclusions” above{% endif %}.</p>
+  <p class="mt-leise">No visits recorded in this period{% if ausgeschlossen_zahl %} that count – {{ ausgeschlossen_zahl }} were left out, see Visitors{% endif %}.</p>
   {% endif %}
 </div>
 
@@ -201,40 +199,5 @@
     <code>utm_term=company_page</code> or <code>personal_profile</code>.</p>
 </div>
 
-{# ── Diagnostics, folded ─────────────────────────────────────────────── #}
-<details class="mt-diagnose">
-  <summary>Diagnostics – classification, places, browsers, systems, languages, times</summary>
-  <p class="mt-leise">All visits of the period, every class – including those the analyses leave out.</p>
-  {% if verlauf %}
-  <h3>Visits per day by class</h3>
-  {% include "matomo/_verlauf.html" %}
-  {% endif %}
-  {% for t in diagnose %}
-  <h3 style="margin-top:1rem">{{ t.titel }}</h3>
-  {% if t.hinweis %}<p class="mt-leise">{{ t.hinweis }}</p>{% endif %}
-  {% if t.zeilen %}
-  <div class="mt-tabelle" style="max-height:40vh"><table class="mt-sortierbar">
-    <thead><tr>{% for s in t.spalten %}<th>{{ s }}</th>{% endfor %}</tr></thead>
-    <tbody>{% for zeile in t.zeilen %}<tr>{% for wert in zeile %}<td>{{ wert }}</td>{% endfor %}</tr>{% endfor %}</tbody>
-  </table></div>
-  {% else %}<p class="mt-leise">No visits recorded.</p>{% endif %}
-  {% endfor %}
-  {% if raster.hoechstwert %}
-  <h3 style="margin-top:1rem">Weekday and hour ({{ zeitzone }})</h3>
-  <p class="mt-leise">With so few visits this shows when the visits happened – not when it is best to post.</p>
-  <div class="mt-rasterpaar">
-    {% include "matomo/_raster.html" with r=raster.menschen %}
-    {% include "matomo/_raster.html" with r=raster.bots %}
-  </div>
-  {% endif %}
-  <h3 style="margin-top:1rem">Every report Matomo offers{% if anzahl_berichte %} ({{ anzahl_berichte }}){% endif %}</h3>
-  <div class="mt-basis"><strong>Different data basis.</strong> These are Matomo's own reports: all visits Matomo kept, including excluded places, previews and automation; Matomo's days (UTC).</div>
-  {% for kategorie, berichte in kategorien.items %}
-    <div class="mt-kat">{{ kategorie }}</div>
-    <div class="mt-liste">{% for b in berichte %}{% if b.module and b.action %}<a href="{% url 'matomo:bericht' b.module b.action %}?von={{ von }}&amp;bis={{ bis }}">{{ b.name }}</a>{% endif %}{% endfor %}</div>
-  {% empty %}<p class="mt-leise">No report list received.</p>{% endfor %}
-</details>
-
-{% include "matomo/_raster_stil.html" %}
 {% include "matomo/_sortierung.html" %}
 {% endblock %}

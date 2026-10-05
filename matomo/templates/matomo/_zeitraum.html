@@ -21,6 +21,7 @@
     </select>
   </div>
   {% endif %}
+  {% if mitnehmen_teil %}<input type="hidden" name="teil" value="{{ mitnehmen_teil }}">{% endif %}
   {% if mitnehmen_ausgeschlossen %}<input type="hidden" name="ausgeschlossen" value="1">{% endif %}
   {% if alle_orte %}<input type="hidden" name="alle_orte" value="1">{% endif %}
   <button type="submit" class="btn btn-primary">Show</button>
@@ -31,4 +32,7 @@
 </p>
 {% if hinweis %}<div class="alert alert-info">{{ hinweis }}</div>{% endif %}
 {% if datenbasis %}<div class="mt-basis"><strong>Different data basis.</strong> {{ datenbasis }}</div>{% endif %}
-{% if regeln %}{% include "matomo/_ausschluesse.html" %}{% else %}{% include "matomo/_orte.html" %}{% endif %}
+{% if regeln and ausschluss_kurz %}<p class="mt-leise" style="margin:0 0 1rem"><strong>{{ gezaehlt_zahl }}</strong> visit{{ gezaehlt_zahl|pluralize }} counted · {{ ausgeschlossen_zahl }} not counted
+  ({{ gruende.automation }} bots, {{ gruende.unclear }} unclear{% if umfang == "human_unclear" %} – counted{% endif %}, {{ gruende.preview }} with preview, {{ gruende.own }} own device{{ gruende.own|pluralize }}, {% if alle_orte %}places counted anyway{% else %}{{ orte_versteckt }} under a location rule{% endif %})
+  – <a href="{{ besucher_link }}">rules and exclusions on Visitors</a></p>
+{% elif regeln %}{% include "matomo/_ausschluesse.html" %}{% else %}{% include "matomo/_orte.html" %}{% endif %}

@@ -22,26 +22,50 @@
 </style>
 
 <h1>Visitors</h1>
-<p class="mt-leise">One row per visit, newest first. <strong>Details</strong> shows the pages of the visit in order, with the time Matomo could measure on each.</p>
+<p class="mt-leise">Humans and bots, when they come, and every visit with its path.</p>
 
 {% if fehler %}<div class="alert alert-error">{{ fehler }}</div>{% endif %}
 
 {% include "matomo/_zeitraum.html" with mitnehmen_ausgeschlossen=zeige_aus %}
 
 <div class="mt-kacheln">
-  <div class="mt-kachel"><div class="bez">Visits counted</div><div class="zahl">{{ k.besuche }}</div></div>
-  <div class="mt-kachel"><div class="bez">Distinct visitor IDs</div><div class="zahl">{{ k.besucher_ids }}</div></div>
-  <div class="mt-kachel"><div class="bez">Pageviews</div><div class="zahl">{{ k.aufrufe }}</div></div>
-  <div class="mt-kachel" style="border-left-color:#8C9593"><div class="bez">Not counted</div><div class="zahl">{{ ausgeschlossen_zahl }}</div></div>
+  <div class="mt-kachel"><div class="bez">Humans</div><div class="zahl">{{ kl.human }}</div></div>
+  <div class="mt-kachel" style="border-left-color:#8C9593"><div class="bez">Unclear</div><div class="zahl" style="color:#6b7372">{{ kl.unclear }}</div></div>
+  <div class="mt-kachel" style="border-left-color:var(--octo-orange)"><div class="bez">Bots</div><div class="zahl" style="color:var(--octo-orange)">{{ kl.automation }}</div></div>
+  <div class="mt-kachel" style="border-left-color:#8C9593"><div class="bez">Own / preview / places</div><div class="zahl" style="color:#6b7372">{{ sonder }}</div></div>
 </div>
+{% if abgeschnitten %}<div class="alert alert-info">Very many visits; Matomo returned the most recent ones only. Choose a shorter period.</div>{% endif %}
+
+{% if verlauf %}
+<div class="card">
+  <h2>Humans and bots per day</h2>
+  <p class="mt-leise">Visits per day on one axis, so the lines are directly comparable; days without visits are zero.
+    <strong>Unclear</strong> has its own line: one page without a measurable time is not proof of a bot.
+    <strong>Bots</strong> = headless browser, or every page left after at most 1 s. Own devices, previews and the places under the location rule are not in the lines.</p>
+  {% include "matomo/_verlauf.html" %}
+</div>
+{% endif %}
+
+{% if raster.hoechstwert %}
+<div class="card">
+  <h2>When do they come?</h2>
+  <p class="mt-leise">Each cell is one hour on one weekday ({{ zeitzone }}); the stronger the colour, the more visits. Both grids share one scale –
+    the strongest shade stands for {{ raster.hoechstwert }} visit{{ raster.hoechstwert|pluralize }} in one hour. Click a cell for those visits.
+    {% if raster.unklar %}{{ raster.unklar }} unclear visit{{ raster.unklar|pluralize }} {{ raster.unklar|pluralize:"is,are" }} in neither grid.{% endif %}
+    With few visits this shows when visits happened, not the best time to post.</p>
+  <div class="mt-rasterpaar">
+    {% include "matomo/_raster.html" with r=raster.menschen %}
+    {% include "matomo/_raster.html" with r=raster.bots %}
+  </div>
+</div>
+{% endif %}
 
 <p class="mt-leise">
-  {% if zeige_aus %}<strong>Showing every visit, including the {{ ausgeschlossen_zahl }} not counted</strong> (grey rows, with the reason).
+  {% if zeige_aus %}<strong>The table shows every visit, including the {{ ausgeschlossen_zahl }} not counted</strong> (grey rows, with the reason).
     <a href="{{ nur_gezaehlt }}">Show counted visits only</a>
-  {% else %}Showing the counted visits. <a href="{{ ausgeschlossen_link }}">Show excluded visits too</a>{% endif %}
-  {% if tag or stunde %} · filtered to {{ tag }} {% if stunde %}{{ stunde }}:00–{{ stunde }}:59{% endif %} ({{ zeitzone }}) – <a href="{{ filter_weg }}">remove</a>{% endif %}
+  {% else %}The table shows the {{ k.besuche }} counted visit{{ k.besuche|pluralize }}. <a href="{{ ausgeschlossen_link }}">Show excluded visits too</a>{% endif %}
+  {% if tag or stunde or klasse_filter %} · filtered to {% if klasse_filter %}{{ klasse_filter }} {% endif %}{{ tag }} {% if stunde %}{{ stunde }}:00–{{ stunde }}:59{% endif %} – <a href="{{ filter_weg }}">remove</a>{% endif %}
 </p>
-{% if abgeschnitten %}<div class="alert alert-info">Very many visits; Matomo returned the most recent ones only. Choose a shorter period.</div>{% endif %}
 
 <div class="card">
   {% if besuche %}
@@ -92,5 +116,21 @@
   </p>
 </div>
 
+<details class="card" style="padding-top:0.6rem">
+  <summary style="cursor:pointer;font-weight:700;color:var(--octo-dark-petrol)">Browsers, systems, languages, devices, places</summary>
+  <p class="mt-leise">All visits of the period, every class – including those not counted.</p>
+  {% for t in diagnose %}
+  <h3 style="margin-top:1rem">{{ t.titel }}</h3>
+  {% if t.hinweis %}<p class="mt-leise">{{ t.hinweis }}</p>{% endif %}
+  {% if t.zeilen %}
+  <div class="mt-tabelle" style="max-height:40vh"><table class="mt-sortierbar">
+    <thead><tr>{% for s in t.spalten %}<th>{{ s }}</th>{% endfor %}</tr></thead>
+    <tbody>{% for zeile in t.zeilen %}<tr>{% for wert in zeile %}<td>{{ wert }}</td>{% endfor %}</tr>{% endfor %}</tbody>
+  </table></div>
+  {% else %}<p class="mt-leise">No visits recorded.</p>{% endif %}
+  {% endfor %}
+</details>
+
+{% include "matomo/_raster_stil.html" %}
 {% include "matomo/_sortierung.html" %}
 {% endblock %}

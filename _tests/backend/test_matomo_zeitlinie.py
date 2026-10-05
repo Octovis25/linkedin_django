@@ -109,11 +109,13 @@ class Orte(Grundlage):
     def test_besucherseite(self):
         log = [besuch('a', '2026-09-10'), besuch('b', '2026-09-11', 'Herzogenaurach')]
         with mock.patch(HOLE, return_value=log):
-            seite = self.client.get('/webstats/besucher/?von=2026-09-01&bis=2026-09-30').content.decode()
+            antwort = self.client.get('/webstats/besucher/?von=2026-09-01&bis=2026-09-30')
+            seite = antwort.content.decode()
             mit = self.client.get('/webstats/besucher/?von=2026-09-01&bis=2026-09-30&alle_orte=1').content.decode()
         self.assertIn('Exclusions and classification', seite)
         self.assertIn('1 under a location rule', seite)
-        self.assertNotIn('<td>Herzogenaurach</td>', seite)
+        # not in the visit table (the folded diagnostics list every place on purpose)
+        self.assertNotIn('Herzogenaurach', [b['stadt'] for b in antwort.context['besuche']])
         self.assertIn('places counted anyway right now', mit)
         self.assertIn('name="alle_orte" value="1"', mit)       # the date form keeps it
 

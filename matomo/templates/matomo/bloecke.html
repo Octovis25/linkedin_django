@@ -4,13 +4,34 @@
 {% block content %}
 {% include "matomo/_stil.html" %}
 
+<style>
+  .mt-teile { display:flex; gap:0.4rem; flex-wrap:wrap; margin:0.4rem 0 0.9rem; }
+  .mt-teile a { padding:0.3rem 0.85rem; border:1px solid #d8d4c8; border-radius:16px; font-size:0.86rem;
+                text-decoration:none; color:var(--octo-dark-petrol); background:#fff; }
+  .mt-teile a.an { background:var(--octo-petrol); border-color:var(--octo-petrol); color:#fff; }
+</style>
 <h1>{{ seitentitel }}</h1>
+{% if teile %}
+<nav class="mt-teile" aria-label="Report groups">
+  {% for k, name in teile %}<a href="?teil={{ k }}&amp;von={{ von }}&amp;bis={{ bis }}"{% if k == teil %} class="an" aria-current="page"{% endif %}>{{ name }}</a>{% endfor %}
+</nav>
+<h2 style="margin-top:0">{{ teil_titel }}</h2>
+{% endif %}
 <p class="mt-leise">{{ untertitel }}</p>
 
 {% if fehler %}<div class="alert alert-error">{{ fehler }}</div>{% endif %}
 
 {% include "matomo/_zeitraum.html" %}
 
+{% if teil == "alle" %}
+<div class="card">
+  <h2>Every report Matomo offers{% if anzahl_berichte %} ({{ anzahl_berichte }}){% endif %}</h2>
+  {% for kategorie, berichte in kategorien.items %}
+    <div class="mt-kat">{{ kategorie }}</div>
+    <div class="mt-liste">{% for b in berichte %}{% if b.module and b.action %}<a href="{% url 'matomo:bericht' b.module b.action %}?von={{ von }}&amp;bis={{ bis }}">{{ b.name }}</a>{% endif %}{% endfor %}</div>
+  {% empty %}<p class="mt-leise">No report list received{% if fehler %} – see the message above{% endif %}.</p>{% endfor %}
+</div>
+{% else %}
 <p class="mt-leise">
   {{ tage }} day{{ tage|pluralize }} added up. Averages and percentages are left out —
   adding them across days would be wrong. For a single day set From and To to the same date.
@@ -39,5 +60,6 @@
   {% endif %}
 </div>
 {% endfor %}
+{% endif %}
 {% include "matomo/_sortierung.html" %}
 {% endblock %}
