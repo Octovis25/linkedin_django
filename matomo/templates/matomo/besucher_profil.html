@@ -29,21 +29,43 @@
 </div>
 {% endif %}
 
+<div class="card">
+  {% if eigen %}
+  <p><strong>Marked as own / test device.</strong> Its visits are not counted.</p>
+  <form method="post" action="{% url 'matomo:eigen' %}">{% csrf_token %}
+    <input type="hidden" name="aktion" value="weg"><input type="hidden" name="besucher" value="{{ kennung }}">
+    <input type="hidden" name="zurueck" value="{{ hier }}">
+    <button type="submit" class="btn">Count this visitor ID again</button>
+  </form>
+  {% else %}
+  <p class="mt-leise">Is this your own device (or a test)? Marking it is more reliable than a location rule: it leaves out exactly this
+    visitor ID, wherever it is.{% if vorschau %} <strong>This ID opened a WordPress preview</strong> – previews need a WordPress login,
+    so it is very likely an editor's device.{% endif %} Matomo gives a new ID when cookies are cleared or another browser is used.</p>
+  <form method="post" action="{% url 'matomo:eigen' %}" style="display:flex;gap:0.5rem;flex-wrap:wrap;align-items:center">{% csrf_token %}
+    <input type="hidden" name="aktion" value="dazu"><input type="hidden" name="besucher" value="{{ kennung }}">
+    <input type="hidden" name="zurueck" value="{{ hier }}">
+    <input type="text" name="notiz" maxlength="120" placeholder="Note, e.g. “Ortrud, laptop”" style="width:auto;min-width:240px">
+    <button type="submit" class="btn">This is my device</button>
+  </form>
+  {% endif %}
+</div>
+
 {% for b in besuche %}
 <div class="card">
-  <h2>{{ b.zeit }}</h2>
+  <h2>{{ b.datum_de }} {{ b.uhrzeit }} <span class="mt-leise" style="font-size:0.8rem">({{ zeitzone }})</span></h2>
   <div class="mt-besuchkopf">
-    <span>{{ b.aktionen }} page{{ b.aktionen|pluralize }}</span>
-    {% if b.dauer %}<span>{{ b.dauer }}</span>{% endif %}
-    <span>Referrer: {{ b.herkunft }}</span>
-    <span>{{ b.stadt }}{% if b.stadt and b.land %}, {% endif %}{{ b.land }}</span>
+    <span>{{ b.klasse_name }}{% if b.gruende %} – {{ b.gruende|join:"; " }}{% endif %}</span>
+    <span>{{ b.aufrufe }} page{{ b.aufrufe|pluralize }}{% if b.vorschau_aufrufe %} + {{ b.vorschau_aufrufe }} preview{% endif %}</span>
+    <span>{{ b.dauer_text }}</span>
+    <span>{{ b.quelle }} – {{ b.beleg }}</span>
+    <span>{{ b.stadt }}{% if b.stadt and b.land %}, {% endif %}{{ b.land }} <span class="mt-leise">(approximate)</span></span>
     <span>{{ b.geraet }} · {{ b.browser }} · {{ b.system }}</span>
   </div>
-  {% if b.seiten %}
+  {% if b.schritte %}
   <ul class="mt-weg">
-    {% for s in b.seiten %}
-    <li><span class="zeit">{{ s.zeit }}</span>{{ s.adresse }}
-      {% if s.titel and s.titel != s.adresse %}<span class="mt-leise">— {{ s.titel }}</span>{% endif %}
+    {% for s in b.schritte %}
+    <li><span class="zeit">{{ s.zeit_lokal }}</span>{% if s.typ == "action" %}{% if s.vorschau %}[preview] {% endif %}{{ s.titel }}
+      <span class="mt-leise">— {{ s.pfad }} · {{ s.art }} · {{ s.zeit_text }}</span>{% else %}[{{ s.typ }}] {{ s.titel|default:s.url }}{% endif %}
     </li>
     {% endfor %}
   </ul>

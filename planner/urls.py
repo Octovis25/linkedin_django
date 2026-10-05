@@ -14,11 +14,15 @@ urlpatterns = [
     path('oj/', views.oj_view, name='oj'),
     path('kalender/', kalender.kalender_view, name='kalender'),
     path('kalender/<int:jahr>/', kalender.kalender_view, name='kalender_jahr'),
-    path('kalender/oj/', kalender.kalender_view, {'nur_oj': True}, name='kalender_oj'),
-    path('kalender/oj/<int:jahr>/', kalender.kalender_view, {'nur_oj': True},
-         name='kalender_oj_jahr'),
+    path('kalender/oj/', kalender.kalender_view, {'nur_oj': True}, name='kalender_oj'),
+
+    path('kalender/oj/<int:jahr>/', kalender.kalender_view, {'nur_oj': True},
+
+         name='kalender_oj_jahr'),
+
     path('kalender/api/', kalender.kalender_api, name='kalender_api'),
     path('api/post/', views.api_post, name='api_post'),
+    path('api/utm/', views.api_utm, name='api_utm'),
     path('api/series/', views.api_series, name='api_series'),
     path('api/topic/', views.api_topic, name='api_topic'),
     path('api/idea/', views.api_idea, name='api_idea'),

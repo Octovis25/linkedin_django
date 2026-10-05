@@ -1,0 +1,93 @@
+{% comment %}
+Exclusions and classification (05.10.2026). One fold-out on every view built
+from the visit log. Nothing here deletes data: every rule can be taken back,
+and "Show excluded visits" lists what was left out, with the reason.
+{% endcomment %}
+<style>
+  details.mt-orte { margin:0 0 1rem; border:1px solid #e4e0d5; border-radius:6px; background:#fff; }
+  details.mt-orte > summary { cursor:pointer; padding:0.45rem 0.8rem; font-size:0.85rem; color:#444; list-style:none; }
+  details.mt-orte > summary::-webkit-details-marker { display:none; }
+  details.mt-orte > summary::before { content:'\25B8  '; color:#8a8a8a; }
+  details.mt-orte[open] > summary::before { content:'\25BE  '; }
+  details.mt-orte .innen { padding:0 0.8rem 0.8rem; }
+  details.mt-orte h3 { font-size:0.9rem; margin:0.9rem 0 0.3rem; color:var(--octo-dark-petrol); }
+  details.mt-orte ul { list-style:none; margin:0.2rem 0 0.5rem; padding:0; }
+  details.mt-orte li { display:flex; align-items:center; gap:0.5rem; padding:0.25rem 0; border-bottom:1px solid #f0ede4; font-size:0.88rem; max-width:640px; }
+  details.mt-orte li span { flex:1; }
+  details.mt-orte form { display:inline; margin:0; }
+  details.mt-orte button.weg { border:1px solid #d8d4c8; background:#fff; border-radius:50%; width:1.35rem; height:1.35rem;
+                               line-height:1rem; padding:0; cursor:pointer; color:#777; font-size:0.85rem; }
+  details.mt-orte button.weg:hover { color:#c0392b; border-color:#c0392b; }
+  details.mt-orte .dazu { display:flex; gap:0.5rem; align-items:center; flex-wrap:wrap; }
+  details.mt-orte .dazu input { width:auto; min-width:220px; padding:0.25rem 0.5rem; font-size:0.85rem; }
+  details.mt-orte .dazu button { padding:0.25rem 0.7rem; font-size:0.85rem; }
+  details.mt-orte .zaehlt { color:var(--octo-orange); font-weight:700; }
+  details.mt-orte table.mt-regeln { font-size:0.84rem; max-width:900px; }
+  details.mt-orte table.mt-regeln td { vertical-align:top; padding:0.3rem 0.5rem; white-space:normal; }
+  .mt-basis { background:#fff8ec; border-left:4px solid var(--octo-orange); padding:0.5rem 0.8rem; margin:0 0 0.9rem; font-size:0.86rem; }
+</style>
+<details class="mt-orte"{% if alle_orte %} open{% endif %}>
+  <summary>Exclusions and classification: <strong>{{ ausgeschlossen_zahl }}</strong> of {{ gesamt_alle }} visit{{ gesamt_alle|pluralize }} not counted
+    &middot; {{ gruende.automation }} probably automated &middot; {{ gruende.unclear }} unclear{% if umfang == "human_unclear" %} (counted){% endif %}
+    &middot; {{ gruende.preview }} with preview &middot; {{ gruende.own }} own device{{ gruende.own|pluralize }}
+    &middot; {% if alle_orte %}<span class="zaehlt">places counted anyway right now</span>{% else %}{{ orte_versteckt }} under a location rule{% endif %}</summary>
+  <div class="innen">
+    <p class="mt-leise" style="margin:0.4rem 0 0">
+      Nothing is deleted: Matomo keeps every visit, and every rule here can be taken back.
+      <a href="{{ ausgeschlossen_link }}">Show excluded visits</a> lists them with the reason.
+    </p>
+
+    <h3>How a visit is classified</h3>
+    <table class="mt-regeln">
+      <thead><tr><th>Rule</th><th>What it checks</th><th>Result</th></tr></thead>
+      <tbody>
+        {% for name, text, klasse in regeln %}
+        <tr><td><strong>{{ name }}</strong></td><td>{{ text }}</td><td>{% for k, v in klassen.items %}{% if k == klasse %}{{ v }}{% endif %}{% endfor %}</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    <p class="mt-leise">The first rule that applies decides; an automation signal outweighs a human one.
+      The analyses count “Probably human” visits; with <em>Count: Probably human + unclear</em> the unclear ones come in too.
+      A visit that opened a WordPress or Elementor <strong>preview</strong> is marked as a possible internal
+      editing visit and left out; the preview pages themselves never count as pageviews.</p>
+
+    <h3>Own / test devices (visitor IDs)</h3>
+    <ul>
+      {% for kennung, notiz in eigene %}
+      <li><span><a href="{% url 'matomo:besucher_profil' kennung %}">{{ kennung }}</a>{% if notiz %} – {{ notiz }}{% endif %}</span>
+        <form method="post" action="{% url 'matomo:eigen' %}">{% csrf_token %}
+          <input type="hidden" name="aktion" value="weg"><input type="hidden" name="besucher" value="{{ kennung }}">
+          <input type="hidden" name="zurueck" value="{{ orte_zurueck }}">
+          <button type="submit" class="weg" title="Count this visitor ID again" aria-label="Count {{ kennung }} again">&times;</button>
+        </form></li>
+      {% empty %}
+      <li class="mt-leise">None yet. Mark one in the visit details (“This is my device”) - the most reliable way to recognise own visits.</li>
+      {% endfor %}
+    </ul>
+
+    <h3>Location rule</h3>
+    <p class="mt-leise" style="margin:0">Visits whose city is on this list are left out. A place is <strong>not proof</strong> of an own visit:
+      it also hides strangers from the same town, and city data from an IP address is approximate.
+      Case, spaces and a district in brackets are ignored – “Wasserburg am Inn” also covers “Wasserburg am Inn (Gabersee)”.</p>
+    <ul>
+      {% for o in orte_varianten %}
+      <li><span>{{ o.regel }}{% if o.varianten %} <span class="mt-leise">– in this period: {% for name, n in o.varianten %}{{ name }} ({{ n }}){% if not forloop.last %}, {% endif %}{% endfor %}</span>{% endif %}</span>
+        <form method="post" action="{% url 'matomo:orte' %}">{% csrf_token %}
+          <input type="hidden" name="aktion" value="weg"><input type="hidden" name="stadt" value="{{ o.regel }}">
+          <input type="hidden" name="zurueck" value="{{ orte_zurueck }}">
+          <button type="submit" class="weg" title="Count {{ o.regel }} again" aria-label="Count {{ o.regel }} again">&times;</button>
+        </form></li>
+      {% empty %}
+      <li class="mt-leise">No location rule.</li>
+      {% endfor %}
+    </ul>
+    <form method="post" action="{% url 'matomo:orte' %}" class="dazu">{% csrf_token %}
+      <input type="hidden" name="aktion" value="dazu"><input type="hidden" name="zurueck" value="{{ orte_zurueck }}">
+      <input type="text" name="stadt" maxlength="120" placeholder="City, as Matomo writes it" aria-label="City to leave out" required>
+      <button type="submit" class="btn">Leave out</button>
+    </form>
+    <p class="mt-leise" style="margin:0.6rem 0 0">
+      {% if alle_orte %}<a href="{{ orte_link_ohne }}">Apply the location rule again</a>{% else %}<a href="{{ orte_link_mit }}">Count these places anyway</a>{% endif %}
+    </p>
+  </div>
+</details>

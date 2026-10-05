@@ -61,20 +61,32 @@ def _cache_key(pfad: str, params: dict) -> str:
 
 
 def blog_beitraege(*, cache_seconds: int = 86400):
-    """Alle veröffentlichten WordPress-Beiträge als [{"link", "titel", "datum"}].
+    """All published WordPress posts as [{"link", "titel", "datum", "slug"}].
 
-    Warum (30.09.2026): Die Blogartikel liegen direkt unter der Domain, genau
-    wie die Seiten - an der Adresse allein ist ein Artikel nicht zu erkennen.
-    WordPress weiß es. /wp-json/wp/v2/posts ist normalerweise öffentlich; der
-    Zugang geht trotzdem mit, falls ein Plugin die Liste nur Angemeldeten zeigt.
+    Why (30.09.2026): an article cannot be told from a page by its address -
+    WordPress knows. /wp-json/wp/v2/posts is normally public; the credentials
+    go along in case a plugin shows the list to signed-in users only.
 
-    Einmal am Tag abgefragt. Gibt WordPress die Liste nicht heraus, kommt ein
-    MatomoError - und eine Stunde lang wird es nicht erneut versucht, damit
-    nicht jeder Seitenaufruf auf eine Zeitüberschreitung wartet.
+    Asked once a day. If WordPress does not hand the list out, a MatomoError
+    follows - and for an hour it is not tried again, so that no page load waits
+    for a timeout.
     """
+    return _wp_liste("posts", "matomo:wp-beitraege", cache_seconds)
+
+
+def wp_seiten(*, cache_seconds: int = 86400):
+    """All published WordPress pages, same form (05.10.2026).
+
+    Needed to tell a page (/services/) from an article whose old address had
+    the same shape (/lessons-learned/ before the move to /insights/).
+    """
+    return _wp_liste("pages", "matomo:wp-seiten", cache_seconds)
+
+
+def _wp_liste(route, key, cache_seconds):
     import html
 
-    key, fehler_key = "matomo:wp-beitraege", "matomo:wp-beitraege:fehler"
+    fehler_key = key + ":fehler"
     treffer = cache.get(key)
     if treffer is not None:
         return treffer
@@ -87,36 +99,38 @@ def blog_beitraege(*, cache_seconds: int = 86400):
     except MatomoError:
         auth = None
     raus = []
+    name = "WordPress " + route
     try:
-        for seite in range(1, 6):                       # höchstens 500 Beiträge
+        for seite in range(1, 6):                       # at most 500 entries
             antwort = requests.get(
-                f"{_basis()}/wp-json/wp/v2/posts",
-                params={"per_page": 100, "page": seite, "_fields": "link,title,date"},
+                f"{_basis()}/wp-json/wp/v2/{route}",
+                params={"per_page": 100, "page": seite, "_fields": "link,title,date,slug"},
                 auth=auth, timeout=getattr(settings, "MATOMO_TIMEOUT", 30),
                 headers={"User-Agent": "octovis-matomo-bridge"},
             )
             if antwort.status_code == 400 and seite > 1:
-                break                                   # hinter der letzten Seite
+                break                                   # past the last page
             if antwort.status_code >= 400:
-                raise MatomoError(f"WordPress posts: HTTP {antwort.status_code}")
+                raise MatomoError(f"{name}: HTTP {antwort.status_code}")
             daten = antwort.json()
             if not isinstance(daten, list):
-                raise MatomoError("WordPress posts: unexpected answer")
+                raise MatomoError(f"{name}: unexpected answer")
             for b in daten:
                 if not isinstance(b, dict) or not b.get("link"):
                     continue
                 titel = b.get("title")
                 titel = titel.get("rendered", "") if isinstance(titel, dict) else str(titel or "")
                 raus.append({"link": b["link"], "titel": html.unescape(titel).strip(),
-                             "datum": str(b.get("date") or "")[:10]})
+                             "datum": str(b.get("date") or "")[:10],
+                             "slug": str(b.get("slug") or "")})
             if len(daten) < 100:
                 break
     except MatomoError as e:
         cache.set(fehler_key, str(e), 3600)
         raise
     except (requests.RequestException, ValueError) as e:
-        cache.set(fehler_key, f"WordPress posts: {e}", 3600)
-        raise MatomoError(f"WordPress posts: {e}")
+        cache.set(fehler_key, f"{name}: {e}", 3600)
+        raise MatomoError(f"{name}: {e}")
 
     cache.set(key, raus, cache_seconds)
     return raus

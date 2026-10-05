@@ -3,64 +3,238 @@
 
 {% block content %}
 {% include "matomo/_stil.html" %}
+<style>
+  .mt-hinweis-klein { background:#f3f7f7; border-left:4px solid var(--octo-petrol); padding:0.5rem 0.8rem; margin:0 0 1rem; font-size:0.86rem; }
+  .mt-chip { display:inline-block; padding:0 7px; margin:1px 2px 1px 0; border-radius:9px; background:var(--octo-light-gray); font-size:0.76rem; white-space:nowrap; }
+  .mt-analyse table td { white-space:normal; vertical-align:top; }
+  .mt-analyse td.mt-zahl, .mt-analyse th.mt-zahl { text-align:right; white-space:nowrap; }
+  .mt-analyse tr.mt-summe td { font-weight:700; border-top:2px solid var(--octo-petrol); background:#fafaf7; }
+  .mt-analyse details summary { cursor:pointer; color:var(--octo-petrol); font-size:0.82rem; }
+  .mt-analyse ol, .mt-analyse ul.mt-flach { margin:0.25rem 0 0.25rem 1.1rem; padding:0; font-size:0.82rem; }
+  .mt-kachel .unter { font-size:0.78rem; color:#555; margin-top:0.2rem; }
+  .mt-entwurf { color:#8a6d00; font-size:0.75rem; }
+  details.mt-diagnose { border:1px solid #e4e0d5; border-radius:6px; background:#fff; padding:0.4rem 0.9rem; margin-bottom:1rem; }
+  details.mt-diagnose > summary { cursor:pointer; font-weight:700; color:var(--octo-dark-petrol); padding:0.3rem 0; }
+</style>
 
 <h1>Web Analytics (Matomo)</h1>
 <p class="mt-leise">
-  Live from octotrial.com, {{ tage }} day{{ tage|pluralize }}.
-  {% if letzter_lauf %}
-    Last nightly sync: {{ letzter_lauf.gestartet|date:"d.m.Y H:i" }}
-    ({{ letzter_lauf.berichte_ok }} reports{% if letzter_lauf.berichte_fehler %}, {{ letzter_lauf.berichte_fehler }} errors{% endif %}).
-  {% else %}
-    No nightly sync has run yet.
-  {% endif %}
+  Where visitors to octotrial.com come from, what they read, and whether they go on to an offer or the contact page.
+  {{ tage }} day{{ tage|pluralize }}.
+  {% if letzter_lauf %}Last nightly sync: {{ letzter_lauf.gestartet|date:"d.m.Y H:i" }}.{% endif %}
 </p>
 
 {% if fehler %}
-<div class="alert alert-error" style="margin-top:1rem">
-  <strong>Matomo is not responding:</strong> {{ fehler }}
-</div>
+<div class="alert alert-error" style="margin-top:1rem"><strong>Matomo is not responding:</strong> {{ fehler }}</div>
 {% endif %}
 
 <div class="card" style="margin-top:1rem">
   {% include "matomo/_zeitraum.html" %}
 
   <div class="mt-kacheln">
-    <div class="mt-kachel"><div class="bez">Total visits</div><div class="zahl">{{ gesamt }}</div></div>
-    <div class="mt-kachel"><div class="bez">Humans</div><div class="zahl">{{ menschen }}</div></div>
-    <div class="mt-kachel" style="border-left-color:var(--octo-orange)"><div class="bez">Bots</div><div class="zahl" style="color:var(--octo-orange)">{{ bots }}</div></div>
-    <div class="mt-kachel"><div class="bez">Pages (humans)</div><div class="zahl">{{ seiten_menschen }}</div></div>
-    <div class="mt-kachel"><div class="bez">Avg. time (humans)</div><div class="zahl">{{ dauer_schnitt }}s</div></div>
+    <div class="mt-kachel"><div class="bez">Visits counted</div><div class="zahl">{{ k.besuche }}</div>
+      <div class="unter">{{ k.aufrufe }} pageview{{ k.aufrufe|pluralize }}</div></div>
+    <div class="mt-kachel"><div class="bez">Distinct visitor IDs</div><div class="zahl">{{ k.besucher_ids }}</div>
+      <div class="unter">Matomo IDs, not people</div></div>
+    <div class="mt-kachel"><div class="bez">Reached an offer page</div><div class="zahl">{{ k.angebot.n }}</div>
+      <div class="unter">of {{ k.angebot.von }} visits</div></div>
+    <div class="mt-kachel"><div class="bez">Reached the contact page</div><div class="zahl">{{ k.kontaktseite.n }}</div>
+      <div class="unter">of {{ k.kontaktseite.von }} visits</div></div>
+    <div class="mt-kachel"><div class="bez">Contact actions</div><div class="zahl">{{ k.kontaktaktionen.n }}</div>
+      <div class="unter">email / phone clicks; form sending is not measured</div></div>
   </div>
+  {% if klein %}
+  <div class="mt-hinweis-klein">
+    <strong>Few visits.</strong> With {{ k.besuche }} counted visit{{ k.besuche|pluralize }} the absolute numbers are what matters.
+    Percentages move a lot with a single visit; they show no reliable trend and no best time to post.
   </div>
+  {% endif %}
+  {% if abgeschnitten %}<div class="alert alert-info">Very many visits; Matomo returned the most recent ones only. Choose a shorter period for exact numbers.</div>{% endif %}
+</div>
 
-  {% if sparkline %}
-  <h2>Visits in this range</h2>
-  <svg viewBox="0 0 {{ sparkline.breite }} {{ sparkline.hoehe }}" width="100%" height="150"
-       preserveAspectRatio="none" role="img"
-       aria-label="Visits per day, peak {{ sparkline.hoch }}">
-    <polygon points="{{ sparkline.flaeche }}" fill="var(--octo-turquoise)" opacity=".3"/>
-    <polyline points="{{ sparkline.punkte }}" fill="none" stroke="var(--octo-petrol)"
-              stroke-width="2" stroke-linejoin="round" vector-effect="non-scaling-stroke"/>
-  </svg>
-  <p class="mt-leise">{{ sparkline.erster }} to {{ sparkline.letzter }} · peak {{ sparkline.hoch }} visits</p>
+{# ── 1. Source and what happened next ───────────────────────────────── #}
+<div class="card mt-analyse" id="herkunft">
+  <h2>1 · Where visits come from, and what happens next</h2>
+  <p class="mt-leise">
+    One row per source. Each share shows the count and its base (visits of that source).
+    Offer pages: {% for p in angebotsseiten %}<code>{{ p }}</code>{% if not forloop.last %}, {% endif %}{% endfor %} ·
+    Contact page: {% for p in kontaktseiten %}<code>{{ p }}</code>{% endfor %}.
+    “Contact page” means the page was opened; a <em>contact action</em> is a click on an email or phone link.
+  </p>
+  {% if quellen|length > 1 %}
+  <div class="mt-tabelle mt-kurz">
+    <table>
+      <thead><tr><th>Source</th><th class="mt-zahl">Visits</th><th class="mt-zahl">Visitor IDs</th>
+        <th class="mt-zahl">Several pages</th><th class="mt-zahl">Offer page</th>
+        <th class="mt-zahl">Contact page</th><th class="mt-zahl">Contact actions</th></tr></thead>
+      <tbody>
+        {% for r in quellen %}
+        <tr{% if r.summe %} class="mt-summe"{% endif %}>
+          <td>{{ r.quelle }}</td>
+          <td class="mt-zahl">{{ r.besuche }}</td>
+          <td class="mt-zahl">{{ r.ids }}</td>
+          <td class="mt-zahl">{% include "matomo/_anteil.html" with a=r.mehrere %}</td>
+          <td class="mt-zahl">{% include "matomo/_anteil.html" with a=r.angebot %}</td>
+          <td class="mt-zahl">{% include "matomo/_anteil.html" with a=r.kontaktseite %}</td>
+          <td class="mt-zahl">{% include "matomo/_anteil.html" with a=r.kontaktaktionen %}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <p class="mt-leise"><strong>Unknown source / direct access:</strong> {{ unbekannt_erklaert }}
+    Visitor IDs per row do not add up to the total: one ID can arrive from several sources.</p>
+  {% else %}
+  <p class="mt-leise">No visits recorded in this period{% if ausgeschlossen_zahl %} that count – {{ ausgeschlossen_zahl }} were left out, see “Exclusions” above{% endif %}.</p>
   {% endif %}
 </div>
 
-<div class="card">
-  <h2>Every report Matomo offers{% if anzahl_berichte %} ({{ anzahl_berichte }}){% endif %}</h2>
+{# ── 2. Articles and the pages after them ───────────────────────────── #}
+<div class="card mt-analyse" id="artikel">
+  <h2>2 · Articles and the paths after them</h2>
   <p class="mt-leise">
-    This list is fetched from Matomo on every load. Enable a plugin there and its
-    reports show up here on their own.
+    Every article WordPress knows ({{ kat_info.wordpress|default_if_none:"?" }} published), old addresses merged into the article.
+    <em>Next page</em> is the page opened directly after the article; <em>later in the visit</em> counts visits that reached an offer or the contact page at any point after the article.
+    These paths describe what people did – they do not prove that the article caused it.
+    Reading time is measured only when another page follows; the last page of a visit has no end and is shown as “not measured”, never as 0.
+    {% if kat_info.fehler %}<br><strong>WordPress did not answer:</strong> {{ kat_info.fehler }} – articles are recognised from the portal's own list only.{% endif %}
   </p>
+  {% if artikel %}
+  <div class="mt-tabelle">
+    <table class="mt-sortierbar">
+      <thead><tr><th>Article</th><th class="mt-zahl">Visitor IDs</th><th class="mt-zahl">Pageviews</th>
+        <th class="mt-zahl">Entries</th><th>Came from</th><th>Next page (directly)</th>
+        <th class="mt-zahl">Later: offer</th><th class="mt-zahl">Later: contact</th><th class="mt-zahl">Time on article</th></tr></thead>
+      <tbody>
+        {% for a in artikel %}
+        <tr>
+          <td><strong>{{ a.titel }}</strong>{% if not a.published %} <span class="mt-entwurf" title="Entered in the portal; not a published WordPress post">(portal list)</span>{% endif %}<br>
+            <span class="mt-leise">{{ a.link }}</span>
+            {% if a.adressen|length > 1 %}<details><summary>{{ a.adressen|length }} addresses merged</summary>
+              <ul class="mt-flach">{% for pfad, n in a.adressen %}<li>{{ pfad }} – {{ n }}</li>{% endfor %}</ul></details>{% endif %}</td>
+          <td class="mt-zahl">{{ a.ids }}</td>
+          <td class="mt-zahl">{{ a.aufrufe }}</td>
+          <td class="mt-zahl">{{ a.einstiege }}</td>
+          <td>{% for q, n in a.quellen %}<span class="mt-chip">{{ q }} {{ n }}</span>{% empty %}<span class="mt-leise">–</span>{% endfor %}</td>
+          <td>{% if a.weiter or a.ende %}<ol>{% for name, n in a.weiter|slice:":3" %}<li>{{ name }} ({{ n }})</li>{% endfor %}</ol>
+            {% if a.weiter|length > 3 %}<span class="mt-leise">+ {{ a.weiter|length|add:"-3" }} more</span><br>{% endif %}
+            {% if a.ende %}<span class="mt-leise">visit ended here: {{ a.ende }}</span>{% endif %}{% else %}<span class="mt-leise">–</span>{% endif %}</td>
+          <td class="mt-zahl">{% if a.besuche %}{% include "matomo/_anteil.html" with a=a.angebot %}{% else %}–{% endif %}</td>
+          <td class="mt-zahl">{% if a.besuche %}{% include "matomo/_anteil.html" with a=a.kontakt %}{% else %}–{% endif %}</td>
+          <td class="mt-zahl" data-sort="{{ a.zeit|default_if_none:'-1' }}">{% if a.messungen %}⌀ {{ a.zeit_text }}<br><span class="mt-leise">{{ a.messungen }} measurement{{ a.messungen|pluralize }}</span>{% else %}<span class="mt-leise">not measured</span>{% endif %}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <p class="mt-leise">{{ artikel_gelesen }} of {{ artikel|length }} article{{ artikel|length|pluralize }} opened in this period.</p>
+  {% else %}
+  <p class="mt-leise">No articles known – WordPress gave no list and none are entered in the portal.</p>
+  {% endif %}
+
+  {% if uebersichten %}
+  <details style="margin-top:0.6rem"><summary>Blog overviews – index, categories, series ({{ uebersichten|length }})</summary>
+    <div class="mt-tabelle mt-kurz"><table>
+      <thead><tr><th>Address</th><th>Title</th><th class="mt-zahl">Pageviews</th><th class="mt-zahl">Visitor IDs</th></tr></thead>
+      <tbody>{% for u in uebersichten %}<tr><td>{{ u.pfad }}</td><td>{{ u.titel }}</td><td class="mt-zahl">{{ u.aufrufe }}</td><td class="mt-zahl">{{ u.ids }}</td></tr>{% endfor %}</tbody>
+    </table></div>
+  </details>
+  {% endif %}
+  <details style="margin-top:0.6rem"{% if unzugeordnet %}{% endif %}><summary>Addresses WordPress does not know ({{ unzugeordnet|length }}) and which pages count as articles</summary>
+    <p class="mt-leise">Pages that were opened in this period but are neither a published post nor a page – usually old articles that were
+      deleted or moved without a redirect, or addresses that answer “not found”. Nothing is assigned automatically: mark an address as an article if it was one.</p>
+    {% if unzugeordnet %}
+    <div class="mt-tabelle mt-kurz"><table>
+      <thead><tr><th>Address</th><th>Title recorded by Matomo</th><th>Why</th><th class="mt-zahl">Pageviews</th><th></th></tr></thead>
+      <tbody>{% for u in unzugeordnet %}<tr><td>{{ u.pfad }}</td><td>{{ u.titel }}</td><td class="mt-leise">{{ u.grund }}</td><td class="mt-zahl">{{ u.aufrufe }}</td>
+        <td>{% if u.art != "not found" %}<form method="post" action="{% url 'matomo:blog' %}">{% csrf_token %}
+          <input type="hidden" name="aktion" value="dazu"><input type="hidden" name="pfad" value="{{ u.pfad }}">
+          <input type="hidden" name="zurueck" value="{{ request.get_full_path }}#artikel">
+          <button type="submit" class="btn" style="padding:0.1rem 0.5rem;font-size:0.8rem">Count as article</button></form>{% endif %}</td></tr>{% endfor %}</tbody>
+    </table></div>
+    {% endif %}
+    {% if blog_eigene %}
+    <p class="mt-leise" style="margin-bottom:0.2rem">Entered in the portal as articles:</p>
+    <ul class="mt-flach">{% for pfad in blog_eigene %}<li>{{ pfad }}
+      <form method="post" action="{% url 'matomo:blog' %}" style="display:inline">{% csrf_token %}
+        <input type="hidden" name="aktion" value="weg"><input type="hidden" name="pfad" value="{{ pfad }}">
+        <input type="hidden" name="zurueck" value="{{ request.get_full_path }}#artikel">
+        <button type="submit" class="btn" style="padding:0 0.4rem;font-size:0.75rem" title="No longer count as article">remove</button></form></li>{% endfor %}</ul>
+    {% endif %}
+  </details>
+</div>
+
+{# ── 3. LinkedIn posts and website visits ───────────────────────────── #}
+<div class="card mt-analyse" id="linkedin">
+  <h2>3 · LinkedIn posts and website visits</h2>
+  <p class="mt-leise">
+    A visit belongs to a post only through the post's tracking link (<code>utm_content=post-&lt;id&gt;</code>) – never because it happened soon after a post.
+    LinkedIn's own <em>clicks</em> (Statistics → Clicks) are a different measure: a click is not a website visit (the page may not load, the visitor may block tracking, one person may click twice).
+  </p>
+  {% if posts %}
+  <div class="mt-tabelle mt-kurz">
+    <table>
+      <thead><tr><th>Post</th><th>Channel</th><th>Campaign</th><th class="mt-zahl">Visits</th><th class="mt-zahl">Visitor IDs</th>
+        <th class="mt-zahl">Offer page</th><th class="mt-zahl">Contact page</th><th class="mt-zahl">Contact actions</th></tr></thead>
+      <tbody>
+        {% for r in posts %}
+        <tr>
+          <td>{% if r.post_id %}<strong>#{{ r.post_id }}</strong> {% endif %}{{ r.titel }}{% if r.datum %} <span class="mt-leise">· {{ r.datum }}</span>{% endif %}</td>
+          <td>{% if r.kanal %}{{ r.kanal }}{% else %}{{ r.begriffe|join:", " }}{% endif %}</td>
+          <td>{{ r.kampagnen|join:", " }}</td>
+          <td class="mt-zahl">{{ r.besuche }}</td><td class="mt-zahl">{{ r.ids }}</td>
+          <td class="mt-zahl">{% include "matomo/_anteil.html" with a=r.angebot %}</td>
+          <td class="mt-zahl">{% include "matomo/_anteil.html" with a=r.kontaktseite %}</td>
+          <td class="mt-zahl">{% include "matomo/_anteil.html" with a=r.kontaktaktionen %}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <p><strong>{% if not k.besuche %}No visits recorded in this period.{% elif hat_utm %}Tracking links were used, but none from LinkedIn.{% else %}No visit with a LinkedIn tracking link yet{% endif %}</strong>
+    {% if k.besuche and not hat_utm %} – the source of LinkedIn visits cannot be assigned until posts carry tracking links.
+    Visits from the LinkedIn app arrive without a referrer and are in “Unknown source / direct access”.{% endif %}</p>
+  {% endif %}
+  <p class="mt-leise">Tracking links are made in the planner: open a post, paste the octotrial.com address next to <em>🔗 Website</em> and click <em>Tag</em>, or tag every octotrial.com link in the text at once.
+    Convention: <code>utm_source=linkedin</code>, <code>utm_medium=organic_social</code>, <code>utm_campaign=linkedin_posts</code>, <code>utm_content=post-&lt;id&gt;</code>,
+    <code>utm_term=company_page</code> or <code>personal_profile</code>.</p>
+</div>
+
+{# ── Diagnostics, folded ─────────────────────────────────────────────── #}
+<details class="mt-diagnose">
+  <summary>Diagnostics – classification, places, browsers, systems, languages, times</summary>
+  <p class="mt-leise">All visits of the period, every class – including those the analyses leave out.</p>
+  {% if verlauf %}
+  <h3>Visits per day by class</h3>
+  {% include "matomo/_verlauf.html" %}
+  {% endif %}
+  {% for t in diagnose %}
+  <h3 style="margin-top:1rem">{{ t.titel }}</h3>
+  {% if t.hinweis %}<p class="mt-leise">{{ t.hinweis }}</p>{% endif %}
+  {% if t.zeilen %}
+  <div class="mt-tabelle" style="max-height:40vh"><table class="mt-sortierbar">
+    <thead><tr>{% for s in t.spalten %}<th>{{ s }}</th>{% endfor %}</tr></thead>
+    <tbody>{% for zeile in t.zeilen %}<tr>{% for wert in zeile %}<td>{{ wert }}</td>{% endfor %}</tr>{% endfor %}</tbody>
+  </table></div>
+  {% else %}<p class="mt-leise">No visits recorded.</p>{% endif %}
+  {% endfor %}
+  {% if raster.hoechstwert %}
+  <h3 style="margin-top:1rem">Weekday and hour ({{ zeitzone }})</h3>
+  <p class="mt-leise">With so few visits this shows when the visits happened – not when it is best to post.</p>
+  <div class="mt-rasterpaar">
+    {% include "matomo/_raster.html" with r=raster.menschen %}
+    {% include "matomo/_raster.html" with r=raster.bots %}
+  </div>
+  {% endif %}
+  <h3 style="margin-top:1rem">Every report Matomo offers{% if anzahl_berichte %} ({{ anzahl_berichte }}){% endif %}</h3>
+  <div class="mt-basis"><strong>Different data basis.</strong> These are Matomo's own reports: all visits Matomo kept, including excluded places, previews and automation; Matomo's days (UTC).</div>
   {% for kategorie, berichte in kategorien.items %}
     <div class="mt-kat">{{ kategorie }}</div>
-    <div class="mt-liste">
-      {% for b in berichte %}
-        <a href="{% url 'matomo:bericht' b.module b.action %}?von={{ von }}&amp;bis={{ bis }}">{{ b.name }}</a>
-      {% endfor %}
-    </div>
-  {% empty %}
-    <p class="mt-leise">No report list received – see the message above.</p>
-  {% endfor %}
-</div>
+    <div class="mt-liste">{% for b in berichte %}{% if b.module and b.action %}<a href="{% url 'matomo:bericht' b.module b.action %}?von={{ von }}&amp;bis={{ bis }}">{{ b.name }}</a>{% endif %}{% endfor %}</div>
+  {% empty %}<p class="mt-leise">No report list received.</p>{% endfor %}
+</details>
+
+{% include "matomo/_raster_stil.html" %}
+{% include "matomo/_sortierung.html" %}
 {% endblock %}

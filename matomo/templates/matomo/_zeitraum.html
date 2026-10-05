@@ -13,20 +13,22 @@
     <input type="number" name="limit" id="limit" value="{{ limit }}" min="10" max="1000" step="10">
   </div>
   {% endif %}
-  {% if zeige_nur %}
+  {% if zeige_umfang %}
   <div class="form-group">
-    <label for="nur">Show</label>
-    <select name="nur" id="nur">
-      <option value="alle" {% if nur == 'alle' %}selected{% endif %}>all</option>
-      <option value="menschen" {% if nur == 'menschen' %}selected{% endif %}>humans only</option>
-      <option value="bots" {% if nur == 'bots' %}selected{% endif %}>bots only</option>
+    <label for="umfang">Count</label>
+    <select name="umfang" id="umfang" title="Which visits the analyses count">
+      {% for k, name in umfaenge %}<option value="{{ k }}" {% if umfang == k %}selected{% endif %}>{{ name }}</option>{% endfor %}
     </select>
   </div>
   {% endif %}
-  {% if mitnehmen_tag %}<input type="hidden" name="tag" value="{{ mitnehmen_tag }}">{% endif %}
-  {% if mitnehmen_stunde %}<input type="hidden" name="stunde" value="{{ mitnehmen_stunde }}">{% endif %}
+  {% if mitnehmen_ausgeschlossen %}<input type="hidden" name="ausgeschlossen" value="1">{% endif %}
   {% if alle_orte %}<input type="hidden" name="alle_orte" value="1">{% endif %}
   <button type="submit" class="btn btn-primary">Show</button>
 </form>
+<p class="mt-leise" style="margin:-0.4rem 0 0.8rem">
+  Dates and hours in <strong>{{ zeitzone|default:"Europe/Berlin" }}</strong>{% if datenbasis %} for the period
+  you choose; the report itself is built from Matomo's days{% endif %}.
+</p>
 {% if hinweis %}<div class="alert alert-info">{{ hinweis }}</div>{% endif %}
-{% include "matomo/_orte.html" %}
+{% if datenbasis %}<div class="mt-basis"><strong>Different data basis.</strong> {{ datenbasis }}</div>{% endif %}
+{% if regeln %}{% include "matomo/_ausschluesse.html" %}{% else %}{% include "matomo/_orte.html" %}{% endif %}

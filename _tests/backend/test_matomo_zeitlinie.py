@@ -1,5 +1,8 @@
 """Web Analytics (30.09.2026): places left out, humans first, the timeline.
 
+Since 05.10.2026 everything runs through matomo/auswertung.py; the checks for
+the new rules are in test_matomo_auswertung.py. Here: what stayed.
+
 Matomo itself is stood in for - the tests hand the views a visit log of their
 own through a mocked client.hole, against a real database for the list of
 places.
@@ -16,6 +19,7 @@ from matomo import views
 
 HOLE = 'matomo.views.client.hole'
 WP = 'matomo.views.client.blog_beitraege'
+WP_SEITEN = 'matomo.views.client.wp_seiten'
 
 
 def besuch(wer, tag, stadt='Munich', typ='new', seiten=(('/', 30),), dauer=None):
@@ -47,6 +51,12 @@ class Grundlage(TransactionTestCase):
         wp = mock.patch(WP, return_value=[])
         self.wp = wp.start()
         self.addCleanup(wp.stop)
+        seiten = mock.patch(WP_SEITEN, return_value=[])
+        seiten.start()
+        self.addCleanup(seiten.stop)
+        views._eigene_tabelle_da = False
+        with connection.cursor() as c:
+            c.execute('DROP TABLE IF EXISTS matomo_eigene_besucher')
         self.client.force_login(User.objects.create_user('wa', password='wa'))
 
 
@@ -101,12 +111,11 @@ class Orte(Grundlage):
         with mock.patch(HOLE, return_value=log):
             seite = self.client.get('/webstats/besucher/?von=2026-09-01&bis=2026-09-30').content.decode()
             mit = self.client.get('/webstats/besucher/?von=2026-09-01&bis=2026-09-30&alle_orte=1').content.decode()
-        self.assertIn('Left out of the statistics: 2 places', seite)
-        self.assertIn('1 visit hidden in this period', seite)
-        self.assertNotIn('>Herzogenaurach</td>', seite)
-        self.assertIn('counted anyway right now', mit)
+        self.assertIn('Exclusions and classification', seite)
+        self.assertIn('1 under a location rule', seite)
+        self.assertNotIn('<td>Herzogenaurach</td>', seite)
+        self.assertIn('places counted anyway right now', mit)
         self.assertIn('name="alle_orte" value="1"', mit)       # the date form keeps it
-        self.assertIn('data-vorwahl="Human"', seite)
 
 
 class Zeitlinie(Grundlage):
@@ -118,7 +127,9 @@ class Zeitlinie(Grundlage):
             besuch('c', '2026-09-03', seiten=(('/', 10), ('/about', 20))),
         ]
         with mock.patch(HOLE, return_value=b):
-            besuche = views._besuchsprotokoll(dt.date(2026, 8, 1), dt.date(2026, 9, 30))
+            # b's one-page visit is "unclear" since 05.10.2026; counted here on purpose
+            besuche = views._besuchsprotokoll(dt.date(2026, 8, 1), dt.date(2026, 9, 30),
+                                              umfang='human_unclear')
         z = views.zeitlinie_rechnen(besuche, dt.date(2026, 8, 1), dt.date(2026, 9, 30))
         self.assertEqual([('2026-08', 1, 1, 0), ('2026-09', 2, 1, 1)],
                          [(m['schluessel'], m['alle'], m['wieder'], m['neu']) for m in z['monate']])
@@ -127,13 +138,14 @@ class Zeitlinie(Grundlage):
         self.assertEqual([1, 1], s['/services/']['r'])
         # August: 90 s from the first visit; the second visit's /services is its last page
         self.assertEqual(90, s['/services/']['t'][0])
-        self.assertEqual(0, s['/services/']['t'][1])              # only a last page - no time
+        self.assertIsNone(s['/services/']['t'][1])                # only a last page - not measured, not 0
         self.assertEqual([40, 10], s['/']['t'])                   # (30+50)/2, then 10
-        self.assertEqual([0, 0], s['/contact/']['t'])             # last page, 999 s ignored
+        self.assertEqual([None, None], s['/contact/']['t'])       # last page, 999 s ignored
         self.assertIn('/about/', s)                               # normalised with a slash
 
     def test_bots_zaehlen_nicht(self):
-        b = [besuch('bot', '2026-09-02', seiten=(('/', 0),), dauer=0), besuch('m', '2026-09-03')]
+        b = [besuch('bot', '2026-09-02', seiten=(('/', 0),), dauer=0),
+             besuch('m', '2026-09-03', seiten=(('/', 30), ('/services/', 20)))]
         with mock.patch(HOLE, return_value=b):
             besuche = views._besuchsprotokoll(dt.date(2026, 9, 1), dt.date(2026, 9, 30))
         z = views.zeitlinie_rechnen(besuche, dt.date(2026, 9, 1), dt.date(2026, 9, 30))
@@ -164,7 +176,7 @@ class Zeitlinie(Grundlage):
         self.assertEqual(0, hole.call_args.kwargs['cache_seconds'])  # a year of raw log is not kept
         html = a.content.decode()
         self.assertIn('id="zl-daten"', html)
-        self.assertIn('1 visit hidden in this period', html)
+        self.assertIn('1 under a location rule', html)
         daten = lambda antwort: antwort.content.decode().split('id="zl-daten"', 1)[1].split('</script>', 1)[0]
         self.assertEqual(daten(a), daten(b))
         # A changed list of places throws the counted numbers away.
@@ -177,12 +189,13 @@ class Zeitlinie(Grundlage):
         with mock.patch(HOLE, return_value=[]) as hole:
             a = self.client.get('/webstats/zeitlinie/?von=2025-01-01&bis=2026-09-30')
         self.assertIn('at most 12 months', a.content.decode())
-        self.assertTrue(hole.call_args.kwargs['date'].startswith('2025-10-01,'))
+        # one day earlier at Matomo: its days are UTC, the portal's are Europe/Berlin
+        self.assertTrue(hole.call_args.kwargs['date'].startswith('2025-09-30,'))
 
     def test_ohne_angabe_sechs_monate(self):
         with mock.patch(HOLE, return_value=[]) as hole:
             self.client.get('/webstats/zeitlinie/')
-        von = dt.date.fromisoformat(hole.call_args.kwargs['date'].split(',')[0])
+        von = dt.date.fromisoformat(hole.call_args.kwargs['date'].split(',')[0]) + dt.timedelta(days=1)
         self.assertEqual(1, von.day)
         heute = dt.date.today()
         self.assertEqual((heute.year * 12 + heute.month) - (von.year * 12 + von.month), 5)
@@ -212,7 +225,8 @@ class Blog(Grundlage):
 
     def rechnen(self, blog):
         with mock.patch(HOLE, return_value=self.log()):
-            besuche = views._besuchsprotokoll(dt.date(2026, 8, 1), dt.date(2026, 9, 30))
+            besuche = views._besuchsprotokoll(dt.date(2026, 8, 1), dt.date(2026, 9, 30),
+                                              umfang='human_unclear')
         return views.zeitlinie_rechnen(besuche, dt.date(2026, 8, 1), dt.date(2026, 9, 30), blog=blog)
 
     def test_artikel_ausfuehrlich(self):
@@ -228,7 +242,8 @@ class Blog(Grundlage):
         self.assertEqual('Aug 2026', cdm['erste'])
         self.assertEqual([('/contact-page/', 1), ('/services/', 1)], cdm['weiter'])
         self.assertEqual([1, 0, 0, 0], cdm['monate'][0]['quellen'])      # LinkedIn in August
-        self.assertEqual([0, 1, 0, 1], cdm['monate'][1]['quellen'])      # September: Google, and one without referrer
+        # September: Google, and one without referrer - "Direct" now (it used to land in "Other")
+        self.assertEqual([0, 1, 1, 0], cdm['monate'][1]['quellen'])
         # an article nobody read is still listed
         self.assertEqual((0, ''), (a['/lessons-learned/']['leser'], a['/lessons-learned/']['erste']))
         self.assertEqual('The CDM lifecycle', z['blog'][0]['titel'])
@@ -268,19 +283,19 @@ class Blog(Grundlage):
 
     def test_blog_zurueck_nur_ins_portal(self):
         a = self.client.post('/webstats/blog/', {'aktion': 'dazu', 'pfad': '/x/', 'zurueck': 'https://evil.example/'})
-        self.assertEqual('/webstats/zeitlinie/', a['Location'])
+        self.assertEqual('/webstats/', a['Location'])
         self.client.post('/webstats/blog/', {'aktion': 'dazu', 'pfad': '/'})     # the home page is never an article
         self.assertEqual(['/x/'], views.blog_eigene())
 
     def test_seite(self):
+        # The article table moved to the overview; the timeline keeps one matrix row.
         self.wp.return_value = self.ARTIKEL
         with mock.patch(HOLE, return_value=self.log()):
             html = self.client.get('/webstats/zeitlinie/?von=2026-08-01&bis=2026-09-30').content.decode()
-        self.assertIn('<h2>Blog articles</h2>', html)
-        self.assertIn('The CDM lifecycle', html)
-        self.assertIn('not read in this range', html)       # Lessons learned
-        self.assertIn('2 from WordPress', html)
-        self.assertIn('class="mt-sortierbar zl-blogtabelle"', html)
+            ueber = self.client.get('/webstats/?von=2026-08-01&bis=2026-09-30').content.decode()
+        self.assertIn('now analysed on the', html)
+        self.assertIn('The CDM lifecycle', ueber)
+        self.assertIn('(2 published)', ueber)
         import json
         daten = json.loads(html.split('id="zl-daten" type="application/json">', 1)[1].split('</script>', 1)[0])
         self.assertIn('Blog – all articles (2)', [z['seite'] for z in daten['seiten']])

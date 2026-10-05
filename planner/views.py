@@ -3539,3 +3539,42 @@ def api_buffer_profiles(request):
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=500)
 
+
+
+# ── Tracking links for the website (05.10.2026) ─────────────────────────────
+
+@login_required
+def api_utm(request):
+    """Tag octotrial.com links for one post (planner/utm.py has the convention).
+
+    POST {"post_id": 152, "text": "..."} -> the text with every octotrial.com
+    link tagged, and the list of changed links. GET ?post_id=152&url=... ->
+    one tagged link. The channel (company page or personal profile) comes
+    from the post itself, not from the browser.
+    """
+    from . import utm
+    if request.method == 'POST':
+        try:
+            daten = json.loads(request.body or b'{}')
+        except ValueError:
+            return JsonResponse({'ok': False, 'error': 'Invalid JSON'}, status=400)
+    else:
+        daten = request.GET
+    try:
+        post_id = int(daten.get('post_id'))
+    except (TypeError, ValueError):
+        return JsonResponse({'ok': False, 'error': 'post_id missing'}, status=400)
+    with connection.cursor() as c:
+        zeilen = _q(c, "SELECT COALESCE(is_oj,0) FROM planner_posts WHERE id=%s", [post_id])
+    if not zeilen:
+        return JsonResponse({'ok': False, 'error': 'Post not found'}, status=404)
+    persoenlich = bool(zeilen[0][0])
+    kanal = utm.CHANNELS[persoenlich]
+    if request.method == 'POST':
+        text, aenderungen = utm.tag_text(daten.get('text') or '', post_id, persoenlich)
+        return JsonResponse({'ok': True, 'text': text, 'channel': kanal,
+                             'changes': [{'old': a, 'new': n} for a, n in aenderungen]})
+    url = (daten.get('url') or '').strip()
+    if not utm.is_site_link(url):
+        return JsonResponse({'ok': False, 'error': 'Only octotrial.com links are tagged'}, status=400)
+    return JsonResponse({'ok': True, 'url': utm.tag(url, post_id, persoenlich), 'channel': kanal})

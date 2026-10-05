@@ -350,6 +350,20 @@ document.addEventListener('DOMContentLoaded', function () {
       <label style="font-size:12px;color:#6c757d;white-space:nowrap">🔗 Link</label>
       <input type="text" id="pe-link" placeholder="https://..." style="font-size:13px;flex:1;padding:6px 8px;border:0.5px solid #ced4da;border-radius:4px;box-sizing:border-box">
     </div>
+    <!-- Tracking link for the website (05.10.2026): one convention, see planner/utm.py -->
+    <div id="pe-utm" style="border:0.5px solid #ced4da;border-radius:4px;padding:8px;margin-bottom:8px;background:#fafbfc">
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+        <label for="pe-utm-url" style="font-size:12px;color:#008591;font-weight:500;white-space:nowrap" title="Web Analytics can tell which post brought a visit only through this link">🔗 Website</label>
+        <input type="text" id="pe-utm-url" placeholder="https://octotrial.com/..." style="font-size:13px;flex:1;min-width:200px;padding:6px 8px;border:0.5px solid #ced4da;border-radius:4px;box-sizing:border-box">
+        <button type="button" onclick="peUtmLink()" style="font-size:12px;padding:4px 10px;border:0.5px solid #61CEBC;border-radius:4px;background:#fff;cursor:pointer;color:#008591">Tag</button>
+        <button type="button" onclick="peUtmText()" title="Add the tracking parameters to every octotrial.com link in the post text" style="font-size:12px;padding:4px 10px;border:0.5px solid #ced4da;border-radius:4px;background:#fff;cursor:pointer;color:#555">Tag links in text</button>
+      </div>
+      <div id="pe-utm-out" style="display:none;margin-top:6px;gap:6px;align-items:center">
+        <input type="text" id="pe-utm-result" readonly style="font-size:12px;flex:1;padding:5px 8px;border:0.5px solid #ced4da;border-radius:4px;background:#fff;box-sizing:border-box">
+        <button type="button" onclick="peUtmCopy()" style="font-size:12px;padding:4px 10px;border:0.5px solid #ced4da;border-radius:4px;background:#fff;cursor:pointer">Copy</button>
+      </div>
+      <div id="pe-utm-msg" style="font-size:11px;color:#6c757d;margin-top:4px"></div>
+    </div>
 
     <!-- ── Video-Auswahl: Nextcloud (Default) oder PC-Upload ── -->
     <div style="border:0.5px solid #ced4da;border-radius:4px;padding:8px;margin-bottom:8px;background:#fafbfc">
@@ -521,6 +535,8 @@ async function peDeletePost(id) {
 
 function openCreate() {
   document.getElementById('pe-id').value = '';
+  ['pe-utm-url','pe-utm-result'].forEach(i => { const f = document.getElementById(i); if (f) f.value = ''; });
+  if (document.getElementById('pe-utm-out')) { document.getElementById('pe-utm-out').style.display = 'none'; document.getElementById('pe-utm-msg').textContent = ''; }
   document.getElementById('pe-title').value = '';
   document.getElementById('pe-content').innerHTML = '';
   ptSet('pe-type', '');
@@ -686,6 +702,8 @@ function openEdit(id) {
   const p = PE_POSTS.find(x => x.id == id);
   if (!p) return;
   document.getElementById('pe-id').value = p.id;
+  ['pe-utm-url','pe-utm-result'].forEach(i => { const f = document.getElementById(i); if (f) f.value = ''; });
+  if (document.getElementById('pe-utm-out')) { document.getElementById('pe-utm-out').style.display = 'none'; document.getElementById('pe-utm-msg').textContent = ''; }
   document.getElementById('pe-title').value = p.title;
   document.getElementById('pe-content').innerHTML = p.content || '';
   ptSet('pe-type', p.post_type || '');
@@ -1148,5 +1166,46 @@ if (_liModalBg) _liModalBg.addEventListener('click', function(e) {
   });
   zeige("all");
 })();
+
+// ── Tracking links (planner/utm.py decides the parameters) ──────────────────
+async function peUtmCall(body, method) {
+  const id = document.getElementById('pe-id').value;
+  const msg = document.getElementById('pe-utm-msg');
+  if (!id) { msg.textContent = 'Save the post first – the link carries its number.'; return null; }
+  let r;
+  if (method === 'GET') {
+    r = await fetch('/planner/api/utm/?post_id=' + encodeURIComponent(id) + '&url=' + encodeURIComponent(body.url));
+  } else {
+    r = await fetch('/planner/api/utm/', {method: 'POST',
+      headers: {'Content-Type': 'application/json', 'X-CSRFToken': peCSRF},
+      body: JSON.stringify(Object.assign({post_id: id}, body))});
+  }
+  const d = await r.json().catch(() => ({ok: false, error: 'No answer'}));
+  if (!d.ok) { msg.textContent = d.error || 'Not possible'; return null; }
+  return d;
+}
+async function peUtmLink() {
+  const url = document.getElementById('pe-utm-url').value.trim();
+  const d = await peUtmCall({url: url}, 'GET');
+  if (!d) return;
+  document.getElementById('pe-utm-result').value = d.url;
+  document.getElementById('pe-utm-out').style.display = 'flex';
+  document.getElementById('pe-utm-msg').textContent = 'For the ' + d.channel.replace('_', ' ') + '. Existing utm values are kept.';
+}
+function peUtmCopy() {
+  const f = document.getElementById('pe-utm-result');
+  f.select();
+  (navigator.clipboard ? navigator.clipboard.writeText(f.value) : Promise.reject()).catch(() => document.execCommand('copy'));
+  document.getElementById('pe-utm-msg').textContent = 'Copied.';
+}
+async function peUtmText() {
+  const ed = document.getElementById('pe-content');
+  const d = await peUtmCall({text: ed.innerHTML}, 'POST');
+  if (!d) return;
+  if (!d.changes.length) { document.getElementById('pe-utm-msg').textContent = 'No untagged octotrial.com link in the text.'; return; }
+  ed.innerHTML = d.text;
+  document.getElementById('pe-utm-msg').textContent = d.changes.length + ' link' + (d.changes.length > 1 ? 's' : '') +
+    ' tagged for the ' + d.channel.replace('_', ' ') + ' – save the post to keep it.';
+}
 </script>
 {% endif %}

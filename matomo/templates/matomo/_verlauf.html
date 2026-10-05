@@ -60,7 +60,7 @@ Achse sich danach neu einstellt. Erwartet "verlauf" aus views._verlauf.
   var sichtbar = {};
   reihen.forEach(function (r) { sichtbar[r.feld] = true; });
 
-  var B = 920, H = 220, links = 34, rechts = 62, oben = 24, unten = 24;   // oben Platz für die Zahl an der höchsten Spitze
+  var B = 920, H = 220, links = 34, rechts = 78, oben = 24, unten = 24;   // oben Platz für die Zahl an der höchsten Spitze
   var zeichenbreite = B - links - rechts, zeichenhoehe = H - oben - unten;
   var grundlinie = oben + zeichenhoehe;
   var blase = null;
@@ -142,6 +142,7 @@ Achse sich danach neu einstellt. Erwartet "verlauf" aus views._verlauf.
                                    y: grundlinie + 15, 'text-anchor': 'middle' }, d.kurz));
     });
 
+    var endmarken = [];
     reihen.forEach(function (r) {
       if (!sichtbar[r.feld]) return;
       var punkte = daten.map(function (d, i) { return x(i).toFixed(1) + ',' + y(d[r.feld]).toFixed(1); });
@@ -165,9 +166,19 @@ Achse sich danach neu einstellt. Erwartet "verlauf" aus views._verlauf.
           'text-anchor': 'middle', fill: r.farbe }, daten[i][r.feld]));
       });
 
-      var letzter = daten[daten.length - 1];
+      endmarken.push({ y: y(daten[daten.length - 1][r.feld]) + 4, name: r.name, farbe: r.farbe });
+    });
+
+    // End labels: several lines often end on the same value (0) - keep them
+    // at least 13 px apart instead of printing them over each other.
+    // Pushed upwards from the lowest one, so none slips below the axis.
+    endmarken.sort(function (a, b) { return b.y - a.y; });
+    for (var m = 1; m < endmarken.length; m++) {
+      if (endmarken[m - 1].y - endmarken[m].y < 13) endmarken[m].y = endmarken[m - 1].y - 13;
+    }
+    endmarken.forEach(function (e) {
       svg.appendChild(el('text', { class: 'endbeschriftung', x: links + zeichenbreite + 8,
-        y: (y(letzter[r.feld]) + 4).toFixed(1), fill: r.farbe }, r.name));
+        y: e.y.toFixed(1), fill: e.farbe }, e.name));
     });
 
     svg.appendChild(el('line', { class: 'fadenkreuz', x1: 0, y1: 0, x2: 0, y2: 0,

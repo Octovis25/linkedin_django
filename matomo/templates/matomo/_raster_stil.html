@@ -1,0 +1,20 @@
+<style>
+  .mt-rasterpaar { display:flex; gap:1.75rem; flex-wrap:wrap; margin-top:0.5rem; }
+  .mt-rasterkarte { flex:1 1 460px; min-width:0; }
+  .mt-rastertitel { font-weight:700; font-size:0.9rem; margin-bottom:0.35rem; }
+  .mt-rastertitel.menschen { color:var(--octo-petrol); }
+  .mt-rastertitel.bots { color:#6b7372; }
+  .mt-raster { display:block; }
+  .mt-rasterkopf, .mt-rasterzeile { display:grid; grid-template-columns:2.2rem repeat(24, 1fr) 2.6rem; gap:2px; align-items:center; }
+  .mt-rasterkopf { margin-bottom:2px; }
+  .mt-rasterkopf span { font-size:0.65rem; color:#888; text-align:left; }
+  .mt-tag { font-size:0.75rem; color:var(--octo-dark-petrol); font-weight:600; }
+  .mt-feld { display:block; height:20px; border-radius:3px; }
+  .mt-feld.leer { background:var(--octo-light-gray); }
+  .mt-feld.menschen { background:var(--octo-petrol); }
+  .mt-feld.bots { background:#8C9593; }
+  a.mt-feld:hover { outline:2px solid var(--octo-dark-petrol); outline-offset:1px; }
+  .mt-summenkopf { font-size:0.65rem; color:#888; text-align:right; padding-right:0.15rem; }
+  .mt-summe { font-size:0.8rem; font-weight:600; text-align:right; padding-right:0.15rem; color:var(--octo-dark-petrol); }
+  @media (max-width:1200px) { .mt-raster { overflow-x:auto; } .mt-rasterkopf, .mt-rasterzeile { min-width:520px; } }
+</style>

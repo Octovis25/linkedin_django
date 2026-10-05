@@ -51,7 +51,7 @@ returning ones are the point. The matrix is one hue, light to dark.
 </style>
 
 <h1>Timeline</h1>
-<p class="mt-leise">Humans only, month by month – who came, who came back, and which pages they read for how long.</p>
+<p class="mt-leise">Counted visits only – the same rules as the Overview – month by month: which visitor IDs came, which came back, and which pages they opened for how long.</p>
 
 {% if fehler %}<div class="alert alert-error">{{ fehler }}</div>{% endif %}
 
@@ -62,8 +62,9 @@ returning ones are the point. The matrix is one hue, light to dark.
 {% endif %}
 
 <div class="card">
-  <h2>Human visitors per month</h2>
-  <p class="mt-leise">Different people each month, split into <strong>returning</strong> (Matomo had seen them before) and <strong>new</strong>. Point at a column for the numbers.</p>
+  <h2>Visitor IDs per month</h2>
+  <p class="mt-leise">Distinct Matomo visitor IDs each month, split into <strong>returning</strong> (Matomo had seen the ID before) and <strong>new</strong>.
+    An ID is a device and browser, not a person. Months are <strong>not</strong> added up: an ID that came in two months is in both columns. Point at a column for the numbers.</p>
   <div class="zl-legende">
     <span><i style="background:#0093A1"></i>Returning</span>
     <span><i style="background:#B7BFBD"></i>New</span>
@@ -84,93 +85,16 @@ returning ones are the point. The matrix is one hue, light to dark.
   <ul class="zl-regeln">
     <li><strong>Unique visitors</strong> – different people (Matomo's visitor id) who opened the page that month; five visits by one person count once.</li>
     <li><strong>Returning</strong> – of those, the ones who came on a visit Matomo marks as returning.</li>
-    <li><strong>&#8960; time on page</strong> – average time per view. The last page of a visit has no end time and is not counted.</li>
-    <li>From the visit log, humans only, without the places left out above. Without a date range the last six months; at most twelve.</li>
+    <li><strong>&#8960; time on page</strong> – average of the measured views. The last page of a visit has no end time and is not measured; a cell without any measurement shows “–”, not 0.</li>
+    <li>From the visit log, counted visits only (see “Exclusions and classification” above). Months in Europe/Berlin. Without a date range the last six months; at most twelve.</li>
   </ul>
 </div>
 
 <div class="card" id="zl-blog">
   <h2>Blog articles</h2>
-  <p class="mt-leise">One row per article, humans only, without the places left out. Sort by any column; <strong>Details</strong> opens the months.</p>
-  {% if blog %}
-  <div class="mt-tabelle mt-kurz" style="margin-top:0.5rem">
-    <table class="mt-sortierbar zl-blogtabelle">
-      <thead><tr>
-        <th>Article</th><th class="mt-zahl" title="Readers per month">Months</th>
-        <th class="mt-zahl" title="Different people who read it">Readers</th>
-        <th class="mt-zahl" title="Of those, the ones Matomo had seen before">Returning</th>
-        <th class="mt-zahl" title="Every opening, repeats included">Views</th>
-        <th class="mt-zahl" title="Average reading time; in brackets from how many views it is measured">&#8960; Time</th>
-        <th class="mt-zahl" title="Visits that began on this article">Started here</th>
-        <th title="Where most of its readers came from">Came mostly from</th>
-        <th class="mt-zahl" title="Different readers who came from LinkedIn">From LinkedIn</th>
-        <th></th>
-      </tr></thead>
-      <tbody>
-        {% for a in blog %}
-        <tr>
-          <td class="zl-artikel"><strong>{{ a.titel }}</strong><small>{{ a.seite }}{% if a.erste %} &middot; first read {{ a.erste }}{% else %} &middot; not read in this range{% endif %}</small></td>
-          <td class="mt-zahl" data-sort="{{ a.leser }}"><span class="zl-spark">{% for b in a.balken %}<i{% if not b.wert %} class="leer"{% else %} style="height:{{ b.hoehe }}px"{% endif %} title="{{ b.monat }}: {{ b.wert }}"></i>{% endfor %}</span></td>
-          <td class="mt-zahl">{{ a.leser }}</td>
-          <td class="mt-zahl">{{ a.wieder }}</td>
-          <td class="mt-zahl">{{ a.views }}</td>
-          <td class="mt-zahl" data-sort="{{ a.zeit }}">{{ a.zeit_text }} <span class="mt-leise">({{ a.gemessen }})</span></td>
-          <td class="mt-zahl">{{ a.start }}</td>
-          <td>{{ a.haupt|default:"–" }}</td>
-          <td class="mt-zahl">{{ a.linkedin }}</td>
-          <td><a href="#{{ a.anker }}" class="zl-details-link" data-ziel="{{ a.anker }}">Details</a></td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  </div>
-
-  <h3 class="mt-kat" style="margin-top:1.2rem">Month by month</h3>
-  {% for a in blog %}
-  <details class="zl-monate" id="{{ a.anker }}">
-    <summary><strong>{{ a.titel }}</strong> <span class="mt-leise">{{ a.leser }} reader{{ a.leser|pluralize }}</span></summary>
-    <table class="zl-mini">
-      <tr><th>Month</th><th>Readers</th><th>Returning</th><th>Views</th><th>&#8960; Time</th><th>Started here</th>{% for q in quellen %}<th>{{ q }}</th>{% endfor %}</tr>
-      {% for m in a.monate %}
-      <tr><td>{{ m.name }}</td><td>{{ m.leser }}</td><td>{{ m.wieder }}</td><td>{{ m.views }}</td><td>{{ m.zeit_text }}</td><td>{{ m.start }}</td>{% for q in m.quellen %}<td>{{ q }}</td>{% endfor %}</tr>
-      {% endfor %}
-    </table>
-    {% if a.weiter %}<p class="mt-leise" style="margin:0.4rem 0 0">Read next after this article: {% for pfad, anzahl in a.weiter %}{{ pfad }} ({{ anzahl }}){% if not forloop.last %}, {% endif %}{% endfor %}.</p>{% endif %}
-  </details>
-  {% endfor %}
-  {% else %}
-  <p class="mt-leise">No blog articles known yet{% if blog_info.fehler %} – WordPress did not hand out its list of posts. Add the addresses below{% endif %}.</p>
-  {% endif %}
-
-  <ul class="zl-regeln">
-    <li><strong>Readers</strong> – different people; <strong>Returning</strong> – of those, the ones Matomo had seen before; <strong>Views</strong> – every opening.</li>
-    <li><strong>&#8960; Time</strong> – Matomo only knows the reading time when the reader opened another page afterwards; the number in brackets says from how many views it comes. Matomo's heartbeat timer would measure it for everyone.</li>
-    <li><strong>Came mostly from</strong> and the columns in the months: LinkedIn, Search (Google, Bing, …), Direct (no referring page), Other – counted per visit.</li>
-  </ul>
-
-  <details class="mt-orte" style="margin-top:0.9rem">
-    <summary>Which pages count as blog articles{% if blog_info.wordpress is not None %}: {{ blog_info.wordpress }} from WordPress{% else %}: WordPress did not answer{% endif %}{% if blog_eigene %}, {{ blog_eigene|length }} added here{% endif %}</summary>
-    <div class="innen">
-      <p class="mt-leise" style="margin:0.3rem 0 0.5rem">
-        {% if blog_info.wordpress is not None %}Every published WordPress post is recognised automatically (checked once a day).{% else %}WordPress did not hand out its list of posts ({{ blog_info.fehler }}). Add the addresses here instead.{% endif %}
-        Add an address here if a page should count as an article too.</p>
-      <ul>
-        {% for pfad in blog_eigene %}
-        <li><span>{{ pfad }}</span>
-          <form method="post" action="{% url 'matomo:blog' %}">{% csrf_token %}
-            <input type="hidden" name="aktion" value="weg"><input type="hidden" name="pfad" value="{{ pfad }}">
-            <input type="hidden" name="zurueck" value="{{ orte_zurueck }}">
-            <button type="submit" class="weg" title="Remove {{ pfad }}" aria-label="Remove {{ pfad }}">&times;</button>
-          </form></li>
-        {% endfor %}
-      </ul>
-      <form method="post" action="{% url 'matomo:blog' %}" class="dazu">{% csrf_token %}
-        <input type="hidden" name="aktion" value="dazu"><input type="hidden" name="zurueck" value="{{ orte_zurueck }}">
-        <input type="text" name="pfad" maxlength="255" placeholder="/article-address/" aria-label="Address of an article" required>
-        <button type="submit" class="btn">Add</button>
-      </form>
-    </div>
-  </details>
+  <p class="mt-leise">The articles are now analysed on the <a href="{% url 'matomo:uebersicht' %}?von={{ von }}&amp;bis={{ bis }}#artikel">Overview</a>
+    (“Articles and the paths after them”) – with old and new addresses merged, sources, next pages and measured reading time.
+    In the matrix above all articles share one row.</p>
 </div>
 
 <div class="zl-sprechblase" id="zl-tip"></div>
@@ -193,7 +117,7 @@ returning ones are the point. The matrix is one hue, light to dark.
     tip.style.left = x + 'px'; tip.style.top = y + 'px';
   }
   function weg() { tip.style.display = 'none'; }
-  function zeit(sek) { return sek ? Math.floor(sek / 60) + ':' + ('0' + (sek % 60)).slice(-2) : '–'; }
+  function zeit(sek) { return sek == null ? '–' : Math.floor(sek / 60) + ':' + ('0' + (sek % 60)).slice(-2); }
 
   /* ---- columns: returning at the base, new on top ---- */
   var svg = document.getElementById('zl-saeulen');
@@ -229,7 +153,7 @@ returning ones are the point. The matrix is one hue, light to dark.
   svg.querySelectorAll('.zl-saeule').forEach(function (g) {
     var m = MONATE[+g.dataset.i];
     g.addEventListener('mousemove', function (e) {
-      zeigen(e, '<b>' + schuetzen(m.name) + '</b>' + m.alle + ' human visitor' + (m.alle === 1 ? '' : 's') + '<br>' +
+      zeigen(e, '<b>' + schuetzen(m.name) + '</b>' + m.alle + ' visitor ID' + (m.alle === 1 ? '' : 's') + '<br>' +
         '<span class="punkt" style="background:' + AKZENT + '"></span>' + m.wieder + ' returning<br>' +
         '<span class="punkt" style="background:' + GRAU + '"></span>' + m.neu + ' new');
     });
@@ -248,7 +172,7 @@ returning ones are the point. The matrix is one hue, light to dark.
     SEITEN.forEach(function (z) { z[mass].forEach(function (v) { if (v > max) max = v; }); });
     var h = '<thead><tr><th class="seite">Page</th>' + MONATE.map(function (m) { return '<th>' + schuetzen(m.kurz) + '</th>'; }).join('') + '</tr></thead><tbody>';
     if (!SEITEN.length) {
-      h += '<tr><td class="seite mt-leise" colspan="' + (MONATE.length + 1) + '">No page views by humans in this range.</td></tr>';
+      h += '<tr><td class="seite mt-leise" colspan="' + (MONATE.length + 1) + '">No counted pageviews in this period.</td></tr>';
     }
     SEITEN.forEach(function (z, zi) {
       h += '<tr><td class="seite" title="' + schuetzen(z.titel || z.seite) + '">' + schuetzen(z.seite) + '</td>';
@@ -268,7 +192,7 @@ returning ones are the point. The matrix is one hue, light to dark.
       k.addEventListener('mousemove', function (e) {
         var z = SEITEN[+k.dataset.z], mi = +k.dataset.m;
         zeigen(e, '<b>' + schuetzen(z.seite) + ' · ' + schuetzen(MONATE[mi].name) + '</b>' +
-          z.u[mi] + ' unique visitor' + (z.u[mi] === 1 ? '' : 's') + '<br>' + z.r[mi] + ' returning<br>&#8960; ' + zeit(z.t[mi]) + ' min on the page');
+          z.u[mi] + ' unique visitor' + (z.u[mi] === 1 ? '' : 's') + '<br>' + z.r[mi] + ' returning<br>' + (z.t[mi] == null ? 'time not measured' : '&#8960; ' + zeit(z.t[mi]) + ' min on the page'));
       });
       k.addEventListener('mouseleave', weg);
     });

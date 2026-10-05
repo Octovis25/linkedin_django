@@ -4,181 +4,93 @@
 {% block content %}
 {% include "matomo/_stil.html" %}
 <style>
-  .mt-rasterpaar { display:flex; gap:1.75rem; flex-wrap:wrap; margin-top:0.5rem; }
-  .mt-rasterkarte { flex:1 1 460px; min-width:0; }
-  .mt-rastertitel { font-weight:700; font-size:0.9rem; margin-bottom:0.35rem; }
-  .mt-rastertitel.menschen { color:var(--octo-petrol); }
-  .mt-rastertitel.bots { color:var(--octo-orange); }
-  .mt-raster { display:block; }
-  .mt-rasterkopf, .mt-rasterzeile { display:grid;
-      grid-template-columns:2.2rem repeat(24, 1fr) 2.6rem;
-      gap:2px; align-items:center; }
-  .mt-rasterkopf { margin-bottom:2px; }
-  .mt-rasterkopf span { font-size:0.65rem; color:#888; text-align:left; }
-  .mt-tag { font-size:0.75rem; color:var(--octo-dark-petrol); font-weight:600; }
-  .mt-feld { display:block; height:20px; border-radius:3px; }
-  .mt-feld.leer { background:var(--octo-light-gray); }
-  .mt-feld.menschen { background:var(--octo-petrol); }
-  .mt-feld.bots { background:var(--octo-orange); }
-  a.mt-feld:hover { outline:2px solid var(--octo-dark-petrol); outline-offset:1px; }
-  .mt-summenkopf { font-size:0.65rem; color:#888; text-align:right; padding-right:0.15rem; }
-  .mt-summe { font-size:0.8rem; font-weight:600; text-align:right; padding-right:0.15rem;
-              color:var(--octo-dark-petrol); }
-  .mt-summe.menschen { color:var(--octo-petrol); }
-  .mt-summe.bots { color:var(--octo-orange); }
-  .mt-legende { display:inline-block; width:0.7rem; height:0.7rem; border-radius:2px;
-                vertical-align:-1px; margin:0 0.15rem 0 0.4rem; }
-  .mt-legende.mensch { background:var(--octo-petrol); }
-  .mt-legende.bot { background:var(--octo-orange); }
-  @media (max-width:1200px) { .mt-raster { overflow-x:auto; }
-                              .mt-rasterkopf, .mt-rasterzeile { min-width:520px; } }
-  tr.mt-verdacht td { background:#fff6ed; }
-  .mt-marke { display:inline-block; padding:1px 8px; border-radius:10px;
-              background:var(--octo-orange); color:#fff; font-size:0.72rem; font-weight:600; }
-  .mt-marke.mensch { background:var(--octo-petrol); }
-  .mt-bot { color: var(--octo-orange); font-weight: 600; }
-  .mt-kachel.bot { border-left-color: var(--octo-orange); }
-  .mt-kachel.bot .zahl { color: var(--octo-orange); }
-  td.mt-zahl, th.mt-zahl { text-align: right; }
+  .mt-besuche td { white-space:normal !important; vertical-align:top; font-size:0.86rem; }
+  .mt-besuche td.mt-zahl { text-align:right; white-space:nowrap !important; }
+  .mt-besuche td:first-child { white-space:nowrap !important; }
+  tr.mt-raus td { background:#f7f6f2; color:#666; }
+  .mt-marke { display:inline-block; padding:1px 8px; border-radius:10px; font-size:0.72rem; font-weight:600; color:#fff; white-space:nowrap; }
+  .mt-marke.human { background:var(--octo-petrol); }
+  .mt-marke.unclear { background:#8C9593; }
+  .mt-marke.automation { background:var(--octo-orange); }
+  .mt-marke.own { background:#5a4a8a; }
+  .mt-grund { display:block; font-size:0.75rem; color:#666; margin-top:2px; }
+  .mt-weg { margin:0.3rem 0 0 1rem; padding:0; font-size:0.8rem; }
+  .mt-weg li { margin:0.1rem 0; }
+  .mt-weg .typ { color:#8a6d00; }
+  .mt-weg .vorschau { color:#a0522d; }
+  td details summary { cursor:pointer; color:var(--octo-petrol); white-space:nowrap; }
 </style>
 
 <h1>Visitors</h1>
-<p class="mt-leise">
-  Who visits octotrial.com – humans and bots reported separately.
-</p>
+<p class="mt-leise">One row per visit, newest first. <strong>Details</strong> shows the pages of the visit in order, with the time Matomo could measure on each.</p>
 
 {% if fehler %}<div class="alert alert-error">{{ fehler }}</div>{% endif %}
 
-{% include "matomo/_zeitraum.html" with zeige_nur=1 %}
+{% include "matomo/_zeitraum.html" with mitnehmen_ausgeschlossen=zeige_aus %}
 
 <div class="mt-kacheln">
-  <div class="mt-kachel"><div class="bez">Total visits</div><div class="zahl">{{ gesamt }}</div></div>
-  <div class="mt-kachel"><div class="bez">Humans</div><div class="zahl">{{ menschen }}</div></div>
-  <div class="mt-kachel bot"><div class="bez">Bots</div><div class="zahl">{{ bots }}</div></div>
-  <div class="mt-kachel bot"><div class="bez">Share of bots</div><div class="zahl">{{ anteil_bots }} %</div></div>
-  <div class="mt-kachel"><div class="bez">Pages (humans)</div><div class="zahl">{{ seiten_menschen }}</div></div>
-  <div class="mt-kachel"><div class="bez">Avg. time (humans)</div><div class="zahl">{{ dauer_schnitt }}s</div></div>
+  <div class="mt-kachel"><div class="bez">Visits counted</div><div class="zahl">{{ k.besuche }}</div></div>
+  <div class="mt-kachel"><div class="bez">Distinct visitor IDs</div><div class="zahl">{{ k.besucher_ids }}</div></div>
+  <div class="mt-kachel"><div class="bez">Pageviews</div><div class="zahl">{{ k.aufrufe }}</div></div>
+  <div class="mt-kachel" style="border-left-color:#8C9593"><div class="bez">Not counted</div><div class="zahl">{{ ausgeschlossen_zahl }}</div></div>
 </div>
 
 <p class="mt-leise">
-  {{ tage }} day{{ tage|pluralize }} analysed.
-  {% if nur == "menschen" %}<strong>The tables below show humans only</strong>
-    ({{ angezeigt }} visits) – the tiles above always show the full picture.
-  {% elif nur == "bots" %}<strong>The tables below show bots only</strong>
-    ({{ angezeigt }} visits) – the tiles above always show the full picture.
-  {% endif %}
-  A visit counts as a <span class="mt-bot">bot</span> when it lasted <strong>0 seconds
-  and opened at most one page</strong> – but only if the same visitor never behaved like
-  a human on any visit. Whoever reads properly once counts as human on their short
-  drop-ins too.
-  {% if gerettet %}In this range that reclassified {{ gerettet }} short visits as human.{% endif %}
-  {% if direkte %}{{ direkte }} visits arrived without a referring page — see the table
-  “Direct entries in detail”.{% endif %}
-  An indication, not proof: a visitor who clicks away immediately, once, still lands
-  among the bots – while a well-disguised scraper does not. Individual visits are in the <a href="{% url 'matomo:protokoll' %}?von={{ von }}&amp;bis={{ bis }}">Log</a> tab.
+  {% if zeige_aus %}<strong>Showing every visit, including the {{ ausgeschlossen_zahl }} not counted</strong> (grey rows, with the reason).
+    <a href="{{ nur_gezaehlt }}">Show counted visits only</a>
+  {% else %}Showing the counted visits. <a href="{{ ausgeschlossen_link }}">Show excluded visits too</a>{% endif %}
+  {% if tag or stunde %} · filtered to {{ tag }} {% if stunde %}{{ stunde }}:00–{{ stunde }}:59{% endif %} ({{ zeitzone }}) – <a href="{{ filter_weg }}">remove</a>{% endif %}
 </p>
+{% if abgeschnitten %}<div class="alert alert-info">Very many visits; Matomo returned the most recent ones only. Choose a shorter period.</div>{% endif %}
 
-{% if abgeschnitten %}
-<div class="alert alert-info">
-  Very many visits found; the analysis is limited to the most recent ones. Choose a
-  shorter range for exact numbers.
-</div>
-{% endif %}
-
-{% if verlauf %}
 <div class="card">
-  <h2>Trend</h2>
-  <p class="mt-leise">
-    Visits per day, humans and bots separately. Both lines share one axis, so they are
-    directly comparable. Days without visits are drawn as zero, not skipped.
-  </p>
-  {% include "matomo/_verlauf.html" %}
-</div>
-{% endif %}
-
-{% if raster.hoechstwert %}
-<div class="card">
-  <h2>When do they come?</h2>
-  <p class="mt-leise">
-    Each cell is one hour on one weekday; the stronger the colour, the more visits.
-    Both grids use the same scale and are directly comparable — the strongest shade
-    stands for {{ raster.hoechstwert }} visits in one hour in both.
-    Click a cell to see the individual visits.
-    {% if raster.ohne_zeit %}({{ raster.ohne_zeit }} visits without a usable timestamp are
-    missing here.){% endif %}
-  </p>
-
-  <div class="mt-rasterpaar">
-    {% include "matomo/_raster.html" with r=raster.menschen %}
-    {% include "matomo/_raster.html" with r=raster.bots %}
-  </div>
-</div>
-{% endif %}
-
-
-{% if leute %}
-<div class="card">
-  <h2>Individual visitors</h2>
-  <p class="mt-leise">
-    One row per person, not per visit — several visits by the same visitor are merged.
-    Date and time are those of the most recent visit. <strong>Details</strong> shows the
-    visitor’s full path through the site.
-  </p>
-  <div class="mt-tabelle" style="margin-top:0.75rem">
-    <table class="mt-sortierbar">
-      <thead>
-        <tr>
-          <th data-vorwahl="Human" title="Starts on Human - choose all or Bot below">Type</th><th>Date</th><th>Time</th>
-          <th class="mt-zahl">Visits</th><th class="mt-zahl">Pages</th><th class="mt-zahl">Time</th>
-          <th>City</th><th>Country</th><th>Device</th><th>Browser</th><th>Referrer</th><th></th>
-        </tr>
-      </thead>
+  {% if besuche %}
+  <div class="mt-tabelle" style="max-height:75vh">
+    <table class="mt-sortierbar mt-besuche">
+      <thead><tr>
+        <th>When</th><th>Classification</th><th>Source</th><th>Evidence</th><th>Entry page</th>
+        <th>Campaign / post</th><th class="mt-zahl">Pages</th><th class="mt-zahl">Measured time</th>
+        <th>Returning</th><th>City</th><th>Country</th>{% if zeige_aus %}<th>Not counted because</th>{% endif %}<th>Details</th>
+      </tr></thead>
       <tbody>
-        {% for p in leute %}
-        <tr {% if p.ist_bot %}class="mt-verdacht"{% endif %}>
-          <td>{% if p.ist_bot %}<span class="mt-marke">Bot</span>
-              {% else %}<span class="mt-marke mensch">Human</span>{% endif %}</td>
-          <td data-sort="{{ p.zuletzt_iso }}">{{ p.zuletzt_datum }}</td>
-          <td>{{ p.zuletzt_zeit }}</td>
-          <td class="mt-zahl">{{ p.besuche }}</td>
-          <td class="mt-zahl">{{ p.seiten }}</td>
-          <td class="mt-zahl">{{ p.dauer_text }}</td>
-          <td>{{ p.stadt }}</td>
-          <td>{{ p.land }}</td>
-          <td>{{ p.geraet }}</td>
-          <td>{{ p.browser }}</td>
-          <td>{{ p.herkunft }}</td>
-          <td>{% if p.kennung != "-" %}<a href="{% url 'matomo:besucher_profil' p.kennung %}?zurueck={{ request.get_full_path|urlencode }}">Details</a>{% endif %}</td>
+        {% for v in besuche %}
+        <tr{% if not v.im_publikum %} class="mt-raus"{% endif %}>
+          <td data-sort="{{ v.sortier }}">{{ v.datum_de }}<br><span class="mt-leise">{{ v.uhrzeit }}</span></td>
+          <td><span class="mt-marke {{ v.klasse }}">{{ v.klasse_name }}</span>{% for g in v.gruende %}<span class="mt-grund">{{ g }}</span>{% endfor %}</td>
+          <td>{{ v.quelle }}</td>
+          <td><span class="mt-leise">{{ v.beleg }}</span></td>
+          <td>{% if v.einstieg %}{{ v.einstieg.titel }}<br><span class="mt-leise">{{ v.einstieg.pfad }}{% if v.einstieg.vorschau %} · preview{% endif %}</span>{% else %}–{% endif %}</td>
+          <td>{% if v.post_id %}Post #{{ v.post_id }}{% endif %}{% if v.kampagne %}{% if v.post_id %}<br>{% endif %}<span class="mt-leise">{{ v.kampagne }}</span>{% endif %}{% if not v.post_id and not v.kampagne %}–{% endif %}</td>
+          <td class="mt-zahl">{{ v.aufrufe }}{% if v.vorschau_aufrufe %} <span class="mt-leise">+{{ v.vorschau_aufrufe }} preview</span>{% endif %}</td>
+          <td class="mt-zahl" data-sort="{{ v.dauer_sek|default_if_none:'-1' }}">{{ v.dauer_text }}</td>
+          <td>{% if v.wiederkehrend %}yes{% else %}no{% endif %}</td>
+          <td>{{ v.stadt }}</td>
+          <td>{{ v.land }}</td>
+          {% if zeige_aus %}<td>{% if v.im_publikum %}–{% else %}{% for a in v.ausschluesse %}{{ a }}{% if not forloop.last %}; {% endif %}{% empty %}{{ v.klasse_name }}{% endfor %}{% endif %}</td>{% endif %}
+          <td><details><summary>{{ v.schritte|length }} step{{ v.schritte|length|pluralize }}</summary>
+            <ol class="mt-weg">
+              {% for s in v.schritte %}
+              <li>{% if s.zeit_lokal %}<span class="mt-leise">{{ s.zeit_lokal }}</span> {% endif %}
+                {% if s.typ == "action" %}{% if s.vorschau %}<span class="vorschau">[preview]</span> {% endif %}{{ s.titel }} <span class="mt-leise">{{ s.pfad }} · {{ s.art }} · {{ s.zeit_text }}</span>
+                {% else %}<span class="typ">[{{ s.typ }}]</span> {{ s.titel|default:s.url }}{% endif %}</li>
+              {% endfor %}
+            </ol>
+            {% if v.besucher %}<a href="{% url 'matomo:besucher_profil' v.besucher %}?zurueck={{ request.get_full_path|urlencode }}">All visits of this visitor ID</a>{% endif %}
+          </details></td>
         </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  </div>
-</div>
-{% endif %}
-
-{% for t in tabellen %}
-<div class="card">
-  <h2>{{ t.titel }}</h2>
-  {% if t.hinweis %}<p class="mt-leise">{{ t.hinweis }}</p>{% endif %}
-  {% if t.zeilen %}
-  <div class="mt-tabelle" style="margin-top:0.75rem">
-    <table class="mt-sortierbar">
-      <thead>
-        <tr>{% for s in t.spalten %}<th{% if forloop.counter > t.spalten|length|add:"-3" %} class="mt-zahl"{% endif %}>{{ s }}</th>{% endfor %}</tr>
-      </thead>
-      <tbody>
-        {% for zeile in t.zeilen %}
-        <tr>{% for wert in zeile %}<td{% if forloop.counter > t.spalten|length|add:"-3" %} class="mt-zahl"{% endif %}>{{ wert }}</td>{% endfor %}</tr>
         {% endfor %}
       </tbody>
     </table>
   </div>
   {% else %}
-  <p class="mt-leise" style="margin-top:0.75rem">No data for this range.</p>
+  <p class="mt-leise">{% if fehler %}Measurement not available – Matomo did not answer.{% elif ausgeschlossen_zahl and not zeige_aus %}No counted visits in this period – {{ ausgeschlossen_zahl }} were left out. <a href="{{ ausgeschlossen_link }}">Show them</a>.{% else %}No visits recorded in this period.{% endif %}</p>
   {% endif %}
+  <p class="mt-leise" style="margin-top:0.6rem">
+    City and country are approximate, estimated from the IP address – for orientation, never to identify a person.
+    <em>Measured time</em> runs from the first to the last pageview of a visit; the time on the last page is not measured
+    (no heartbeat), so a one-page visit shows “not measured”, not 0. <em>Returning</em> is Matomo's own flag.
+  </p>
 </div>
-{% endfor %}
 
 {% include "matomo/_sortierung.html" %}
 {% endblock %}

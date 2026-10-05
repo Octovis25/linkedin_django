@@ -123,7 +123,7 @@ up, so it moved right; Collectives became a sub-entry under Data.
         <nav>
     <a href="/" {% if request.path == '/' %}class="active"{% endif %}>Overview</a>
     <a href="/statistics/" {% if '/statistics/' in request.path %}class="active"{% endif %}>LinkedIn Statistics</a>
-    <a href="/webstats/besucher/" {% if '/webstats/' in request.path %}class="active"{% endif %}>Web Analytics</a>
+    <a href="/webstats/" {% if '/webstats/' in request.path %}class="active"{% endif %}>Web Analytics</a>
     <a href="/planner/" {% if '/planner/' in request.path %}class="active"{% endif %}>Create Posts</a>
     <a href="/library/studio/" {% if '/library/' in request.path %}class="active"{% endif %}>Image Studio</a>
     <a href="/assets/" {% if '/assets/' in request.path %}class="active"{% endif %}>Assets</a>
@@ -184,7 +184,6 @@ up, so it moved right; Collectives became a sub-entry under Data.
     <a href="/webstats/ziele/" {% if '/ziele' in request.path %}class="active"{% endif %}>Goals</a>
     <a href="/webstats/suchbegriffe/" {% if '/suchbegriffe' in request.path %}class="active"{% endif %}>Search terms</a>
     <a href="/webstats/ki/" {% if '/webstats/ki/' in request.path %}class="active"{% endif %}>AI</a>
-    <a href="/webstats/protokoll/" {% if '/protokoll' in request.path %}class="active"{% endif %}>Log</a>
     <a href="/webstats/archiv/" {% if '/archiv' in request.path %}class="active"{% endif %}>Archive</a>
   </div>
   {% endif %}
