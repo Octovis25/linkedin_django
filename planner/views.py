@@ -11,6 +11,8 @@ import urllib.request
 import urllib.error
 from django.conf import settings
 
+from .zeit import berlin, berlin_fmt
+
 
 def nur_fuer_admin(ansicht):
     """Refuse the OJ area to everyone but an administrator.
@@ -193,14 +195,9 @@ def _attach_send_time(posts_list):
         if not wann:
             roh = faellig.get(p.get('id'), '')
             if roh:
-                # Buffer's ISO stamp, e.g. 2026-09-21T08:00:00.000Z
-                try:
-                    from datetime import datetime as _dt2
-                    wann = _dt2.strptime(roh[:19], '%Y-%m-%dT%H:%M:%S').strftime('%d.%m.%Y %H:%M')
-                    quelle = 'from Buffer'
-                except Exception:
-                    wann = roh[:16].replace('T', ' ')
-                    quelle = 'from Buffer'
+                # Buffer's ISO stamp in UTC, e.g. 2026-09-21T08:00:00.000Z
+                wann = berlin_fmt(roh) or roh[:16].replace('T', ' ')
+                quelle = 'from Buffer'
         if not wann and p.get('planned_date'):
             wann = p['planned_date'].strftime('%d.%m.%Y')
             if p.get('planned_time'):
@@ -264,9 +261,6 @@ def _attach_time_and_link(posts_list):
     return posts_list
 
 
-BERLIN = 'Europe/Berlin'
-
-
 def _buffer_send_time(scheduled_ms):
     """The moment a post goes to Buffer, or why it must not go.
 
@@ -291,8 +285,7 @@ def _buffer_send_time(scheduled_ms):
 
 def _plan_from_send_time(c, post_id, scheduled_at):
     """Keep the post's own date and time in step with what Buffer got."""
-    from zoneinfo import ZoneInfo
-    lokal = scheduled_at.astimezone(ZoneInfo(BERLIN))
+    lokal = berlin(scheduled_at)
     c.execute("UPDATE planner_posts SET planned_date=%s, planned_time=%s WHERE id=%s",
               [lokal.date(), lokal.strftime('%H:%M:00'), post_id])
 
@@ -587,7 +580,7 @@ def scheduled_view(request):
             'topic_id': r[8], 'comment': r[9] or '', 'bg': bg, 'fg': fg,
             'linkedin_posted': bool(r[10]), 'is_oj': False, 'link': r[11] or '',
             'post_scheduled_at': sched_at,
-            'post_scheduled_at_fmt': sched_at.strftime('%d.%m.%Y %H:%M') if sched_at else '',
+            'post_scheduled_at_fmt': berlin_fmt(sched_at),
             'planned_time': r[13],
             'created_at': r[14], 'updated_at': r[15],
         })
@@ -905,16 +898,22 @@ def api_post(request):
             if 'in_pipeline' in data:
                 in_pipeline = data.get('in_pipeline')
             try:
-                link_sent = data.get('link')  # None = leer (JS sendet null wenn leer)
-                link_val = (link_sent or '').strip() or None  # '' → None, URL → URL
-                pt = data.get('planned_time') or None
                 c.execute("""UPDATE planner_posts SET title=%s, content=%s,
-                            status=%s, planned_date=%s, planned_time=%s, comment=%s, link=%s, in_pipeline=%s WHERE id=%s""",
+                            status=%s, planned_date=%s, comment=%s, in_pipeline=%s WHERE id=%s""",
                     [data.get('title'),
                      data.get('content'), status,
-                     data.get('planned_date') or None, pt,
+                     data.get('planned_date') or None,
                      data.get('comment') or None,
-                     link_val, in_pipeline, data.get('id')])
+                     in_pipeline, data.get('id')])
+                # Time and link only change when the dialog sends them (null
+                # clears them). The OJ editor has neither field - its save used
+                # to wipe both (06.10.2026).
+                if 'planned_time' in data:
+                    c.execute("UPDATE planner_posts SET planned_time=%s WHERE id=%s",
+                              [data.get('planned_time') or None, data.get('id')])
+                if 'link' in data:
+                    c.execute("UPDATE planner_posts SET link=%s WHERE id=%s",
+                              [(data.get('link') or '').strip() or None, data.get('id')])
                 # The topic only changes when the dialog sends one. The edit
                 # dialog in the Planner has no topic field - its save used to
                 # wipe the topic of every post edited there.

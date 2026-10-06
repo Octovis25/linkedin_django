@@ -273,7 +273,7 @@
 
 <!-- Post data for JS -->
 <script id="oj-data-raw" type="application/json">
-[{% for p in posts %}{"id":{{ p.id }},"title":"{{ p.title|default:""|escapejs }}","content":"{{ p.content|default:""|escapejs }}","status":"{{ p.status }}","date":"{{ p.planned_date|date:"Y-m-d"|default:"" }}","topicId":{{ p.topic_id|default:"null" }},"comment":"{{ p.comment|escapejs }}","image":"{{ p.image|default:""|escapejs }}","video":"{{ p.video_nc_path|default:""|escapejs }}"}{% if not forloop.last %},{% endif %}{% endfor %}]
+[{% for p in posts %}{"id":{{ p.id }},"title":"{{ p.title|default:""|escapejs }}","content":"{{ p.content|default:""|escapejs }}","status":"{{ p.status }}","date":"{{ p.planned_date|date:"Y-m-d"|default:"" }}","time":"{{ p.planned_time|time:"H:i"|default:"" }}","topicId":{{ p.topic_id|default:"null" }},"comment":"{{ p.comment|escapejs }}","image":"{{ p.image|default:""|escapejs }}","video":"{{ p.video_nc_path|default:""|escapejs }}"}{% if not forloop.last %},{% endif %}{% endfor %}]
 </script>
 
 <script>
@@ -569,18 +569,13 @@ function liOjOpenPost(id) {
   document.getElementById('li-oj-char').textContent = plain.length;
   document.getElementById('li-oj-img-row').style.display = p.image ? 'flex' : 'none';
   document.getElementById('li-oj-img-check').checked = !!p.image;
-  // Scheduling
+  // Scheduling: the post's own date and time, nothing invented. A post with
+  // a date is meant to be scheduled; liOjDoPost() stops with a message when
+  // the time is missing or past (Ortrud, 06.10.2026).
   const schedRow = document.getElementById('li-oj-sched-row');
-  if (p.date) {
-    const postDate = new Date(p.date + 'T09:00:00');
-    const isFuture = postDate > new Date(Date.now() + 600000);
-    schedRow.style.display = isFuture ? 'flex' : 'none';
-    document.getElementById('li-oj-sched-check').checked = isFuture;
-    document.getElementById('li-oj-sched-time').textContent = isFuture
-      ? postDate.toLocaleDateString('de-DE', {day:'2-digit',month:'2-digit',year:'numeric'}) + ' 09:00' : '';
-  } else {
-    schedRow.style.display = 'none';
-  }
+  schedRow.style.display = 'flex';
+  document.getElementById('li-oj-sched-check').checked = !!p.date;
+  document.getElementById('li-oj-sched-dt').value = (p.date && p.time) ? p.date + 'T' + p.time : '';
   document.getElementById('li-oj-result').style.display = 'none';
   document.getElementById('li-oj-modal-bg').style.display = 'flex';
 }
@@ -599,15 +594,23 @@ async function liOjDoPost() {
   const btn = document.getElementById('li-oj-btn');
   const schedCheck = document.getElementById('li-oj-sched-check');
   const isScheduled = schedCheck && schedCheck.checked;
-  btn.disabled = true;
-  btn.textContent = isScheduled ? 'Scheduling…' : 'Posting…';
   const res = document.getElementById('li-oj-result');
   res.style.display = 'none';
-  const p = ojMap[liOjCurrentId];
   let scheduled_ms = null;
-  if (isScheduled && p && p.date) {
-    scheduled_ms = new Date(p.date + 'T09:00:00').getTime();
+  if (isScheduled) {
+    const dtVal = document.getElementById('li-oj-sched-dt').value;
+    if (dtVal) scheduled_ms = new Date(dtVal).getTime();
+    // Scheduled posts go to Buffer: only with a fixed time in the future.
+    const halt = (text) => {
+      res.style.display = 'block';
+      res.style.background = '#FCEBEB'; res.style.color = '#791F1F';
+      res.textContent = text;
+    };
+    if (!scheduled_ms) return halt('This post has no date and time. Set them here. Nothing was sent.');
+    if (scheduled_ms <= Date.now() + 60000) return halt('This date and time is in the past. Choose a later one. Nothing was sent.');
   }
+  btn.disabled = true;
+  btn.textContent = isScheduled ? 'Scheduling…' : 'Posting…';
   try {
     const r = await fetch(`/planner/linkedin/post/${liOjCurrentId}/`, {
       method: 'POST',
@@ -664,7 +667,8 @@ document.getElementById('li-oj-modal-bg').addEventListener('click', function(e) 
     </div>
     <div id="li-oj-sched-row" style="display:none;align-items:center;gap:8px;margin-bottom:12px;font-size:13px">
       <input type="checkbox" id="li-oj-sched-check" checked style="cursor:pointer">
-      <label for="li-oj-sched-check" style="cursor:pointer;color:#444">📅 Schedule on LinkedIn for <strong id="li-oj-sched-time"></strong></label>
+      <label for="li-oj-sched-check" style="cursor:pointer;color:#444">📅 Schedule on LinkedIn:</label>
+      <input type="datetime-local" id="li-oj-sched-dt" style="font-size:13px;padding:4px 8px;border:0.5px solid #ced4da;border-radius:4px">
     </div>
     <div id="li-oj-result" style="display:none;padding:8px 12px;border-radius:6px;font-size:13px;margin-bottom:10px"></div>
     <div style="display:flex;justify-content:flex-end;gap:8px">

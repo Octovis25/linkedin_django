@@ -29,6 +29,7 @@ from django.shortcuts import render
 from django.views.decorators.csrf import csrf_exempt
 
 from .views import COLOR_MAP, _attach_send_time, _q
+from .zeit import berlin_fmt
 
 # Monday = 0, the same as date.weekday(), so nothing has to be converted.
 WOCHENTAGE = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
@@ -484,7 +485,7 @@ def _posts_des_jahres(jahr, nur_oj=False):
 
         zeilen = _q(c, """SELECT p.id, p.title, p.content, p.status, p.planned_date,
                                  p.planned_time, t.name, t.color, p.linkedin_posted,
-                                 DATE_FORMAT(p.post_scheduled_at, '%%d.%%m.%%Y %%H:%%i'),
+                                 p.post_scheduled_at,
                                  COALESCE(LENGTH(p.image), 0) > 0,
                                  COALESCE(p.gif_nc_path, ''), COALESCE(p.video_nc_path, '')
                           FROM planner_posts p
@@ -499,7 +500,7 @@ def _posts_des_jahres(jahr, nur_oj=False):
             'id': r[0], 'title': (r[1] or '').strip(), 'content': r[2] or '',
             'status': r[3] or '', 'planned_date': r[4], 'planned_time': r[5],
             'topic_name': r[6] or '', 'bg': bg, 'fg': fg,
-            'linkedin_posted': r[8], 'post_scheduled_at_fmt': r[9] or '',
+            'linkedin_posted': r[8], 'post_scheduled_at_fmt': berlin_fmt(r[9]),
             'hat_bild': bool(r[10]), 'gif_nc_path': r[11] or '', 'video_nc_path': r[12] or '',
             'buffer_hat_bild': r[0] in buffer_mit_bild,
         })

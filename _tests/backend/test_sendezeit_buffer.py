@@ -66,6 +66,48 @@ class Sendezeit(TransactionTestCase):
         self.assertEqual('08:45', p['time'][:5])
         self.assertEqual('https://octotrial.com/services/', p['link'])
 
+    def test_speichern_ohne_zeitfeld_laesst_zeit_und_link(self):
+        # The OJ editor sends neither time nor link.
+        antwort = self.client.post('/planner/api/post/', json.dumps(dict(
+            action='update', id=self.pid, title='R2', content='Text', status='Ready',
+            planned_date='2026-10-13')), content_type='application/json')
+        self.assertTrue(antwort.json()['ok'])
+        tag, uhr, link = zeile("SELECT planned_date, planned_time, link FROM planner_posts WHERE id=%s", self.pid)
+        self.assertEqual(date(2026, 10, 13), tag)
+        self.assertEqual('08:45', str(uhr)[:5].zfill(5))
+        self.assertEqual('https://octotrial.com/services/', link)
+
+    def test_speichern_mit_leerer_zeit_loescht_sie(self):
+        self.client.post('/planner/api/post/', json.dumps(dict(
+            action='update', id=self.pid, title='R', content='Text', status='Ready',
+            planned_date='2026-10-12', planned_time=None, link=None)),
+            content_type='application/json')
+        self.assertEqual((None, None), zeile("SELECT planned_time, link FROM planner_posts WHERE id=%s", self.pid))
+
+    def test_oj_seite_kennt_die_uhrzeit(self):
+        with connection.cursor() as c:
+            c.execute("UPDATE planner_posts SET is_oj=1 WHERE id=%s", [self.pid])
+        antwort = self.client.get('/planner/oj/')
+        self.assertEqual(antwort.status_code, 200)
+        self.assertIn('"time":"08:45"', antwort.content.decode())
+
+    # ── shown in German time ───────────────────────────────────────────────
+    def test_anzeige_in_deutscher_zeit(self):
+        from datetime import datetime
+        from planner.zeit import berlin_fmt
+        self.assertEqual('14.10.2030 09:30', berlin_fmt(datetime(2030, 10, 14, 7, 30)))
+        self.assertEqual('14.01.2031 08:30', berlin_fmt('2031-01-14T07:30:00.000Z'))
+        self.assertEqual('', berlin_fmt(None))
+
+    def test_scheduled_zeigt_deutsche_zeit(self):
+        with connection.cursor() as c:
+            c.execute("""UPDATE planner_posts SET status='Scheduled',
+                         post_scheduled_at='2030-10-14 07:30:00' WHERE id=%s""", [self.pid])
+        with mock.patch.object(pv, '_li_get_superuser_token', return_value=None):
+            antwort = self.client.get('/planner/scheduled/')
+        self.assertEqual(antwort.status_code, 200)
+        self.assertIn('14.10.2030 09:30', antwort.content.decode())
+
     def test_anhaengen_ueberschreibt_nichts(self):
         posts = [{'id': self.pid, 'planned_time': dtime(10, 0), 'link': 'eigen'}]
         pv._attach_time_and_link(posts)
