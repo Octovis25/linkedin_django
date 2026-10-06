@@ -232,7 +232,69 @@ def _attach_video_paths(posts_list):
     # Every list view passes through here, so the post type rides along -
     # the legacy SELECTs stay untouched.
     _attach_post_types(posts_list)
+    _attach_time_and_link(posts_list)
     return posts_list
+
+
+def _attach_time_and_link(posts_list):
+    """Add 'planned_time' and 'link' where a list's SELECT left them out.
+
+    Ready, Archive, All and OJ did not read them. The post editor then opened
+    with an empty time and link, and saving wrote both back as empty - the
+    time a post had was gone (Ortrud, 06.10.2026).
+    """
+    fehlt = [p.get('id') for p in posts_list
+             if p.get('id') and ('planned_time' not in p or 'link' not in p)]
+    if not fehlt:
+        return posts_list
+    placeholders = ','.join(['%s'] * len(fehlt))
+    with connection.cursor() as c:
+        try:
+            c.execute(f"""SELECT id, planned_time, COALESCE(link,'')
+                           FROM planner_posts WHERE id IN ({placeholders})""", fehlt)
+            rows = c.fetchall()
+        except Exception:
+            rows = []
+    werte = {r[0]: (r[1], r[2] or '') for r in rows}
+    for p in posts_list:
+        if p.get('id') in werte:
+            zeit, link = werte[p['id']]
+            p.setdefault('planned_time', zeit)
+            p.setdefault('link', link)
+    return posts_list
+
+
+BERLIN = 'Europe/Berlin'
+
+
+def _buffer_send_time(scheduled_ms):
+    """The moment a post goes to Buffer, or why it must not go.
+
+    Returns (scheduled_at in UTC, None) or (None, message). Buffer only ever
+    gets a fixed date and time: without one it would put the post in its
+    queue, and a time in the past used to do the same (Ortrud, 06.10.2026).
+    """
+    import time as _time
+    from datetime import datetime as _dt, timezone as _timezone
+    if not scheduled_ms:
+        return None, ('This post has no date and time. Set them in the post '
+                      'or here - nothing was sent to Buffer.')
+    try:
+        ts = float(scheduled_ms) / 1000.0
+    except (TypeError, ValueError):
+        return None, 'The date and time could not be read - nothing was sent to Buffer.'
+    if ts <= _time.time() + 60:
+        return None, ('This date and time is in the past. Choose a later one - '
+                      'nothing was sent to Buffer.')
+    return _dt.fromtimestamp(ts, tz=_timezone.utc), None
+
+
+def _plan_from_send_time(c, post_id, scheduled_at):
+    """Keep the post's own date and time in step with what Buffer got."""
+    from zoneinfo import ZoneInfo
+    lokal = scheduled_at.astimezone(ZoneInfo(BERLIN))
+    c.execute("UPDATE planner_posts SET planned_date=%s, planned_time=%s WHERE id=%s",
+              [lokal.date(), lokal.strftime('%H:%M:00'), post_id])
 
 
 def _attach_post_types(posts_list):
@@ -3018,6 +3080,10 @@ def _linkedin_do_post_impl(request, post_id):
                 'ok': False,
                 'error': 'Buffer is not configured. Please save the Buffer access token and select a profile.'
             }, status=400)
+        # Before any upload: no date, or one in the past, sends nothing.
+        scheduled_at, zeit_fehler = _buffer_send_time(scheduled_ms)
+        if zeit_fehler:
+            return JsonResponse({'ok': False, 'error': zeit_fehler}, status=400)
 
         try:
             image_url = None
@@ -3054,12 +3120,6 @@ def _linkedin_do_post_impl(request, post_id):
                     image_url = _upload_image_to_cloudinary(post_id)
                     print("BUFFER CLOUDINARY IMAGE URL:", image_url)
 
-            scheduled_at = None
-            if scheduled_ms:
-                scheduled_ts = float(scheduled_ms) / 1000.0
-                if scheduled_ts > _time.time() + 60:
-                    scheduled_at = _dt.fromtimestamp(scheduled_ts, tz=_timezone.utc)
-
             result = _buffer_post(
                 buf_token=token['buffer_token'],
                 profile_id=_buf_pid,
@@ -3094,6 +3154,7 @@ def _linkedin_do_post_impl(request, post_id):
                             buffer_update_id=%s
                         WHERE id=%s
                     """, [text, scheduled_at.replace(tzinfo=None), buffer_update_id, post_id])
+                    _plan_from_send_time(c, post_id, scheduled_at)
 
                     return JsonResponse({
                         'ok': True,

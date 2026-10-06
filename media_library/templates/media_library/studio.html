@@ -195,10 +195,10 @@ if (!window.fabric && window.studioZeigeFehler) {
   }
 }
 </script>
-{# Fetch every module at once. Without this the browser finds each import only
+{% comment %}Fetch every module at once. Without this the browser finds each import only
    after the module that names it has arrived - studio.js, then editor.js and
    io.js, then util.js ... one round trip after another. After the import map:
-   a module fetched before it would make the browser ignore the map. #}
+   a module fetched before it would make the browser ignore the map.{% endcomment %}
 <link rel="modulepreload" href="{% static 'media_library/studio/studio.js' %}">
 <link rel="modulepreload" href="{% static 'media_library/studio/editor.js' %}">
 <link rel="modulepreload" href="{% static 'media_library/studio/media.js' %}">

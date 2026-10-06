@@ -966,22 +966,10 @@ function liOpenPost(id) {
   const schedCheck = document.getElementById('li-schedule-check');
   const schedDt = document.getElementById('li-schedule-dt');
   if (schedRow && schedDt) {
-    // Compute default datetime: use post's planned_date at 09:00 if in the future, else tomorrow 09:00
-    let defaultDt = '';
-    if (p.date) {
-      const postDate = new Date(p.date + 'T09:00:00');
-      if (postDate > new Date(Date.now() + 600000)) {
-        defaultDt = p.date + 'T09:00';
-      }
-    }
-    if (!defaultDt) {
-      const tom = new Date(Date.now() + 86400000);
-      const y = tom.getFullYear();
-      const mo = String(tom.getMonth()+1).padStart(2,'0');
-      const d = String(tom.getDate()).padStart(2,'0');
-      defaultDt = `${y}-${mo}-${d}T09:00`;
-    }
-    schedDt.value = defaultDt;
+    // The post's own date and time - nothing invented. No date or time, or one
+    // in the past: liDoPost() says so and sends nothing (Ortrud, 06.10.2026).
+    const zeit = (p.time || '').slice(0, 5);
+    schedDt.value = (p.date && zeit) ? p.date + 'T' + zeit : '';
     schedRow.style.display = 'flex';
     if (schedCheck) schedCheck.checked = true;
   }
@@ -1034,12 +1022,30 @@ async function liDoPost() {
   // ── Text / Image / Video route (alles über /post/) ──
   const schedCheck  = document.getElementById('li-schedule-check');
   const isScheduled = schedCheck && schedCheck.checked;
-  btn.textContent = isScheduled ? 'Scheduling…' : 'Posting…';
   let scheduled_ms = null;
   if (isScheduled) {
     const dtVal = document.getElementById('li-schedule-dt') && document.getElementById('li-schedule-dt').value;
     if (dtVal) scheduled_ms = new Date(dtVal).getTime();
   }
+  // Buffer only gets a fixed date and time in the future - never its queue.
+  // The company page always goes through Buffer.
+  const viaBuffer = isScheduled || document.getElementById('li-target').value === 'org';
+  const halt = (text) => {
+    res.style.display = 'block';
+    res.style.background = '#FCEBEB'; res.style.color = '#791F1F';
+    res.textContent = text;
+    btn.disabled = false;
+  };
+  if (viaBuffer && !isScheduled) {
+    return halt('Company page posts go through Buffer and need a date and time: tick 📅 and set them. Nothing was sent.');
+  }
+  if (viaBuffer && !scheduled_ms) {
+    return halt('This post has no date and time. Set them in the post or here. Nothing was sent.');
+  }
+  if (viaBuffer && scheduled_ms <= Date.now() + 60000) {
+    return halt('This date and time is in the past. Choose a later one. Nothing was sent.');
+  }
+  btn.textContent = isScheduled ? 'Scheduling…' : 'Posting…';
   try {
     const r = await fetch(`/planner/linkedin/post/${liCurrentId}/`, {
       method: 'POST',
