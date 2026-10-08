@@ -126,6 +126,7 @@ up, so it moved right; Collectives became a sub-entry under Data.
     <a href="/webstats/" {% if '/webstats/' in request.path %}class="active"{% endif %}>Web Analytics</a>
     <a href="/planner/" {% if '/planner/' in request.path %}class="active"{% endif %}>Create Posts</a>
     <a href="/library/studio/" {% if '/library/' in request.path %}class="active"{% endif %}>Image Studio</a>
+    <a href="/tutorials/" {% if '/tutorials/' in request.path %}class="active"{% endif %}>Tutorials</a>
     <a href="/assets/" {% if '/assets/' in request.path %}class="active"{% endif %}>Assets</a>
     <a href="/data/posts/" {% if '/data/' in request.path or '/collectives/' in request.path %}class="active"{% endif %}>Data</a>
     {% if user.is_superuser %}

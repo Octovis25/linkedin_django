@@ -1,0 +1,164 @@
+{% extends "base.html" %}
+{% load static %}
+{% block title %}Tutorials – {{ portal_name }}{% endblock %}
+
+{% block content %}
+<style>
+  .tu-portals { display:flex; gap:6px; flex-wrap:wrap; margin:0 0 12px; }
+  .tu-portals a { padding:4px 12px; border-radius:99px; border:1px solid #dfe5e4; color:#6B7876; text-decoration:none; font-size:0.82rem; background:#fff; }
+  .tu-portals a.on { background:var(--octo-petrol, #008591); border-color:var(--octo-petrol, #008591); color:#fff; }
+  .tu-ws { display:grid; grid-template-columns:230px minmax(0,1fr) 290px; background:#fff; border:1px solid #dfe5e4; border-radius:10px; min-height:600px; }
+  .tu-col { padding:14px; border-right:1px solid #dfe5e4; min-width:0; }
+  .tu-col:last-child { border-right:0; }
+  .tu-col h3 { margin:0 0 10px; font-size:0.72rem; color:#6B7876; text-transform:uppercase; letter-spacing:.05em; }
+  .tu-film { display:block; padding:8px 10px; border:1px solid #dfe5e4; border-radius:8px; margin-bottom:8px; color:inherit; text-decoration:none; }
+  .tu-film b { display:block; font-size:0.86rem; }
+  .tu-film small { color:#6B7876; }
+  .tu-film.on { border-color:var(--octo-petrol, #008591); background:#eef8f8; }
+  .tu-pill { display:inline-block; font-size:0.66rem; padding:1px 7px; border-radius:99px; margin-top:4px; background:#fff1e3; color:#a2500a; }
+  .tu-pill.ready { background:#e8f4fb; color:#0077B5; }
+  .tu-pill.portal { background:#e1f5ee; color:#0F6E56; }
+  .tu-btn { box-sizing:border-box; display:inline-flex; align-items:center; justify-content:center; gap:6px; padding:7px 12px; border-radius:6px; border:1px solid #dfe5e4; background:#fff; font-size:0.84rem; cursor:pointer; color:#161616; text-decoration:none; }
+  .tu-btn.pri { background:var(--octo-petrol, #008591); border-color:var(--octo-petrol, #008591); color:#fff; font-weight:600; }
+  .tu-btn.full { width:100%; margin-top:6px; }
+  .tu-btn:disabled { opacity:.45; cursor:default; }
+  .tu-btn.rec { background:#c62828; border-color:#c62828; color:#fff; }
+  .tu-new { display:flex; gap:6px; margin-top:4px; }
+  .tu-new input { flex:1; min-width:0; font:inherit; font-size:0.84rem; padding:6px 8px; border:1px solid #dfe5e4; border-radius:6px; }
+  .tu-hint { font-size:0.74rem; color:#6B7876; margin-top:5px; }
+  .tu-stage-col { padding:14px 18px; display:flex; flex-direction:column; gap:12px; }
+  .tu-bar { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+  .tu-bar input.tu-title { flex:1; min-width:180px; font:inherit; font-size:1rem; font-weight:600; padding:6px 8px; border:1px solid transparent; border-radius:6px; }
+  .tu-bar input.tu-title:hover, .tu-bar input.tu-title:focus { border-color:#dfe5e4; }
+  .tu-bar select { font:inherit; font-size:0.8rem; padding:5px; border:1px solid #dfe5e4; border-radius:6px; }
+  #tu-stage { width:100%; aspect-ratio:16/9; border:1px solid #dfe5e4; border-radius:8px; background:#E9EEF0; cursor:crosshair; touch-action:none; display:block; }
+  .tu-steps { display:flex; gap:8px; overflow-x:auto; padding-bottom:4px; }
+  .tu-step { flex:0 0 140px; border:1px solid #dfe5e4; border-radius:8px; padding:6px; background:#fff; cursor:pointer; font-size:0.74rem; text-align:left; display:flex; flex-direction:column; gap:3px; }
+  .tu-step canvas { width:100%; aspect-ratio:16/9; border-radius:4px; background:#E9EEF0; }
+  .tu-step.on { border-color:var(--octo-petrol, #008591); box-shadow:0 0 0 2px #b7e6e3; }
+  .tu-step-lab { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; color:#161616; }
+  .tu-step-dur { color:#6B7876; font-size:0.7rem; }
+  .tu-step.add { align-items:center; justify-content:center; color:var(--octo-petrol, #008591); font-weight:600; border-style:dashed; min-height:110px; }
+  .tu-step.add small { display:block; font-weight:400; color:#6B7876; font-size:0.66rem; margin-top:2px; }
+  .tu-voice { display:flex; align-items:center; gap:10px; background:#fafcfc; border:1px solid #dfe5e4; border-radius:8px; padding:8px 10px; }
+  .tu-voice canvas { flex:1; min-width:60px; height:28px; }
+  #tu-status { font-size:0.8rem; color:#0F6E56; min-height:1.2em; }
+  #tu-status.bad { color:#a12020; }
+  .tu-fld { margin-bottom:12px; }
+  .tu-fld > label { display:block; font-size:0.74rem; color:#6B7876; margin-bottom:4px; }
+  .tu-fld input, .tu-fld textarea, .tu-fld select { width:100%; box-sizing:border-box; font:inherit; font-size:0.84rem; padding:6px 8px; border:1px solid #dfe5e4; border-radius:6px; }
+  .tu-fld textarea { min-height:80px; resize:vertical; }
+  .tu-seg { display:flex; border:1px solid #dfe5e4; border-radius:6px; overflow:hidden; }
+  .tu-seg button { flex:1; padding:6px 4px; font-size:0.78rem; color:#6B7876; border:0; border-right:1px solid #dfe5e4; background:#fff; cursor:pointer; }
+  .tu-seg button:last-child { border-right:0; }
+  .tu-seg button.on { background:#eef8f8; color:var(--octo-petrol, #008591); font-weight:600; }
+  .tu-row { display:flex; gap:6px; align-items:center; }
+  .tu-link { background:none; border:0; color:var(--octo-petrol, #008591); cursor:pointer; font-size:0.74rem; padding:0; text-decoration:underline; }
+  #tu-panel.empty .tu-only-step { display:none; }
+  #tu-video video { width:100%; border-radius:6px; background:#0b3d44; }
+  .tu-empty { padding:60px 20px; text-align:center; color:#6B7876; }
+  hr.tu { border:0; border-top:1px solid #dfe5e4; margin:14px 0; }
+  @media (max-width: 1000px) {
+    .tu-ws { grid-template-columns:minmax(0,1fr); }
+    .tu-col { border-right:0; border-bottom:1px solid #dfe5e4; }
+  }
+</style>
+
+<div id="tu-root" data-portal="{{ portal }}" data-film="{{ film.id|default:'' }}">
+  <h1 style="margin-bottom:4px">Tutorials</h1>
+  <p class="tu-hint" style="margin:0 0 12px">How-to films for our portals: screenshots, a moving cursor and your voice. Screenshots only from the <b>test instance with demo data</b>.</p>
+
+  <nav class="tu-portals">
+    {% for key, name in portals %}
+    <a href="?portal={{ key }}" class="{% if key == portal %}on{% endif %}">{{ name }}</a>
+    {% endfor %}
+  </nav>
+
+  <div class="tu-ws">
+    <!-- Films -->
+    <div class="tu-col">
+      <h3>Films · {{ portal_name }}</h3>
+      {% for f in films %}
+      <a class="tu-film {% if film and f.id == film.id %}on{% endif %}" href="?portal={{ portal }}&film={{ f.id }}">
+        <b>{{ f.title }}</b>
+        <small>{{ f.steps }} step{{ f.steps|pluralize }}{% if f.length %} · {{ f.length }}{% endif %}</small><br>
+        <span class="tu-pill {% if f.status == 'Video ready' %}ready{% elif f.status == 'In portal' %}portal{% endif %}">{{ f.status }}</span>
+      </a>
+      {% empty %}
+      <p class="tu-hint">No films for this portal yet.</p>
+      {% endfor %}
+      <div class="tu-new">
+        <input id="tu-new-title" placeholder="Title of a new film" maxlength="200">
+        <button type="button" class="tu-btn" id="tu-new">＋</button>
+      </div>
+    </div>
+
+    {% if film %}
+    <!-- Stage -->
+    <div class="tu-stage-col">
+      <div class="tu-bar">
+        <input class="tu-title" id="tu-title" value="{{ film.title }}" maxlength="200" title="Title of the film">
+        <select id="tu-lang" title="Language">{% for l in langs %}<option value="{{ l }}" {% if l == film.lang %}selected{% endif %}>{{ l|upper }}</option>{% endfor %}</select>
+        <span class="tu-hint" style="margin:0">16:9 · <span id="tu-total">0:00</span></span>
+        <button type="button" class="tu-btn" id="tu-preview">▶ Preview</button>
+        <button type="button" class="tu-btn pri" id="tu-save">💾 Save video</button>
+      </div>
+      <canvas id="tu-stage" width="1920" height="1080"></canvas>
+      <div id="tu-status"></div>
+      <div class="tu-steps" id="tu-steps"></div>
+      <input type="file" id="tu-add-file" accept="image/png,image/jpeg,image/webp" multiple hidden>
+      <p class="tu-hint" style="margin:0">Tip: take a screenshot (Windows: <b>Win + Shift + S</b>), then press <b>Ctrl + V</b> here – it becomes the next step. ← → switch steps.</p>
+    </div>
+
+    <!-- Step -->
+    <div class="tu-col" id="tu-panel">
+      <div class="tu-only-step">
+        <h3 id="tu-step-no">Step</h3>
+        <div class="tu-fld"><label>Screenshot</label>
+          <button type="button" class="tu-btn" id="tu-replace" style="width:100%">Replace screenshot…</button>
+          <input type="file" id="tu-replace-file" accept="image/png,image/jpeg,image/webp" hidden>
+        </div>
+        <div class="tu-fld"><label>On the screenshot, set</label>
+          <div class="tu-seg"><button type="button" data-mode="click">🎯 Click point</button><button type="button" data-mode="frame">▭ Frame</button></div>
+          <div class="tu-hint">Click point: <span id="tu-click-info"></span> <button type="button" class="tu-link" id="tu-click-clear">remove</button></div>
+          <div class="tu-hint">Frame: drag a box · <span id="tu-frame-info"></span> <button type="button" class="tu-link" id="tu-frame-clear">remove</button></div>
+        </div>
+        <div class="tu-fld"><label>Highlight</label>
+          <select id="tu-highlight"><option value="frame">Frame</option><option value="none">None</option></select>
+        </div>
+        <div class="tu-fld"><label>Caption</label><input id="tu-caption" maxlength="300" placeholder="e.g. Click Approve"></div>
+        <div class="tu-fld"><label>Spoken text (read this aloud)</label><textarea id="tu-script" placeholder="What you say in this step"></textarea></div>
+        <div class="tu-fld"><label>Voice</label>
+          <div class="tu-voice">
+            <button type="button" class="tu-btn" id="tu-rec">🎙 Record</button>
+            <canvas id="tu-wave" width="300" height="28"></canvas>
+            <button type="button" class="tu-btn" id="tu-voice-play" title="Listen">▶</button>
+          </div>
+          <div class="tu-hint" id="tu-voice-len"></div>
+          <div class="tu-hint">The step lasts as long as the recording.</div>
+        </div>
+        <div class="tu-fld"><label>Shortest length of the step (seconds)</label><input type="number" id="tu-min" min="1" max="600" step="0.5"></div>
+        <div class="tu-row">
+          <button type="button" class="tu-btn" id="tu-up" title="Move left">◀</button>
+          <button type="button" class="tu-btn" id="tu-down" title="Move right">▶</button>
+          <span style="flex:1"></span>
+          <button type="button" class="tu-btn" id="tu-del">Remove step</button>
+        </div>
+        <hr class="tu">
+      </div>
+      <h3>Film</h3>
+      <div class="tu-fld"><label>Shown on the portal page</label><input id="tu-page" value="{{ film.page }}" maxlength="200" placeholder="e.g. Draft review"></div>
+      <div class="tu-fld"><label>Status</label>
+        <select id="tu-status-sel">{% for s in statuses %}<option value="{{ s }}" {% if s == film.status %}selected{% endif %}>{{ s }}</option>{% endfor %}</select>
+      </div>
+      <div id="tu-video"></div>
+    </div>
+    {% else %}
+    <div class="tu-col tu-empty" style="grid-column: span 2">
+      Give the new film a title on the left and press ＋.<br>Then add screenshots step by step.
+    </div>
+    {% endif %}
+  </div>
+</div>
+<script type="module" src="{% static 'tutorials/tutorials.js' %}"></script>
+{% endblock %}

@@ -26,6 +26,7 @@ INSTALLED_APPS = [
     'planner',
     'posts_posted',
     'matomo',
+    'tutorials',
 ]
 
 MIDDLEWARE = [

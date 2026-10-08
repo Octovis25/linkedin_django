@@ -58,6 +58,7 @@ INSTALLED_APPS = [
     "media_library",
     "assets",
     "matomo",
+    "tutorials",
 ]
 
 MIDDLEWARE = [

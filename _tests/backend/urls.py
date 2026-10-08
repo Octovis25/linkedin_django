@@ -6,4 +6,5 @@ urlpatterns = [
     path('library/', include('media_library.urls')),
     path('planner/', include('planner.urls')),
     path('webstats/', include('matomo.urls')),
+    path('tutorials/', include('tutorials.urls')),
 ]
