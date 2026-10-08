@@ -134,8 +134,9 @@
             <canvas id="tu-wave" width="300" height="28"></canvas>
             <button type="button" class="tu-btn" id="tu-voice-play" title="Listen">▶</button>
           </div>
+          <button type="button" class="tu-btn" id="tu-tts" style="width:100%;margin-top:6px">🗣 Voice from the spoken text</button>
           <div class="tu-hint" id="tu-voice-len"></div>
-          <div class="tu-hint">The step lasts as long as the recording.</div>
+          <div class="tu-hint">Record yourself or let the computer voice read the text. The step lasts as long as the voice.</div>
         </div>
         <div class="tu-fld"><label>Shortest length of the step (seconds)</label><input type="number" id="tu-min" min="1" max="600" step="0.5"></div>
         <div class="tu-row">
@@ -148,6 +149,14 @@
       </div>
       <h3>Film</h3>
       <div class="tu-fld"><label>Shown on the portal page</label><input id="tu-page" value="{{ film.page }}" maxlength="200" placeholder="e.g. Draft review"></div>
+      <div class="tu-fld"><label>Computer voice</label>
+        <div class="tu-row">
+          <select id="tu-voice-sel" style="flex:1">{% for v in voices %}<option value="{{ v }}" {% if v == film.voice %}selected{% endif %}>{{ v|capfirst }}</option>{% endfor %}</select>
+          <button type="button" class="tu-btn" id="tu-voice-try" title="Listen to this voice with the selected step">▶</button>
+        </div>
+        <button type="button" class="tu-btn full" id="tu-tts-all">🗣 Voices for all steps</button>
+        <div class="tu-hint">OpenAI voice, reads the spoken text of each step (about 1–2 cents per minute of film).</div>
+      </div>
       <div class="tu-fld"><label>Status</label>
         <select id="tu-status-sel">{% for s in statuses %}<option value="{{ s }}" {% if s == film.status %}selected{% endif %}>{{ s }}</option>{% endfor %}</select>
       </div>

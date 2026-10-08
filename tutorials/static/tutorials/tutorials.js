@@ -346,7 +346,7 @@ function renderPanel() {
   $('tu-click-info').textContent = hasClick(s) ? 'set – click elsewhere to move it' : 'not set – click on the screenshot';
   $('tu-frame-info').textContent = frameOf(s) || (s.frame_w != null) ? 'drawn' : 'not drawn yet';
   document.querySelectorAll('[data-mode]').forEach(b => b.classList.toggle('on', b.dataset.mode === state.mode));
-  $('tu-voice-len').textContent = s.audio_ms ? fmt(s.audio_ms) + ' recorded' : 'no recording yet';
+  $('tu-voice-len').textContent = s.audio_ms ? 'Voice: ' + fmt(s.audio_ms) : 'No voice yet';
   $('tu-voice-play').disabled = !s.audio_url;
   $('tu-up').disabled = state.sel === 0;
   $('tu-down').disabled = state.sel >= state.steps.length - 1;
@@ -460,6 +460,65 @@ async function playVoice() {
   const buf = await loadVoice(s.audio_url);
   const ac = audioCtx(); await ac.resume();
   const src = ac.createBufferSource(); src.buffer = buf; src.connect(ac.destination); src.start();
+}
+
+// ── Text to voice ───────────────────────────────────────────────────────────
+// The server asks OpenAI and stores the MP3; the length is measured here.
+async function ttsStep(s) {
+  const j = await postJson('/tutorials/api/tts/', { id: s.id });
+  state.voices.delete(j.url);
+  const buf = await loadVoice(j.url);
+  const ms = Math.round(buf.duration * 1000);
+  s.audio_nc_path = j.nc_path; s.audio_url = j.url;
+  saveStep(s, { audio_nc_path: j.nc_path, audio_ms: ms });
+  return ms;
+}
+const spoken = s => (s.script || '').trim() || (s.caption || '').trim();
+
+async function ttsOne() {
+  const s = state.steps[state.sel];
+  if (!s || state.busy) return;
+  if (!spoken(s)) { say('Write the spoken text first.', true); return; }
+  if (s.audio_url && !confirm('This step already has a voice. Replace it?')) return;
+  state.busy = true; $('tu-tts').disabled = true;
+  try {
+    say('Creating the voice…');
+    const ms = await ttsStep(s);
+    say('Voice created (' + fmt(ms) + ').');
+    refreshAll();
+    playVoice();
+  } catch (e) { say('No voice: ' + e.message, true); }
+  finally { state.busy = false; $('tu-tts').disabled = false; }
+}
+
+async function ttsAll() {
+  if (state.busy || !state.steps.length) return;
+  let todo = state.steps.filter(s => spoken(s) && !s.audio_url);
+  if (!todo.length) {
+    if (!confirm('Every step already has a voice. Create all voices again with the selected voice?')) return;
+    todo = state.steps.filter(spoken);
+  }
+  if (!todo.length) { say('No step has spoken text yet.', true); return; }
+  state.busy = true; $('tu-tts-all').disabled = true;
+  try {
+    for (let k = 0; k < todo.length; k++) {
+      say(`Creating voices… ${k + 1} of ${todo.length}`);
+      await ttsStep(todo[k]);
+      refreshAll();
+    }
+    say(`${todo.length} voice${todo.length > 1 ? 's' : ''} created.`);
+  } catch (e) { say('Stopped: ' + e.message, true); }
+  finally { state.busy = false; $('tu-tts-all').disabled = false; refreshAll(); }
+}
+
+// Voices whose length is not known yet (e.g. the browser closed too early).
+async function measureMissing() {
+  for (const s of state.steps) {
+    if (s.audio_url && !s.audio_ms) {
+      try { const b = await loadVoice(s.audio_url); saveStep(s, { audio_ms: Math.round(b.duration * 1000) }); }
+      catch (_) { /* stays unknown - the step keeps its shortest length */ }
+    }
+  }
 }
 
 // ── Preview ─────────────────────────────────────────────────────────────────
@@ -660,6 +719,7 @@ async function start() {
   await loadAllImages();
   renderFilm();
   refreshAll();
+  measureMissing().then(() => refreshAll());
 
   // Film fields
   const filmField = (id, key, wait) => {
@@ -676,6 +736,22 @@ async function start() {
   filmField('tu-page', 'page', 700);
   filmField('tu-lang', 'lang');
   filmField('tu-status-sel', 'status');
+  filmField('tu-voice-sel', 'voice');
+  $('tu-tts').onclick = ttsOne;
+  $('tu-tts-all').onclick = ttsAll;
+  $('tu-voice-try').onclick = async () => {
+    // Saves the selected voice first, then voices the current step with it.
+    try { await postJson('/tutorials/api/film/', { action: 'update', id: filmId, voice: $('tu-voice-sel').value }); }
+    catch (e) { say('Not saved: ' + e.message, true); return; }
+    const s = state.steps[state.sel];
+    if (!s) return;
+    if (s.audio_url && !confirm('Try the voice on this step? Its current voice is replaced.')) return;
+    if (!spoken(s)) { say('Write the spoken text of this step first.', true); return; }
+    state.busy = true;
+    try { say('Creating the voice…'); await ttsStep(s); refreshAll(); playVoice(); say('Voice created.'); }
+    catch (e) { say('No voice: ' + e.message, true); }
+    finally { state.busy = false; }
+  };
 
   // Step fields
   const cur = () => state.steps[state.sel];

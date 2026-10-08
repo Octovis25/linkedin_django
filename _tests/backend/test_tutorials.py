@@ -4,6 +4,7 @@ Nextcloud is not reachable in the test run, so files go to the local fallback
 (__local__/tutorials/...), which the Studio's proxy serves the same way.
 """
 import json
+from unittest import mock
 import shutil
 import os
 
@@ -21,7 +22,7 @@ PNG = (b'\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08
        b'\x00\x00\x00\x00IEND\xaeB`\x82')
 
 
-class Tutorials(TransactionTestCase):
+class Basis(TransactionTestCase):
     # CREATE TABLE commits in MySQL - so no TestCase transaction around it.
 
     def setUp(self):
@@ -53,6 +54,9 @@ class Tutorials(TransactionTestCase):
     def hochladen(self, film_id, art='image', inhalt=PNG, typ='image/png', name='shot.png'):
         datei = SimpleUploadedFile(name, inhalt, content_type=typ)
         return self.client.post('/tutorials/api/upload/', {'film_id': film_id, 'kind': art, 'file': datei})
+
+
+class Tutorials(Basis):
 
     # ── the page ───────────────────────────────────────────────────────────
     def test_seite_ohne_film(self):
@@ -180,3 +184,66 @@ class Tutorials(TransactionTestCase):
         with connection.cursor() as c:
             c.execute("UPDATE tutorial_films SET video_seconds=72.4 WHERE id=%s", [fid])
         self.assertEqual('1:12', tv.film_list('sop')[0]['length'])
+
+
+class TextToVoice(Basis):
+    """Stage 2: the spoken text becomes a voice through OpenAI (mocked here)."""
+
+    def schritt(self, script='Click Approve.'):
+        fid = self.neuer_film()
+        sid = self.api('/tutorials/api/step/', action='create', film_id=fid)[1]['id']
+        self.api('/tutorials/api/step/', action='update', id=sid, script=script)
+        return fid, sid
+
+    def test_ohne_schluessel_klare_meldung(self):
+        _, sid = self.schritt()
+        with mock.patch.dict(os.environ, {'OPENAI_API_KEY': ''}):
+            status, j = self.api('/tutorials/api/tts/', id=sid)
+        self.assertEqual(400, status)
+        self.assertIn('OPENAI_API_KEY', j['error'])
+
+    def test_stimme_wird_erzeugt_und_gespeichert(self):
+        fid, sid = self.schritt()
+        self.api('/tutorials/api/film/', action='update', id=fid, voice='nova', lang='de')
+        antwort = mock.Mock(status_code=200, content=b'ID3fake-mp3')
+        with mock.patch.dict(os.environ, {'OPENAI_API_KEY': 'sk-test'}), \
+             mock.patch('requests.post', return_value=antwort) as post:
+            status, j = self.api('/tutorials/api/tts/', id=sid)
+        self.assertEqual(200, status, j)
+        gesendet = post.call_args.kwargs['json']
+        self.assertEqual(('gpt-4o-mini-tts', 'nova', 'Click Approve.', 'mp3'),
+                         (gesendet['model'], gesendet['voice'], gesendet['input'], gesendet['response_format']))
+        self.assertIn('Deutsch', gesendet['instructions'])
+        self.assertEqual('Bearer sk-test', post.call_args.kwargs['headers']['Authorization'])
+        self.assertIn(f'/sop/{fid}/voice/tts_{sid}_', j['nc_path'])
+        self.assertTrue(j['nc_path'].endswith('.mp3'))
+        self.assertEqual(j['nc_path'], self.zeile("SELECT audio_nc_path FROM tutorial_steps WHERE id=%s", sid)[0])
+        self.assertEqual(200, self.client.get(j['url']).status_code)
+
+    def test_ohne_text_keine_stimme(self):
+        _, sid = self.schritt(script='')
+        with mock.patch.dict(os.environ, {'OPENAI_API_KEY': 'sk-test'}), mock.patch('requests.post') as post:
+            status, _ = self.api('/tutorials/api/tts/', id=sid)
+        self.assertEqual(400, status)
+        post.assert_not_called()
+
+    def test_fehler_von_openai_wird_gezeigt(self):
+        _, sid = self.schritt()
+        antwort = mock.Mock(status_code=401)
+        antwort.json.return_value = {'error': {'message': 'Incorrect API key provided'}}
+        with mock.patch.dict(os.environ, {'OPENAI_API_KEY': 'sk-bad'}), \
+             mock.patch('requests.post', return_value=antwort):
+            status, j = self.api('/tutorials/api/tts/', id=sid)
+        self.assertEqual(502, status)
+        self.assertIn('Incorrect API key', j['error'])
+
+    def test_unbekannte_stimme(self):
+        fid = self.neuer_film()
+        self.assertEqual(400, self.api('/tutorials/api/film/', action='update', id=fid, voice='robot')[0])
+
+    def test_spalte_wird_nachgeruestet(self):
+        with connection.cursor() as c:
+            c.execute("ALTER TABLE tutorial_films DROP COLUMN voice")
+        tv.ensure_tables.ungepuffert()
+        fid = self.neuer_film()
+        self.assertEqual('marin', tv.load_film(fid)['voice'])

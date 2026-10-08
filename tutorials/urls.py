@@ -11,4 +11,5 @@ urlpatterns = [
     path('api/step/', views.api_step, name='api_step'),
     path('api/upload/', views.api_upload, name='api_upload'),
     path('api/video/', views.api_video, name='api_video'),
+    path('api/tts/', views.api_tts, name='api_tts'),
 ]

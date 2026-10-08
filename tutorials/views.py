@@ -32,6 +32,19 @@ PORTALS = [
 ]
 PORTAL_NAMES = dict(PORTALS)
 STATUSES = ['Draft', 'Video ready', 'In portal']
+
+# Text to voice (stage 2, 08.10.2026): OpenAI's speech endpoint. The key lives
+# in Render's environment as OPENAI_API_KEY - never in the code.
+TTS_URL = os.environ.get('OPENAI_TTS_URL', 'https://api.openai.com/v1/audio/speech')
+TTS_MODEL = 'gpt-4o-mini-tts'
+VOICES = ['marin', 'cedar', 'alloy', 'ash', 'ballad', 'coral', 'echo', 'fable',
+          'nova', 'onyx', 'sage', 'shimmer', 'verse']
+TTS_STYLE = {
+    'en': ('Speak English. A calm, friendly trainer explains software step by step. '
+           'Clear, unhurried pace, short pauses between sentences.'),
+    'de': ('Sprich Deutsch. Ein ruhiger, freundlicher Trainer erklärt Software Schritt '
+           'für Schritt. Deutlich, ohne Eile, kurze Pausen zwischen den Sätzen.'),
+}
 LANGS = ['en', 'de']
 
 NC_ROOT = 'Marketing & Design/Octotrial_Assets/Tutorials'
@@ -65,6 +78,7 @@ def ensure_tables():
             status        VARCHAR(20)  NOT NULL DEFAULT 'Draft',
             video_nc_path VARCHAR(512) NULL,
             video_seconds DOUBLE       NULL,
+            voice         VARCHAR(20)  NOT NULL DEFAULT 'marin',
             created_at    DATETIME DEFAULT CURRENT_TIMESTAMP,
             updated_at    DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
         ) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci""")
@@ -87,6 +101,10 @@ def ensure_tables():
             min_ms        INT NOT NULL DEFAULT 3000,
             INDEX (film_id)
         ) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci""")
+        # Added later: the voice for text to voice.
+        c.execute("SHOW COLUMNS FROM tutorial_films LIKE 'voice'")
+        if not c.fetchone():
+            c.execute("ALTER TABLE tutorial_films ADD COLUMN voice VARCHAR(20) NOT NULL DEFAULT 'marin'")
 
 
 # ── Helpers ─────────────────────────────────────────────────────────────────
@@ -138,7 +156,7 @@ def load_film(film_id):
     ensure_tables()
     with connection.cursor() as c:
         c.execute("""SELECT id, portal, title, page, lang, status, video_nc_path,
-                            video_seconds, updated_at
+                            video_seconds, updated_at, voice
                      FROM tutorial_films WHERE id=%s""", [film_id])
         r = c.fetchone()
     if not r:
@@ -148,6 +166,7 @@ def load_film(film_id):
         'status': r[5], 'video_nc_path': r[6] or '', 'video_url': file_url(r[6]),
         'video_seconds': r[7],
         'updated_at': r[8].strftime('%d.%m.%Y %H:%M') if r[8] else '',
+        'voice': r[9] or 'marin',
     }
 
 
@@ -249,6 +268,7 @@ def tutorials_view(request):
     return render(request, 'tutorials/tutorials.html', {
         'portals': PORTALS, 'portal': portal, 'portal_name': PORTAL_NAMES[portal],
         'films': films, 'film': film, 'statuses': STATUSES, 'langs': LANGS,
+        'voices': VOICES,
     })
 
 
@@ -295,6 +315,10 @@ def api_film(request):
             if daten['lang'] not in LANGS:
                 return JsonResponse({'ok': False, 'error': 'Unknown language'}, status=400)
             werte['lang'] = daten['lang']
+        if 'voice' in daten:
+            if daten['voice'] not in VOICES:
+                return JsonResponse({'ok': False, 'error': 'Unknown voice'}, status=400)
+            werte['voice'] = daten['voice']
         if 'status' in daten:
             if daten['status'] not in STATUSES:
                 return JsonResponse({'ok': False, 'error': 'Unknown status'}, status=400)
@@ -445,3 +469,63 @@ def api_video(request):
                             status=CASE WHEN status='In portal' THEN status ELSE 'Video ready' END
                      WHERE id=%s""", [gespeichert, sekunden, film['id']])
     return JsonResponse({'ok': True, 'film': load_film(film['id'])})
+
+
+@login_required
+def api_tts(request):
+    """Turns a step's spoken text into a voice (OpenAI) and puts it on the step.
+
+    The browser measures the length afterwards (it decodes the MP3 anyway) and
+    saves it with the step. Each voice gets its own file name - text and voice
+    in the hash - so an older take is never overwritten.
+    """
+    if request.method != 'POST':
+        return JsonResponse({'ok': False, 'error': 'POST required'}, status=405)
+    daten = _json_body(request)
+    if daten is None:
+        return JsonResponse({'ok': False, 'error': 'Invalid JSON'}, status=400)
+    schluessel = os.environ.get('OPENAI_API_KEY', '').strip()
+    if not schluessel:
+        return JsonResponse({'ok': False, 'error': 'OPENAI_API_KEY is not set on the server '
+                                                   '(Render → Environment).'}, status=400)
+    ensure_tables()
+    with connection.cursor() as c:
+        c.execute("SELECT film_id, COALESCE(script,''), caption FROM tutorial_steps WHERE id=%s",
+                  [daten.get('id') or 0])
+        zeile = c.fetchone()
+    if not zeile:
+        return JsonResponse({'ok': False, 'error': 'Step not found'}, status=404)
+    film = load_film(zeile[0])
+    text = (zeile[1] or '').strip() or (zeile[2] or '').strip()
+    if not text:
+        return JsonResponse({'ok': False, 'error': 'This step has no spoken text yet.'}, status=400)
+    text = text[:4000]
+    stimme = film['voice'] if film['voice'] in VOICES else 'marin'
+
+    import requests
+    try:
+        antwort = requests.post(TTS_URL, timeout=90, headers={
+            'Authorization': f'Bearer {schluessel}', 'Content-Type': 'application/json',
+        }, json={
+            'model': TTS_MODEL, 'voice': stimme, 'input': text, 'response_format': 'mp3',
+            'instructions': TTS_STYLE.get(film['lang'], TTS_STYLE['en']),
+        })
+    except requests.RequestException as fehler:
+        return JsonResponse({'ok': False, 'error': f'OpenAI not reachable: {fehler}'}, status=502)
+    if antwort.status_code != 200:
+        try:
+            grund = antwort.json().get('error', {}).get('message', '')
+        except ValueError:
+            grund = antwort.text[:200]
+        return JsonResponse({'ok': False, 'error': f'OpenAI answered {antwort.status_code}: {grund}'},
+                            status=502)
+    inhalt = antwort.content
+    kurz = hashlib.sha1((stimme + '|' + text).encode('utf-8')).hexdigest()[:8]
+    nc_path = f"{film_folder(film['portal'], film['id'])}/voice/tts_{daten['id']}_{kurz}.mp3"
+    gespeichert = store(inhalt, nc_path, 'audio/mpeg')
+    with connection.cursor() as c:
+        c.execute("UPDATE tutorial_steps SET audio_nc_path=%s, audio_ms=NULL WHERE id=%s",
+                  [gespeichert, daten['id']])
+        c.execute("UPDATE tutorial_films SET status='Draft' WHERE id=%s AND status='Video ready'",
+                  [film['id']])
+    return JsonResponse({'ok': True, 'nc_path': gespeichert, 'url': file_url(gespeichert)})
