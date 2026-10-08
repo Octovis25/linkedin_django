@@ -175,7 +175,9 @@ function drawCursor(c, x, y) {
   c.lineWidth = 1.3; c.strokeStyle = '#161616'; c.lineJoin = 'round'; c.stroke();
   c.restore();
 }
-function drawCaption(c, text, alpha) {
+// The caption sits at the bottom - unless what the step points at is down
+// there; then it moves to the top so it never covers the click or the frame.
+function drawCaption(c, text, alpha, top = false) {
   if (!text) return;
   c.save();
   c.globalAlpha = alpha;
@@ -186,7 +188,7 @@ function drawCaption(c, text, alpha) {
   if (line !== text) line = line.trimEnd() + '…';
   const tw = c.measureText(line).width;
   const bw = tw + 72, bh = 76;
-  const x = (W - bw) / 2, y = H - bh - 54;
+  const x = (W - bw) / 2, y = top ? 54 : H - bh - 54;
   roundRect(c, x, y, bw, bh, 14);
   c.fillStyle = COLORS.caption; c.fill();
   c.fillStyle = '#fff'; c.textBaseline = 'middle'; c.textAlign = 'center';
@@ -258,7 +260,10 @@ function drawStep(c, i, local, { editor = false, caption = true } = {}) {
     drawCursor(c, from.x, from.y);
   }
 
-  if (caption) drawCaption(c, s.caption, editor ? 1 : clamp(local / 250));
+  if (caption) {
+    const low = (to && to.y > H * 0.62) || (fr && fr.y + fr.h > H * 0.72);
+    drawCaption(c, s.caption, editor ? 1 : clamp(local / 250), low);
+  }
 }
 
 // The whole film at time t (ms).
