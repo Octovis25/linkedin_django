@@ -1,0 +1,78 @@
+{% comment %}
+Sort a list in the browser: post number, send date, last edited, created
+(Ortrud, 08.10.2026). Every item carries data-num, data-send ("dd.mm.yyyy" or
+"dd.mm.yyyy hh:mm"), data-created and data-edited ("yyyy-mm-dd hh:mm:ss").
+Include with: list (selector of the container), item (selector of an item
+directly inside it), default ("edited-desc", "send-asc" ...). Each tab
+remembers the last choice in this browser.
+{% endcomment %}
+<style>
+  .ps-bar { display:inline-flex; gap:8px; align-items:center; flex-wrap:wrap; }
+  .ps-seg { display:inline-flex; border:1px solid #d9e3e3; border-radius:8px; overflow:hidden; }
+  .ps-seg button, .ps-dir { font:inherit; font-size:12px; padding:5px 11px; border:0; background:#fff; color:#2b3b3b; cursor:pointer; }
+  .ps-seg button { border-right:1px solid #d9e3e3; }
+  .ps-seg button:last-child { border-right:0; }
+  .ps-seg button.on { background:#008591; color:#fff; }
+  .ps-dir { border:1px solid #d9e3e3; border-radius:8px; }
+  .ps-by-send .pe-d-send, .ps-by-created .pe-d-created, .ps-by-edited .pe-d-edited { font-weight:700; color:#005F68; }
+  .ps-by-num .post-nr { font-weight:700; color:#005F68; }
+</style>
+<span class="ps-bar" data-list="{{ list }}" data-item="{{ item }}" data-default="{{ default|default:'edited-desc' }}" data-tab="{{ tab }}">
+  <span>Sort by:</span>
+  <span class="ps-seg">
+    <button type="button" data-k="num">Post #</button>
+    <button type="button" data-k="send">Send date</button>
+    <button type="button" data-k="edited">Last edited</button>
+    <button type="button" data-k="created">Created</button>
+  </span>
+  <button type="button" class="ps-dir" title="Change the order"></button>
+</span>
+<script>
+(function () {
+  const bar = document.currentScript.previousElementSibling;
+  const store = 'planner-sort:' + (bar.dataset.tab || location.pathname);
+  const LABEL = { num: ['↑ lowest number first', '↓ highest number first'],
+                  date: ['↑ earliest first', '↓ latest first'] };
+  let wahl = bar.dataset.default;
+  try { wahl = localStorage.getItem(store) || wahl; } catch (e) { /* no storage: the default */ }
+  let [k, dir] = wahl.split('-');
+
+  // A sortable text per item, or null when it has no such date (always last).
+  function wert(el) {
+    if (k === 'num') return Number(el.dataset.num || 0);
+    if (k === 'send') {
+      const m = (el.dataset.send || '').match(/(\d{2})\.(\d{2})\.(\d{4})(?:\s+(\d{2}):(\d{2}))?/);
+      return m ? m[3] + m[2] + m[1] + (m[4] || '00') + (m[5] || '00') : null;
+    }
+    return el.dataset[k] || null;
+  }
+  function sortieren() {
+    const liste = document.querySelector(bar.dataset.list);
+    if (!liste) return;
+    const items = Array.from(liste.children).filter(el => el.matches(bar.dataset.item));
+    const auf = dir === 'asc' ? 1 : -1;
+    items.sort(function (a, b) {
+      const x = wert(a), y = wert(b);
+      if (x === null && y === null) return 0;
+      if (x === null) return 1;
+      if (y === null) return -1;
+      return (x < y ? -1 : x > y ? 1 : 0) * auf;
+    });
+    items.forEach(el => liste.appendChild(el));
+    liste.classList.remove('ps-by-num', 'ps-by-send', 'ps-by-edited', 'ps-by-created');
+    liste.classList.add('ps-by-' + k);
+    bar.querySelectorAll('.ps-seg button').forEach(b => b.classList.toggle('on', b.dataset.k === k));
+    bar.querySelector('.ps-dir').textContent = LABEL[k === 'num' ? 'num' : 'date'][dir === 'asc' ? 0 : 1];
+    try { localStorage.setItem(store, k + '-' + dir); } catch (e) { /* fine */ }
+  }
+  bar.querySelectorAll('.ps-seg button').forEach(function (b) {
+    b.addEventListener('click', function () {
+      if (b.dataset.k !== k) { k = b.dataset.k; dir = k === 'send' ? 'asc' : 'desc'; }
+      sortieren();
+    });
+  });
+  bar.querySelector('.ps-dir').addEventListener('click', function () { dir = dir === 'asc' ? 'desc' : 'asc'; sortieren(); });
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', sortieren);
+  else sortieren();
+})();
+</script>

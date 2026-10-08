@@ -76,6 +76,9 @@
 </div>
 
 {% if posts %}
+<div style="display:flex;justify-content:flex-end;margin:0 0 8px;font-size:12px;color:#6c757d">
+  {% include "planner/_sort.html" with list="#oj-rows" item=".post-row" default="edited-desc" %}
+</div>
 <table class="oj-table">
   <thead>
     <tr>
@@ -86,9 +89,9 @@
       <th></th>
     </tr>
   </thead>
-  <tbody>
+  <tbody id="oj-rows">
     {% for p in posts %}
-    <tr class="post-row" id="prow-{{ p.id }}"
+    <tr class="post-row" id="prow-{{ p.id }}" data-num="{{ p.id }}" data-send="{% if p.planned_date %}{{ p.planned_date|date:'d.m.Y' }}{% if p.planned_time %} {{ p.planned_time|time:'H:i' }}{% endif %}{% endif %}" data-created="{{ p.created_at|date:'Y-m-d H:i:s' }}" data-edited="{{ p.updated_at|date:'Y-m-d H:i:s' }}"
         onclick="openOjEditById({{ p.id }})">
       <td class="td-title">
         <span class="post-name" title="{{ p.title|default:p.content|truncatechars:120 }}">
@@ -104,7 +107,7 @@
         <span class="topic-dot ta-{{ p.topic_color }}"></span>{{ p.topic_name }}
         {% else %}—{% endif %}
       </td>
-      <td style="font-size:12px;color:#6c757d">{{ p.planned_date|date:"d.m.Y"|default:"—" }}</td>
+      <td class="pe-d-send" style="font-size:12px;color:#6c757d">{{ p.planned_date|date:"d.m.Y"|default:"—" }}{% if p.planned_time %} {{ p.planned_time|time:"H:i" }}{% endif %}</td>
       <td style="white-space:nowrap">
         {% if li_connected and p.status == 'Scheduled' %}
         <button type="button" class="pa-btn" title="Auf LinkedIn posten"

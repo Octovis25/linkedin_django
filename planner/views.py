@@ -234,30 +234,35 @@ def _attach_video_paths(posts_list):
 
 
 def _attach_time_and_link(posts_list):
-    """Add 'planned_time' and 'link' where a list's SELECT left them out.
+    """Add 'planned_time', 'link', 'created_at' and 'updated_at' where a
+    list's SELECT left them out.
 
-    Ready, Archive, All and OJ did not read them. The post editor then opened
-    with an empty time and link, and saving wrote both back as empty - the
-    time a post had was gone (Ortrud, 06.10.2026).
+    Ready, Archive, All and OJ did not read time and link. The post editor then
+    opened with both empty, and saving wrote them back as empty - the time a
+    post had was gone (Ortrud, 06.10.2026). OJ also lacked the two dates the
+    sorting needs (08.10.2026).
     """
+    keys = ('planned_time', 'link', 'created_at', 'updated_at')
     fehlt = [p.get('id') for p in posts_list
-             if p.get('id') and ('planned_time' not in p or 'link' not in p)]
+             if p.get('id') and any(k not in p for k in keys)]
     if not fehlt:
         return posts_list
     placeholders = ','.join(['%s'] * len(fehlt))
     with connection.cursor() as c:
         try:
-            c.execute(f"""SELECT id, planned_time, COALESCE(link,'')
+            c.execute(f"""SELECT id, planned_time, COALESCE(link,''), created_at, updated_at
                            FROM planner_posts WHERE id IN ({placeholders})""", fehlt)
             rows = c.fetchall()
         except Exception:
             rows = []
-    werte = {r[0]: (r[1], r[2] or '') for r in rows}
+    werte = {r[0]: (r[1], r[2] or '', r[3], r[4]) for r in rows}
     for p in posts_list:
         if p.get('id') in werte:
-            zeit, link = werte[p['id']]
+            zeit, link, angelegt, geaendert = werte[p['id']]
             p.setdefault('planned_time', zeit)
             p.setdefault('link', link)
+            p.setdefault('created_at', angelegt)
+            p.setdefault('updated_at', geaendert)
     return posts_list
 
 

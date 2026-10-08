@@ -152,7 +152,7 @@ word, so a published post that was later tidied away still counts as published.
 
 {% include "planner/_post_type.html" %}
 {# Filter by post type - only in the browser, the list itself stays as it is. #}
-<div id="pt-filter" style="display:flex;gap:8px;align-items:center;margin-bottom:10px;font-size:12px;color:#6c757d">
+<div id="pt-filter" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px;font-size:12px;color:#6c757d">
   <span>Show:</span>
   <span class="pt-seg">
     <button type="button" data-f="" class="on" onclick="ptFilter(this)">All</button>
@@ -161,6 +161,8 @@ word, so a published post that was later tidied away still counts as published.
     <button type="button" data-f="none" onclick="ptFilter(this)">Without type</button>
   </span>
   <span id="pt-filter-count"></span>
+  <span style="margin-left:10px"></span>
+  {% if tab == "scheduled" %}{% include "planner/_sort.html" with list="#pe-list" item=".pe-card" default="send-asc" %}{% else %}{% include "planner/_sort.html" with list="#pe-list" item=".pe-card" default="edited-desc" %}{% endif %}
 </div>
 <script>
 function ptFilter(btn) {
@@ -185,9 +187,9 @@ document.addEventListener('DOMContentLoaded', function () {
 });
 </script>
 
-<div style="display:flex;flex-direction:column;gap:8px">
+<div id="pe-list" style="display:flex;flex-direction:column;gap:8px">
 {% for p in posts %}
-<div class="pe-card" id="post-{{ p.id }}" data-post-id="{{ p.id }}" data-post-type="{{ p.post_type }}" data-ende="{% if p.linkedin_posted %}posted{% else %}dropped{% endif %}" style="background:#fff;border:0.5px solid #e0e0e0;border-radius:10px;padding:12px 14px">
+<div class="pe-card" id="post-{{ p.id }}" data-post-id="{{ p.id }}" data-num="{{ p.id }}" data-send="{% if p.send_time %}{{ p.send_time }}{% elif p.planned_date %}{{ p.planned_date|date:'d.m.Y' }}{% if p.planned_time %} {{ p.planned_time|time:'H:i' }}{% endif %}{% endif %}" data-created="{{ p.created_at|date:'Y-m-d H:i:s' }}" data-edited="{{ p.updated_at|date:'Y-m-d H:i:s' }}" data-post-type="{{ p.post_type }}" data-ende="{% if p.linkedin_posted %}posted{% else %}dropped{% endif %}" style="background:#fff;border:0.5px solid #e0e0e0;border-radius:10px;padding:12px 14px">
   <div style="display:flex;gap:10px;align-items:center">
     {% if p.image %}
     <img src="/planner/image/{{ p.id }}/?v={% now 'U' %}" style="width:56px;height:56px;border-radius:6px;object-fit:cover;flex-shrink:0;cursor:zoom-in" onclick="peLightbox('/planner/image/{{ p.id }}/?v={% now 'U' %}')">
@@ -217,17 +219,17 @@ document.addEventListener('DOMContentLoaded', function () {
         <span class="post-nr" title="Post number">#{{ p.id }}</span>
         {% if p.post_type == 'short' %}<span class="pt-chip pt-chip-short">⚡ Short</span>{% elif p.post_type == 'company' %}<span class="pt-chip pt-chip-company">🏢 Company</span>{% endif %}
         <span style="font-size:11px;padding:1px 8px;border-radius:99px;background:{{ p.bg }};color:{{ p.fg }}">{{ p.topic_name }}</span>
-        {% if p.planned_date %}<span style="font-size:11px;color:#6c757d">📅 {{ p.planned_date|date:"d.m.Y" }}{% if p.planned_time %} 🕐 {{ p.planned_time|time:"H:i" }}{% endif %}</span>{% endif %}
+        {% if p.planned_date %}<span class="pe-d-send" style="font-size:11px;color:#6c757d">📅 {{ p.planned_date|date:"d.m.Y" }}{% if p.planned_time %} 🕐 {{ p.planned_time|time:"H:i" }}{% endif %}</span>{% endif %}
         {# The send time is what this page is about, so it gets its own badge. #}
-        {% if p.send_time %}<span style="font-size:11px;padding:1px 8px;border-radius:99px;background:#e8f4fb;color:#0077B5;font-weight:600;border:1px solid #0077B5" title="Goes out ({{ p.send_time_source }})">📤 {{ p.send_time }}</span>{% endif %}
+        {% if p.send_time %}<span class="pe-d-send" style="font-size:11px;padding:1px 8px;border-radius:99px;background:#e8f4fb;color:#0077B5;font-weight:600;border:1px solid #0077B5" title="Goes out ({{ p.send_time_source }})">📤 {{ p.send_time }}</span>{% endif %}
         {% if p.linkedin_posted %}<span style="font-size:11px;padding:1px 7px;border-radius:99px;background:#0077B5;color:#fff;font-weight:600" title="Published on LinkedIn">in ✓</span>{% endif %}
       </div>
       <p style="font-size:13px;color:#212529;margin:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ p.title|default:p.content|striptags|truncatechars:80 }}</p>
       {% if p.link %}<p style="font-size:12px;margin:3px 0 0"><a href="{{ p.link }}" target="_blank" rel="noopener" style="color:#008080;text-decoration:none;word-break:break-all" title="{{ p.link }}">🔗 {{ p.link|truncatechars:60 }}</a></p>{% endif %}
       {% if p.comment %}<p style="font-size:12px;color:#6c757d;margin:3px 0 0;font-style:italic">{{ p.comment|truncatechars:60 }}</p>{% endif %}
       <p style="font-size:11px;color:#adb5bd;margin:4px 0 0;display:flex;gap:12px;flex-wrap:wrap">
-        {% if p.created_at %}<span title="Erstellt">📝 {{ p.created_at|date:"d.m.Y H:i" }}</span>{% endif %}
-        {% if p.updated_at %}<span title="Last modified">✏️ {{ p.updated_at|date:"d.m.Y H:i" }}</span>{% endif %}
+        {% if p.created_at %}<span class="pe-d-created" title="Created">📝 {{ p.created_at|date:"d.m.Y H:i" }}</span>{% endif %}
+        {% if p.updated_at %}<span class="pe-d-edited" title="Last modified">✏️ {{ p.updated_at|date:"d.m.Y H:i" }}</span>{% endif %}
       </p>
     </div>
     <div style="display:flex;gap:6px;flex-shrink:0;align-items:center">
