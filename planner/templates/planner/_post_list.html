@@ -593,7 +593,20 @@ function peResetVideoUi() {
   if (sel) sel.value = '';
   peShowVideoPreview('');
 }
-function peClearVideo() { peResetVideoUi(); }
+/* The ✕ next to the video takes it off the post right away - like the image.
+   It used to clear only the form, so saving left the old video on the post. */
+async function peClearVideo() {
+  const id = document.getElementById('pe-id').value;
+  const gespeichert = id && (PE_POSTS.find(x => x.id == id) || {}).video;
+  if (gespeichert) {
+    if (!confirm('Remove the video from this post? The file goes back to "My outputs" in the Studio.')) return;
+    const r = await peApi({action: 'remove_video', id: parseInt(id)});
+    if (!r || !r.ok) { alert('The video could not be removed: ' + ((r && r.error) || 'unknown error')); return; }
+    const p = PE_POSTS.find(x => x.id == id);
+    if (p) { p.video = ''; p.video_nc_path = ''; }
+  }
+  peResetVideoUi();
+}
 
 /* Show the Studio button only when a Nextcloud video is selected */
 function peUpdateStudioBtn() {

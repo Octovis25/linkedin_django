@@ -989,6 +989,21 @@ def api_post(request):
             except Exception:
                 c.execute("UPDATE planner_posts SET image=NULL, video_nc_path=NULL WHERE id=%s", [data.get('id')])
             return JsonResponse({'ok': True})
+        elif action == 'remove_video':
+            # Only the video comes off - an image on the same post stays.
+            # The ✕ next to the video in the editor used to clear the form
+            # only; saving then left the video on the post (Ortrud, #127,
+            # 09.10.2026). The file goes back to the outputs, as everywhere.
+            _ensure_media_columns()
+            c.execute("SELECT COALESCE(video_nc_path,''), COALESCE(status,'') FROM planner_posts WHERE id=%s",
+                      [data.get('id')])
+            row = c.fetchone()
+            if not row:
+                return JsonResponse({'ok': False, 'error': 'Post not found'}, status=404)
+            if row[0] and (row[1] or '').lower() != 'posted':
+                _move_replaced_media_to_outputs(row[0], c)
+            c.execute("UPDATE planner_posts SET video_nc_path=NULL WHERE id=%s", [data.get('id')])
+            return JsonResponse({'ok': True})
         elif action == 'set_video':
             # Link an existing Nextcloud video to this post (no upload).
             _ensure_media_columns()
