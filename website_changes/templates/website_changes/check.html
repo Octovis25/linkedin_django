@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block title %}Website changes – check{% endblock %}
+{% block content %}
+<h1>Website changes – check</h1>
+<p style="color:#555;font-size:.9rem">Does WordPress hand out the revisions of a page, with author and content? Read only, through the same access as Matomo. Other page: <code>?post=2263</code></p>
+{% if error %}
+  <div class="alert alert-error"><strong>Not possible:</strong> {{ error }}</div>
+{% elif not page %}
+  <p>No page or post with ID {{ post_id }}.</p>
+{% else %}
+  <p><strong>#{{ page.id }} {{ page.title }}</strong> ({{ page.type }}, {{ page.status }}) – <a href="{{ page.link }}" target="_blank" rel="noopener">open ↗</a></p>
+  <table style="border-collapse:collapse;font-size:.88rem;width:100%">
+    <tr style="text-align:left;border-bottom:2px solid #008591">
+      <th style="padding:5px 8px">Revision</th><th style="padding:5px 8px">Saved (UTC)</th><th style="padding:5px 8px">Author</th>
+      <th style="padding:5px 8px">Content</th><th style="padding:5px 8px">Found</th><th style="padding:5px 8px">Headings</th>
+    </tr>
+    {% for r in revisions %}
+    <tr style="border-bottom:1px solid #e4e0d5;vertical-align:top">
+      <td style="padding:5px 8px">{{ r.id }}</td>
+      <td style="padding:5px 8px;white-space:nowrap">{{ r.modified_gmt|slice:":16"|cut:"T"|default:"?" }}</td>
+      <td style="padding:5px 8px">{{ r.author|default:"?" }}</td>
+      <td style="padding:5px 8px">{{ r.found.bytes }} characters</td>
+      <td style="padding:5px 8px;white-space:nowrap">{{ r.found.counts.heading }} headings · {{ r.found.counts.text }} texts · {{ r.found.counts.button }} buttons · {{ r.found.counts.image }} images</td>
+      <td style="padding:5px 8px">{{ r.found.headings|join:" · " }}</td>
+    </tr>
+    {% empty %}
+    <tr><td colspan="6" style="padding:5px 8px">No revisions – WordPress may keep none for this page.</td></tr>
+    {% endfor %}
+  </table>
+{% endif %}
+{% endblock %}

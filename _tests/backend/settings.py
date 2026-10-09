@@ -27,6 +27,7 @@ INSTALLED_APPS = [
     'posts_posted',
     'matomo',
     'tutorials',
+    'website_changes',
 ]
 
 MIDDLEWARE = [

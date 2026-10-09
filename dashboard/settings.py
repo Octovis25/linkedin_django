@@ -59,6 +59,7 @@ INSTALLED_APPS = [
     "assets",
     "matomo",
     "tutorials",
+    "website_changes",
 ]
 
 MIDDLEWARE = [

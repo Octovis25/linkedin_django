@@ -29,6 +29,7 @@ urlpatterns = [
     path("collectives/", include("collectives.urls")),
     path("planner/", include("planner.urls")),
     path("statistics/", include("linkedin_statistics.stat_urls")),  # Statistics module
+    path("webstats/changes/", include("website_changes.urls")),  # octotrial.com change log
     path("webstats/", include("matomo.urls", namespace="matomo")),  # Matomo Web-Statistik
     path("tutorials/", include("tutorials.urls")),  # how-to films for the portals
     path("users/", core_views.user_list, name='user_list'),
