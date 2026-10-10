@@ -692,14 +692,15 @@ async function setStatusInline(sel, id) {
   applyFilters();
 }
 
-/* Video-/GIF-Thumbnails in der Tabelle: Frame bei ~2s als Standbild laden */
+/* Video thumbnails in the list: the first frame, the one Buffer and LinkedIn show as the preview */
 function initVideoThumbs() {
   document.querySelectorAll('video[data-vthumb]').forEach(v => {
     if (v.dataset.vthumbInit) return;
     v.dataset.vthumbInit = '1';
     v.src = v.dataset.vthumb;
     v.addEventListener('loadedmetadata', () => {
-      const t = Math.min(2, (v.duration || 3) / 2);
+      // Just after 0 s - some browsers paint nothing for an exact 0.
+      const t = Math.min(0.05, (v.duration || 1) / 2);
       try { v.currentTime = t; } catch (e) {}
     }, { once: true });
   });
