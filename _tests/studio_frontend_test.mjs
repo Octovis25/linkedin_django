@@ -2591,7 +2591,7 @@ const lxVideo = await page.evaluate(async () => {
 pruefe('Video: jedes Bild bekommt seine eigene Zeit, kein Sprung über 1/30 s - auch mit laufender Vorschau',
   lxVideo.bilder >= 60 && lxVideo.groessterSprung <= 34, JSON.stringify(lxVideo).slice(0, 160));
 pruefe('und ein langsamer Rechner dehnt das Video nicht',
-  Number.isFinite(lxVideo.dauer) && Math.abs(lxVideo.dauer - (lxVideo.inhalt + 0.4)) < 0.6, JSON.stringify(lxVideo));
+  Number.isFinite(lxVideo.dauer) && Math.abs(lxVideo.dauer - (lxVideo.inhalt + 0.4 + 1.2)) < 0.6, JSON.stringify(lxVideo));
 // Ruckeln auf LinkedIn: der Rekorder stempelte Bilder 19 bis 73 ms auseinander.
 // Mit WebCodecs trägt jedes Bild seine genaue Zeit - genau 1/30 s Abstand.
 pruefe('Das Video wird Bild für Bild kodiert (WebCodecs)', lxVideo.weg === 'webcodecs', lxVideo.weg);

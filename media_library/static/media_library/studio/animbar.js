@@ -664,11 +664,23 @@ export function renderAnimBar() {
   lenWrap.appendChild(lenInp);
   lenWrap.appendChild(document.createTextNode('s'));
 
+  // Opening frame = the finished picture (Buffer/LinkedIn preview). On by default.
+  const coverWrap = document.createElement('label');
+  coverWrap.style.cssText = 'display:flex;align-items:center;gap:5px;font-size:.75rem;color:#555;margin-left:14px;cursor:pointer';
+  coverWrap.title = 'The video starts with the finished picture for 1.2 s, then plays from the start. '
+                  + 'Buffer and LinkedIn show this first frame as the preview.';
+  const coverInp = document.createElement('input');
+  coverInp.type = 'checkbox'; coverInp.id = 'video-cover';
+  coverInp.checked = window._videoCover !== false;
+  coverInp.onchange = () => { window._videoCover = coverInp.checked; };
+  coverWrap.appendChild(coverInp);
+  coverWrap.appendChild(document.createTextNode('🖼 Start with the finished picture'));
+
   const prevTop = document.createElement('button');
   prevTop.className = 'tbtn primary'; prevTop.textContent = '▶ Preview';
   prevTop.style.marginLeft = '10px';
   prevTop.onclick = () => media.previewAnimation(editor);
-  head.appendChild(title); head.appendChild(tempoWrap); head.appendChild(lenWrap);
+  head.appendChild(title); head.appendChild(tempoWrap); head.appendChild(lenWrap); head.appendChild(coverWrap);
   head.appendChild(prevTop);
   bar.appendChild(head);
 

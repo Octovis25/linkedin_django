@@ -1498,6 +1498,15 @@ function animDuration(editor) {
    The file has exactly 30 frames a second and nothing needs converting. */
 const VIDEO_FPS = 30;
 const VIDEO_CODEC = 'vp09.00.10.08';
+// Buffer and LinkedIn show the first frame as the preview. A design that builds
+// up from an empty card would show an empty picture - so by default the video
+// opens with the finished picture for a moment, then plays from the start.
+const COVER_SEK = 1.2;
+function coverSekunden() {
+  const el = document.getElementById('video-cover');
+  const an = el ? el.checked : window._videoCover !== false;
+  return an ? COVER_SEK : 0;
+}
 let _letzteVideoZeiten = [];        // µs stamps of the last video, for the checks
 let _letzterVideoWeg = '';
 export function letzteVideoAufnahme() { return { weg: _letzterVideoWeg, zeiten: _letzteVideoZeiten.slice() }; }
@@ -1545,12 +1554,13 @@ async function videoBildgenau(editor, gesamt, breit, hoch) {
   const frameMs = 1000 / VIDEO_FPS;
   const letzter = Math.floor(gesamt / frameMs);
   const halten = Math.round(0.4 * VIDEO_FPS);       // hold the last frame 0.4 s
-  const anzahl = letzter + 1 + halten;
+  const vorne = Math.round(coverSekunden() * VIDEO_FPS); // the finished picture first
+  const anzahl = vorne + letzter + 1 + halten;
 
   _fxOn = true;
   for (let n = 0; n < anzahl; n++) {
     if (fehler) throw fehler;
-    bildBei(editor, Math.min(n, letzter) * frameMs);
+    bildBei(editor, n < vorne ? letzter * frameMs : Math.min(n - vorne, letzter) * frameMs);
     bctx.clearRect(0, 0, breit, hoch);
     bctx.drawImage(quelle, 0, 0, breit, hoch);
     const f = new VideoFrame(bild, { timestamp: Math.round(n * schrittUs), duration: Math.round(schrittUs) });
@@ -1637,6 +1647,14 @@ export async function exportVideo(editor, onBlob) {
     });
     rec.start();
     _fxOn = true;
+    // The finished picture first (see coverSekunden).
+    const vorne = Math.round(coverSekunden() * 30);
+    if (vorne) {
+      if (spur && rec.state === 'recording') rec.pause();
+      bildBei(editor, gesamt);
+      if (spur && rec.state === 'paused') rec.resume();
+      for (let i = 0; i < vorne; i++) { bildHolen(); await new Promise(r => setTimeout(r, frameMs)); }
+    }
     for (let n = 0; n * frameMs <= gesamt; n++) {
       if (document.hidden) {
         if (rec.state === 'recording') rec.pause();
