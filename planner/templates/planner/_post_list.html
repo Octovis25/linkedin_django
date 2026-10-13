@@ -192,22 +192,17 @@ document.addEventListener('DOMContentLoaded', function () {
 <div class="pe-card" id="post-{{ p.id }}" data-post-id="{{ p.id }}" data-num="{{ p.id }}" data-send="{% if p.send_time %}{{ p.send_time }}{% elif p.planned_date %}{{ p.planned_date|date:'d.m.Y' }}{% if p.planned_time %} {{ p.planned_time|time:'H:i' }}{% endif %}{% endif %}" data-created="{{ p.created_at|date:'Y-m-d H:i:s' }}" data-edited="{{ p.updated_at|date:'Y-m-d H:i:s' }}" data-post-type="{{ p.post_type }}" data-ende="{% if p.linkedin_posted %}posted{% else %}dropped{% endif %}" style="background:#fff;border:0.5px solid #e0e0e0;border-radius:10px;padding:12px 14px">
   <div style="display:flex;gap:10px;align-items:center">
     {% if p.image %}
-    <img src="/planner/image/{{ p.id }}/?v={% now 'U' %}" style="width:56px;height:56px;border-radius:6px;object-fit:cover;flex-shrink:0;cursor:zoom-in" onclick="peLightbox('/planner/image/{{ p.id }}/?v={% now 'U' %}')">
+    <img src="/planner/thumb/{{ p.id }}/?v={{ p.updated_at|date:'U' }}" loading="lazy" style="width:56px;height:56px;border-radius:6px;object-fit:cover;flex-shrink:0;cursor:zoom-in" onclick="peLightbox('/planner/image/{{ p.id }}/?v={% now 'U' %}')">
     {% elif p.video_nc_path %}
       {% if p.video_nc_path|slice:"-4:"|lower == ".gif" %}
-      <img src="/library/studio/nc-image/?p={{ p.video_nc_path|urlencode }}"
+      <img src="/planner/thumb/{{ p.id }}/?v={{ p.updated_at|date:'U' }}" loading="lazy"
            style="width:56px;height:56px;border-radius:6px;object-fit:cover;flex-shrink:0;cursor:zoom-in"
            title="GIF" onclick="peLightbox('/library/studio/nc-image/?p={{ p.video_nc_path|urlencode }}')">
-      {% elif "Studio_Work" in p.video_nc_path %}
-      <video muted preload="metadata" playsinline
-             data-vthumb="/library/studio/nc-image/?p={{ p.video_nc_path|urlencode }}"
-             style="width:56px;height:56px;border-radius:6px;object-fit:cover;flex-shrink:0;background:#000"
-             title="Video"></video>
       {% else %}
-      <video muted preload="metadata" playsinline
-             data-vthumb="/planner/nc-video-preview/{{ p.video_nc_path|cut:'Marketing & Design/LinkedIn/Planner/Videos/'|urlencode }}/"
-             style="width:56px;height:56px;border-radius:6px;object-fit:cover;flex-shrink:0;background:#000"
-             title="Video"></video>
+      {# The first frame as a small picture - the frame Buffer and LinkedIn show. #}
+      <img src="/planner/thumb/{{ p.id }}/?v={{ p.updated_at|date:'U' }}" loading="lazy"
+           style="width:56px;height:56px;border-radius:6px;object-fit:cover;flex-shrink:0;background:#000"
+           title="Video">
       {% endif %}
     {% else %}
     <div style="width:56px;height:56px;border-radius:6px;background:{{ p.bg }};flex-shrink:0;display:flex;align-items:center;justify-content:center">

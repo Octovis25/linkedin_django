@@ -1,17 +1,13 @@
 <td style="width:46px;padding:6px 4px 6px 14px">
   {% if p.image %}
-    <img class="pt-thumb" src="/planner/image/{{ p.id }}/?v={% now 'U' %}"
+    <img class="pt-thumb" loading="lazy" src="/planner/thumb/{{ p.id }}/?v={{ p.updated_at|date:'U' }}"
          onclick="event.stopPropagation();openLightbox('/planner/image/{{ p.id }}/?v={% now 'U' %}')">
   {% elif p.video_nc_path %}
     {% if p.video_nc_path|slice:'-4:'|lower == '.gif' %}
-    <img class="pt-thumb" title="GIF" src="/library/studio/nc-image/?p={{ p.video_nc_path|urlencode }}"
+    <img class="pt-thumb" title="GIF" loading="lazy" src="/planner/thumb/{{ p.id }}/?v={{ p.updated_at|date:'U' }}"
          onclick="event.stopPropagation();openLightbox('/library/studio/nc-image/?p={{ p.video_nc_path|urlencode }}')">
-    {% elif 'Studio_Work' in p.video_nc_path %}
-    <video class="pt-thumb" muted preload="metadata" playsinline title="Video"
-           data-vthumb="/library/studio/nc-image/?p={{ p.video_nc_path|urlencode }}"></video>
     {% else %}
-    <video class="pt-thumb" muted preload="metadata" playsinline title="Video"
-           data-vthumb="/planner/nc-video-preview/{{ p.video_nc_path|cut:'Marketing & Design/LinkedIn/Planner/Videos/'|urlencode }}/"></video>
+    <img class="pt-thumb" loading="lazy" title="Video" src="/planner/thumb/{{ p.id }}/?v={{ p.updated_at|date:'U' }}">
     {% endif %}
   {% else %}
     <div class="pt-thumb pt-thumb-ph" style="background:{{ accent }}20;color:{{ accent }}">

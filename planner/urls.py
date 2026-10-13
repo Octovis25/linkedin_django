@@ -1,5 +1,5 @@
 from django.urls import path
-from . import views, kalender
+from . import views, kalender, vorschau
 
 app_name = 'planner'
 urlpatterns = [
@@ -28,6 +28,7 @@ urlpatterns = [
     path('api/idea/', views.api_idea, name='api_idea'),
     path('api/image/<int:post_id>/', views.api_image, name='api_image'),
     path('image/<int:post_id>/', views.planner_image, name='planner_image'),
+    path('thumb/<int:post_id>/', vorschau.post_vorschau, name='planner_thumb'),
     path('api-connect/', views.api_connect_view, name='api_connect'),
     path('linkedin/auth/', views.linkedin_auth_start, name='linkedin_auth_start'),
     path('linkedin/callback/', views.linkedin_auth_callback, name='linkedin_auth_callback'),
