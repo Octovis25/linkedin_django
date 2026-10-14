@@ -96,13 +96,15 @@ with connection.cursor() as c:
     c.execute("INSERT INTO planner_posts VALUES (3, '', 'Marketing & Design/LinkedIn/Planner/Videos/v.webm', '2026-10-13 10:00:00')")
 abrufe = []
 v._rohdaten = lambda p: (abrufe.append(p), VIDEO if p.endswith('.webm') else PNG)[1]
+STAND = {'v': 'etag-1'}
+v._dateistand = lambda p: STAND['v']
 
 client = Client()
 pruefe('Without login: no picture', client.get('/planner/thumb/1/').status_code == 302)
 client.force_login(User.objects.create_user('o', 'o@x', 'pw'))
 r = client.get('/planner/thumb/1/?v=1')
 pruefe('With login: a JPEG', r.status_code == 200 and r['Content-Type'] == 'image/jpeg')
-pruefe('which the browser may keep for a day', r['Cache-Control'] == 'private, max-age=86400', r['Cache-Control'])
+pruefe('which the browser may keep for ten minutes', r['Cache-Control'] == 'private, max-age=600', r['Cache-Control'])
 etag = r['ETag']
 client.get('/planner/thumb/1/?v=1')
 pruefe('The second call comes from the disk, not from Nextcloud', len(abrufe) == 1, abrufe)
@@ -113,6 +115,11 @@ with connection.cursor() as c:
 r = client.get('/planner/thumb/1/', HTTP_IF_NONE_MATCH=etag)
 pruefe('After a change the new picture comes', r.status_code == 200 and r['ETag'] != etag)
 pruefe('and without ?v= the browser asks again each time', r['Cache-Control'] == 'private, no-cache')
+etag2 = r['ETag']
+STAND['v'] = 'etag-2'      # same post, same file name, new file (#130, 14.10.2026)
+r = client.get('/planner/thumb/1/', HTTP_IF_NONE_MATCH=etag2)
+pruefe('A file saved again under the same name gives a new picture', r.status_code == 200 and r['ETag'] != etag2)
+pruefe('and it is really fetched again', len(abrufe) == 3, abrufe)
 r = client.get('/planner/thumb/3/')
 pruefe('A video post gets its first frame', r.status_code == 200 and r['Content-Type'] == 'image/jpeg')
 pruefe('A post without media: 404', client.get('/planner/thumb/2/').status_code == 404)

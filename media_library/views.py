@@ -768,6 +768,21 @@ def _nc_ensure_folder(nc_url, username, password, folder_path):
             pass
 
 
+def _post_geaendert(c, post_id):
+    """Mark a post as changed after its medium was saved again.
+
+    The Studio saves under the same file name, so the UPDATE that attaches it
+    writes the values the row already has - and MySQL then leaves the
+    ON UPDATE timestamp alone. The card kept its old date and its old preview
+    picture (#130, 14.10.2026). Never fatal: a database without the column
+    just keeps the old behaviour.
+    """
+    try:
+        c.execute("UPDATE planner_posts SET updated_at=CURRENT_TIMESTAMP WHERE id=%s", [post_id])
+    except Exception as e:
+        print("post changed-mark:", e)
+
+
 def _nc_upload(content_bytes, nc_path, content_type='image/png'):
     """Upload raw bytes to Nextcloud. Returns nc_path on success, None on failure."""
     from posts_posted.nc_storage import _get_nc_credentials
@@ -1714,6 +1729,7 @@ def studio_save(request):
                     c.execute("UPDATE planner_posts SET image=%s, video_nc_path=NULL, gif_nc_path=NULL WHERE id=%s", [new_path, post_id])
                 except Exception:
                     c.execute("UPDATE planner_posts SET image=%s WHERE id=%s", [new_path, post_id])
+                _post_geaendert(c, post_id)
                 if new_path != nc_path:
                     c.execute("UPDATE studio_images SET nc_path=%s WHERE nc_path=%s", [new_path, nc_path])
                     c.execute("UPDATE media_library_items SET nc_path=%s WHERE nc_path=%s", [new_path, nc_path])
@@ -1844,6 +1860,7 @@ def studio_save_video(request):
                     c.execute("UPDATE planner_posts SET video_nc_path=%s, image=NULL, gif_nc_path=NULL WHERE id=%s", [new_path, post_id])
                 except Exception:
                     c.execute("UPDATE planner_posts SET video_nc_path=%s, image=NULL WHERE id=%s", [new_path, post_id])
+                _post_geaendert(c, post_id)
                 if new_path != nc_path:
                     c.execute("UPDATE studio_images SET nc_path=%s WHERE nc_path=%s", [new_path, nc_path])
                     c.execute("UPDATE media_library_items SET nc_path=%s WHERE nc_path=%s", [new_path, nc_path])

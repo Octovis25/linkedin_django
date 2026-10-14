@@ -92,6 +92,47 @@ def erstes_videobild(rohdaten, endung, breite):
             return f.read()
 
 
+def _dateistand(pfad):
+    """The file's own version: Nextcloud's ETag (or last change), the mtime
+    for a local file, '' when it cannot be asked.
+
+    The post's updated_at alone is not enough. When the Studio saves a video
+    again it writes the same file name, the row's values stay the same, and
+    MySQL leaves updated_at alone - the card kept the old picture (#130,
+    14.10.2026). The file itself always knows it has changed.
+    """
+    if pfad.startswith('__local__/'):
+        datei = os.path.join(settings.BASE_DIR, 'media', pfad[len('__local__/'):])
+        try:
+            return str(int(os.path.getmtime(datei)))
+        except OSError:
+            return ''
+    try:
+        import re
+        import requests
+        from requests.auth import HTTPBasicAuth
+        from urllib.parse import quote
+        from posts_posted.nc_storage import _get_nc_credentials
+        nc_url, user, pw = _get_nc_credentials()
+        if not all([nc_url, user, pw]):
+            return ''
+        url = '%s/remote.php/dav/files/%s/%s' % (nc_url.rstrip('/'), user, quote(pfad, safe='/'))
+        r = requests.request('PROPFIND', url, auth=HTTPBasicAuth(user, pw),
+                             headers={'Depth': '0', 'Content-Type': 'application/xml'},
+                             data='<?xml version="1.0"?><d:propfind xmlns:d="DAV:"><d:prop>'
+                                  '<d:getetag/><d:getlastmodified/></d:prop></d:propfind>',
+                             timeout=10)
+        if r.status_code not in (200, 207):
+            return ''
+        for tag in ('getetag', 'getlastmodified'):
+            m = re.search(r'<d:%s>([^<]*)</d:%s>' % (tag, tag), r.text)
+            if m and m.group(1).strip():
+                return m.group(1).strip().strip('"')
+    except Exception as fehler:
+        print('post preview: file version unknown (%s)' % fehler)
+    return ''
+
+
 def _ordner():
     pfad = os.path.join(settings.BASE_DIR, 'media', '_thumbs', 'planner')
     os.makedirs(pfad, exist_ok=True)
@@ -114,9 +155,11 @@ def _antwort(daten, etag, request):
     resp = HttpResponse(daten, content_type='image/jpeg')
     resp['ETag'] = '"%s"' % etag
     # With ?v= (the post's last change) the address changes whenever the post
-    # does, so a day in the browser is safe. Without it the browser asks again
-    # each time and gets "not modified" - no picture travels twice.
-    resp['Cache-Control'] = ('private, max-age=86400' if request.GET.get('v')
+    # does. But a medium can change without the post (same file name saved
+    # again), so the browser keeps it only ten minutes and then asks - the
+    # answer is "not modified" unless the file really changed, so no picture
+    # travels twice. Without ?v= it asks every time.
+    resp['Cache-Control'] = ('private, max-age=600' if request.GET.get('v')
                              else 'private, no-cache')
     return resp
 
@@ -140,7 +183,7 @@ def post_vorschau(request, post_id):
     if not pfad:
         raise Http404
 
-    etag = schluessel(pfad, zeile[2], breite)
+    etag = schluessel(pfad, '%s|%s' % (zeile[2], _dateistand(pfad)), breite)
     if request.headers.get('If-None-Match', '').strip('"') == etag:
         resp = HttpResponseNotModified()
         resp['ETag'] = '"%s"' % etag
