@@ -38,6 +38,7 @@ Ebene höher brauchen keine — die prüfen reine Rechenlogik und laufen überal
 | `test_medien.py` | Medien-Proxy (Medientyp, Bereichsanfragen, Pfadschranke), Vorschaubilder, Ausgabenliste |
 | `test_schema.py` | Nachrüsten fehlender Spalten gegen eine echte Datenbank |
 | `test_studio_listen.py` | Vorlagen- und Ausgabenliste (schlank, Vorschaubilder, passive Vorlagen), Bild speichern als Formular, Ordner bleibt beim erneuten Speichern |
+| `test_nextcloud_behaviour.py` | Nextcloud-Verhalten von heute (Stand 14.10.2026, vor dem Umbau): Zugangsdaten und Rückfall, Hochladen/Überschreiben, Lesen/Streamen, Löschen, MOVE, Ordner anlegen, Listen – mit `fake_nextcloud.py`, einem WebDAV-Server im Arbeitsspeicher |
 
 ## Wie die Attrappe funktioniert
 
