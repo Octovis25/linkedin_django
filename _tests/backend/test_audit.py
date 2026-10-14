@@ -231,3 +231,35 @@ class Page(AuditTest):
         self.assertEqual([r['username'] for r in ctx['rows']], ['a'])
         ctx = self.client.get('/db-admin/log/', {'object': '#2'}).context
         self.assertEqual([r['object_id'] for r in ctx['rows']], ['2'])
+
+
+
+class Menu(AuditTest):
+    """The DB Admin sub-tab, rendered from the real core/base.html."""
+
+    def render_nav(self, user, path):
+        import os
+        from django.conf import settings
+        from django.template import Context, Template
+        src = open(os.path.join(os.path.dirname(settings.BASE_DIR), 'core', 'templates',
+                                'core', 'base.html'), encoding='utf-8').read()
+        start = src.index("{% if '/db-admin/' in request.path and user.is_superuser %}")
+        end = src.index('{% endif %}\n', src.index('</div>', start)) + len('{% endif %}')
+        snippet = src[start:end].replace('\r', '')
+        req = RequestFactory().get(path)
+        req.user = user
+        from audit.access import may_view
+        return Template(snippet).render(Context({'request': req, 'user': user,
+                                                 'audit_visible': may_view(user)}))
+
+    def test_owner_sees_the_log_tab_in_db_admin(self):
+        html = self.render_nav(self.owner, '/db-admin/log/')
+        self.assertIn('href="/db-admin/log/" class="active">Log</a>', html)
+
+    def test_other_superuser_sees_no_log_tab(self):
+        html = self.render_nav(self.admin, '/db-admin/')
+        self.assertIn('Tables', html)
+        self.assertNotIn('/db-admin/log/', html)
+
+    def test_no_sub_menu_outside_db_admin(self):
+        self.assertEqual(self.render_nav(self.owner, '/planner/').strip(), '')

@@ -169,6 +169,12 @@ up, so it moved right; Collectives became a sub-entry under Data.
     <a href="https://nc.octotrial.com/apps/collectives/Octohome-11" target="_blank" rel="noopener" class="ext" title="Open OctoHome (rules and notes for Claude Team) in Nextcloud Collectives in a new tab">🏠 OctoHome ↗</a>
   </div>
   {% endif %}
+  {% if '/db-admin/' in request.path and user.is_superuser %}
+  <div class="sub-nav">
+    <a href="/db-admin/" {% if '/db-admin/log/' not in request.path %}class="active"{% endif %}>Tables</a>
+    {% if audit_visible %}<a href="/db-admin/log/" {% if '/db-admin/log/' in request.path %}class="active"{% endif %}>Log</a>{% endif %}
+  </div>
+  {% endif %}
   {% if '/statistics/' in request.path %}
   <div class="sub-nav">
     <a href="/statistics/" {% if request.path == '/statistics/' %}class="active"{% endif %}>General</a>
