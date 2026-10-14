@@ -7,5 +7,5 @@ urlpatterns = [
     path('planner/', include('planner.urls')),
     path('webstats/', include('matomo.urls')),
     path('tutorials/', include('tutorials.urls')),
-    path('audit/', include('audit.urls')),
+    path('db-admin/log/', include('audit.urls')),
 ]

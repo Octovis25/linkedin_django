@@ -17,16 +17,25 @@ The request body is only read where it is safe:
   * JSON only up to MAX_JSON bytes.
 """
 import json
+import time
 
 from django.urls import Resolver404, resolve
 
 from . import store
+from .device import describe
 
 WRITE_METHODS = {'POST', 'PUT', 'PATCH', 'DELETE'}
-SKIP_PREFIXES = ('/static/', '/media/', '/login/', '/logout/', '/audit/',
+SKIP_PREFIXES = ('/static/', '/media/', '/login/', '/logout/', '/db-admin/log/',
                  '/password-reset/', '/reset/', '/change-password/')
 CLAUDE_API_PREFIX = '/api/claude/'
 CLAUDE_API_USER = 'Claude API'
+# Being in the app counts too, not only changing something: with "stay signed
+# in" people sign in once a month, so sign-ins alone say little about when
+# somebody works. One "active" line per person and working block - folded
+# while the gaps stay under ACTIVE_FOLD, written at most every ACTIVE_EVERY.
+ACTIVE_FOLD = 3 * 3600
+ACTIVE_EVERY = 10 * 60
+_last_active = {}
 MAX_JSON = 200 * 1024
 KEEP_FIELDS = ('action', 'id', 'post_id', 'item_id', 'folder_id', 'topic_id', 'title',
                'name', 'status', 'datum', 'date', 'time', 'type', 'post_type', 'category',
@@ -44,6 +53,7 @@ class AuditTrailMiddleware:
         try:
             if self._wanted(request):
                 self._record(request, getattr(response, 'status_code', 0))
+            self._active(request)
         except Exception as error:          # the trail must never break a request
             print('audit trail: %s' % error)
         return response
@@ -55,6 +65,18 @@ class AuditTrailMiddleware:
         except Exception:
             pass
         return None
+
+    def _active(self, request):
+        user = getattr(request, 'user', None)
+        if not (user and user.is_authenticated) or request.path.startswith(SKIP_PREFIXES):
+            return
+        now = time.monotonic()
+        if now - _last_active.get(user.pk, -ACTIVE_EVERY) < ACTIVE_EVERY:
+            return
+        _last_active[user.pk] = now
+        store.write(user.get_username(), 'GET', '', view='auth:active', action='active',
+                    status=200, user_id=user.pk, details=describe(request),
+                    fold_seconds=ACTIVE_FOLD)
 
     # -- what is recorded ------------------------------------------------------
     def _wanted(self, request):

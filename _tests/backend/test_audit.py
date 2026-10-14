@@ -57,9 +57,9 @@ class Recording(AuditTest):
         self.assertEqual(r['details']['title'], 'Octo')
         self.assertNotIn('note', r['details'])          # not on the list of kept fields
 
-    def test_reads_are_not_recorded(self):
+    def test_reads_are_not_recorded_as_changes(self):
         self.client.get('/planner/all/')
-        self.assertEqual(self.rows(), [])
+        self.assertEqual([r['view'] for r in self.rows()], ['auth:active'])
 
     def test_anonymous_posts_are_not_recorded(self):
         req = RequestFactory().post('/planner/api/post/', {'action': 'create'})
@@ -117,7 +117,7 @@ class Recording(AuditTest):
             req = RequestFactory().post('/library/studio/api/save/', {'title': 'Header'})
             req.user = self.benutzer
             self.run_middleware(req)
-        rows = self.rows()
+        rows = [r for r in self.rows() if r['view'] != 'auth:active']
         self.assertEqual(len(rows), 1)
         self.assertEqual(rows[0]['times'], 3)
 
@@ -146,18 +146,57 @@ class Recording(AuditTest):
         self.assertEqual(response.status_code, 200)
 
 
+class SignIns(AuditTest):
+
+    def test_sign_in_keeps_browser_system_address_and_remember(self):
+        from audit.signals import logged_in
+        req = RequestFactory().post('/login/', {'username': 'pruefer', 'password': 'x',
+                                                'remember': 'on'},
+                                    HTTP_USER_AGENT='Mozilla/5.0 (Windows NT 10.0) Chrome/130.0 Safari/537',
+                                    HTTP_X_FORWARDED_FOR='203.0.113.7, 10.0.0.1')
+        req.POST  # parsed, as the login view does
+        logged_in(None, request=req, user=self.benutzer)
+        d = self.rows()[0]['details']
+        self.assertEqual(d, {'device': 'Chrome on Windows', 'ip': '203.0.113.7',
+                             'stay signed in': 'yes'})
+
+    def test_being_active_is_one_line_per_working_block(self):
+        from audit import middleware
+        middleware._last_active.clear()
+        for _ in range(3):
+            self.client.get('/planner/all/', HTTP_USER_AGENT='Mozilla/5.0 (Macintosh; Mac OS X) Safari/605')
+            middleware._last_active.clear()      # as if ten minutes had passed
+        active = [r for r in self.rows() if r['action'] == 'active']
+        self.assertEqual(len(active), 1)
+        self.assertEqual(active[0]['times'], 3)
+        self.assertEqual(active[0]['details']['device'], 'Safari on Mac')
+
+    def test_device_names(self):
+        from audit.device import browser_and_system as b
+        self.assertEqual(b('Mozilla/5.0 (Windows NT 10.0) Chrome/130 Safari/537 Edg/130'), 'Edge on Windows')
+        self.assertEqual(b('Mozilla/5.0 (iPhone; CPU iPhone OS 18) Version/18 Mobile Safari/604'), 'Safari on iPhone/iPad')
+        self.assertEqual(b('Mozilla/5.0 (X11; Linux x86_64; rv:130) Gecko Firefox/130'), 'Firefox on Linux')
+        self.assertEqual(b(''), '')
+
+    def test_db_admin_does_not_list_the_log_table(self):
+        from db_admin.views import get_all_tables_with_counts
+        names = [t['name'] for t in get_all_tables_with_counts()]
+        self.assertNotIn('audit_log', names)
+        self.assertIn('planner_posts', names)
+
+
 class Access(AuditTest):
 
     def test_only_the_owner_sees_the_page(self):
         self.client.force_login(self.owner)
-        self.assertEqual(self.client.get('/audit/').status_code, 200)
+        self.assertEqual(self.client.get('/db-admin/log/').status_code, 200)
 
     def test_another_superuser_does_not(self):
         self.client.force_login(self.admin)        # superuser 'chefin'
-        self.assertEqual(self.client.get('/audit/').status_code, 404)
+        self.assertEqual(self.client.get('/db-admin/log/').status_code, 404)
 
     def test_a_normal_user_does_not(self):
-        self.assertEqual(self.client.get('/audit/').status_code, 404)
+        self.assertEqual(self.client.get('/db-admin/log/').status_code, 404)
 
     def test_owner_must_also_be_superuser(self):
         self.owner.is_superuser = False
@@ -177,17 +216,18 @@ class Page(AuditTest):
                     details={'title': 'Octo'})
         store.write('ortrud', 'POST', '/login/', view='auth:login', action='login', status=200)
         self.client.force_login(self.owner)
-        html = self.client.get('/audit/').content.decode()
+        html = self.client.get('/db-admin/log/').content.decode()
         self.assertIn('e.kirillova93', html)
         self.assertIn('#127', html)
         self.assertIn('planner · video api', html)
         self.assertIn('Signed in', html)
+        self.assertIn('<title>', html.replace('<title>Log', '<title>'))   # neutral tab title
 
     def test_filters(self):
         store.write('a', 'POST', '/x/', view='v', object_id='1', status=200)
         store.write('b', 'POST', '/y/', view='w', object_id='2', status=200)
         self.client.force_login(self.owner)
-        ctx = self.client.get('/audit/', {'user': 'a'}).context
+        ctx = self.client.get('/db-admin/log/', {'user': 'a'}).context
         self.assertEqual([r['username'] for r in ctx['rows']], ['a'])
-        ctx = self.client.get('/audit/', {'object': '#2'}).context
+        ctx = self.client.get('/db-admin/log/', {'object': '#2'}).context
         self.assertEqual([r['object_id'] for r in ctx['rows']], ['2'])

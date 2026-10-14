@@ -63,7 +63,7 @@ def ensure_table(force=False):
 
 
 def write(username, method, path, view='', action='', object_id='', status=0,
-          details=None, user_id=None, now=None):
+          details=None, user_id=None, now=None, fold_seconds=FOLD_SECONDS):
     """Record one change. Never raises: the trail must not break the app."""
     try:
         ensure_table()
@@ -77,7 +77,7 @@ def write(username, method, path, view='', action='', object_id='', status=0,
                    WHERE username=%s AND method=%s AND path=%s AND view=%s
                      AND action=%s AND object_id=%s AND status=%s AND last_at >= %s
                    ORDER BY id DESC LIMIT 1""",
-                values + [int(status or 0), now - timedelta(seconds=FOLD_SECONDS)])
+                values + [int(status or 0), now - timedelta(seconds=fold_seconds)])
             row = c.fetchone()
             if row:
                 c.execute("UPDATE audit_log SET times=times+1, last_at=%s, details=%s "
@@ -104,8 +104,11 @@ def _prune(now):
         c.execute("DELETE FROM audit_log WHERE at < %s", [now - timedelta(days=KEEP_DAYS)])
 
 
-def read(since, until, username='', text='', object_id='', limit=300):
-    """Rows newest first, as dicts. since/until are naive UTC."""
+def read(since, until, username='', text='', object_id='', limit=300, kind=''):
+    """Rows newest first, as dicts. since/until are naive UTC.
+
+    kind='auth' gives only sign-ins, sign-outs and activity; kind='changes'
+    everything else."""
     ensure_table()
     sql = ["SELECT id, at, last_at, times, username, method, path, view, action, "
            "object_id, status, details FROM audit_log WHERE at >= %s AND at < %s"]
@@ -113,6 +116,10 @@ def read(since, until, username='', text='', object_id='', limit=300):
     if username:
         sql.append("AND username = %s")
         args.append(username)
+    if kind == 'auth':
+        sql.append("AND view LIKE 'auth:%%'")
+    elif kind == 'changes':
+        sql.append("AND view NOT LIKE 'auth:%%'")
     if object_id:
         sql.append("AND object_id = %s")
         args.append(object_id)

@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Audit trail{% endblock %}
+{% block title %}Log{% endblock %}
 {% block content %}
 <style>
   .au-wrap { max-width: 1200px; }
@@ -22,10 +22,9 @@
   .au-path { color:#8a9a9a; font-size:.75rem; word-break:break-all; }
 </style>
 <div class="au-wrap">
-  <h1>Audit trail</h1>
-  <p class="au-note">Every change made in this app – who, when, what. Only you can see this page.
-    Looking at pages is not recorded, only changes, sign-ins and the Claude API.
-    Repeated saves of the same thing within two minutes are shown as one line.</p>
+  <h1>Log</h1>
+  <p class="au-note">Who signed in how, who was active when, and every change made in this app. Only you can see this page.
+    Repeated saves of the same thing within two minutes are shown as one line; "active" covers a working block with breaks under three hours.</p>
 
   <form class="au-filter" method="get">
     <div><label>Period</label>
@@ -47,6 +46,27 @@
   </div>
   {% endif %}
 
+  <h2 style="font-size:1rem;color:#005F68;margin:1.2rem 0 .4rem">Sign-ins and activity</h2>
+  {% if signins %}
+  <table class="au">
+    <tr><th>When</th><th>Who</th><th>What</th><th>Browser / system</th><th>Address</th><th>Stay signed in</th><th></th></tr>
+    {% for r in signins %}
+    <tr>
+      <td>{{ r.when }}{% if r.until %} – {{ r.until }}{% endif %}</td>
+      <td>{{ r.username }}</td>
+      <td>{{ r.what }}</td>
+      <td>{{ r.device }}</td>
+      <td>{{ r.ip }}</td>
+      <td>{{ r.stay }}</td>
+      <td>{% if r.ok %}<span class="au-ok">✓</span>{% else %}<span class="au-bad" title="{{ r.status }}">✗</span>{% endif %}</td>
+    </tr>
+    {% endfor %}
+  </table>
+  {% else %}
+  <p class="au-note">No sign-ins in this period.</p>
+  {% endif %}
+
+  <h2 style="font-size:1rem;color:#005F68;margin:1.4rem 0 .4rem">Changes</h2>
   {% if rows %}
   <table class="au">
     <tr><th>When</th><th>Who</th><th>What</th><th>Object</th><th>Details</th><th></th></tr>

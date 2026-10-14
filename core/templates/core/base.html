@@ -104,7 +104,6 @@
       {% endif %}
       {% if user.is_authenticated %}
         {% if user.is_superuser %}<a href="/planner/api-connect/">API Connect</a>{% endif %}
-        {% if audit_visible %}<a href="/audit/" title="Who changed what - only you see this">Audit trail</a>{% endif %}
         {% if user.is_superuser %}<a href="https://dashboard.render.com/" target="_blank" rel="noopener" class="ext" title="Open the Render dashboard in a new tab">Render ↗</a>{% endif %}
         {% if user.is_staff %}<a href="/users/">User management</a>{% endif %}
         <span class="user-info">{{ user.get_full_name|default:user.username }}</span>

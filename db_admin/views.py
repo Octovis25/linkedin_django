@@ -15,6 +15,11 @@ def superuser_required(view_func):
     return wrapped
 
 
+# Not listed on the left: the activity log has its own page (audit app), and
+# a table name in the list is visible to anybody watching a shared screen.
+HIDDEN_TABLES = {"audit_log"}
+
+
 def get_all_tables_with_counts():
     """Alle Tabellen mit Zeilenanzahl für die rechte Spalte."""
     tables = []
@@ -22,6 +27,8 @@ def get_all_tables_with_counts():
         c.execute("SHOW TABLES")
         table_names = [row[0] for row in c.fetchall()]
         for name in table_names:
+            if name in HIDDEN_TABLES:
+                continue
             try:
                 c.execute(f"SELECT COUNT(*) FROM `{name}`")
                 row_count = c.fetchone()[0]
