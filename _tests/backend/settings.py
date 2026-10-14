@@ -28,6 +28,7 @@ INSTALLED_APPS = [
     'matomo',
     'tutorials',
     'website_changes',
+    'audit',
 ]
 
 MIDDLEWARE = [
@@ -35,6 +36,7 @@ MIDDLEWARE = [
     'django.middleware.common.CommonMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
+    'audit.middleware.AuditTrailMiddleware',
 ]
 
 ROOT_URLCONF = '_tests.backend.urls'
@@ -47,6 +49,7 @@ TEMPLATES = [{
     'OPTIONS': {'context_processors': [
         'django.contrib.auth.context_processors.auth',
         'django.contrib.messages.context_processors.messages',
+        'audit.access.audit_link',
     ]},
 }]
 

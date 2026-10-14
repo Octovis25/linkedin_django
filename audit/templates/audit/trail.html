@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+{% block title %}Audit trail{% endblock %}
+{% block content %}
+<style>
+  .au-wrap { max-width: 1200px; }
+  .au-note { color:#5f6b6b; font-size:.88rem; margin:.2rem 0 1rem; }
+  .au-filter { display:flex; flex-wrap:wrap; gap:.5rem; align-items:end; margin-bottom:1rem; }
+  .au-filter label { font-size:.78rem; color:#5f6b6b; display:block; }
+  .au-filter select, .au-filter input { padding:.35rem .5rem; border:1px solid #cfd8d8; border-radius:6px; font:inherit; font-size:.9rem; }
+  .au-filter button { padding:.4rem .9rem; border:0; border-radius:6px; background:#008591; color:#fff; font:inherit; cursor:pointer; }
+  .au-people { display:flex; flex-wrap:wrap; gap:.6rem; margin-bottom:1.2rem; }
+  .au-card { border:1px solid #e3e8e8; border-radius:8px; padding:.55rem .8rem; background:#fff; min-width:190px; }
+  .au-card b { color:#005F68; }
+  .au-card small { color:#5f6b6b; display:block; }
+  table.au { border-collapse:collapse; width:100%; font-size:.86rem; background:#fff; }
+  table.au th { text-align:left; border-bottom:2px solid #008591; padding:6px 8px; font-size:.78rem; color:#5f6b6b; text-transform:uppercase; letter-spacing:.03em; }
+  table.au td { border-bottom:1px solid #eef1f1; padding:6px 8px; vertical-align:top; }
+  .au-times { color:#5f6b6b; font-size:.78rem; }
+  .au-ok { color:#0F6E56; font-weight:700; }
+  .au-bad { color:#B42318; font-weight:700; }
+  .au-extra { color:#3a4a4a; font-size:.8rem; word-break:break-word; }
+  .au-path { color:#8a9a9a; font-size:.75rem; word-break:break-all; }
+</style>
+<div class="au-wrap">
+  <h1>Audit trail</h1>
+  <p class="au-note">Every change made in this app – who, when, what. Only you can see this page.
+    Looking at pages is not recorded, only changes, sign-ins and the Claude API.
+    Repeated saves of the same thing within two minutes are shown as one line.</p>
+
+  <form class="au-filter" method="get">
+    <div><label>Period</label>
+      <select name="days">{% for v, t in ranges %}<option value="{{ v }}" {% if v == days %}selected{% endif %}>{{ t }}</option>{% endfor %}</select></div>
+    <div><label>Person</label>
+      <select name="user"><option value="">Everybody</option>{% for u in users %}<option value="{{ u }}" {% if u == user %}selected{% endif %}>{{ u }}</option>{% endfor %}</select></div>
+    <div><label>Post / object</label><input name="object" value="{{ object }}" placeholder="e.g. 127" size="8"></div>
+    <div><label>Search</label><input name="q" value="{{ q }}" placeholder="video, studio, delete …" size="18"></div>
+    <div><button type="submit">Show</button></div>
+  </form>
+
+  {% if people %}
+  <div class="au-people">
+    {% for p in people %}
+    <div class="au-card"><b>{{ p.username }}</b>
+      <small>{{ p.changes }} change{{ p.changes|pluralize }} · {{ p.logins }} sign-in{{ p.logins|pluralize }}</small>
+      <small>last active {{ p.last }}</small></div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  {% if rows %}
+  <table class="au">
+    <tr><th>When</th><th>Who</th><th>What</th><th>Object</th><th>Details</th><th></th></tr>
+    {% for r in rows %}
+    <tr>
+      <td>{{ r.when }}{% if r.times > 1 %}<div class="au-times">{{ r.times }}× until {{ r.until }}</div>{% endif %}</td>
+      <td>{{ r.username }}</td>
+      <td>{{ r.what }}<div class="au-path">{{ r.method }} {{ r.path }}</div></td>
+      <td>{% if r.object_id %}#{{ r.object_id }}{% endif %}</td>
+      <td class="au-extra">{{ r.extra }}{% for f in r.files %}<div>📎 {{ f.name }} ({{ f.size|filesizeformat }})</div>{% endfor %}</td>
+      <td>{% if r.ok %}<span class="au-ok" title="Worked ({{ r.status }})">✓</span>{% else %}<span class="au-bad" title="Failed ({{ r.status }})">✗ {{ r.status }}</span>{% endif %}</td>
+    </tr>
+    {% endfor %}
+  </table>
+  {% if limit_hit %}<p class="au-note">Showing the newest 300 lines – narrow the filter to see older ones.</p>{% endif %}
+  {% else %}
+  <p class="au-note">Nothing recorded in this period.</p>
+  {% endif %}
+</div>
+{% endblock %}

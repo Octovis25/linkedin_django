@@ -46,6 +46,7 @@ urlpatterns = [
     # Claude API (nur Bilder + Texte, API-Key geschützt)
     path("api/claude/", include("media_library.claude_urls")),
     path("db-admin/", include("db_admin.urls")),
+    path("audit/", include("audit.urls")),  # audit trail, owner only
     path("change-password/", auth_views.PasswordChangeView.as_view(
         template_name="core/change_password.html", success_url="/"), name="change_password"),
 

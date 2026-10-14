@@ -60,6 +60,7 @@ INSTALLED_APPS = [
     "matomo",
     "tutorials",
     "website_changes",
+    "audit",
 ]
 
 MIDDLEWARE = [
@@ -71,6 +72,7 @@ MIDDLEWARE = [
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
+    "audit.middleware.AuditTrailMiddleware",  # who changed what - see audit/
 ]
 
 ROOT_URLCONF = "dashboard.urls"
@@ -86,6 +88,7 @@ TEMPLATES = [{
         "django.contrib.messages.context_processors.messages",
         "core.context.live_adresse",
         "media_library.context_processors.brand_colors",
+        "audit.access.audit_link",
     ]}
 }]
 

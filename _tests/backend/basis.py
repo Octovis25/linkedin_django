@@ -142,6 +142,10 @@ def schema_aufbauen(mit_nachgeruesteten=True):
         getattr(views, name).ungepuffert()
     if mit_nachgeruesteten:
         pv.schema_sicherstellen(erzwingen=True)
+    # The audit trail writes on every POST; its CREATE TABLE would commit a
+    # running test's transaction in MySQL, so it is created here, up front.
+    from audit import store as audit_store
+    audit_store.ensure_table(force=True)
 
 
 class BackendTest(TestCase):
