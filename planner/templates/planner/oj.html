@@ -62,6 +62,16 @@
 .ta-blue{background:#185FA5}.ta-green{background:#1D9E75}.ta-amber{background:#BA7517}
 .ta-purple{background:#7F77DD}.ta-red{background:#A32D2D}.ta-gray{background:#888780}
 .empty-oj{padding:2rem;text-align:center;color:#aaa;font-size:1rem}
+/* ── Number, tabs, medium (16.10.2026) ── */
+.oj-nr{font-weight:700;color:#005F68;margin-right:4px}
+.oj-tabs{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin:0 0 8px}
+.oj-tabbtn{font-size:12px;padding:4px 12px;border:0.5px solid #ced4da;border-radius:99px;background:#fff;cursor:pointer;color:#333}
+.oj-tabbtn.on{background:#008080;border-color:#008080;color:#fff}
+.oj-tabbtn .n{opacity:.7;margin-left:3px}
+.s-Archive{background:#f1f1f1;color:#6c757d}
+.oj-medium{font-size:12px;white-space:nowrap;color:#444}
+.oj-medium.fehlt{color:#B42318;font-weight:500}
+.oj-num-head{font-size:12px;background:#e3f4f5;color:#005F68;border-radius:99px;padding:1px 8px;margin-left:4px;font-weight:700}
 </style>
 
 <!-- ── Top bar ── -->
@@ -76,8 +86,15 @@
 </div>
 
 {% if posts %}
-<div style="display:flex;justify-content:flex-end;margin:0 0 8px;font-size:12px;color:#6c757d">
-  {% include "planner/_sort.html" with list="#oj-rows" item=".post-row" default="edited-desc" %}
+<div class="oj-tabs">
+  {% for name, n in oj_tabs %}<button type="button" class="oj-tabbtn{% if forloop.first %} on{% endif %}" data-tab="{{ name }}" onclick="ojShowTab('{{ name }}')">{{ name }}<span class="n">{{ n }}</span></button>{% endfor %}
+  <select id="oj-topic-filter" class="fselect" style="font-size:12px;padding:3px 6px;margin-left:8px" onchange="ojFilter()">
+    <option value="">All topics</option>
+    {% for t in topics %}<option value="{{ t.id }}">{{ t.name }}</option>{% endfor %}
+  </select>
+  <span style="margin-left:auto;font-size:12px;color:#6c757d">
+    {% include "planner/_sort.html" with list="#oj-rows" item=".post-row" default="edited-desc" %}
+  </span>
 </div>
 <table class="oj-table">
   <thead>
@@ -85,17 +102,18 @@
       <th>Title / Content</th>
       <th>Status</th>
       <th>Category</th>
+      <th>Medium</th>
       <th>Date</th>
       <th></th>
     </tr>
   </thead>
   <tbody id="oj-rows">
     {% for p in posts %}
-    <tr class="post-row" id="prow-{{ p.id }}" data-num="{{ p.id }}" data-send="{% if p.planned_date %}{{ p.planned_date|date:'d.m.Y' }}{% if p.planned_time %} {{ p.planned_time|time:'H:i' }}{% endif %}{% endif %}" data-created="{{ p.created_at|date:'Y-m-d H:i:s' }}" data-edited="{{ p.updated_at|date:'Y-m-d H:i:s' }}"
+    <tr class="post-row" id="prow-{{ p.id }}" data-num="{{ p.id }}" data-tab="{{ p.oj_tab }}" data-topic="{{ p.topic_id|default:'' }}" data-send="{% if p.planned_date %}{{ p.planned_date|date:'d.m.Y' }}{% if p.planned_time %} {{ p.planned_time|time:'H:i' }}{% endif %}{% endif %}" data-created="{{ p.created_at|date:'Y-m-d H:i:s' }}" data-edited="{{ p.updated_at|date:'Y-m-d H:i:s' }}"
         onclick="openOjEditById({{ p.id }})">
       <td class="td-title">
         <span class="post-name" title="{{ p.title|default:p.content|truncatechars:120 }}">
-          {{ p.title|default:p.content|truncatechars:70 }}
+          <span class="oj-nr" title="Post number">#{{ p.id }}</span>{{ p.title|default:p.content|truncatechars:70 }}
         </span>
         {% if p.title and p.content %}
         <div class="post-snippet">{{ p.content|striptags|truncatechars:80 }}</div>
@@ -107,6 +125,7 @@
         <span class="topic-dot ta-{{ p.topic_color }}"></span>{{ p.topic_name }}
         {% else %}—{% endif %}
       </td>
+      <td>{% if p.medium == 'image' %}<span class="oj-medium">🖼 Picture</span>{% elif p.medium == 'gif' %}<span class="oj-medium">GIF</span>{% elif p.medium == 'video' %}<span class="oj-medium">🎬 Video</span>{% elif p.medium == 'draft' %}<span class="oj-medium" title="A Studio design is attached, not saved as picture or video yet">🎨 Draft</span>{% else %}<span class="oj-medium fehlt">– missing</span>{% endif %}</td>
       <td class="pe-d-send" style="font-size:12px;color:#6c757d">{{ p.planned_date|date:"d.m.Y"|default:"—" }}{% if p.planned_time %} {{ p.planned_time|time:"H:i" }}{% endif %}</td>
       <td style="white-space:nowrap">
         {% if li_connected and p.status == 'Scheduled' %}
@@ -114,6 +133,8 @@
           onclick="event.stopPropagation();liOjOpenPost({{ p.id }})"
           style="background:#0077B5;color:#fff;border-color:#0077B5;font-weight:700">in</button>
         {% endif %}
+        <a class="pa-btn" title="Open in the Studio" href="/library/studio/?post_id={{ p.id }}" target="_blank"
+          onclick="event.stopPropagation()" style="text-decoration:none">🎨</a>
         <button type="button" class="pa-btn del" title="Delete"
           onclick="event.stopPropagation();ojDelete({{ p.id }})">🗑</button>
       </td>
@@ -142,7 +163,13 @@
     <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
       <label style="font-size:12px;color:#6c757d;white-space:nowrap">Planned to post</label>
       <input type="date" id="n-date" class="fselect" style="flex:1">
+      <input type="time" id="n-time" step="60" class="fselect" style="width:100px" title="Time">
     </div>
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+      <label for="n-link" style="font-size:12px;color:#008591;white-space:nowrap">🔗 Link</label>
+      <input type="text" id="n-link" placeholder="https://octotrial.com/... (for the first comment)" class="finput" style="margin-bottom:0;flex:1">
+    </div>
+    <div style="font-size:11px;color:#6c757d;margin:-4px 0 8px">The link gets its post number with “Tag” after the first save.</div>
     <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
       <div class="img-drop" id="n-thumb"
            onclick="document.getElementById('n-img-input').click()"
@@ -184,7 +211,7 @@
 <!-- ══ Edit OJ Post Modal ══ -->
 <div class="modal-bg" id="oj-edit-modal">
   <div class="modal">
-    <h3 style="margin:0 0 1rem;font-size:15px">OJ Post bearbeiten <span class="oj-tag">OJ</span></h3>
+    <h3 style="margin:0 0 1rem;font-size:15px">OJ Post bearbeiten <span class="oj-num-head" id="e-num"></span> <span class="oj-tag">OJ</span></h3>
     <input type="hidden" id="e-id">
     <div style="display:flex;gap:8px;margin-bottom:8px">
       <select id="e-topic" class="fselect" style="flex:1">
@@ -198,6 +225,16 @@
     <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
       <label style="font-size:12px;color:#6c757d;white-space:nowrap">Planned to post</label>
       <input type="date" id="e-date" class="fselect" style="flex:1">
+      <input type="time" id="e-time" step="60" class="fselect" style="width:100px" title="Time">
+    </div>
+    <div style="border:0.5px solid #ced4da;border-radius:4px;padding:8px;margin-bottom:8px;background:#fafbfc">
+      <div style="display:flex;align-items:center;gap:6px">
+        <label for="e-link" style="font-size:12px;color:#008591;font-weight:500;white-space:nowrap" title="The link for the first comment">🔗 Link</label>
+        <input type="text" id="e-link" placeholder="https://octotrial.com/..." style="font-size:13px;flex:1;padding:6px 8px;border:0.5px solid #ced4da;border-radius:4px;box-sizing:border-box">
+        <button type="button" onclick="ojTagLink()" style="font-size:12px;padding:4px 10px;border:0.5px solid #61CEBC;border-radius:4px;background:#fff;cursor:pointer;color:#008591" title="Add this post's number for Web Analytics">Tag</button>
+        <button type="button" onclick="ojCopyLink()" style="font-size:12px;padding:4px 8px;border:0.5px solid #ced4da;border-radius:4px;background:#fff;cursor:pointer;color:#555" title="Copy for the first comment">Copy</button>
+      </div>
+      <div id="e-link-msg" style="font-size:11px;color:#6c757d;margin-top:4px"></div>
     </div>
     <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
       <div class="img-drop" id="e-thumb"
@@ -276,7 +313,7 @@
 
 <!-- Post data for JS -->
 <script id="oj-data-raw" type="application/json">
-[{% for p in posts %}{"id":{{ p.id }},"title":"{{ p.title|default:""|escapejs }}","content":"{{ p.content|default:""|escapejs }}","status":"{{ p.status }}","date":"{{ p.planned_date|date:"Y-m-d"|default:"" }}","time":"{{ p.planned_time|time:"H:i"|default:"" }}","topicId":{{ p.topic_id|default:"null" }},"comment":"{{ p.comment|escapejs }}","image":"{{ p.image|default:""|escapejs }}","video":"{{ p.video_nc_path|default:""|escapejs }}"}{% if not forloop.last %},{% endif %}{% endfor %}]
+[{% for p in posts %}{"id":{{ p.id }},"title":"{{ p.title|default:""|escapejs }}","content":"{{ p.content|default:""|escapejs }}","status":"{{ p.status }}","date":"{{ p.planned_date|date:"Y-m-d"|default:"" }}","time":"{{ p.planned_time|time:"H:i"|default:"" }}","link":"{{ p.link|default:""|escapejs }}","topicId":{{ p.topic_id|default:"null" }},"comment":"{{ p.comment|escapejs }}","image":"{{ p.image|default:""|escapejs }}","video":"{{ p.video_nc_path|default:""|escapejs }}"}{% if not forloop.last %},{% endif %}{% endfor %}]
 </script>
 
 <script>
@@ -380,6 +417,8 @@ function openOjModal() {
   document.getElementById('n-title').value = '';
   document.getElementById('n-status').value = 'Draft';
   document.getElementById('n-date').value = '';
+  document.getElementById('n-time').value = '';
+  document.getElementById('n-link').value = '';
   document.getElementById('n-topic').value = '';
   document.getElementById('n-comment').value = '';
   setEditorText('n', '');
@@ -395,11 +434,14 @@ async function saveOjNew() {
   const content = getEditorText('n').trim();
   const status = document.getElementById('n-status').value;
   const date = document.getElementById('n-date').value;
+  const time = document.getElementById('n-time').value;
+  const link = document.getElementById('n-link').value.trim();
   const comment = document.getElementById('n-comment').value.trim();
   if (!content && !title) { alert('Bitte Titel oder Inhalt eingeben.'); return; }
   const res = await api('/planner/api/post/', {
     action:'create', topic_id:topicId||null, title, content, status,
-    planned_date:date||null, comment:comment||null, is_oj:1
+    planned_date:date||null, planned_time:time||null, link:link||null,
+    comment:comment||null, is_oj:1
   });
   if (res && res.ok) {
     const imgInput = document.getElementById('n-img-input');
@@ -420,6 +462,10 @@ function openOjEditById(id) {
   const p = ojMap[id];
   if (!p) return;
   document.getElementById('e-id').value = id;
+  document.getElementById('e-num').textContent = '#' + id;
+  document.getElementById('e-time').value = p.time || '';
+  document.getElementById('e-link').value = p.link || '';
+  document.getElementById('e-link-msg').textContent = '';
   document.getElementById('e-title').value = p.title || '';
   setEditorText('e', p.content || '');
   document.getElementById('e-status').value = p.status || 'Draft';
@@ -506,11 +552,14 @@ async function updateOjPost() {
   const content = getEditorText('e').trim();
   const status = document.getElementById('e-status').value;
   const date = document.getElementById('e-date').value;
+  const time = document.getElementById('e-time').value;
+  const link = document.getElementById('e-link').value.trim();
   const comment = document.getElementById('e-comment').value.trim();
   const res = await api('/planner/api/post/', {
     action:'update', id:parseInt(id), topic_id:topicId||null,
     title, content, status,
-    planned_date:date||null, comment:comment||null,
+    planned_date:date||null, planned_time:time||null, link:link||null,
+    comment:comment||null,
     in_pipeline: status === 'Draft' ? 0 : 1
   });
   if (res && res.ok) {
@@ -538,6 +587,44 @@ async function updateOjPost() {
     alert('Fehler beim Speichern.');
   }
 }
+
+/* ── Link for the first comment: Tag adds the post number (planner/utm.py) ── */
+async function ojTagLink() {
+  const id = document.getElementById('e-id').value;
+  const field = document.getElementById('e-link');
+  const msg = document.getElementById('e-link-msg');
+  const url = field.value.trim();
+  if (!url) { msg.textContent = 'Paste the octotrial.com address first.'; return; }
+  const r = await fetch('/planner/api/utm/?post_id=' + encodeURIComponent(id) + '&url=' + encodeURIComponent(url));
+  const d = await r.json().catch(() => ({ok: false, error: 'No answer'}));
+  if (!d.ok) { msg.textContent = d.error || 'Not possible'; return; }
+  field.value = d.url;
+  msg.textContent = 'Tagged for the ' + d.channel.replace('_', ' ') + ' – Save keeps it.';
+}
+function ojCopyLink() {
+  const f = document.getElementById('e-link');
+  f.select();
+  (navigator.clipboard ? navigator.clipboard.writeText(f.value) : Promise.reject()).catch(() => document.execCommand('copy'));
+  document.getElementById('e-link-msg').textContent = 'Copied – paste it as the first comment.';
+}
+
+/* ── Tabs and topic filter ── */
+let ojTab = 'Draft';
+try { ojTab = sessionStorage.getItem('ojTab') || 'Draft'; } catch (e) {}
+function ojFilter() {
+  const topic = (document.getElementById('oj-topic-filter') || {}).value || '';
+  document.querySelectorAll('#oj-rows .post-row').forEach(r => {
+    const show = r.dataset.tab === ojTab && (!topic || r.dataset.topic === topic);
+    r.style.display = show ? '' : 'none';
+  });
+  document.querySelectorAll('.oj-tabbtn').forEach(b => b.classList.toggle('on', b.dataset.tab === ojTab));
+}
+function ojShowTab(name) {
+  ojTab = name;
+  try { sessionStorage.setItem('ojTab', name); } catch (e) {}
+  ojFilter();
+}
+document.addEventListener('DOMContentLoaded', ojFilter);
 
 /* ── Delete from edit modal ── */
 async function ojDeleteFromEdit() {

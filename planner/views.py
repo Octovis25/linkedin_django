@@ -813,16 +813,58 @@ def oj_view(request):
         })
 
     _attach_video_paths(posts_list)
+    _attach_oj_medium_and_tab(posts_list)
+    oj_tabs = [(name, sum(1 for p in posts_list if p['oj_tab'] == name)) for name in OJ_TABS]
     li_token = _li_get_superuser_token()
     return render(request, 'planner/oj.html', {
         'posts': posts_list,
         'topics': topics,
+        'oj_tabs': oj_tabs,
         'statuses': ['Draft', 'Review', 'Ready', 'Scheduled', 'Posted', 'Archive'],
         'tab': 'oj',
         'posts_json': _posts_to_json(posts_list),
         'li_connected': bool(li_token),
         'li_org': li_token.get('org_name', '') if li_token else '',
     })
+
+
+# The OJ list has four tabs (Ortrud, 16.10.2026). Review and Ready are not
+# used for personal posts; should one turn up, it waits under Draft.
+OJ_TABS = ('Draft', 'Scheduled', 'Posted', 'Archive')
+
+
+def _oj_tab(status):
+    return status if status in OJ_TABS else 'Draft'
+
+
+def _attach_oj_medium_and_tab(posts_list):
+    """For the OJ list: which tab a post sits in, and what medium it has -
+    'image', 'gif', 'video', 'draft' (only a Studio design attached) or ''
+    (nothing yet - the list shows that in red)."""
+    ids = [p['id'] for p in posts_list if p.get('id')]
+    entwuerfe = set()
+    if ids:
+        platz = ','.join(['%s'] * len(ids))
+        with connection.cursor() as c:
+            try:
+                c.execute(f"SELECT DISTINCT post_id FROM studio_images WHERE post_id IN ({platz})", ids)
+                entwuerfe = {r[0] for r in c.fetchall()}
+            except Exception:
+                entwuerfe = set()
+    for p in posts_list:
+        p['oj_tab'] = _oj_tab(p.get('status'))
+        video = (p.get('video_nc_path') or '').lower()
+        if p.get('image'):
+            p['medium'] = 'image'
+        elif video.endswith('.gif'):
+            p['medium'] = 'gif'
+        elif video:
+            p['medium'] = 'video'
+        elif p.get('id') in entwuerfe:
+            p['medium'] = 'draft'
+        else:
+            p['medium'] = ''
+    return posts_list
 
 
 @login_required
