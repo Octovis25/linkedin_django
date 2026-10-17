@@ -411,17 +411,17 @@ const PE_POSTS = {{ posts_json|safe }};
 /* The send time is a list: every quarter of an hour from 06:00 to 22:00. A
    post that already has another time keeps it - peSetzeZeit() adds that one
    time to the list rather than quietly dropping it on the next save. */
-function peZeitListe() {
-  const feld = document.getElementById('pe-time');
+function peZeitListe(id) {
+  const feld = document.getElementById(id || 'pe-time');
   if (!feld || feld.options.length > 1) return;
   for (let min = 6 * 60; min <= 22 * 60; min += 15) {
     const t = String(Math.floor(min / 60)).padStart(2, '0') + ':' + String(min % 60).padStart(2, '0');
     feld.add(new Option(t, t));
   }
 }
-function peSetzeZeit(wert) {
-  peZeitListe();
-  const feld = document.getElementById('pe-time');
+function peSetzeZeit(wert, id) {
+  peZeitListe(id);
+  const feld = document.getElementById(id || 'pe-time');
   // A time added for the previous post is not offered for the next one.
   [...feld.options].filter(o => o.dataset.extra).forEach(o => o.remove());
   const t = (wert || '').slice(0, 5);
@@ -975,12 +975,14 @@ function liOpenPost(id) {
   // Scheduling: always show with datetime-local input
   const schedRow = document.getElementById('li-schedule-row');
   const schedCheck = document.getElementById('li-schedule-check');
-  const schedDt = document.getElementById('li-schedule-dt');
-  if (schedRow && schedDt) {
-    // The post's own date and time - nothing invented. No date or time, or one
-    // in the past: liDoPost() says so and sends nothing (Ortrud, 06.10.2026).
-    const zeit = (p.time || '').slice(0, 5);
-    schedDt.value = (p.date && zeit) ? p.date + 'T' + zeit : '';
+  const schedDate = document.getElementById('li-schedule-date');
+  if (schedRow && schedDate) {
+    // The post's own date and time - nothing invented (Ortrud, 06.10.2026).
+    // Date and time are separate, so a post with a date but no time keeps
+    // its date and only the time is left to choose (Ortrud, 17.10.2026).
+    // Missing or past: liDoPost() says so and sends nothing.
+    schedDate.value = p.date || '';
+    peSetzeZeit(p.time, 'li-schedule-time');
     schedRow.style.display = 'flex';
     if (schedCheck) schedCheck.checked = true;
   }
@@ -1033,10 +1035,12 @@ async function liDoPost() {
   // ── Text / Image / Video route (alles über /post/) ──
   const schedCheck  = document.getElementById('li-schedule-check');
   const isScheduled = schedCheck && schedCheck.checked;
-  let scheduled_ms = null;
+  let scheduled_ms = null, missing = '';
   if (isScheduled) {
-    const dtVal = document.getElementById('li-schedule-dt') && document.getElementById('li-schedule-dt').value;
-    if (dtVal) scheduled_ms = new Date(dtVal).getTime();
+    const tag = document.getElementById('li-schedule-date').value;
+    const zeit = document.getElementById('li-schedule-time').value;
+    if (tag && zeit) scheduled_ms = new Date(tag + 'T' + zeit).getTime();
+    else if (tag) missing = 'time';
   }
   // Buffer only gets a fixed date and time in the future - never its queue.
   // The company page always goes through Buffer.
@@ -1049,6 +1053,9 @@ async function liDoPost() {
   };
   if (viaBuffer && !isScheduled) {
     return halt('Company page posts go through Buffer and need a date and time: tick 📅 and set them. Nothing was sent.');
+  }
+  if (viaBuffer && !scheduled_ms && missing === 'time') {
+    return halt('Choose a time next to the date. Nothing was sent.');
   }
   if (viaBuffer && !scheduled_ms) {
     return halt('This post has no date and time. Set them in the post or here. Nothing was sent.');
@@ -1141,7 +1148,8 @@ if (_liModalBg) _liModalBg.addEventListener('click', function(e) {
     <div id="li-schedule-row" style="display:flex;align-items:center;gap:8px;margin-bottom:12px;font-size:13px;flex-wrap:wrap">
       <input type="checkbox" id="li-schedule-check" style="cursor:pointer">
       <label for="li-schedule-check" style="cursor:pointer;color:#444">📅 Auf LinkedIn planen:</label>
-      <input type="datetime-local" id="li-schedule-dt" style="font-size:13px;padding:4px 8px;border:0.5px solid #ced4da;border-radius:4px">
+      <input type="date" id="li-schedule-date" style="font-size:13px;padding:4px 8px;border:0.5px solid #ced4da;border-radius:4px">
+      <select id="li-schedule-time" title="Send time" style="font-size:13px;width:92px;padding:4px;border:0.5px solid #ced4da;border-radius:4px"><option value="">--:--</option></select>
     </div>
     <div id="li-post-result" style="display:none;padding:8px 12px;border-radius:6px;font-size:13px;margin-bottom:10px"></div>
     <div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap">
