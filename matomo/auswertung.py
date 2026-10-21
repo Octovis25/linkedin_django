@@ -54,34 +54,29 @@ POST_CONTENT = re.compile(r"^(?:post[-_]?)?(\d{1,7})$", re.I)
 
 # ── Classification ───────────────────────────────────────────────────────
 
+# Two classes only (Ortrud, 21.10.2026): more than 1 s between two pages is a
+# human, everything else counts as a bot. There used to be a third class,
+# "unclear", for one page without a measurable time; those are bots now.
 HUMAN = "human"
 AUTOMATION = "automation"
-UNCLEAR = "unclear"
 OWN = "own"
 CLASSES = {
-    HUMAN: "Probably human",
-    AUTOMATION: "Probably automated",
-    UNCLEAR: "Unclear",
+    HUMAN: "Human",
+    AUTOMATION: "Bot",
     OWN: "Confirmed own / test visit",
 }
 
-READING_GAP = 3        # seconds between two pageviews that look like reading
-FAST_GAP = 1           # every gap at most this long: faster than anyone reads
+HUMAN_GAP = 1          # more than this many seconds between two pageviews: a human
 
 RULES = [
     ("Own device", "The visitor ID is on the list of own / test devices "
                    "(marked by hand in the visit details).", OWN),
     ("Headless browser", "Matomo reports a headless browser (e.g. “Headless Chrome”) - "
                          "a browser without a screen, used by scripts.", AUTOMATION),
-    ("Too fast for reading", f"Two or more pages, every page left after at most "
-                             f"{FAST_GAP} s.", AUTOMATION),
-    ("Reading time", f"Two or more pages with at least {READING_GAP} s between two of them.",
+    ("More than 1 s", f"Two or more pages with more than {HUMAN_GAP} s between two of them.",
      HUMAN),
-    ("Interaction", "A click on an outgoing link, an email or phone link, a download, "
-                    "an event or a goal.", HUMAN),
-    ("Otherwise", "No automation signal and no human signal - for example one page "
-                  "without measurable time. 0 seconds alone is not proof of a bot, "
-                  "several pages alone are not proof of a person.", UNCLEAR),
+    ("Everything else", f"One page (Matomo cannot measure its time), or every page left "
+                        f"after at most {HUMAN_GAP} s.", AUTOMATION),
 ]
 
 # ── Previews and other editing views ─────────────────────────────────────
@@ -456,36 +451,21 @@ def prepare(raw, catalogue, settings):
 
 
 def _classify(v, settings):
-    reasons, automation, human = [], [], []
     if v["besucher"] and v["besucher"] in settings.own_ids:
         v["klasse"] = OWN
         v["gruende"] = ["Visitor ID is on the list of own / test devices"]
         return
-    if "headless" in v["browser"].lower():
-        automation.append(f"headless browser ({v['browser']})")
     gaps = v["luecken"]
-    if len(v["seiten"]) >= 2 and gaps and all(g <= FAST_GAP for g in gaps):
-        automation.append(f"{len(v['seiten'])} pages, each left after ≤ {FAST_GAP} s")
-    if any(g >= READING_GAP for g in gaps):
-        human.append(f"reading time between pages (up to {max(gaps)} s)")
-    if v["interaktionen"]:
-        human.append(f"{v['interaktionen']} interaction{'s' if v['interaktionen'] > 1 else ''}"
-                     " (link, download, event or goal)")
-    if automation:
+    if "headless" in v["browser"].lower():
         v["klasse"] = AUTOMATION
-        reasons = ["Automation signal: " + "; ".join(automation)]
-        if human:
-            reasons.append("also seen: " + "; ".join(human))
-    elif human:
+        v["gruende"] = [f"headless browser ({v['browser']})"]
+    elif any(g > HUMAN_GAP for g in gaps):
         v["klasse"] = HUMAN
-        reasons = ["Human signal: " + "; ".join(human)]
+        v["gruende"] = [f"> {HUMAN_GAP} s between pages (up to {max(gaps)} s)"]
     else:
-        v["klasse"] = UNCLEAR
-        if len(v["seiten"]) <= 1:
-            reasons = ["One page, time not measurable, no interaction"]
-        else:
-            reasons = ["Several pages, but no reading time between them and no interaction"]
-    v["gruende"] = reasons
+        v["klasse"] = AUTOMATION
+        v["gruende"] = (["one page, time not measurable"] if len(v["seiten"]) <= 1
+                        else [f"{len(v['seiten'])} pages, each left after ≤ {HUMAN_GAP} s"])
 
 
 def _exclusions(v, settings):
@@ -506,8 +486,7 @@ def _exclusions(v, settings):
 # ── The whole period ─────────────────────────────────────────────────────
 
 SCOPES = {
-    "human": ("Probably human", (HUMAN,)),
-    "human_unclear": ("Probably human + unclear", (HUMAN, UNCLEAR)),
+    "human": ("Human", (HUMAN,)),
 }
 
 
@@ -757,10 +736,10 @@ def frequencies(visits, fields, titles):
         key = tuple(str(v.get(f) or "unknown") for f in fields)
         row = table.setdefault(key, dict.fromkeys(CLASSES, 0))
         row[v["klasse"]] += 1
-    rows = [list(k) + [c[HUMAN], c[UNCLEAR], c[AUTOMATION], c[OWN], sum(c.values())]
+    rows = [list(k) + [c[HUMAN], c[AUTOMATION], c[OWN], sum(c.values())]
             for k, c in table.items()]
     rows.sort(key=lambda r: (-r[-1], str(r[0])))
-    return {"spalten": list(titles) + ["Human", "Unclear", "Automated", "Own", "Total"],
+    return {"spalten": list(titles) + ["Human", "Bot", "Own", "Total"],
             "zeilen": rows}
 
 

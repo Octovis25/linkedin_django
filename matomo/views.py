@@ -479,7 +479,6 @@ def _ausschluss_summe(ev):
     return {
         "gruende": {
             "automation": sum(1 for v in alle if v["klasse"] == aw.AUTOMATION),
-            "unclear": sum(1 for v in alle if v["klasse"] == aw.UNCLEAR),
             "own": sum(1 for v in alle if v["klasse"] == aw.OWN),
             "preview": sum(1 for v in alle if v["bearbeitung"]),
             "places": sum(1 for v in alle if v["ortsregel"]),
@@ -525,7 +524,8 @@ def _ausschluss_kontext(request, ev=None, summe=None):
         "gezaehlt_zahl": summe["gesamt"] - summe["ausgeschlossen"],
         "umfang": summe["umfang"],
         "umfaenge": [(k, v[0]) for k, v in aw.SCOPES.items()],
-        "zeige_umfang": True,
+        # One class is counted since 21.10.2026 - nothing to choose.
+        "zeige_umfang": len(aw.SCOPES) > 1,
         "zeitzone": aw.TIMEZONE,
     }
 
@@ -540,7 +540,7 @@ def _verlauf(besuche, von, bis):
         d += dt.timedelta(days=1)
     if len(tage) < 2:
         return None
-    felder = {aw.HUMAN: "menschen", aw.UNCLEAR: "unklar", aw.AUTOMATION: "bots"}
+    felder = {aw.HUMAN: "menschen", aw.AUTOMATION: "bots"}
     zaehler = {t.isoformat(): dict.fromkeys(felder.values(), 0) for t in tage}
     for b in besuche:
         eintrag = zaehler.get(b.get("datum"))
@@ -556,27 +556,21 @@ def _verlauf(besuche, von, bis):
             "ersterImMonat": t.day == 1, "istMontag": t.weekday() == 0,
             **zaehler[t.isoformat()],
         })
-    # Colours checked with the dataviz validator (September 2026); grey for "unclear".
-    reihen = [("menschen", "Humans", "#0093A1"), ("unklar", "Unclear", "#8C9593"),
-              ("bots", "Bots", "#F56E28")]
+    # Colours checked with the dataviz validator (September 2026).
+    reihen = [("menschen", "Humans", "#0093A1"), ("bots", "Bots", "#F56E28")]
     return {"daten": daten, "tage": len(tage),
             "reihen": [{"feld": f, "name": n, "farbe": c, "summe": sum(x[f] for x in daten)}
                        for f, n, c in reihen]}
 
 
 def _stundenraster(besuche):
-    """Two 7 x 24 grids (Europe/Berlin), humans and bots, one shared scale.
-
-    "Unclear" visits are in neither grid - a single page without a measurable
-    time is not proof of a bot - and are counted below the grids instead.
-    """
+    """Two 7 x 24 grids (Europe/Berlin), humans and bots, one shared scale."""
     zaehler = {aw.HUMAN: {tag: [0] * 24 for tag in WOCHENTAGE},
                aw.AUTOMATION: {tag: [0] * 24 for tag in WOCHENTAGE}}
-    ohne_zeit = unklar = 0
+    ohne_zeit = 0
     for b in besuche:
         tag, stunde = b.get("wochentag"), b.get("stunde", "")
         if b["klasse"] not in zaehler:
-            unklar += b["klasse"] == aw.UNCLEAR
             continue
         if tag not in WOCHENTAGE or not stunde[:2].isdigit():
             ohne_zeit += 1
@@ -599,7 +593,7 @@ def _stundenraster(besuche):
 
     return {"menschen": baue(aw.HUMAN, "menschen", "Humans"),
             "bots": baue(aw.AUTOMATION, "bots", "Bots"),
-            "hoechstwert": hoechstwert, "ohne_zeit": ohne_zeit, "unklar": unklar}
+            "hoechstwert": hoechstwert, "ohne_zeit": ohne_zeit}
 
 
 def _zeitraum_kontext(von, bis, hinweis):
@@ -1265,7 +1259,7 @@ def zeitlinie(request):
                                         "summe": None}
 
     summe = ergebnis.get("summe") or {
-        "gruende": {"automation": 0, "unclear": 0, "own": 0, "preview": 0, "places": 0},
+        "gruende": {"automation": 0, "own": 0, "preview": 0, "places": 0},
         "varianten": [], "ausgeschlossen": 0, "gesamt": 0, "umfang": umfang,
         "alle_orte": alle_orte}
     return render(request, "matomo/zeitlinie.html", {

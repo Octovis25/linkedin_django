@@ -40,7 +40,11 @@ Alles im Browser, ohne Nachladen und ohne fremde Bibliothek.
     return parseFloat(roh);
   }
 
-  function text(zelle) { return zelle ? zelle.textContent.trim() : ''; }
+  // data-filter: the value to pick when the cell shows more than that (a reason below a label).
+  function text(zelle) {
+    if (zelle && zelle.dataset && zelle.dataset.filter !== undefined) return zelle.dataset.filter.trim();
+    return zelle ? zelle.textContent.trim() : '';
+  }
 
   // Für Datumsspalten steht im data-sort ein sortierbarer Wert (JJJJ-MM-TT),
   // während sichtbar TT.MM.JJJJ steht - sonst käme der 01.09. vor den 31.08.
@@ -104,7 +108,9 @@ Alles im Browser, ohne Nachladen und ohne fremde Bibliothek.
       // Zahlen- und Messwertspalten bekommen keine Liste, ebenso Spalten
       // ohne echte Auswahl. Rechtsbündige Spalten sind per Konvention Zahlen.
       var istMesswert = kopf.cells[i] && kopf.cells[i].classList.contains('mt-zahl');
-      if (nurZahlen || istMesswert || anzahl < 2 || anzahl > 200) {
+      // A column whose text is no value to pick (e.g. a fold-out path).
+      var ohneListe = kopf.cells[i] && kopf.cells[i].hasAttribute('data-kein-filter');
+      if (nurZahlen || istMesswert || ohneListe || anzahl < 2 || anzahl > 200) {
         listen.push(null);
         filterzeile.appendChild(zelle);
         continue;

@@ -33,6 +33,6 @@
 {% if hinweis %}<div class="alert alert-info">{{ hinweis }}</div>{% endif %}
 {% if datenbasis %}<div class="mt-basis"><strong>Different data basis.</strong> {{ datenbasis }}</div>{% endif %}
 {% if regeln and ausschluss_kurz %}<p class="mt-leise" style="margin:0 0 1rem"><strong>{{ gezaehlt_zahl }}</strong> visit{{ gezaehlt_zahl|pluralize }} counted · {{ ausgeschlossen_zahl }} not counted
-  ({{ gruende.automation }} bots, {{ gruende.unclear }} unclear{% if umfang == "human_unclear" %} – counted{% endif %}, {{ gruende.preview }} with preview, {{ gruende.own }} own device{{ gruende.own|pluralize }}, {% if alle_orte %}places counted anyway{% else %}{{ orte_versteckt }} under a location rule{% endif %})
+  ({{ gruende.automation }} bots, {{ gruende.preview }} with preview, {{ gruende.own }} own device{{ gruende.own|pluralize }}, {% if alle_orte %}places counted anyway{% else %}{{ orte_versteckt }} under a location rule{% endif %})
   – <a href="{{ besucher_link }}">rules and exclusions on Visitors</a></p>
 {% elif regeln %}{% include "matomo/_ausschluesse.html" %}{% else %}{% include "matomo/_orte.html" %}{% endif %}

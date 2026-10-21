@@ -4,13 +4,23 @@
 {% block content %}
 {% include "matomo/_stil.html" %}
 <style>
-  .mt-besuche td { white-space:normal !important; vertical-align:top; font-size:0.86rem; }
+  .mt-besuche td { white-space:normal !important; vertical-align:top; font-size:0.82rem; padding:0.4rem 0.45rem; }
+  .mt-besuche thead th { padding:0.45rem 0.45rem; font-size:0.84rem; }
+  .mt-besuche tr.mt-filterzeile th { padding:0.3rem 0.35rem; }
+  .mt-besuche tr.mt-filterzeile select { min-width:56px; }
+  .mt-besuche td.sp-klasse { max-width:130px; }
+  .mt-besuche td.sp-quelle { max-width:150px; }
+  .mt-besuche td.sp-einstieg { max-width:190px; word-break:break-word; }
+  .mt-besuche td.sp-ort { max-width:110px; }
+  .mt-besuche td.sp-weg { min-width:150px; max-width:260px; }
+  /* A second horizontal scrollbar above the table, in step with the one below. */
+  .mt-oben-scroll { overflow-x:auto; overflow-y:hidden; height:14px; margin:0 0 2px; }
+  .mt-oben-scroll div { height:1px; }
   .mt-besuche td.mt-zahl { text-align:right; white-space:nowrap !important; }
   .mt-besuche td:first-child { white-space:nowrap !important; }
   tr.mt-raus td { background:#f7f6f2; color:#666; }
   .mt-marke { display:inline-block; padding:1px 8px; border-radius:10px; font-size:0.72rem; font-weight:600; color:#fff; white-space:nowrap; }
   .mt-marke.human { background:var(--octo-petrol); }
-  .mt-marke.unclear { background:#8C9593; }
   .mt-marke.automation { background:var(--octo-orange); }
   .mt-marke.own { background:#5a4a8a; }
   .mt-grund { display:block; font-size:0.75rem; color:#666; margin-top:2px; }
@@ -23,6 +33,8 @@
 
 <h1>Visitors</h1>
 <p class="mt-leise">Humans and bots, when they come, and every visit with its path.</p>
+<p class="mt-leise" style="margin-top:-0.4rem"><strong>Human</strong> = more than 1 s between two pages.
+  Everything else counts as a <strong>bot</strong> – also a single page, because Matomo cannot measure its time.</p>
 
 {% if fehler %}<div class="alert alert-error">{{ fehler }}</div>{% endif %}
 
@@ -30,7 +42,6 @@
 
 <div class="mt-kacheln">
   <div class="mt-kachel"><div class="bez">Humans</div><div class="zahl">{{ kl.human }}</div></div>
-  <div class="mt-kachel" style="border-left-color:#8C9593"><div class="bez">Unclear</div><div class="zahl" style="color:#6b7372">{{ kl.unclear }}</div></div>
   <div class="mt-kachel" style="border-left-color:var(--octo-orange)"><div class="bez">Bots</div><div class="zahl" style="color:var(--octo-orange)">{{ kl.automation }}</div></div>
   <div class="mt-kachel" style="border-left-color:#8C9593"><div class="bez">Own / preview / places</div><div class="zahl" style="color:#6b7372">{{ sonder }}</div></div>
 </div>
@@ -40,8 +51,7 @@
 <div class="card">
   <h2>Humans and bots per day</h2>
   <p class="mt-leise">Visits per day on one axis, so the lines are directly comparable; days without visits are zero.
-    <strong>Unclear</strong> has its own line: one page without a measurable time is not proof of a bot.
-    <strong>Bots</strong> = headless browser, or every page left after at most 1 s. Own devices, previews and the places under the location rule are not in the lines.</p>
+    <strong>Humans</strong> = more than 1 s between two pages; everything else is a <strong>bot</strong>. Own devices, previews and the places under the location rule are not in the lines.</p>
   {% include "matomo/_verlauf.html" %}
 </div>
 {% endif %}
@@ -51,7 +61,6 @@
   <h2>When do they come?</h2>
   <p class="mt-leise">Each cell is one hour on one weekday ({{ zeitzone }}); the stronger the colour, the more visits. Both grids share one scale –
     the strongest shade stands for {{ raster.hoechstwert }} visit{{ raster.hoechstwert|pluralize }} in one hour. Click a cell for those visits.
-    {% if raster.unklar %}{{ raster.unklar }} unclear visit{{ raster.unklar|pluralize }} {{ raster.unklar|pluralize:"is,are" }} in neither grid.{% endif %}
     With few visits this shows when visits happened, not the best time to post.</p>
   <div class="mt-rasterpaar">
     {% include "matomo/_raster.html" with r=raster.menschen %}
@@ -69,29 +78,28 @@
 
 <div class="card">
   {% if besuche %}
-  <div class="mt-tabelle" style="max-height:75vh">
+  <div class="mt-oben-scroll" id="mt-oben-scroll" aria-hidden="true"><div></div></div>
+  <div class="mt-tabelle" id="mt-besuche-box" style="max-height:75vh">
     <table class="mt-sortierbar mt-besuche">
       <thead><tr>
-        <th>When</th><th>Classification</th><th>Source</th><th>Evidence</th><th>Entry page</th>
-        <th>Campaign / post</th><th class="mt-zahl">Pages</th><th class="mt-zahl">Measured time</th>
-        <th>Returning</th><th>City</th><th>Country</th>{% if zeige_aus %}<th>Not counted because</th>{% endif %}<th>Details</th>
+        <th>When</th><th>Classification</th><th>Source</th><th>Entry page</th>
+        <th class="mt-zahl">Pages</th><th class="mt-zahl">Time</th>
+        <th>City</th><th>Country</th>{% if zeige_aus %}<th>Not counted because</th>{% endif %}<th data-kein-filter>Details</th>
+        <th title="The LinkedIn post or campaign the visit came from (tagged link)">Campaign / post</th><th>Returning</th>
       </tr></thead>
       <tbody>
         {% for v in besuche %}
         <tr{% if not v.im_publikum %} class="mt-raus"{% endif %}>
           <td data-sort="{{ v.sortier }}">{{ v.datum_de }}<br><span class="mt-leise">{{ v.uhrzeit }}</span></td>
-          <td><span class="mt-marke {{ v.klasse }}">{{ v.klasse_name }}</span>{% for g in v.gruende %}<span class="mt-grund">{{ g }}</span>{% endfor %}</td>
-          <td>{{ v.quelle }}</td>
-          <td><span class="mt-leise">{{ v.beleg }}</span></td>
-          <td>{% if v.einstieg %}{{ v.einstieg.titel }}<br><span class="mt-leise">{{ v.einstieg.pfad }}{% if v.einstieg.vorschau %} · preview{% endif %}</span>{% else %}–{% endif %}</td>
-          <td>{% if v.post_id %}Post #{{ v.post_id }}{% endif %}{% if v.kampagne %}{% if v.post_id %}<br>{% endif %}<span class="mt-leise">{{ v.kampagne }}</span>{% endif %}{% if not v.post_id and not v.kampagne %}–{% endif %}</td>
+          <td class="sp-klasse" data-filter="{{ v.klasse_name }}"><span class="mt-marke {{ v.klasse }}">{{ v.klasse_name }}</span>{% for g in v.gruende %}<span class="mt-grund">{{ g }}</span>{% endfor %}</td>
+          <td class="sp-quelle" data-filter="{{ v.quelle }}">{{ v.quelle }}<span class="mt-grund">{{ v.beleg }}</span></td>
+          <td class="sp-einstieg">{% if v.einstieg %}{{ v.einstieg.titel }}<br><span class="mt-leise">{{ v.einstieg.pfad }}{% if v.einstieg.vorschau %} · preview{% endif %}</span>{% else %}–{% endif %}</td>
           <td class="mt-zahl">{{ v.aufrufe }}{% if v.vorschau_aufrufe %} <span class="mt-leise">+{{ v.vorschau_aufrufe }} preview</span>{% endif %}</td>
           <td class="mt-zahl" data-sort="{{ v.dauer_sek|default_if_none:'-1' }}">{{ v.dauer_text }}</td>
-          <td>{% if v.wiederkehrend %}yes{% else %}no{% endif %}</td>
-          <td>{{ v.stadt }}</td>
-          <td>{{ v.land }}</td>
+          <td class="sp-ort">{{ v.stadt }}</td>
+          <td class="sp-ort">{{ v.land }}</td>
           {% if zeige_aus %}<td>{% if v.im_publikum %}–{% else %}{% for a in v.ausschluesse %}{{ a }}{% if not forloop.last %}; {% endif %}{% empty %}{{ v.klasse_name }}{% endfor %}{% endif %}</td>{% endif %}
-          <td><details><summary>{{ v.schritte|length }} step{{ v.schritte|length|pluralize }}</summary>
+          <td class="sp-weg"><details><summary>{{ v.schritte|length }} step{{ v.schritte|length|pluralize }}</summary>
             <ol class="mt-weg">
               {% for s in v.schritte %}
               <li>{% if s.zeit_lokal %}<span class="mt-leise">{{ s.zeit_lokal }}</span> {% endif %}
@@ -101,6 +109,8 @@
             </ol>
             {% if v.besucher %}<a href="{% url 'matomo:besucher_profil' v.besucher %}?zurueck={{ request.get_full_path|urlencode }}">All visits of this visitor ID</a>{% endif %}
           </details></td>
+          <td>{% if v.post_id %}Post #{{ v.post_id }}{% endif %}{% if v.kampagne %}{% if v.post_id %}<br>{% endif %}<span class="mt-leise">{{ v.kampagne }}</span>{% endif %}{% if not v.post_id and not v.kampagne %}–{% endif %}</td>
+          <td>{% if v.wiederkehrend %}yes{% else %}no{% endif %}</td>
         </tr>
         {% endfor %}
       </tbody>
@@ -111,9 +121,28 @@
   {% endif %}
   <p class="mt-leise" style="margin-top:0.6rem">
     City and country are approximate, estimated from the IP address – for orientation, never to identify a person.
-    <em>Measured time</em> runs from the first to the last pageview of a visit; the time on the last page is not measured
-    (no heartbeat), so a one-page visit shows “not measured”, not 0. <em>Returning</em> is Matomo's own flag.
+    <em>Time</em> is measured from the first to the last pageview of a visit; the time on the last page is not measured
+    (no heartbeat), so a one-page visit shows “not measured”, not 0. <em>Campaign / post</em> shows the LinkedIn post
+    (or campaign) a visit came from – only when it arrived through a tagged link (🔗 Website → Tag in the post editor).
+    <em>Returning</em> is Matomo's own flag.
   </p>
+  <script>
+  (function () {
+    var oben = document.getElementById('mt-oben-scroll');
+    var box = document.getElementById('mt-besuche-box');
+    if (!oben || !box) return;
+    var innen = oben.firstElementChild, laeuft = false;
+    function messen() {
+      innen.style.width = box.scrollWidth + 'px';
+      oben.style.display = box.scrollWidth > box.clientWidth + 1 ? '' : 'none';
+    }
+    oben.addEventListener('scroll', function () { if (laeuft) { laeuft = false; return; } laeuft = true; box.scrollLeft = oben.scrollLeft; });
+    box.addEventListener('scroll', function () { if (laeuft) { laeuft = false; return; } laeuft = true; oben.scrollLeft = box.scrollLeft; });
+    window.addEventListener('resize', messen);
+    box.addEventListener('toggle', messen, true);      // opening the steps makes the table wider
+    messen();
+  }());
+  </script>
 </div>
 
 <details class="card" style="padding-top:0.6rem">

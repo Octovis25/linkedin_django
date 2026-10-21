@@ -102,31 +102,41 @@ class Vorschau(SimpleTestCase):
 
 
 class Klassifikation(SimpleTestCase):
-    def test_eine_seite_null_sekunden_ist_unklar(self):
+    # Two classes since 21.10.2026: more than 1 s between two pages is a human,
+    # everything else a bot.
+    def test_nur_zwei_klassen(self):
+        self.assertEqual({aw.HUMAN, aw.AUTOMATION, aw.OWN}, set(aw.CLASSES))
+        self.assertEqual(['human'], list(aw.SCOPES))
+        # an old link with umfang=human_unclear counts the humans
+        self.assertEqual([x['besucher'] for x in bewerten().audience],
+                         [x['besucher'] for x in bewerten(scope='human_unclear').audience])
+
+    def test_eine_seite_ist_ein_bot(self):
         v = nach_id(bewerten())
-        self.assertEqual(aw.UNCLEAR, v['u1']['klasse'])
-        self.assertEqual(['One page, time not measurable, no interaction'], v['u1']['gruende'])
+        self.assertEqual(aw.AUTOMATION, v['u1']['klasse'])
+        self.assertEqual(['one page, time not measurable'], v['u1']['gruende'])
         self.assertIsNone(v['u1']['dauer_sek'])
         self.assertEqual('not measured (1 page)', v['u1']['dauer_text'])
-
-    def test_unklar_zaehlt_wenn_gewaehlt(self):
         self.assertNotIn('u1', [x['besucher'] for x in bewerten().audience])
-        self.assertIn('u1', [x['besucher'] for x in bewerten(scope='human_unclear').audience])
 
     def test_headless_mit_grund(self):
         h1 = nach_id(bewerten())['h1']
         self.assertEqual(aw.AUTOMATION, h1['klasse'])
-        self.assertIn('headless browser (Headless Chrome)', h1['gruende'][0])
-        # its three seconds between two pages are a human signal - shown, but outweighed
-        self.assertIn('also seen: reading time', h1['gruende'][1])
+        # its three seconds between two pages do not make a headless browser a human
+        self.assertEqual(['headless browser (Headless Chrome)'], h1['gruende'])
 
-    def test_mehrere_seiten_allein_kein_mensch(self):
+    def test_mehr_als_eine_sekunde_ist_ein_mensch(self):
         f1 = nach_id(bewerten())['f1']
         self.assertEqual(aw.AUTOMATION, f1['klasse'])
         self.assertIn('5 pages, each left after ≤ 1 s', f1['gruende'][0])
-        zwei = wa_daten.visit('z', '2026-09-05 10:00', [('/', 'Home', 2), ('/services/', 'Services', 0)])
-        z = nach_id(bewerten([zwei]))['z']
-        self.assertEqual(aw.UNCLEAR, z['klasse'])                          # 2 s: neither proof
+
+        def klasse(sek):
+            v = wa_daten.visit('z', '2026-09-05 10:00', [('/', 'Home', sek), ('/services/', 'Services', 0)])
+            z = nach_id(bewerten([v]))['z']
+            return z['klasse'], z['gruende']
+        self.assertEqual((aw.HUMAN, ['> 1 s between pages (up to 2 s)']), klasse(2))
+        self.assertEqual(aw.AUTOMATION, klasse(1)[0])                      # exactly 1 s: not more
+        self.assertEqual(aw.AUTOMATION, klasse(0)[0])
 
     def test_interaktion_ist_menschlich(self):
         l1 = nach_id(bewerten())['l1']
@@ -331,24 +341,28 @@ class Ansichten(TransactionTestCase):
         # the period starts a day earlier at Matomo (its days are UTC)
         self.assertTrue(h.call_args_list[0].kwargs['date'].startswith('2026-08-31,2026-09-30'))
 
-    def test_umfang_wirkt_ueberall(self):
-        q = '?von=2026-09-01&bis=2026-09-30&umfang=human_unclear'
+    def test_kein_umfang_mehr_zu_waehlen(self):
+        q = '?von=2026-09-01&bis=2026-09-30&umfang=human_unclear'          # an old link
         ueber, _ = self.get('/webstats/' + q)
         besucher, _ = self.get('/webstats/besucher/' + q)
-        self.assertEqual(8, ueber.context['k']['besuche'])                  # + u1, u2, s1
-        self.assertEqual(8, len(besucher.context['besuche']))
+        self.assertEqual(5, ueber.context['k']['besuche'])
+        self.assertEqual(5, len(besucher.context['besuche']))
+        self.assertNotIn('name="umfang"', besucher.content.decode())
 
     def test_menschen_und_bots_je_tag(self):
         r, _ = self.get('/webstats/besucher/?von=2026-09-01&bis=2026-09-30')
         kl, sonder = r.context['kl'], r.context['sonder']
         # without own devices, previews and the location rule: o1, o2, e1, e2
-        self.assertEqual((5, 3, 2, 0, 4), (kl['human'], kl['unclear'], kl['automation'], kl['own'], sonder))
-        self.assertEqual(14, kl['human'] + kl['unclear'] + kl['automation'] + sonder)
+        # u1, u2 and s1 (one page each) were "unclear" until 21.10.2026 - bots now
+        self.assertEqual((5, 5, 0, 4), (kl['human'], kl['automation'], kl['own'], sonder))
+        self.assertEqual(14, kl['human'] + kl['automation'] + sonder)
         summen = {x['feld']: x['summe'] for x in r.context['verlauf']['reihen']}
-        self.assertEqual({'menschen': 5, 'unklar': 3, 'bots': 2}, summen)    # the curve = the tiles
+        self.assertEqual({'menschen': 5, 'bots': 5}, summen)                 # the curve = the tiles
         raster = r.context['raster']
-        self.assertEqual((5, 2, 3), (raster['menschen']['summe'], raster['bots']['summe'], raster['unklar']))
+        self.assertEqual((5, 5), (raster['menschen']['summe'], raster['bots']['summe']))
         html = r.content.decode()
+        self.assertNotIn('Unclear', html)
+        self.assertIn('<strong>Human</strong> = more than 1 s between two pages', html)
         self.assertIn('Humans and bots per day', html)
         self.assertIn('Exclusions and classification', html)                # the full rules: here
         self.assertIn('klasse=automation', html)                             # a bot cell opens those visits
@@ -363,7 +377,8 @@ class Ansichten(TransactionTestCase):
 
     def test_klassenfilter(self):
         r, _ = self.get('/webstats/besucher/?von=2026-09-01&bis=2026-09-30&ausgeschlossen=1&klasse=automation')
-        self.assertEqual({'h1', 'f1'}, {v['besucher'] for v in r.context['besuche']})
+        # + the one-page visits, bots since 21.10.2026 (e2 is also a preview visit)
+        self.assertEqual({'h1', 'f1', 'u1', 'u2', 's1', 'e2'}, {v['besucher'] for v in r.context['besuche']})
 
     def test_alte_reiter_leiten_weiter(self):
         for alt, neu in (('/webstats/ziele/?von=2026-09-01', '/webstats/?von=2026-09-01'),
@@ -396,7 +411,7 @@ class Ansichten(TransactionTestCase):
         html = r.content.decode()
         self.assertIn('location rule “Wasserburg am Inn” (Matomo: Wasserburg am Inn (Gabersee))', html)
         self.assertIn('possible internal editing visit (preview opened)', html)
-        self.assertIn('Automation signal: headless browser (Headless Chrome)', html)
+        self.assertIn('headless browser (Headless Chrome)', html)
 
     def test_eigenes_geraet_markieren_und_zuruecknehmen(self):
         a = self.client.post('/webstats/eigen/', {'aktion': 'dazu', 'besucher': 'a1', 'notiz': 'Laptop',
