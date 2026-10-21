@@ -46,8 +46,8 @@ and "Show excluded visits" lists what was left out, with the reason.
         {% endfor %}
       </tbody>
     </table>
-    <p class="mt-leise">The first rule that applies decides. Two classes only: more than 1 s between two pages is a
-      human, everything else counts as a bot – including a single page, whose time Matomo cannot measure.
+    <p class="mt-leise">The first rule that applies decides. Two classes only: a visit with a clear bot signal is a bot,
+      every other visit counts as a human – also a single page, whose time Matomo cannot measure.
       The analyses count the humans.
       A visit that opened a WordPress or Elementor <strong>preview</strong> is marked as a possible internal
       editing visit and left out; the preview pages themselves never count as pageviews.</p>

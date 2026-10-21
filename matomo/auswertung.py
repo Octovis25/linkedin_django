@@ -54,9 +54,9 @@ POST_CONTENT = re.compile(r"^(?:post[-_]?)?(\d{1,7})$", re.I)
 
 # ── Classification ───────────────────────────────────────────────────────
 
-# Two classes only (Ortrud, 21.10.2026): more than 1 s between two pages is a
-# human, everything else counts as a bot. There used to be a third class,
-# "unclear", for one page without a measurable time; those are bots now.
+# Two classes only (Ortrud, 21.10.2026): a visit with a clear bot signal is a
+# bot, every other visit is a human. There used to be a third class,
+# "unclear", for one page without a measurable time.
 HUMAN = "human"
 AUTOMATION = "automation"
 OWN = "own"
@@ -66,17 +66,35 @@ CLASSES = {
     OWN: "Confirmed own / test visit",
 }
 
-HUMAN_GAP = 1          # more than this many seconds between two pageviews: a human
+FAST_GAP = 1           # every gap at most this long: faster than anyone reads
+
+# The bot signals were chosen from the real log (21.10.2026, 530 visits in a
+# year): among the visits with reading time between pages - surely people -
+# these hardly ever occur, among the one-page visits they are the rule.
+#   places: server farms, 0 readers there (Boardman 48 one-page visits,
+#   Council Bluffs 23, Ashburn 18, ...; Google referrers from Boardman too)
+DATA_CENTRE_PLACES = ("Boardman", "Council Bluffs", "Ashburn", "Santa Clara", "San Jose",
+                      "The Dalles", "Quincy", "Prineville", "Falkenstein", "Gunzenhausen",
+                      "Xiamen")
+#   referrer spam: sites that only advertise themselves
+SPAM_REFERRERS = ("webdig.asia", "blog2026.online", "sunblog.asia", "wnnkd.com")
+#   one page without a referrer AND browser language en-us (274 bots, 7
+#   readers - all with several pages) or no language, or a Linux desktop
+BOT_LANGUAGES = ("en-us", "unknown", "")
 
 RULES = [
     ("Own device", "The visitor ID is on the list of own / test devices "
                    "(marked by hand in the visit details).", OWN),
     ("Headless browser", "Matomo reports a headless browser (e.g. “Headless Chrome”) - "
                          "a browser without a screen, used by scripts.", AUTOMATION),
-    ("More than 1 s", f"Two or more pages with more than {HUMAN_GAP} s between two of them.",
-     HUMAN),
-    ("Everything else", f"One page (Matomo cannot measure its time), or every page left "
-                        f"after at most {HUMAN_GAP} s.", AUTOMATION),
+    ("Referrer spam", "The referrer is a site that only advertises itself ("
+                      + ", ".join(SPAM_REFERRERS) + ").", AUTOMATION),
+    ("Data centre", "Matomo places the visit in a server-farm town ("
+                    + ", ".join(DATA_CENTRE_PLACES) + ").", AUTOMATION),
+    ("Too fast", f"Two or more pages, every page left after at most {FAST_GAP} s.", AUTOMATION),
+    ("One page, no referrer, US robot setup", "One page, no referrer, and the browser language "
+     "is en-us or missing, or the system is Linux.", AUTOMATION),
+    ("Everything else", "No bot signal: counted as a human.", HUMAN),
 ]
 
 # ── Previews and other editing views ─────────────────────────────────────
@@ -425,6 +443,7 @@ def prepare(raw, catalogue, settings):
         "dauer_text": (f"≥ {duration_text(duration)}" if len(pageviews) >= 2
                        else "not measured (1 page)"),
         "luecken": gaps,
+        "referrer_host": host_of(str(raw.get("referrerUrl") or "")),
         "wiederkehrend": str(raw.get("visitorType") or "").lower() == "returning",
         "besuch_nr": _int(raw.get("visitCount"), 0),
         "quelle": source,
@@ -455,17 +474,40 @@ def _classify(v, settings):
         v["klasse"] = OWN
         v["gruende"] = ["Visitor ID is on the list of own / test devices"]
         return
+    bot = _bot_signal(v)
     gaps = v["luecken"]
-    if "headless" in v["browser"].lower():
+    if bot:
         v["klasse"] = AUTOMATION
-        v["gruende"] = [f"headless browser ({v['browser']})"]
-    elif any(g > HUMAN_GAP for g in gaps):
-        v["klasse"] = HUMAN
-        v["gruende"] = [f"> {HUMAN_GAP} s between pages (up to {max(gaps)} s)"]
+        v["gruende"] = [bot]
     else:
-        v["klasse"] = AUTOMATION
-        v["gruende"] = (["one page, time not measurable"] if len(v["seiten"]) <= 1
-                        else [f"{len(v['seiten'])} pages, each left after ≤ {HUMAN_GAP} s"])
+        v["klasse"] = HUMAN
+        v["gruende"] = ([f"reading time between pages (up to {max(gaps)} s)"] if gaps and max(gaps) > FAST_GAP
+                        else ["no bot signal"])
+
+
+def _bot_signal(v):
+    """The first clear bot signal of a visit, or '' - see RULES."""
+    if "headless" in v["browser"].lower():
+        return f"headless browser ({v['browser']})"
+    rhost = v.get("referrer_host") or ""
+    spam = next((s for s in SPAM_REFERRERS if rhost == s or rhost.endswith("." + s)), "")
+    if spam:
+        return f"referrer spam ({rhost})"
+    stadt = place_key(v["stadt"])
+    ort = next((p for p in DATA_CENTRE_PLACES if place_key(p) == stadt), "")
+    if ort:
+        return f"data-centre location ({v['stadt']})"
+    gaps = v["luecken"]
+    if len(v["seiten"]) >= 2 and gaps and all(g <= FAST_GAP for g in gaps):
+        return f"{len(v['seiten'])} pages, each left after ≤ {FAST_GAP} s"
+    if len(v["seiten"]) <= 1 and v["quelle"] == UNKNOWN:
+        sprache = str(v.get("sprache") or "").lower()
+        system = str(v.get("system") or "").lower()
+        if sprache in BOT_LANGUAGES:
+            return f"one page, no referrer, browser language {sprache if sprache not in ('', 'unknown') else 'missing'}"
+        if "linux" in system and "android" not in system:
+            return f"one page, no referrer, {v['system']}"
+    return ""
 
 
 def _exclusions(v, settings):

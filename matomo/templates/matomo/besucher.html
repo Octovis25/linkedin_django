@@ -33,8 +33,9 @@
 
 <h1>Visitors</h1>
 <p class="mt-leise">Humans and bots, when they come, and every visit with its path.</p>
-<p class="mt-leise" style="margin-top:-0.4rem"><strong>Human</strong> = more than 1 s between two pages.
-  Everything else counts as a <strong>bot</strong> – also a single page, because Matomo cannot measure its time.</p>
+<p class="mt-leise" style="margin-top:-0.4rem"><strong>Bot</strong> = a clear bot signal: headless browser, referrer spam,
+  a server-farm town, every page left within 1 s, or one page without a referrer from a US robot setup (language en-us or none, Linux).
+  Everything else counts as a <strong>human</strong>. The full rules are under “Exclusions and classification” below.</p>
 
 {% if fehler %}<div class="alert alert-error">{{ fehler }}</div>{% endif %}
 
@@ -51,7 +52,7 @@
 <div class="card">
   <h2>Humans and bots per day</h2>
   <p class="mt-leise">Visits per day on one axis, so the lines are directly comparable; days without visits are zero.
-    <strong>Humans</strong> = more than 1 s between two pages; everything else is a <strong>bot</strong>. Own devices, previews and the places under the location rule are not in the lines.</p>
+    <strong>Bots</strong> = a clear bot signal; everything else is a <strong>human</strong>. Own devices, previews and the places under the location rule are not in the lines.</p>
   {% include "matomo/_verlauf.html" %}
 </div>
 {% endif %}

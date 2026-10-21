@@ -102,8 +102,8 @@ class Vorschau(SimpleTestCase):
 
 
 class Klassifikation(SimpleTestCase):
-    # Two classes since 21.10.2026: more than 1 s between two pages is a human,
-    # everything else a bot.
+    # Two classes since 21.10.2026: a clear bot signal makes a bot, everything
+    # else is a human.
     def test_nur_zwei_klassen(self):
         self.assertEqual({aw.HUMAN, aw.AUTOMATION, aw.OWN}, set(aw.CLASSES))
         self.assertEqual(['human'], list(aw.SCOPES))
@@ -111,13 +111,35 @@ class Klassifikation(SimpleTestCase):
         self.assertEqual([x['besucher'] for x in bewerten().audience],
                          [x['besucher'] for x in bewerten(scope='human_unclear').audience])
 
-    def test_eine_seite_ist_ein_bot(self):
-        v = nach_id(bewerten())
+    def test_eine_seite_nur_mit_bot_signal_ein_bot(self):
+        v = nach_id(bewerten(scope='human', own_ids=set()))
         self.assertEqual(aw.AUTOMATION, v['u1']['klasse'])
-        self.assertEqual(['one page, time not measurable'], v['u1']['gruende'])
+        self.assertEqual(['data-centre location (Boardman)'], v['u1']['gruende'])
+        self.assertEqual(['data-centre location (Council Bluffs)'], v['u2']['gruende'])
+        self.assertEqual(['referrer spam (www.webdig.asia)'], v['s1']['gruende'])
         self.assertIsNone(v['u1']['dauer_sek'])
         self.assertEqual('not measured (1 page)', v['u1']['dauer_text'])
-        self.assertNotIn('u1', [x['besucher'] for x in bewerten().audience])
+        # one page from Nuremberg, German browser: no bot signal - a human
+        self.assertEqual((aw.HUMAN, ['no bot signal']), (v['e2']['klasse'], v['e2']['gruende']))
+
+        def eine_seite(**kw):
+            roh = wa_daten.visit('x', '2026-09-05 10:00', [('/', 'Home', 0)], city='New York',
+                                 country='United States', **{k: w for k, w in kw.items()
+                                                             if k in ('rtype', 'rname', 'rurl')})
+            roh.update({k: w for k, w in kw.items() if k in ('languageCode', 'operatingSystemName')})
+            x = nach_id(bewerten([roh]))['x']
+            return x['klasse'], x['gruende'][0]
+        self.assertEqual((aw.AUTOMATION, 'one page, no referrer, browser language en-us'),
+                         eine_seite(languageCode='en-us'))
+        self.assertEqual((aw.AUTOMATION, 'one page, no referrer, browser language missing'),
+                         eine_seite(languageCode=''))
+        self.assertEqual((aw.AUTOMATION, 'one page, no referrer, GNU/Linux'),
+                         eine_seite(operatingSystemName='GNU/Linux'))
+        # the same with a referrer, or another language: a human
+        self.assertEqual(aw.HUMAN, eine_seite(languageCode='en-us', rtype='search', rname='Google',
+                                              rurl='https://www.google.com/')[0])
+        self.assertEqual(aw.HUMAN, eine_seite(languageCode='en-gb')[0])
+        self.assertEqual(aw.HUMAN, eine_seite(operatingSystemName='Android')[0])
 
     def test_headless_mit_grund(self):
         h1 = nach_id(bewerten())['h1']
@@ -125,7 +147,7 @@ class Klassifikation(SimpleTestCase):
         # its three seconds between two pages do not make a headless browser a human
         self.assertEqual(['headless browser (Headless Chrome)'], h1['gruende'])
 
-    def test_mehr_als_eine_sekunde_ist_ein_mensch(self):
+    def test_zu_schnell_ist_ein_bot(self):
         f1 = nach_id(bewerten())['f1']
         self.assertEqual(aw.AUTOMATION, f1['klasse'])
         self.assertIn('5 pages, each left after ≤ 1 s', f1['gruende'][0])
@@ -134,7 +156,7 @@ class Klassifikation(SimpleTestCase):
             v = wa_daten.visit('z', '2026-09-05 10:00', [('/', 'Home', sek), ('/services/', 'Services', 0)])
             z = nach_id(bewerten([v]))['z']
             return z['klasse'], z['gruende']
-        self.assertEqual((aw.HUMAN, ['> 1 s between pages (up to 2 s)']), klasse(2))
+        self.assertEqual((aw.HUMAN, ['reading time between pages (up to 2 s)']), klasse(2))
         self.assertEqual(aw.AUTOMATION, klasse(1)[0])                      # exactly 1 s: not more
         self.assertEqual(aw.AUTOMATION, klasse(0)[0])
 
@@ -353,7 +375,7 @@ class Ansichten(TransactionTestCase):
         r, _ = self.get('/webstats/besucher/?von=2026-09-01&bis=2026-09-30')
         kl, sonder = r.context['kl'], r.context['sonder']
         # without own devices, previews and the location rule: o1, o2, e1, e2
-        # u1, u2 and s1 (one page each) were "unclear" until 21.10.2026 - bots now
+        # u1, u2 (server farms) and s1 (referrer spam) were "unclear" until 21.10.2026
         self.assertEqual((5, 5, 0, 4), (kl['human'], kl['automation'], kl['own'], sonder))
         self.assertEqual(14, kl['human'] + kl['automation'] + sonder)
         summen = {x['feld']: x['summe'] for x in r.context['verlauf']['reihen']}
@@ -362,7 +384,7 @@ class Ansichten(TransactionTestCase):
         self.assertEqual((5, 5), (raster['menschen']['summe'], raster['bots']['summe']))
         html = r.content.decode()
         self.assertNotIn('Unclear', html)
-        self.assertIn('<strong>Human</strong> = more than 1 s between two pages', html)
+        self.assertIn('<strong>Bot</strong> = a clear bot signal', html)
         self.assertIn('Humans and bots per day', html)
         self.assertIn('Exclusions and classification', html)                # the full rules: here
         self.assertIn('klasse=automation', html)                             # a bot cell opens those visits
@@ -377,8 +399,8 @@ class Ansichten(TransactionTestCase):
 
     def test_klassenfilter(self):
         r, _ = self.get('/webstats/besucher/?von=2026-09-01&bis=2026-09-30&ausgeschlossen=1&klasse=automation')
-        # + the one-page visits, bots since 21.10.2026 (e2 is also a preview visit)
-        self.assertEqual({'h1', 'f1', 'u1', 'u2', 's1', 'e2'}, {v['besucher'] for v in r.context['besuche']})
+        # + the one-page visits from server farms and the referrer spam
+        self.assertEqual({'h1', 'f1', 'u1', 'u2', 's1'}, {v['besucher'] for v in r.context['besuche']})
 
     def test_alte_reiter_leiten_weiter(self):
         for alt, neu in (('/webstats/ziele/?von=2026-09-01', '/webstats/?von=2026-09-01'),

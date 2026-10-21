@@ -129,7 +129,7 @@ class Zeitlinie(Grundlage):
             besuch('c', '2026-09-03', seiten=(('/', 10), ('/about', 20))),
         ]
         with mock.patch(HOLE, return_value=b):
-            # b's one-page visit is a bot since 21.10.2026 (only > 1 s between pages is human)
+            # b's one-page visit without referrer and without a browser language is a bot
             besuche = views._besuchsprotokoll(dt.date(2026, 8, 1), dt.date(2026, 9, 30))
         z = views.zeitlinie_rechnen(besuche, dt.date(2026, 8, 1), dt.date(2026, 9, 30))
         self.assertEqual([('2026-08', 1, 1, 0), ('2026-09', 1, 0, 1)],
@@ -234,17 +234,16 @@ class Blog(Grundlage):
         z = self.rechnen(blog)
         a = {x['seite']: x for x in z['blog']}
         cdm = a['/clinical-data-management-lifecycle/']
-        # b's second visit (one page, from Google) is a bot since 21.10.2026
-        self.assertEqual((2, 1, 2), (cdm['leser'], cdm['wieder'], cdm['views']))
-        self.assertEqual(1, cdm['start'])                 # a started on it
+        self.assertEqual((2, 1, 3), (cdm['leser'], cdm['wieder'], cdm['views']))
+        self.assertEqual(2, cdm['start'])                 # a started on it, and b's second visit
         self.assertEqual(160, cdm['zeit'])                # (120 + 200) / 2; the 10 s last page does not count
         self.assertEqual(2, cdm['gemessen'])
         self.assertEqual(1, cdm['linkedin'])
         self.assertEqual('Aug 2026', cdm['erste'])
         self.assertEqual([('/contact-page/', 1), ('/services/', 1)], cdm['weiter'])
         self.assertEqual([1, 0, 0, 0], cdm['monate'][0]['quellen'])      # LinkedIn in August
-        # September: one without referrer - "Direct" now (it used to land in "Other")
-        self.assertEqual([0, 0, 1, 0], cdm['monate'][1]['quellen'])
+        # September: Google, and one without referrer - "Direct" now (it used to land in "Other")
+        self.assertEqual([0, 1, 1, 0], cdm['monate'][1]['quellen'])
         # an article nobody read is still listed
         self.assertEqual((0, ''), (a['/lessons-learned/']['leser'], a['/lessons-learned/']['erste']))
         self.assertEqual('The CDM lifecycle', z['blog'][0]['titel'])
