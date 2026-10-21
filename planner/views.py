@@ -785,19 +785,30 @@ def uebersicht_view(request):
 @login_required
 @nur_fuer_admin
 def oj_view(request):
+    """Ortrud's personal posts in the same list and editor as every other tab
+    (planner/_post_list.html), with their own four tabs on top (21.10.2026).
+    Until then OJ had a template of its own that had fallen behind: no video
+    in the LinkedIn dialog, no in-button before Scheduled."""
+    topic_filter = request.GET.get('topic', '')
     with connection.cursor() as c:
         topics = _topics(c)
         # Columns are checked once per process, not here on every call.
         schema_sicherstellen()
+        sql = """SELECT p.id, p.title, p.content, p.status, p.planned_date,
+                        p.image, t.name, t.color, p.topic_id, COALESCE(p.comment,'') as comment,
+                        COALESCE(p.linkedin_posted,0), COALESCE(p.link,'') as link,
+                        p.post_scheduled_at, p.planned_time,
+                        p.created_at, p.updated_at
+                 FROM planner_posts p
+                 LEFT JOIN planner_topics t ON p.topic_id = t.id
+                 WHERE p.is_oj = 1"""
+        params = []
+        if topic_filter:
+            sql += " AND p.topic_id=%s"
+            params.append(topic_filter)
+        sql += " ORDER BY p.updated_at DESC, p.created_at DESC"
         try:
-            posts = _q(c, """SELECT p.id, p.title, p.content, p.status, p.planned_date,
-                                    p.image, t.name, t.color, p.topic_id, COALESCE(p.comment,'') as comment,
-                                    COALESCE(p.linkedin_posted,0)
-                             FROM planner_posts p
-                             LEFT JOIN planner_topics t ON p.topic_id = t.id
-                             WHERE p.is_oj = 1
-                             ORDER BY FIELD(p.status,'Draft','Review','Ready','Scheduled','Posted'),
-                                      COALESCE(p.planned_date,'9999-12-31'), p.created_at""", [])
+            posts = _q(c, sql, params)
         except Exception:
             posts = []
 
@@ -809,22 +820,29 @@ def oj_view(request):
             'status': r[3], 'planned_date': r[4], 'image': r[5] or '',
             'topic_name': r[6] or '', 'topic_color': r[7] or 'gray',
             'topic_id': r[8], 'comment': r[9] or '', 'bg': bg, 'fg': fg,
-            'linkedin_posted': bool(r[10]), 'is_oj': True,
+            'linkedin_posted': bool(r[10]), 'is_oj': True, 'link': r[11] or '',
+            'post_scheduled_at': r[12],
+            'post_scheduled_at_fmt': berlin_fmt(r[12]),
+            'planned_time': r[13],
+            'created_at': r[14], 'updated_at': r[15],
         })
 
     _attach_video_paths(posts_list)
+    _attach_send_time(posts_list)
     _attach_oj_medium_and_tab(posts_list)
     oj_tabs = [(name, sum(1 for p in posts_list if p['oj_tab'] == name)) for name in OJ_TABS]
     li_token = _li_get_superuser_token()
     return render(request, 'planner/oj.html', {
         'posts': posts_list,
         'topics': topics,
+        'topic_filter': topic_filter,
         'oj_tabs': oj_tabs,
         'statuses': ['Draft', 'Review', 'Ready', 'Scheduled', 'Posted', 'Archive'],
         'tab': 'oj',
         'posts_json': _posts_to_json(posts_list),
         'li_connected': bool(li_token),
         'li_org': li_token.get('org_name', '') if li_token else '',
+        'allow_create': True,
     })
 
 
@@ -2378,15 +2396,12 @@ def _buffer_channel_for_target(token, target):
 
     Rule (per Ortrud): OJ / personal posts → personal Buffer channel,
     everything else (org / company page) → org Buffer channel.
-    Falls back to the org channel if no personal channel is configured.
+    Without a personal channel a personal post gets none - never the org's.
     """
     if target == 'person':
-        pid = token.get('buffer_profile_id_person')
-        pname = token.get('buffer_profile_name_person')
-        if pid:
-            return pid, pname
-        # No dedicated personal channel — fall back to org channel.
-        return token.get('buffer_profile_id'), token.get('buffer_profile_name')
+        # No personal channel chosen: no channel at all. Falling back to the
+        # org channel put personal posts on the company page (21.10.2026).
+        return token.get('buffer_profile_id_person'), token.get('buffer_profile_name_person')
     return token.get('buffer_profile_id'), token.get('buffer_profile_name')
 
 
@@ -3137,6 +3152,12 @@ def _linkedin_do_post_impl(request, post_id):
     _buf_pid, _buf_pname = _buffer_channel_for_target(token, target)
     if scheduled_ms or target == 'org':
         if not token.get('buffer_token') or not _buf_pid:
+            if target == 'person' and token.get('buffer_token'):
+                return JsonResponse({
+                    'ok': False,
+                    'error': 'No personal LinkedIn channel is chosen in Buffer. Choose it under '
+                             'API Connect (Personal LinkedIn channel). Nothing was sent.'
+                }, status=400)
             return JsonResponse({
                 'ok': False,
                 'error': 'Buffer is not configured. Please save the Buffer access token and select a profile.'
@@ -3153,11 +3174,13 @@ def _linkedin_do_post_impl(request, post_id):
 
             # Rule (from Ortrud): if the post has a link, post the link (LinkedIn
             # shows the link preview, a Canva video for instance). No media upload.
+            # Not for OJ posts: there the link is for the first comment, and the
+            # post keeps its video or picture (Ortrud, 21.10.2026).
             _ensure_media_columns()
             with connection.cursor() as c:
-                c.execute("SELECT COALESCE(link,'') FROM planner_posts WHERE id=%s", [post_id])
+                c.execute("SELECT COALESCE(link,''), COALESCE(is_oj,0) FROM planner_posts WHERE id=%s", [post_id])
                 lrow = c.fetchone()
-            if lrow and lrow[0] and str(lrow[0]).strip().lower().startswith("http"):
+            if lrow and not lrow[1] and lrow[0] and str(lrow[0]).strip().lower().startswith("http"):
                 link_url = str(lrow[0]).strip()
                 print("BUFFER LINK URL:", link_url)
 

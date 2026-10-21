@@ -56,6 +56,6 @@ class Sortieren(TransactionTestCase):
         self.assertIn('data-send=""', karte)
 
     def test_oj_bekommt_sortierung_mit_datum_und_uhrzeit(self):
-        zeile = self.karten('/planner/oj/', 'tr')[0]
+        zeile = self.karten('/planner/oj/', 'div')[0]
         self.assertIn('data-send="02.11.2026 07:30"', zeile)
         self.assertIn('data-created="2026-09-01 10:00:00"', zeile)

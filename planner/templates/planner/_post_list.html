@@ -37,7 +37,7 @@
     carries two things: where it came from (back) and the status that fits this
     tab. After saving, the Planner brings you back here.
     {% endcomment %}
-    <a href="/planner/?new=1&amp;back={{ request.path|urlencode }}{% if tab == "draft" %}&amp;status=Draft{% elif tab == "pipeline" %}&amp;status=Review{% elif tab == "ready" %}&amp;status=Ready{% elif tab == "scheduled" %}&amp;status=Scheduled{% elif tab == "archive" %}&amp;status=Archive{% endif %}"
+    <a href="/planner/?new=1&amp;back={{ request.path|urlencode }}{% if tab == "draft" %}&amp;status=Draft{% elif tab == "pipeline" %}&amp;status=Review{% elif tab == "ready" %}&amp;status=Ready{% elif tab == "scheduled" %}&amp;status=Scheduled{% elif tab == "archive" %}&amp;status=Archive{% elif tab == "oj" %}&amp;status=Draft&amp;oj=1{% endif %}"
        style="font-size:13px;padding:4px 10px;border:0.5px solid #008080;border-radius:4px;background:#008080;color:#fff;cursor:pointer;white-space:nowrap;text-decoration:none;display:inline-block"
        title="Create a new post - the dialog opens in the Planner and brings you back here">＋ New post</a>
     {% endif %}
@@ -153,14 +153,14 @@ word, so a published post that was later tidied away still counts as published.
 {% include "planner/_post_type.html" %}
 {# Filter by post type - only in the browser, the list itself stays as it is. #}
 <div id="pt-filter" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px;font-size:12px;color:#6c757d">
-  <span>Show:</span>
+  {% if tab != "oj" %}<span>Show:</span>
   <span class="pt-seg">
     <button type="button" data-f="" class="on" onclick="ptFilter(this)">All</button>
     <button type="button" data-f="short" onclick="ptFilter(this)">⚡ Short</button>
     <button type="button" data-f="company" onclick="ptFilter(this)">🏢 Company</button>
     <button type="button" data-f="none" onclick="ptFilter(this)">Without type</button>
   </span>
-  <span id="pt-filter-count"></span>
+  <span id="pt-filter-count"></span>{% endif %}
   <span style="margin-left:10px"></span>
   {% if tab == "scheduled" %}{% include "planner/_sort.html" with list="#pe-list" item=".pe-card" default="send-asc" %}{% else %}{% include "planner/_sort.html" with list="#pe-list" item=".pe-card" default="edited-desc" %}{% endif %}
 </div>
@@ -189,7 +189,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
 <div id="pe-list" style="display:flex;flex-direction:column;gap:8px">
 {% for p in posts %}
-<div class="pe-card" id="post-{{ p.id }}" data-post-id="{{ p.id }}" data-num="{{ p.id }}" data-send="{% if p.send_time %}{{ p.send_time }}{% elif p.planned_date %}{{ p.planned_date|date:'d.m.Y' }}{% if p.planned_time %} {{ p.planned_time|time:'H:i' }}{% endif %}{% endif %}" data-created="{{ p.created_at|date:'Y-m-d H:i:s' }}" data-edited="{{ p.updated_at|date:'Y-m-d H:i:s' }}" data-post-type="{{ p.post_type }}" data-ende="{% if p.linkedin_posted %}posted{% else %}dropped{% endif %}" style="background:#fff;border:0.5px solid #e0e0e0;border-radius:10px;padding:12px 14px">
+<div class="pe-card" id="post-{{ p.id }}" data-post-id="{{ p.id }}" data-num="{{ p.id }}" data-send="{% if p.send_time %}{{ p.send_time }}{% elif p.planned_date %}{{ p.planned_date|date:'d.m.Y' }}{% if p.planned_time %} {{ p.planned_time|time:'H:i' }}{% endif %}{% endif %}" data-created="{{ p.created_at|date:'Y-m-d H:i:s' }}" data-edited="{{ p.updated_at|date:'Y-m-d H:i:s' }}" data-post-type="{{ p.post_type }}"{% if p.oj_tab %} data-oj-tab="{{ p.oj_tab }}"{% endif %} data-ende="{% if p.linkedin_posted %}posted{% else %}dropped{% endif %}" style="background:#fff;border:0.5px solid #e0e0e0;border-radius:10px;padding:12px 14px">
   <div style="display:flex;gap:10px;align-items:center">
     {% if p.image %}
     <img src="/planner/thumb/{{ p.id }}/?v={{ p.updated_at|date:'U' }}" loading="lazy" style="width:56px;height:56px;border-radius:6px;object-fit:cover;flex-shrink:0;cursor:zoom-in" onclick="peLightbox('/planner/image/{{ p.id }}/?v={% now 'U' %}')">
@@ -212,6 +212,8 @@ document.addEventListener('DOMContentLoaded', function () {
     <div style="flex:1;min-width:0">
       <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:4px">
         <span class="post-nr" title="Post number">#{{ p.id }}</span>
+        {# OJ: say when there is no picture or video yet, or only a Studio draft. #}
+        {% if tab == "oj" %}{% if p.medium == 'draft' %}<span class="pe-medium" style="font-size:11px;padding:1px 8px;border-radius:99px;background:#f3eefc;color:#5b3fa0" title="Only a Studio draft so far">🎨 Studio draft</span>{% elif not p.medium %}<span class="pe-medium pe-medium-fehlt" style="font-size:11px;padding:1px 8px;border-radius:99px;background:#fdecec;color:#B42318;font-weight:600" title="No picture or video yet">– no medium</span>{% endif %}{% endif %}
         {% if p.post_type == 'short' %}<span class="pt-chip pt-chip-short">⚡ Short</span>{% elif p.post_type == 'company' %}<span class="pt-chip pt-chip-company">🏢 Company</span>{% endif %}
         <span style="font-size:11px;padding:1px 8px;border-radius:99px;background:{{ p.bg }};color:{{ p.fg }}">{{ p.topic_name }}</span>
         {% if p.planned_date %}<span class="pe-d-send" style="font-size:11px;color:#6c757d">📅 {{ p.planned_date|date:"d.m.Y" }}{% if p.planned_time %} 🕐 {{ p.planned_time|time:"H:i" }}{% endif %}</span>{% endif %}
@@ -344,7 +346,7 @@ document.addEventListener('DOMContentLoaded', function () {
       </div>
     </div>
     <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
-      <label style="font-size:12px;color:#6c757d;white-space:nowrap">🔗 Link</label>
+      <label id="pe-link-label" style="font-size:12px;color:#6c757d;white-space:nowrap">🔗 Link</label>
       <input type="text" id="pe-link" placeholder="https://..." style="font-size:13px;flex:1;padding:6px 8px;border:0.5px solid #ced4da;border-radius:4px;box-sizing:border-box">
     </div>
     <!-- Tracking link for the website (05.10.2026): one convention, see planner/utm.py -->
@@ -722,6 +724,10 @@ function openEdit(id) {
   document.getElementById('pe-date').value = p.date || '';
   peSetzeZeit(p.time);
   document.getElementById('pe-link').value = p.link || '';
+  // OJ: the link is for the first comment, not the post. It is also the
+  // address to tag, so it is put into the Website field already.
+  document.getElementById('pe-link-label').textContent = p.is_oj ? '🔗 Link (first comment)' : '🔗 Link';
+  if (p.is_oj && p.link && document.getElementById('pe-utm-url')) document.getElementById('pe-utm-url').value = p.link;
   document.getElementById('pe-comment').value = p.comment || '';
   document.getElementById('pe-img-input').value = '';
   document.getElementById('pe-img-nc-path').value = '';
@@ -940,14 +946,20 @@ function liOpenPost(id) {
     }
   }
   // Regel: Hat der Post einen Link -> Link posten (kein Bild). Sonst Bild.
+  // Not for OJ posts: there the link goes into the first comment by hand and
+  // the post keeps its video or picture (Ortrud, 21.10.2026).
   const hasLink = !!(p.link && String(p.link).trim().toLowerCase().startsWith('http'));
-  document.getElementById('li-include-img').checked = !!p.image && !hasLink;
-  document.getElementById('li-include-img-row').style.display = (p.image && !hasLink) ? 'flex' : 'none';
+  const linkPost = hasLink && !p.is_oj;
+  document.getElementById('li-include-img').checked = !!p.image && !linkPost;
+  document.getElementById('li-include-img-row').style.display = (p.image && !linkPost) ? 'flex' : 'none';
 
   // Link-Hinweis anzeigen, wenn ein Link vorhanden ist
   const liLinkInfo = document.getElementById('li-link-info');
   if (liLinkInfo) {
     if (hasLink) {
+      document.getElementById('li-link-label').textContent = linkPost
+        ? '🔗 Link will be posted (LinkedIn shows the preview):'
+        : '🔗 For the first comment - not posted:';
       document.getElementById('li-link-url').textContent = p.link;
       liLinkInfo.style.display = 'flex';
     } else {
@@ -959,7 +971,7 @@ function liOpenPost(id) {
   const liVidInfo = document.getElementById('li-video-info');
   const liVidName = document.getElementById('li-video-name');
   const liVidPrev = document.getElementById('li-video-preview');
-  if (p.video && !hasLink) {
+  if (p.video && !linkPost) {
     const fn = p.video.split('/').pop();
     liVidName.textContent = fn;
     liVidInfo.style.display = 'flex';
@@ -1124,7 +1136,7 @@ if (_liModalBg) _liModalBg.addEventListener('click', function(e) {
     <div style="margin-bottom:10px;display:flex;gap:8px">
       <select id="li-target" style="font-size:13px;padding:5px 8px;border:0.5px solid #ced4da;border-radius:4px;flex:1">
         {% if tab != 'scheduled' %}<option value="person">Personal profile</option>{% endif %}
-        {% if li_org %}<option value="org">{{ li_org }} (Seite)</option>{% endif %}
+        {% if li_org and tab != 'oj' %}<option value="org">{{ li_org }} (Seite)</option>{% endif %}
       </select>
     </div>
     <textarea id="li-post-text" style="width:100%;min-height:160px;font-size:13px;padding:8px;border:0.5px solid #ced4da;border-radius:4px;resize:vertical;box-sizing:border-box;line-height:1.6;font-family:inherit"></textarea>
@@ -1134,7 +1146,7 @@ if (_liModalBg) _liModalBg.addEventListener('click', function(e) {
       <label for="li-include-img" style="cursor:pointer;color:#444">Post image too</label>
     </div>
     <div id="li-link-info" style="display:none;align-items:center;gap:8px;margin-bottom:8px;font-size:13px;padding:6px 10px;background:#eef2ff;border:0.5px solid #2c4bff;border-radius:6px">
-      <span style="color:#2c4bff">🔗 Link will be posted (LinkedIn shows the preview):</span>
+      <span id="li-link-label" style="color:#2c4bff">🔗 Link will be posted (LinkedIn shows the preview):</span>
       <span id="li-link-url" style="font-size:12px;color:#2c4bff;word-break:break-all"></span>
     </div>
     <div id="li-video-info" style="display:none;flex-direction:column;gap:8px;margin-bottom:8px;font-size:13px;padding:6px 10px;background:#f0fbf8;border:0.5px solid #61CEBC;border-radius:6px">

@@ -124,15 +124,36 @@ class LinkedInDialog(TransactionTestCase):
         self.assertEqual(self.im_browser(self.seite('/planner/scheduled/'), schritte),
                          [2030, 10, 19, 10, 0])
 
-    # ── OJ ─────────────────────────────────────────────────────────────────
+    # ── OJ: same dialog, personal profile, video stays, link is for the comment ──
     def test_oj_date_without_time_keeps_the_date(self):
         def schritte(page):
-            page.evaluate('id => liOjOpenPost(id)', self.oj)
-            erst = (page.input_value('#li-oj-sched-date'), page.input_value('#li-oj-sched-time'))
-            page.evaluate('liOjDoPost()')
-            page.wait_for_function("document.getElementById('li-oj-result').textContent")
-            return erst, page.text_content('#li-oj-result'), page.evaluate('window.__sent')
+            page.evaluate('id => liOpenPost(id)', self.oj)
+            erst = (page.input_value('#li-schedule-date'), page.input_value('#li-schedule-time'),
+                    page.input_value('#li-target'))
+            page.evaluate('liDoPost()')
+            page.wait_for_function("document.getElementById('li-post-result').textContent")
+            return erst, page.text_content('#li-post-result'), page.evaluate('window.__sent')
         erst, text, gesendet = self.im_browser(self.seite('/planner/oj/'), schritte)
-        self.assertEqual(erst, ('2030-10-21', ''))
+        self.assertEqual(erst, ('2030-10-21', '', 'person'))
         self.assertIn('Choose a time', text)
         self.assertIsNone(gesendet)
+
+    def test_oj_video_goes_along_although_there_is_a_link(self):
+        with connection.cursor() as c:
+            c.execute("""UPDATE planner_posts SET planned_time='09:00:00', video_nc_path=%s, link=%s
+                         WHERE id=%s""", ['Marketing & Design/x/AI_SOP.webm',
+                                          'https://octotrial.com/insights/x/', self.oj])
+
+        def schritte(page):
+            page.evaluate('id => liOpenPost(id)', self.oj)
+            sichtbar = page.evaluate("""() => [
+                getComputedStyle(document.getElementById('li-video-info')).display,
+                document.getElementById('li-link-label').textContent]""")
+            page.evaluate('liDoPost()')
+            page.wait_for_function('window.__sent')
+            return sichtbar, page.evaluate('window.__sent.body')
+        (video, hinweis), body = self.im_browser(self.seite('/planner/oj/'), schritte)
+        self.assertNotEqual(video, 'none')
+        self.assertIn('first comment', hinweis)
+        self.assertEqual((body['target'], body['include_video']), ('person', True))
+        self.assertTrue(body['scheduled_ms'])

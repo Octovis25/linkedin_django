@@ -89,7 +89,7 @@ class Sendezeit(TransactionTestCase):
             c.execute("UPDATE planner_posts SET is_oj=1 WHERE id=%s", [self.pid])
         antwort = self.client.get('/planner/oj/')
         self.assertEqual(antwort.status_code, 200)
-        self.assertIn('"time":"08:45"', antwort.content.decode())
+        self.assertIn('"time": "08:45:00"', antwort.content.decode())
 
     # ── shown in German time ───────────────────────────────────────────────
     def test_anzeige_in_deutscher_zeit(self):
@@ -168,3 +168,36 @@ class Sendezeit(TransactionTestCase):
         self.assertEqual('Scheduled', status)
         self.assertEqual(date(2030, 10, 14), tag)
         self.assertEqual('09:30', str(uhr)[:5].zfill(5))
+
+    # ── OJ through Buffer (21.10.2026) ──────────────────────────────────────
+    def kuenftig(self):
+        from datetime import datetime, timezone
+        return datetime(2030, 10, 14, 7, 30, tzinfo=timezone.utc).timestamp() * 1000
+
+    def test_firmen_post_mit_link_geht_als_link(self):
+        antwort, bp = self.senden(scheduled_ms=self.kuenftig())
+        self.assertEqual(200, antwort.status_code, antwort.content[:300])
+        self.assertEqual('https://octotrial.com/services/', bp.call_args.kwargs['link_url'])
+
+    def test_oj_link_ist_fuer_den_kommentar_nicht_fuer_buffer(self):
+        with connection.cursor() as c:
+            c.execute("UPDATE planner_posts SET is_oj=1 WHERE id=%s", [self.pid])
+        antwort, bp = self.senden(scheduled_ms=self.kuenftig(), target='person')
+        self.assertEqual(200, antwort.status_code, antwort.content[:300])
+        self.assertIsNone(bp.call_args.kwargs['link_url'])
+
+    def test_ohne_persoenlichen_kanal_nie_die_firmenseite(self):
+        self.assertEqual((None, None), pv._buffer_channel_for_target(TOKEN, 'person'))
+        self.assertEqual(('p', None), pv._buffer_channel_for_target(TOKEN, 'org'))
+        with mock.patch.object(pv, '_li_get_superuser_token', return_value=TOKEN), \
+             mock.patch.object(pv, '_buffer_post') as bp:
+            antwort = self.client.post(f'/planner/linkedin/post/{self.pid}/', json.dumps(dict(
+                text='Hello', target='person', scheduled_ms=self.kuenftig())),
+                content_type='application/json')
+        self.assertEqual(400, antwort.status_code)
+        self.assertIn('No personal LinkedIn channel', antwort.json()['error'])
+        bp.assert_not_called()
+
+    def test_mit_persoenlichem_kanal_dorthin(self):
+        token = dict(TOKEN, buffer_profile_id_person='me', buffer_profile_name_person='Ortrud')
+        self.assertEqual(('me', 'Ortrud'), pv._buffer_channel_for_target(token, 'person'))
