@@ -429,7 +429,7 @@
 <!-- Edit Post Modal -->
 <div class="modal-bg" id="edit-modal">
   <div class="modal">
-    <h3 style="margin:0 0 1rem;font-size:15px">Edit Post</h3>
+    <h3 style="margin:0 0 1rem;font-size:15px">Edit Post <span id="e-nr" class="post-nr" title="Post number"></span></h3>
     <input type="hidden" id="e-id">
     <div style="display:flex;gap:8px;margin-bottom:8px">
       <select id="e-status" class="fselect" style="flex:1">
@@ -1020,6 +1020,8 @@ function openStudioForPost(prefix) {
 /* ── Open edit modal ── */
 function openEditModal(id, title, content, status, date, comment, image, link, time) {
   document.getElementById('e-id').value = id;
+  // The post's number in the heading, like on its card (Ortrud, 25.10.2026).
+  document.getElementById('e-nr').textContent = '#' + id;
   document.getElementById('e-title').value = title || '';
   setEditorText('e', content);
   document.getElementById('e-status').value = status || 'Draft';
