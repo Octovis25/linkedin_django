@@ -60,13 +60,13 @@ class SchemaPflege(TransactionTestCase):
             nr = c.fetchone()[0]
             c.execute("UPDATE planner_posts SET linkedin_posted=1, "
                       "post_scheduled_at='2026-09-12 14:00:00', "
-                      "video_nc_path='Marketing & Design/x/clip.webm' WHERE id=%s", [nr])
+                      "video_nc_path='Marketing_and_Design/x/clip.webm' WHERE id=%s", [nr])
             c.execute("SELECT linkedin_posted, post_scheduled_at, video_nc_path "
                       "FROM planner_posts WHERE id=%s", [nr])
             zeile = c.fetchone()
         self.assertEqual(1, zeile[0])
         self.assertIsNotNone(zeile[1])
-        self.assertEqual('Marketing & Design/x/clip.webm', zeile[2])
+        self.assertEqual('Marketing_and_Design/x/clip.webm', zeile[2])
 
     def test_nur_einmal_pro_prozess(self):
         # Der eigentliche Zweck: Nach dem ersten Lauf darf die Datenbank nicht

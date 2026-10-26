@@ -4,11 +4,11 @@ from requests.auth import HTTPBasicAuth
 from urllib.parse import quote
 
 # Existing/statistics image folder must stay unchanged for the content/statistics workflow.
-NC_STATISTICS_IMAGE_FOLDER = "Marketing & Design/LinkedIn/Statistics/data/Post-Bilder"
+NC_STATISTICS_IMAGE_FOLDER = "Marketing_and_Design/LinkedIn/Statistics/data/Post-Bilder"
 
 # Planner media folders for planned posts.
-NC_PLANNER_IMAGE_FOLDER = "Marketing & Design/LinkedIn/Planner/Images"
-NC_PLANNER_VIDEO_FOLDER = "Marketing & Design/LinkedIn/Planner/Videos"
+NC_PLANNER_IMAGE_FOLDER = "Marketing_and_Design/LinkedIn/Planner/Images"
+NC_PLANNER_VIDEO_FOLDER = "Marketing_and_Design/LinkedIn/Planner/Videos"
 
 # Backwards-compatible default name used by older code.
 NC_IMAGE_FOLDER = NC_PLANNER_IMAGE_FOLDER

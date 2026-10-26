@@ -898,7 +898,7 @@ def planner_image(request, post_id):
     # Wenn lokaler Pfad (planner/...) → Nextcloud Pfad bauen
     if not nc_path.startswith('Marketing'):
         filename = nc_path.split('/')[-1]
-        nc_path = f"Marketing & Design/LinkedIn/Planner/Images/{filename}"
+        nc_path = f"Marketing_and_Design/LinkedIn/Planner/Images/{filename}"
     content, ct = download_image_from_nextcloud(nc_path)
     if not content:
         raise Http404
@@ -1313,7 +1313,7 @@ def _get_video_nc_path(post_id):
     nc_path = row[0]
     if not nc_path.startswith("Marketing"):
         filename = nc_path.split("/")[-1]
-        nc_path = f"Marketing & Design/LinkedIn/Planner/Videos/{filename}"
+        nc_path = f"Marketing_and_Design/LinkedIn/Planner/Videos/{filename}"
     return nc_path
 
 
@@ -1606,7 +1606,7 @@ def _upload_image_to_cloudinary(post_id):
     nc_path = row[0]
     if not nc_path.startswith("Marketing"):
         filename = nc_path.split("/")[-1]
-        nc_path = f"Marketing & Design/LinkedIn/Planner/Images/{filename}"
+        nc_path = f"Marketing_and_Design/LinkedIn/Planner/Images/{filename}"
 
     img_content, img_content_type = download_image_from_nextcloud(nc_path)
     if not img_content:
@@ -1646,7 +1646,7 @@ def _upload_video_to_nextcloud(video_file, post_id):
 
     suffix = os.path.splitext(video_file.name)[1] or '.mp4'
     filename = f"video_{post_id}_{int(_time.time())}{suffix}"
-    nc_folder = "Marketing & Design/LinkedIn/Planner/Videos"
+    nc_folder = "Marketing_and_Design/LinkedIn/Planner/Videos"
     nc_path = f"{nc_folder}/{filename}"
 
     nc_url, username, password = _get_nc_credentials()
@@ -1720,13 +1720,13 @@ def _list_nc_folder_media(nc_folder, exts):
 def _list_nextcloud_videos():
     """List video files in the Nextcloud Planner/Videos folder."""
     return _list_nc_folder_media(
-        "Marketing & Design/LinkedIn/Planner/Videos",
+        "Marketing_and_Design/LinkedIn/Planner/Videos",
         ('.mp4', '.mov', '.webm', '.m4v', '.avi'))
 
 
 # Studio-Ausgaben (bewegte Medien) aus Studio_Work/Output.
-STUDIO_OUTPUT_VIDEOS = "Marketing & Design/Octotrial_Assets/Studio_Work/Output/Videos"
-STUDIO_OUTPUT_GIFS   = "Marketing & Design/Octotrial_Assets/Studio_Work/Output/GIFs"
+STUDIO_OUTPUT_VIDEOS = "Marketing_and_Design/Octotrial_Assets/Studio_Work/Output/Videos"
+STUDIO_OUTPUT_GIFS   = "Marketing_and_Design/Octotrial_Assets/Studio_Work/Output/GIFs"
 
 
 def _list_studio_outputs():
@@ -1761,7 +1761,7 @@ def api_studio_outputs(request):
 
 
 # Static Studio images from Studio_Work/Output/Images.
-STUDIO_OUTPUT_IMAGES = "Marketing & Design/Octotrial_Assets/Studio_Work/Output/Images"
+STUDIO_OUTPUT_IMAGES = "Marketing_and_Design/Octotrial_Assets/Studio_Work/Output/Images"
 
 
 def _list_studio_images():
@@ -1782,9 +1782,9 @@ def api_studio_images(request):
         return JsonResponse({'ok': False, 'error': str(e)}, status=500)
 
 
-STUDIO_OUTPUT_PREFIX = "Marketing & Design/Octotrial_Assets/Studio_Work/Output/"
-PLANNER_IMAGES_FOLDER = "Marketing & Design/LinkedIn/Planner/Images"
-PLANNER_VIDEOS_FOLDER = "Marketing & Design/LinkedIn/Planner/Videos"
+STUDIO_OUTPUT_PREFIX = "Marketing_and_Design/Octotrial_Assets/Studio_Work/Output/"
+PLANNER_IMAGES_FOLDER = "Marketing_and_Design/LinkedIn/Planner/Images"
+PLANNER_VIDEOS_FOLDER = "Marketing_and_Design/LinkedIn/Planner/Videos"
 
 
 def _nc_move(src_nc_path, dst_nc_path, overwrite=True):
@@ -1964,7 +1964,7 @@ def nc_video_preview(request, filename):
     if not safe_name.lower().endswith(('.mp4', '.mov', '.webm', '.m4v', '.avi')):
         return HttpResponse(status=400)
 
-    nc_path = f"Marketing & Design/LinkedIn/Planner/Videos/{safe_name}"
+    nc_path = f"Marketing_and_Design/LinkedIn/Planner/Videos/{safe_name}"
     nc_url, username, password = _get_nc_credentials()
     if not all([nc_url, username, password]):
         return HttpResponse(status=500)
@@ -2036,7 +2036,7 @@ def public_image(request, post_id, token):
         # convert it to the real Nextcloud folder path.
         if not nc_path.startswith("Marketing"):
             filename = nc_path.split("/")[-1]
-            nc_path = f"Marketing & Design/LinkedIn/Planner/Images/{filename}"
+            nc_path = f"Marketing_and_Design/LinkedIn/Planner/Images/{filename}"
 
         img_content, img_content_type = download_image_from_nextcloud(nc_path)
 
@@ -2157,7 +2157,7 @@ def public_video(request, post_id, token):
     nc_path = row[0]
     if not nc_path.startswith("Marketing"):
         filename = nc_path.split("/")[-1]
-        nc_path = f"Marketing & Design/LinkedIn/Planner/Videos/{filename}"
+        nc_path = f"Marketing_and_Design/LinkedIn/Planner/Videos/{filename}"
     else:
         filename = nc_path.split("/")[-1]
 

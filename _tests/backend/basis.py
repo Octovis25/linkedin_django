@@ -24,7 +24,7 @@ class WolkeAttrappe:
     Benutzung im Test::
 
         with self.wolke() as w:
-            w.dateien['Marketing & Design/x/bild.png'] = b'...'
+            w.dateien['Marketing_and_Design/x/bild.png'] = b'...'
             w.loeschen_scheitert_mit = 'Datei gesperrt (423)'
             antwort = self.client.post(...)
 

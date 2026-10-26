@@ -73,8 +73,8 @@ class OjListe(TransactionTestCase):
         self.assertNotIn('id="post-%d"' % firma, html)
 
     def test_missing_medium_and_studio_draft_are_marked(self):
-        bild = self.post(image='Marketing & Design/LinkedIn/Planner/Images/b.png')
-        film = self.post(video='Marketing & Design/x/a.mp4')
+        bild = self.post(image='Marketing_and_Design/LinkedIn/Planner/Images/b.png')
+        film = self.post(video='Marketing_and_Design/x/a.mp4')
         entwurf = self.post()
         nichts = self.post()
         with connection.cursor() as c:

@@ -74,7 +74,7 @@ class Paths(ClientTest):
         self.assertEqual(self.nc.calls, [])
 
     def test_listing_never_shows_anything_outside_the_root(self):
-        self.nc.add_file('Marketing & Design/secret.png')
+        self.nc.add_file('Marketing_and_Design/secret.png')
         self.nc.add_file(ROOT + '/a.md')
         self.assertEqual([e.name for e in self.client.list_folder('')], ['a.md'])
 

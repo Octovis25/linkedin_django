@@ -14,7 +14,7 @@ from django.db import connection
 
 from .basis import BackendTest
 
-ORDNER = 'Marketing & Design/Octotrial_Assets/Studio_Work/Output/Images'
+ORDNER = 'Marketing_and_Design/Octotrial_Assets/Studio_Work/Output/Images'
 PFAD = ORDNER + '/bericht.png'
 GESPERRT = 'The file is locked in Nextcloud (423)'
 
@@ -75,7 +75,7 @@ class AusgabeLoeschen(BackendTest):
     def test_pfadwechsel_nach_oben_wird_abgelehnt(self):
         with self.wolke() as w:
             antwort = self.client.post(
-                self.URL, {'nc_path': 'Marketing & Design/../../etc/passwd'})
+                self.URL, {'nc_path': 'Marketing_and_Design/../../etc/passwd'})
         self.assertEqual(antwort.status_code, 400)
         self.assertEqual([], w.geloescht)
 
@@ -167,7 +167,7 @@ class UploadLoeschen(BackendTest):
     """POST /library/studio/upload/delete/ - darf nur im Upload-Ordner wirken."""
 
     URL = '/library/studio/upload/delete/'
-    UPLOAD = 'Marketing & Design/Octotrial_Assets/Studio_Work/Upload/roh.png'
+    UPLOAD = 'Marketing_and_Design/Octotrial_Assets/Studio_Work/Upload/roh.png'
 
     def test_gelingt(self):
         with self.wolke() as w:

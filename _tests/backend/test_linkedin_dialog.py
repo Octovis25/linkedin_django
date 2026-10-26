@@ -141,7 +141,7 @@ class LinkedInDialog(TransactionTestCase):
     def test_oj_video_goes_along_although_there_is_a_link(self):
         with connection.cursor() as c:
             c.execute("""UPDATE planner_posts SET planned_time='09:00:00', video_nc_path=%s, link=%s
-                         WHERE id=%s""", ['Marketing & Design/x/AI_SOP.webm',
+                         WHERE id=%s""", ['Marketing_and_Design/x/AI_SOP.webm',
                                           'https://octotrial.com/insights/x/', self.oj])
 
         def schritte(page):

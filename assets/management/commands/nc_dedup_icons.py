@@ -15,7 +15,7 @@ from requests.auth import HTTPBasicAuth
 from django.core.management.base import BaseCommand
 from posts_posted.nc_storage import _get_nc_credentials
 
-ASSETS_ROOT = "Marketing & Design/Octotrial_Assets"
+ASSETS_ROOT = "Marketing_and_Design/Octotrial_Assets"
 ICONS_PATH = f"{ASSETS_ROOT}/Icons"
 
 # Paare: (mit_leerzeichen, mit_unterstrich)

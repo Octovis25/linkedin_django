@@ -17,8 +17,8 @@ from django.core.management.base import BaseCommand
 from django.db import connection
 from posts_posted.nc_storage import _get_nc_credentials
 
-NEW_IMAGES = "Marketing & Design/Octotrial_Assets/Studio_Output/Images"
-NEW_VIDEOS = "Marketing & Design/Octotrial_Assets/Studio_Output/Videos"
+NEW_IMAGES = "Marketing_and_Design/Octotrial_Assets/Studio_Output/Images"
+NEW_VIDEOS = "Marketing_and_Design/Octotrial_Assets/Studio_Output/Videos"
 
 
 class Command(BaseCommand):

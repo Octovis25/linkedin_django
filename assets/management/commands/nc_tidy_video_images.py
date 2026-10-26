@@ -15,7 +15,7 @@ from django.core.management.base import BaseCommand
 from django.db import connection
 from posts_posted.nc_storage import _get_nc_credentials
 
-FOLDER = "Marketing & Design/Octotrial_Assets/Studio_Output/Video_Images"
+FOLDER = "Marketing_and_Design/Octotrial_Assets/Studio_Output/Video_Images"
 DATA = f"{FOLDER}/_data"
 
 

@@ -128,8 +128,8 @@ def pruefe(name, ok, extra=''):
         print('  FAIL ' + name + ('  -> ' + str(extra) if extra != '' else ''))
 
 
-VIDEO = 'Marketing & Design/LinkedIn/Planner/Videos/Trust_series.webm'
-BILD = 'Marketing & Design/LinkedIn/Planner/Images/Trust_series.png'
+VIDEO = 'Marketing_and_Design/LinkedIn/Planner/Videos/Trust_series.webm'
+BILD = 'Marketing_and_Design/LinkedIn/Planner/Images/Trust_series.png'
 
 print('\n=== A replaced medium goes back to the outputs ===')
 nc = FakeNc()
@@ -143,7 +143,7 @@ pruefe('nothing was deleted - there is no delete here at all',
 print('\n=== A file uploaded from a PC is no special case ===')
 nc = FakeNc()
 raum = baue(nc)
-pc = 'Marketing & Design/LinkedIn/Planner/Videos/WhatsApp_2026_09_18.mp4'
+pc = 'Marketing_and_Design/LinkedIn/Planner/Videos/WhatsApp_2026_09_18.mp4'
 neu = raum['_move_replaced_media_to_outputs'](pc)
 pruefe('it goes to the outputs like everything else',
        neu == OUT + 'WhatsApp_2026_09_18.mp4', neu)

@@ -1,5 +1,5 @@
 """
-Management command: Nextcloud Marketing & Design aufräumen.
+Management command: Nextcloud Marketing_and_Design aufräumen.
 
 Schritt 1: "Octovis Assets" → "Octotrial_Assets" umbenennen (MOVE)
 Schritt 2: Design-relevante Ordner/Dateien in Octotrial_Assets einsortieren
@@ -17,11 +17,11 @@ from django.core.management.base import BaseCommand
 from posts_posted.nc_storage import _get_nc_credentials
 from assets.nc_folders import FOLDER_TREE
 
-ROOT = "Marketing & Design"
-OLD_ASSETS = "Marketing & Design/Octovis Assets"
-NEW_ASSETS = "Marketing & Design/Octotrial_Assets"
+ROOT = "Marketing_and_Design"
+OLD_ASSETS = "Marketing_and_Design/Octovis Assets"
+NEW_ASSETS = "Marketing_and_Design/Octotrial_Assets"
 
-# Mapping: Quellordner in Marketing & Design → Ziel in Octotrial_Assets
+# Mapping: Quellordner in Marketing_and_Design → Ziel in Octotrial_Assets
 MOVE_MAP = {
     "Styleguide Octotrial":     "",                  # Styleguide → Root-Ebene
     "Logo":                     "Logos",             # Logo → Logos
@@ -42,7 +42,7 @@ FILE_MOVE_MAP = {
 
 
 class Command(BaseCommand):
-    help = "Nextcloud Marketing & Design aufräumen und in Octotrial_Assets einsortieren"
+    help = "Nextcloud Marketing_and_Design aufräumen und in Octotrial_Assets einsortieren"
 
     def add_arguments(self, parser):
         parser.add_argument("--apply", action="store_true", help="Tatsächlich ausführen (sonst Dry-Run)")
@@ -57,8 +57,8 @@ class Command(BaseCommand):
         base = f"{nc_url.rstrip('/')}/remote.php/dav/files/{username}"
         auth = HTTPBasicAuth(username, password)
 
-        # ── Schritt 0: Was liegt in Marketing & Design? ──
-        self.stdout.write("\n📂 Inhalt von Marketing & Design:")
+        # ── Schritt 0: Was liegt in Marketing_and_Design? ──
+        self.stdout.write("\n📂 Inhalt von Marketing_and_Design:")
         items = self._propfind(base, ROOT, auth, username)
         for it in items:
             icon = "📁" if it["is_dir"] else "📄"

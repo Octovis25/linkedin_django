@@ -27,7 +27,7 @@ class BackendTest(_Basis):
         views._SCHEMA_GEPRUEFT.update({'_ensure_table', '_ensure_studio_tables',
                                        '_ensure_video_template_table', '_ensure_brand_colors_table'})
 
-VORLAGEN = 'Marketing & Design/LinkedIn/Studio/Templates'
+VORLAGEN = 'Marketing_and_Design/LinkedIn/Studio/Templates'
 GROSS = 'data:image/png;base64,' + 'A' * 200000   # a layout with an embedded image
 
 
@@ -84,7 +84,7 @@ class GespeicherteAusgaben(BackendTest):
     URL = '/library/studio/api/saved/'
 
     def _bild(self, titel, canvas_json):
-        nc = 'Marketing & Design/Octotrial_Assets/Studio_Work/Output/Images/%s.png' % titel
+        nc = 'Marketing_and_Design/Octotrial_Assets/Studio_Work/Output/Images/%s.png' % titel
         with connection.cursor() as c:
             c.execute("INSERT INTO media_library_items (nc_path, title, series, tags) "
                       "VALUES (%s, %s, 'Studio', 'studio')", [nc, titel])
@@ -118,7 +118,7 @@ class ErneutSpeichern(BackendTest):
     def test_gif_bleibt_in_seinem_ordner(self):
         with connection.cursor() as c:
             c.execute("INSERT INTO media_library_items (nc_path, title, series, tags, folder_id) "
-                      "VALUES ('Marketing & Design/x/Alt.gif', 'Alt', 'Studio', 'gif', 7)")
+                      "VALUES ('Marketing_and_Design/x/Alt.gif', 'Alt', 'Studio', 'gif', 7)")
             lib_id = c.lastrowid
         with mock.patch('media_library.views._nc_upload', side_effect=lambda inhalt, pfad, typ: pfad):
             antwort = self.client.post(self.URL, {
@@ -131,7 +131,7 @@ class ErneutSpeichern(BackendTest):
     def test_ein_mitgeschickter_ordner_gilt_weiterhin(self):
         with connection.cursor() as c:
             c.execute("INSERT INTO media_library_items (nc_path, title, series, tags, folder_id) "
-                      "VALUES ('Marketing & Design/x/Clip.webm', 'Clip', 'Studio', 'video', 7)")
+                      "VALUES ('Marketing_and_Design/x/Clip.webm', 'Clip', 'Studio', 'video', 7)")
             lib_id = c.lastrowid
         with mock.patch('media_library.views._nc_upload', side_effect=lambda inhalt, pfad, typ: pfad):
             self.client.post(self.URL, {
@@ -170,7 +170,7 @@ class BildSpeichern(BackendTest):
         self.assertEqual(antwort.status_code, 200, antwort.content[:300])
         self.assertTrue(antwort.json()['ok'])
         # The PNG arrived byte for byte, and the layout was stored.
-        self.assertIn(('Marketing & Design/Octotrial_Assets/Studio_Work/Output/Images/Formular_Bild.png', len(PNG_1x1)),
+        self.assertIn(('Marketing_and_Design/Octotrial_Assets/Studio_Work/Output/Images/Formular_Bild.png', len(PNG_1x1)),
                       [(p, n) for p, n in self.pfade if p.endswith('Formular_Bild.png')])
         gespeichert = self.zeile("SELECT canvas_json FROM studio_images WHERE title=%s ORDER BY id DESC LIMIT 1",
                                  'Formular_Bild')[0]

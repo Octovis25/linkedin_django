@@ -12,7 +12,7 @@ from collectives.models import CollectivesConfig
 from .basis import BackendTest
 from .fake_nextcloud import FAKE_PASSWORD, FAKE_URL, FAKE_USER, FakeNextcloud
 
-VIDEO = 'Marketing & Design/LinkedIn/Planner/Videos/Requirements.webm'
+VIDEO = 'Marketing_and_Design/LinkedIn/Planner/Videos/Requirements.webm'
 
 
 class FileVersion(BackendTest):

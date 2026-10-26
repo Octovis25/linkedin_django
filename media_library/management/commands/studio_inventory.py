@@ -29,9 +29,9 @@ from django.db import connection
 
 # Die drei Wurzeln, die vereinheitlicht werden sollen.
 ROOTS = {
-    "Medienbibliothek": "Marketing & Design/LinkedIn/Medienbibliothek",
-    "Assets":           "Marketing & Design/Octotrial_Assets",
-    "Studio-Output":    "Marketing & Design/Octotrial_Assets/Studio_Output",
+    "Medienbibliothek": "Marketing_and_Design/LinkedIn/Medienbibliothek",
+    "Assets":           "Marketing_and_Design/Octotrial_Assets",
+    "Studio-Output":    "Marketing_and_Design/Octotrial_Assets/Studio_Output",
 }
 IMAGE_EXT = (".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg", ".bmp")
 

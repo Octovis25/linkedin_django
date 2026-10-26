@@ -12,7 +12,7 @@ from django.db import connection
 from django.conf import settings
 
 
-NC_LIBRARY_FOLDER = "Marketing & Design/LinkedIn/Medienbibliothek"
+NC_LIBRARY_FOLDER = "Marketing_and_Design/LinkedIn/Medienbibliothek"
 
 
 class Command(BaseCommand):

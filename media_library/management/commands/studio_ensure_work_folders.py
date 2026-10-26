@@ -14,7 +14,7 @@ Aufruf:
 """
 from django.core.management.base import BaseCommand
 
-WORK_ROOT = "Marketing & Design/Octotrial_Assets/Studio_Work"
+WORK_ROOT = "Marketing_and_Design/Octotrial_Assets/Studio_Work"
 SUBFOLDERS = ["Bilder", "Bewegte_Bilder", "Entwuerfe", "_data"]
 
 

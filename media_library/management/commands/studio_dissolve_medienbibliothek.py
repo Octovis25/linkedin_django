@@ -21,7 +21,7 @@ from urllib.parse import quote
 from django.core.management.base import BaseCommand
 from django.db import connection
 
-TARGET_FOLDER = "Marketing & Design/Octotrial_Assets/Studio_Work/Bilder"
+TARGET_FOLDER = "Marketing_and_Design/Octotrial_Assets/Studio_Work/Bilder"
 
 
 class Command(BaseCommand):

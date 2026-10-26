@@ -2,8 +2,8 @@
 Verschiebt bestehende Studio-Bilder und -Videos von den alten NC-Pfaden
 in die neue Octotrial_Assets-Struktur.
 
-Alt:  Marketing & Design/LinkedIn/Studio/Bibliothek/  → Neu: .../Studio_Output/Images/
-Alt:  Marketing & Design/LinkedIn/Studio/Videos/       → Neu: .../Studio_Output/Videos/
+Alt:  Marketing_and_Design/LinkedIn/Studio/Bibliothek/  → Neu: .../Studio_Output/Images/
+Alt:  Marketing_and_Design/LinkedIn/Studio/Videos/       → Neu: .../Studio_Output/Videos/
 
 Aktualisiert auch die DB-Einträge (media_library_items, studio_images, planner_posts).
 
@@ -19,10 +19,10 @@ from django.core.management.base import BaseCommand
 from django.db import connection
 from posts_posted.nc_storage import _get_nc_credentials
 
-OLD_IMAGES = "Marketing & Design/LinkedIn/Studio/Bibliothek"
-OLD_VIDEOS = "Marketing & Design/LinkedIn/Studio/Videos"
-NEW_IMAGES = "Marketing & Design/Octotrial_Assets/Studio_Output/Images"
-NEW_VIDEOS = "Marketing & Design/Octotrial_Assets/Studio_Output/Videos"
+OLD_IMAGES = "Marketing_and_Design/LinkedIn/Studio/Bibliothek"
+OLD_VIDEOS = "Marketing_and_Design/LinkedIn/Studio/Videos"
+NEW_IMAGES = "Marketing_and_Design/Octotrial_Assets/Studio_Output/Images"
+NEW_VIDEOS = "Marketing_and_Design/Octotrial_Assets/Studio_Output/Videos"
 
 
 class Command(BaseCommand):

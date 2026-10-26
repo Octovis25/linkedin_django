@@ -111,7 +111,7 @@ class Tutorials(Basis):
     def test_fremder_pfad_wird_abgelehnt(self):
         fid = self.neuer_film()
         status, _ = self.api('/tutorials/api/step/', action='create', film_id=fid,
-                             image_nc_path='Marketing & Design/Octotrial_Assets/Studio_Work/x.png')
+                             image_nc_path='Marketing_and_Design/Octotrial_Assets/Studio_Work/x.png')
         self.assertEqual(400, status)
         anderer = self.neuer_film('Other')
         status, _ = self.api('/tutorials/api/step/', action='create', film_id=fid,

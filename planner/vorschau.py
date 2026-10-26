@@ -23,7 +23,7 @@ from django.http import Http404, HttpResponse, HttpResponseNotModified
 
 BREITEN = (112, 240)          # 56 px card at 2x, larger tiles
 VIDEO_ENDUNGEN = ('.webm', '.mp4', '.mov', '.m4v')
-PLANNER_BILDER = 'Marketing & Design/LinkedIn/Planner/Images/'
+PLANNER_BILDER = 'Marketing_and_Design/LinkedIn/Planner/Images/'
 
 
 def schluessel(quelle, stand, breite):

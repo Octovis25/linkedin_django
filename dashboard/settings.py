@@ -73,6 +73,7 @@ MIDDLEWARE = [
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "audit.middleware.AuditTrailMiddleware",  # who changed what - see audit/
+    "core.nc_root.NcRootMiddleware",  # stored paths to Marketing_and_Design once - see core/nc_root.py
 ]
 
 ROOT_URLCONF = "dashboard.urls"

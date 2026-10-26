@@ -16,8 +16,8 @@ from django.core.management.base import BaseCommand
 from django.db import connection
 from posts_posted.nc_storage import _get_nc_credentials
 
-OLD_FOLDER = "Marketing & Design/LinkedIn/Studio/VideoVorlagen"
-NEW_FOLDER = "Marketing & Design/Octotrial_Assets/Studio_Output/Video_Images"
+OLD_FOLDER = "Marketing_and_Design/LinkedIn/Studio/VideoVorlagen"
+NEW_FOLDER = "Marketing_and_Design/Octotrial_Assets/Studio_Output/Video_Images"
 
 
 class Command(BaseCommand):

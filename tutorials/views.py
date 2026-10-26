@@ -47,7 +47,7 @@ TTS_STYLE = {
 }
 LANGS = ['en', 'de']
 
-NC_ROOT = 'Marketing & Design/Octotrial_Assets/Tutorials'
+NC_ROOT = 'Marketing_and_Design/Octotrial_Assets/Tutorials'
 
 IMAGE_TYPES = {'image/png': 'png', 'image/jpeg': 'jpg', 'image/webp': 'webp'}
 AUDIO_TYPES = {'audio/webm': 'webm', 'audio/ogg': 'ogg', 'audio/mp4': 'm4a',

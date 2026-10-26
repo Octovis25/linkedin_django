@@ -1,4 +1,4 @@
-NC_ASSETS_ROOT = "Marketing & Design/Octotrial_Assets"
+NC_ASSETS_ROOT = "Marketing_and_Design/Octotrial_Assets"
 
 FOLDER_TREE = [
     "Backgrounds", "Backgrounds/Workflows", "Backgrounds/Timelines", "Backgrounds/LinkedIn",

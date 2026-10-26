@@ -26,9 +26,9 @@ from collectives.models import CollectivesConfig
 from .basis import BackendTest
 from .fake_nextcloud import FAKE_PASSWORD, FAKE_URL, FAKE_USER, FakeNextcloud, ForeignHostError
 
-PLANNER_IMAGES = 'Marketing & Design/LinkedIn/Planner/Images'
-PLANNER_VIDEOS = 'Marketing & Design/LinkedIn/Planner/Videos'
-STUDIO_OUTPUT = 'Marketing & Design/Octotrial_Assets/Studio_Work/Output'
+PLANNER_IMAGES = 'Marketing_and_Design/LinkedIn/Planner/Images'
+PLANNER_VIDEOS = 'Marketing_and_Design/LinkedIn/Planner/Videos'
+STUDIO_OUTPUT = 'Marketing_and_Design/Octotrial_Assets/Studio_Work/Output'
 NC_ENV = ('NEXTCLOUD_URL', 'NEXTCLOUD_USER', 'NEXTCLOUD_APP_PASSWORD')
 
 
@@ -218,7 +218,7 @@ class PostsPostedStorageTests(NextcloudTest):
             upload_image_to_nextcloud(SimpleUploadedFile('a.png', b'x'), 'a.png')
         url = h.call_args[0][1]
         self.assertEqual(url, FAKE_URL + '/remote.php/dav/files/' + FAKE_USER
-                         + '/Marketing%20%26%20Design/LinkedIn/Planner/Images/a.png')
+                         + '/Marketing_and_Design/LinkedIn/Planner/Images/a.png')
 
     def test_download_returns_bytes_and_type(self):
         from posts_posted.nc_storage import download_image_from_nextcloud
@@ -283,28 +283,28 @@ class CoreExcelUploadTests(NextcloudTest):
 
     def test_creates_every_folder_level_then_puts(self):
         self.assertTrue(self.upload('followers'))
-        target = 'Marketing & Design/LinkedIn/Statistics/data/followers'
+        target = 'Marketing_and_Design/LinkedIn/Statistics/data/followers'
         self.assertEqual([c.path for c in self.nc.calls_of('MKCOL')],
-                         ['Marketing & Design', 'Marketing & Design/LinkedIn',
-                          'Marketing & Design/LinkedIn/Statistics',
-                          'Marketing & Design/LinkedIn/Statistics/data', target])
+                         ['Marketing_and_Design', 'Marketing_and_Design/LinkedIn',
+                          'Marketing_and_Design/LinkedIn/Statistics',
+                          'Marketing_and_Design/LinkedIn/Statistics/data', target])
         self.assertEqual(self.nc.files[target + '/export.xlsx'].content, b'XLSX')
 
     def test_existing_folders_are_fine_and_file_is_overwritten(self):
         self.upload('content', b'OLD')
         self.nc.calls.clear()
         self.assertTrue(self.upload('posts', b'NEW'))    # 'posts' maps to content/
-        p = 'Marketing & Design/LinkedIn/Statistics/data/content/export.xlsx'
+        p = 'Marketing_and_Design/LinkedIn/Statistics/data/content/export.xlsx'
         self.assertEqual(self.nc.files[p].content, b'NEW')
         self.assertEqual(self.nc.overwritten, [p])
 
     def test_unknown_type_goes_to_content(self):
         self.upload('something-else')
-        self.assertIn('Marketing & Design/LinkedIn/Statistics/data/content/export.xlsx',
+        self.assertIn('Marketing_and_Design/LinkedIn/Statistics/data/content/export.xlsx',
                       self.nc.files)
 
     def test_failed_put_returns_false(self):
-        self.nc.force[('PUT', 'Marketing & Design/LinkedIn/Statistics/data/content/export.xlsx')] = 507
+        self.nc.force[('PUT', 'Marketing_and_Design/LinkedIn/Statistics/data/content/export.xlsx')] = 507
         self.assertFalse(self.upload('content'))
 
 
@@ -413,12 +413,12 @@ class MediaLibraryNextcloudTests(NextcloudTest):
 
     def test_ensure_folder_sends_mkcol_per_level_and_ignores_existing(self):
         from media_library.views import _nc_ensure_folder
-        self.nc.add_folder('Marketing & Design')
-        _nc_ensure_folder(FAKE_URL, FAKE_USER, FAKE_PASSWORD, '/Marketing & Design/New/Deep/')
+        self.nc.add_folder('Marketing_and_Design')
+        _nc_ensure_folder(FAKE_URL, FAKE_USER, FAKE_PASSWORD, '/Marketing_and_Design/New/Deep/')
         self.assertEqual([c.path for c in self.nc.calls_of('MKCOL')],
-                         ['Marketing & Design', 'Marketing & Design/New',
-                          'Marketing & Design/New/Deep'])
-        self.assertIn('Marketing & Design/New/Deep', self.nc.folders)
+                         ['Marketing_and_Design', 'Marketing_and_Design/New',
+                          'Marketing_and_Design/New/Deep'])
+        self.assertIn('Marketing_and_Design/New/Deep', self.nc.folders)
 
     def test_upload_creates_parents_and_overwrites_silently(self):
         from media_library.views import _nc_upload
@@ -580,9 +580,9 @@ class AssetsNextcloudTests(NextcloudTest):
         from assets.nc_folders import FOLDER_TREE, ensure_nc_folders
         self.nc.folders = {''}                   # an empty Nextcloud
         ok, info = ensure_nc_folders()
-        self.assertFalse(ok)                     # 'Marketing & Design' itself is not created
+        self.assertFalse(ok)                     # 'Marketing_and_Design' itself is not created
         self.assertEqual(len(self.nc.calls_of('MKCOL')), 1 + len(FOLDER_TREE))
-        self.nc.add_folder('Marketing & Design')
+        self.nc.add_folder('Marketing_and_Design')
         self.nc.calls.clear()
         ok, info = ensure_nc_folders()
         self.assertTrue(ok, info)
@@ -611,9 +611,9 @@ class CollectivesNextcloudTests(NextcloudTest):
     def test_get_pages_reads_markdown_pages_of_the_collective(self):
         from collectives.views import get_pages
         c = CollectivesConfig.objects.get(pk=1)
-        c.kollektive_name = 'Marketing & Design'
+        c.kollektive_name = 'Marketing_and_Design'
         c.save()
-        base = 'Kollektive/Marketing & Design'
+        base = 'Kollektive/Marketing_and_Design'
         self.nc.add_file(base + '/Readme.md', b'# home', 'text/markdown')
         self.nc.add_file(base + '/Posts/Week 1.md', b'# w1', 'text/markdown')
         self.nc.add_file(base + '/Posts/.attachments/x.png')

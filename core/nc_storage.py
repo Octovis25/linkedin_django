@@ -2,7 +2,7 @@ import os
 import requests
 from urllib.parse import quote
 
-NC_BASE_PATH = "Marketing & Design/LinkedIn/Statistics/data"
+NC_BASE_PATH = "Marketing_and_Design/LinkedIn/Statistics/data"
 
 FOLDER_MAP = {
     'content':     'content',
@@ -73,7 +73,7 @@ def upload_image_to_nextcloud(file_path, filename):
         print("Nextcloud: keine Zugangsdaten")
         return False
     try:
-        nc_folder = "Marketing & Design/LinkedIn/Statistics/data/Post-Bilder/image_ready"
+        nc_folder = "Marketing_and_Design/LinkedIn/Statistics/data/Post-Bilder/image_ready"
         _ensure_folder(nc_url, username, password, nc_folder)
         nc_path = "{}/{}".format(nc_folder, filename)
         upload_url = "{}/remote.php/dav/files/{}/{}".format(

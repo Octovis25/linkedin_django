@@ -46,11 +46,11 @@ class PostEntwurf(BackendTest):
             return c.fetchall()
 
     def test_der_entwurf_haengt_am_post_und_oeffnet_sich_im_studio(self):
-        pid = self._post('Hidden workload', video='Marketing & Design/LinkedIn/Planner/Videos/v.mp4')
+        pid = self._post('Hidden workload', video='Marketing_and_Design/LinkedIn/Planner/Videos/v.mp4')
         antwort, opt = self._haengen(pid, 'Neu')
         self.assertEqual(antwort.status_code, 200, antwort.content)
         self.assertTrue(antwort.json()['ok'])
-        self.assertEqual(antwort.json()['nc_path'], 'Marketing & Design/LinkedIn/Planner/Videos/v.mp4')
+        self.assertEqual(antwort.json()['nc_path'], 'Marketing_and_Design/LinkedIn/Planner/Videos/v.mp4')
         daten = self._im_studio(pid)
         self.assertIn('"Neu"', daten['canvas_json'])
         # Embedded images go to the Studio's library folder, from the server.
@@ -58,7 +58,7 @@ class PostEntwurf(BackendTest):
         self.assertEqual(opt.call_args[0][1], NC_STUDIO_LIBRARY_FOLDER)
 
     def test_er_schlaegt_ein_aelteres_design_derselben_datei(self):
-        bild = 'Marketing & Design/LinkedIn/Planner/Images/b.png'
+        bild = 'Marketing_and_Design/LinkedIn/Planner/Images/b.png'
         pid = self._post('Mit Bild', bild=bild)
         with connection.cursor() as c:   # the design saved with the image earlier
             c.execute("INSERT INTO studio_images (nc_path, title, canvas_json, post_id) VALUES (%s,'Alt',%s,%s)",

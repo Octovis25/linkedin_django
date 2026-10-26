@@ -96,7 +96,7 @@ FAELLE = [
     ('bewegt.gif', '', 'image/gif'),
 ]
 for pfad, server, erwartet in FAELLE:
-    ist = medientyp('Marketing & Design/x/' + pfad, server)
+    ist = medientyp('Marketing_and_Design/x/' + pfad, server)
     pruefe('%-14s -> %s' % (pfad, erwartet), ist == erwartet, ist)
 
 print('\n=== Medientyp: die Serverangabe darf nicht schaden ===')
@@ -219,19 +219,19 @@ for b, h in [(1080, 1080), (1920, 1080), (300, 2000), (241, 241), (5000, 5000)]:
 pruefe('keine Verkleinerung ist groesser als ihr Original', not schieflagen, schieflagen)
 
 print('\n=== Vorschaubild: Cache-Schluessel ===')
-a = vorschau_schluessel('Marketing & Design/x/bild.png', 1700000000, 240)
-b = vorschau_schluessel('Marketing & Design/x/bild.png', 1700000000, 240)
+a = vorschau_schluessel('Marketing_and_Design/x/bild.png', 1700000000, 240)
+b = vorschau_schluessel('Marketing_and_Design/x/bild.png', 1700000000, 240)
 pruefe('gleiche Eingabe, gleicher Schluessel', a == b)
 pruefe('anderer Aenderungszeitpunkt -> anderer Schluessel',
-       a != vorschau_schluessel('Marketing & Design/x/bild.png', 1700000099, 240))
+       a != vorschau_schluessel('Marketing_and_Design/x/bild.png', 1700000099, 240))
 pruefe('andere Breite -> anderer Schluessel',
-       a != vorschau_schluessel('Marketing & Design/x/bild.png', 1700000000, 480))
+       a != vorschau_schluessel('Marketing_and_Design/x/bild.png', 1700000000, 480))
 pruefe('anderer Pfad -> anderer Schluessel',
-       a != vorschau_schluessel('Marketing & Design/x/anderes.png', 1700000000, 240))
+       a != vorschau_schluessel('Marketing_and_Design/x/anderes.png', 1700000000, 240))
 pruefe('der Schluessel ist ein sicherer Dateiname',
        a.isalnum() and 20 <= len(a) <= 64, a)
 pruefe('Umlaute und Leerzeichen im Pfad stoeren nicht',
-       vorschau_schluessel('Marketing & Design/Ordner mit Umlaut aeoeue/bild.png', 1, 240).isalnum())
+       vorschau_schluessel('Marketing_and_Design/Ordner mit Umlaut aeoeue/bild.png', 1, 240).isalnum())
 
 # Die Unterscheidbarkeit ist der ganze Zweck: Ohne den Aenderungszeitpunkt
 # zeigte ein neu gespeichertes Bild fuer immer seine alte Vorschau.

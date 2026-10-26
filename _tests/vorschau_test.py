@@ -75,10 +75,10 @@ px = r.convert('RGB').getpixel((50, 50))
 pruefe('A video shows its first frame (red, not the blue that follows)', px[0] > 180 and px[2] < 80, px)
 pruefe('as a small picture', r.size == (112, 112) and len(erstes) < 8000, (r.size, len(erstes)))
 
-pruefe('The picture wins over the video', v.quelle_des_posts('Marketing & Design/x.png', 'a.webm') == ('Marketing & Design/x.png', 'image'))
+pruefe('The picture wins over the video', v.quelle_des_posts('Marketing_and_Design/x.png', 'a.webm') == ('Marketing_and_Design/x.png', 'image'))
 pruefe('An old local name points to the planner folder', v.quelle_des_posts('planner/abc.png', '')[0] == v.PLANNER_BILDER + 'abc.png')
-pruefe('GIF is recognised', v.quelle_des_posts('', 'Marketing & Design/a.GIF')[1] == 'gif')
-pruefe('Video is recognised', v.quelle_des_posts('', 'Marketing & Design/a.webm')[1] == 'video')
+pruefe('GIF is recognised', v.quelle_des_posts('', 'Marketing_and_Design/a.GIF')[1] == 'gif')
+pruefe('Video is recognised', v.quelle_des_posts('', 'Marketing_and_Design/a.webm')[1] == 'video')
 pruefe('No media, no source', v.quelle_des_posts('', '') == (None, None))
 pruefe('The key changes with the post', v.schluessel('a', 1, 112) != v.schluessel('a', 2, 112))
 
@@ -91,9 +91,9 @@ from django.test import Client
 call_command('migrate', verbosity=0)
 with connection.cursor() as c:
     c.execute("CREATE TABLE planner_posts (id INTEGER PRIMARY KEY, image TEXT, video_nc_path TEXT, updated_at TEXT)")
-    c.execute("INSERT INTO planner_posts VALUES (1, 'Marketing & Design/LinkedIn/Planner/Images/a.png', '', '2026-10-13 10:00:00')")
+    c.execute("INSERT INTO planner_posts VALUES (1, 'Marketing_and_Design/LinkedIn/Planner/Images/a.png', '', '2026-10-13 10:00:00')")
     c.execute("INSERT INTO planner_posts VALUES (2, '', '', '2026-10-13 10:00:00')")
-    c.execute("INSERT INTO planner_posts VALUES (3, '', 'Marketing & Design/LinkedIn/Planner/Videos/v.webm', '2026-10-13 10:00:00')")
+    c.execute("INSERT INTO planner_posts VALUES (3, '', 'Marketing_and_Design/LinkedIn/Planner/Videos/v.webm', '2026-10-13 10:00:00')")
 abrufe = []
 v._rohdaten = lambda p: (abrufe.append(p), VIDEO if p.endswith('.webm') else PNG)[1]
 STAND = {'v': 'etag-1'}

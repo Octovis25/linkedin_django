@@ -15,8 +15,8 @@ from django.core.management.base import BaseCommand
 from django.db import connection
 from posts_posted.nc_storage import _get_nc_credentials
 
-NC_IMAGES = "Marketing & Design/Octotrial_Assets/Studio_Output/Images"
-NC_VIDEOS = "Marketing & Design/Octotrial_Assets/Studio_Output/Videos"
+NC_IMAGES = "Marketing_and_Design/Octotrial_Assets/Studio_Output/Images"
+NC_VIDEOS = "Marketing_and_Design/Octotrial_Assets/Studio_Output/Videos"
 
 
 class Command(BaseCommand):
@@ -100,8 +100,8 @@ class Command(BaseCommand):
             with connection.cursor() as c:
                 c.execute("SELECT id, title, preview_nc_path, canvas_json FROM studio_video_templates ORDER BY id")
                 rows = c.fetchall()
-            new_vt_folder = "Marketing & Design/Octotrial_Assets/Studio_Output/Video_Images"
-            old_vt_folder = "Marketing & Design/LinkedIn/Studio/VideoVorlagen"
+            new_vt_folder = "Marketing_and_Design/Octotrial_Assets/Studio_Output/Video_Images"
+            old_vt_folder = "Marketing_and_Design/LinkedIn/Studio/VideoVorlagen"
             for vtid, vt_title, prev_path, canvas_json in rows:
                 if not prev_path or new_vt_folder in prev_path:
                     self.stdout.write(f"  ✅ #{vtid} {vt_title} → bereits migriert")

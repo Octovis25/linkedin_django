@@ -19,8 +19,8 @@ class VideoEntfernen(TransactionTestCase):
         schema_aufbauen()
         with connection.cursor() as c:
             c.execute("""INSERT INTO planner_posts (title, content, status, image, video_nc_path)
-                         VALUES ('T', 'C', 'Review', 'Marketing & Design/LinkedIn/Planner/Images/a.png',
-                                 'Marketing & Design/LinkedIn/Planner/Videos/old.mp4')""")
+                         VALUES ('T', 'C', 'Review', 'Marketing_and_Design/LinkedIn/Planner/Images/a.png',
+                                 'Marketing_and_Design/LinkedIn/Planner/Videos/old.mp4')""")
             self.pid = c.lastrowid
         self.client.force_login(User.objects.create_user('ve', password='ve'))
 
@@ -38,8 +38,8 @@ class VideoEntfernen(TransactionTestCase):
     def test_nur_das_video_geht(self):
         antwort, zurueck = self.entfernen()
         self.assertTrue(antwort.json()['ok'])
-        self.assertEqual(('Marketing & Design/LinkedIn/Planner/Images/a.png', None), self.zeile())
-        self.assertEqual('Marketing & Design/LinkedIn/Planner/Videos/old.mp4', zurueck.call_args.args[0])
+        self.assertEqual(('Marketing_and_Design/LinkedIn/Planner/Images/a.png', None), self.zeile())
+        self.assertEqual('Marketing_and_Design/LinkedIn/Planner/Videos/old.mp4', zurueck.call_args.args[0])
 
     def test_veroeffentlichter_post_behaelt_die_datei(self):
         with connection.cursor() as c:

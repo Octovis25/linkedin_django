@@ -12,7 +12,7 @@ from django.test import override_settings
 
 from .basis import BackendTest
 
-ORDNER = 'Marketing & Design/Octotrial_Assets/Studio_Work/Output'
+ORDNER = 'Marketing_and_Design/Octotrial_Assets/Studio_Work/Output'
 VIDEO = ORDNER + '/Videos/clip.webm'
 BILD = ORDNER + '/Images/bericht.png'
 
@@ -194,7 +194,7 @@ class Ausgabenliste(BackendTest):
         from unittest import mock
 
         def gelesen(ordner, endungen=None):
-            if ordner.startswith('Marketing & Design/LinkedIn/Planner'):
+            if ordner.startswith('Marketing_and_Design/LinkedIn/Planner'):
                 return [{'name': 'b.png', 'title': 'b', 'nc_path': 'planner/b.png',
                          'url': '/u/b', 'mtime': 200}]
             return [{'name': 'a.png', 'title': 'a', 'nc_path': 'studio/a.png',

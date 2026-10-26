@@ -29,7 +29,7 @@ request fail the way the real server sometimes does (423 locked, 401, 507).
 Usage::
 
     with FakeNextcloud() as nc:
-        nc.add_folder('Marketing & Design/LinkedIn/Planner/Images')
+        nc.add_folder('Marketing_and_Design/LinkedIn/Planner/Images')
         ... call app code ...
         nc.calls      -> list of Call
         nc.files      -> {path: FakeFile}

@@ -7,9 +7,10 @@ from django.shortcuts import render, redirect
 from django.http import (JsonResponse, HttpResponse, Http404,
                          StreamingHttpResponse, FileResponse)
 from django.db import connection
+from core.nc_root import nc_pfad
 from django.contrib import messages
 
-NC_LIBRARY_FOLDER = "Marketing & Design/LinkedIn/Medienbibliothek"
+NC_LIBRARY_FOLDER = "Marketing_and_Design/LinkedIn/Medienbibliothek"
 
 
 def _safe(cur, sql, params=None):
@@ -444,18 +445,18 @@ def item_studio_info(request, item_id):
 # ─────────────────────────────────────────────
 #  NEXTCLOUD FOLDERS FOR STUDIO
 # ─────────────────────────────────────────────
-NC_STUDIO_TEMPLATES_FOLDER = "Marketing & Design/LinkedIn/Studio/Templates"
-NC_STUDIO_LIBRARY_FOLDER   = "Marketing & Design/Octotrial_Assets/Studio_Work/Output/Images"
-NC_STUDIO_VIDEOS_FOLDER    = "Marketing & Design/Octotrial_Assets/Studio_Work/Output/Videos"
-NC_STUDIO_GIFS_FOLDER      = "Marketing & Design/Octotrial_Assets/Studio_Work/Output/GIFs"
+NC_STUDIO_TEMPLATES_FOLDER = "Marketing_and_Design/LinkedIn/Studio/Templates"
+NC_STUDIO_LIBRARY_FOLDER   = "Marketing_and_Design/Octotrial_Assets/Studio_Work/Output/Images"
+NC_STUDIO_VIDEOS_FOLDER    = "Marketing_and_Design/Octotrial_Assets/Studio_Work/Output/Videos"
+NC_STUDIO_GIFS_FOLDER      = "Marketing_and_Design/Octotrial_Assets/Studio_Work/Output/GIFs"
 
 # One central definition of the app's own storage roots. Deleting is allowed
 # only inside these (protection against path traversal and deleting other
 # people's files). One source of truth instead of folder lists scattered through
-# individual views. "Marketing & Design" is the brand folder that holds ALL the
+# individual views. "Marketing_and_Design" is the brand folder that holds ALL the
 # app's media (Octotrial_Assets, LinkedIn/Planner, Bilder_Bibliothek …).
 NC_APP_ROOTS = (
-    "Marketing & Design/",   # gesamter Marken-Ordner (alle App-Medien)
+    "Marketing_and_Design/",   # gesamter Marken-Ordner (alle App-Medien)
     "__local__/",            # lokaler Fallback (kein Nextcloud)
 )
 
@@ -1207,7 +1208,7 @@ def studio_link_video(request):
     # Normalize bare filenames to the Planner/Videos folder.
     if not nc_path.startswith("Marketing"):
         filename = nc_path.split("/")[-1]
-        nc_path = f"Marketing & Design/LinkedIn/Planner/Videos/{filename}"
+        nc_path = f"Marketing_and_Design/LinkedIn/Planner/Videos/{filename}"
 
     title = nc_path.split("/")[-1]
     with connection.cursor() as c:
@@ -1717,7 +1718,7 @@ def studio_save(request):
         try:
             from planner.views import _nc_move
             fname = nc_path.rsplit('/', 1)[-1]
-            moved = _nc_move(nc_path, f"Marketing & Design/LinkedIn/Planner/Images/{fname}")
+            moved = _nc_move(nc_path, f"Marketing_and_Design/LinkedIn/Planner/Images/{fname}")
             if moved:
                 new_path = moved
         except Exception as e:
@@ -1849,7 +1850,7 @@ def studio_save_video(request):
         try:
             from planner.views import _nc_move
             fname = nc_path.rsplit('/', 1)[-1]
-            moved = _nc_move(nc_path, f"Marketing & Design/LinkedIn/Planner/Videos/{fname}")
+            moved = _nc_move(nc_path, f"Marketing_and_Design/LinkedIn/Planner/Videos/{fname}")
             if moved:
                 new_path = moved
         except Exception as e:
@@ -1922,7 +1923,7 @@ def studio_api_templates(request):
     return JsonResponse({'templates': data})
 
 
-NC_STUDIO_VIDEO_TEMPLATES_FOLDER = "Marketing & Design/Octotrial_Assets/Studio_Work/Bewegte_Bilder"
+NC_STUDIO_VIDEO_TEMPLATES_FOLDER = "Marketing_and_Design/Octotrial_Assets/Studio_Work/Bewegte_Bilder"
 
 
 @einmal_pro_prozess
@@ -2183,8 +2184,8 @@ def _vorschau_cache_stutzen(ordner, hoechstens=4000):
         print("Trimming the thumbnail cache:", e)
 
 
-NC_PLANNER_IMAGES_FOLDER = "Marketing & Design/LinkedIn/Planner/Images"
-NC_PLANNER_VIDEOS_FOLDER = "Marketing & Design/LinkedIn/Planner/Videos"
+NC_PLANNER_IMAGES_FOLDER = "Marketing_and_Design/LinkedIn/Planner/Images"
+NC_PLANNER_VIDEOS_FOLDER = "Marketing_and_Design/LinkedIn/Planner/Videos"
 
 # Where a finished output can live, and which extensions belong in which tab.
 # Reiter gehoeren.
@@ -2326,7 +2327,8 @@ def studio_thumb(request):
     may be cached forever without a stale image ever appearing: change the file
     and the address changes.
     """
-    nc_path = (request.GET.get('p') or '').strip()
+    # An address from before the folder move still names "Marketing & Design".
+    nc_path = nc_pfad((request.GET.get('p') or '').strip())
     if not nc_path or not _within_app_folders(nc_path):
         raise Http404
 
@@ -2424,7 +2426,8 @@ def studio_nc_image_proxy(request):
         save time - were not recognised. Such files were not fetchable this way
         at all, and the tile stayed grey.
     """
-    nc_path = (request.GET.get('p') or '').strip()
+    # An address from before the folder move still names "Marketing & Design".
+    nc_path = nc_pfad((request.GET.get('p') or '').strip())
     if not nc_path:
         raise Http404
     # The same limit as for deleting: the app's own folders only. Otherwise this
@@ -2698,7 +2701,7 @@ def studio_api_post_image(request, post_id):
     nc_path = rows[0][0]
     if not nc_path.startswith('Marketing') and not nc_path.startswith('__local__'):
         filename = nc_path.split('/')[-1]
-        nc_path = f"Marketing & Design/LinkedIn/Planner/Images/{filename}"
+        nc_path = f"Marketing_and_Design/LinkedIn/Planner/Images/{filename}"
     content, ct = download_image_from_nextcloud(nc_path)
     if not content:
         raise Http404
@@ -2707,7 +2710,7 @@ def studio_api_post_image(request, post_id):
     return resp
 
 
-NC_STUDIO_DIAGRAMS_FOLDER = "Marketing & Design/LinkedIn/Studio/Diagramme"
+NC_STUDIO_DIAGRAMS_FOLDER = "Marketing_and_Design/LinkedIn/Studio/Diagramme"
 
 
 @login_required
@@ -2760,7 +2763,7 @@ def studio_drawio_save(request):
 
 # ── Nextcloud-based library (folders and images from Octotrial_Assets) ──
 
-NC_ASSETS_ROOT = "Marketing & Design/Octotrial_Assets"
+NC_ASSETS_ROOT = "Marketing_and_Design/Octotrial_Assets"
 
 
 @login_required
@@ -2919,7 +2922,7 @@ def studio_nc_browse(request):
 
 # ── Shared assets (the shared NC folder for the image pool) ──
 
-NC_SHARED_ASSETS_FOLDER = "Marketing & Design/Bilder_Bibliothek"
+NC_SHARED_ASSETS_FOLDER = "Marketing_and_Design/Bilder_Bibliothek"
 
 
 @login_required
@@ -3095,7 +3098,7 @@ def studio_shared_assets_upload(request):
     return JsonResponse({'ok': True, 'name': filename, 'url': proxy_url, 'nc_path': nc_path, 'db_id': db_id})
 
 
-NC_STUDIO_UPLOAD_FOLDER = "Marketing & Design/Octotrial_Assets/Studio_Work/Upload"
+NC_STUDIO_UPLOAD_FOLDER = "Marketing_and_Design/Octotrial_Assets/Studio_Work/Upload"
 
 
 @login_required
@@ -3214,7 +3217,7 @@ def studio_shared_assets_delete(request):
     return JsonResponse({'ok': True})
 
 
-NC_STUDIO_ELEMENTE_NC_FOLDER = "Marketing & Design/Octotrial_Assets/Studio_Elemente"
+NC_STUDIO_ELEMENTE_NC_FOLDER = "Marketing_and_Design/Octotrial_Assets/Studio_Elemente"
 
 
 @login_required
