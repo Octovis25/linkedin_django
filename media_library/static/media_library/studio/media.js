@@ -4,7 +4,7 @@
 // see startOf()/elapsedAt() further down.
 // On playback, opacity, position, scale and angle are interpolated over time
 // and the canvas is rendered frame by frame.
-import { toast, status, herunterladen, dateiName } from './util.js';
+import { toast, status, herunterladen, dateiName, modal, eingestellteLaenge, laengeSetzen } from './util.js';
 import { fabric } from './editor.js';
 import { saveAnimation } from './io.js';
 
@@ -1442,12 +1442,39 @@ function restoreFit(editor) {
 }
 
 function animDuration(editor) {
-  // Manueller Längen-Regler hat Vorrang (Sekunden). Leer/0 = automatisch.
-  const el = document.getElementById('video-length');
-  const secs = el ? parseFloat(el.value) : 0;
+  // The Video length field comes first (seconds). Empty/0 = automatic.
   // Capped at 15 s: 30 s x 12 fps = 360 frames at 2.5 MB per copy = around
   // 900 MB in memory before the GIF encoding even starts, and the tab dies.
-  if (secs && secs > 0) return Math.min(secs, 15) * 1000;
+  const secs = eingestellteLaenge();
+  if (secs) return secs * 1000;
+  return autoDauer(editor, true);
+}
+
+// How long the piece needs so that every motion has finished - the automatic
+// length without its 8 s limit. An animation that ended at 10.3 s used to be
+// cut at 8 s without a word (#143).
+export function benoetigteDauer(editor) { return autoDauer(editor, false); }
+
+/* Before a GIF or video is saved: does its length cut the animation short?
+   Then the user decides. Returns false when the save is called off. */
+export async function laengePruefen(editor) {
+  const braucht = benoetigteDauer(editor);
+  const laeuft = animDuration(editor);
+  if (laeuft + 50 >= braucht) return true;
+  const sek = ms => Math.round(ms / 100) / 10;
+  const vorschlag = Math.min(15, Math.ceil(braucht / 500) / 2);   // the field's half-second steps
+  const was = eingestellteLaenge() ? 'Video length ' + sek(laeuft) + ' s'
+                                   : 'The automatic length (' + sek(laeuft) + ' s)';
+  const wahl = await modal('Video length cuts the animation',
+    was + ' cuts the animation – it needs ' + sek(braucht) + ' s.',
+    [{ label: 'Use ' + vorschlag + ' s', value: 'neu' },
+     { label: 'Keep ' + sek(laeuft) + ' s', value: 'alt' },
+     { label: 'Cancel', value: null }]);
+  if (wahl === 'neu') { laengeSetzen(vorschlag); return true; }
+  return wahl === 'alt';
+}
+
+function autoDauer(editor, mitGrenze) {
   readTempo();
   let max = 1500, hasLoop = false, lupenWeg = 0;
   editor.canvas.getObjects().forEach(o => {
@@ -1484,7 +1511,7 @@ function animDuration(editor) {
   // The ceiling grows with the tempo, otherwise a slowed piece is cut off -
   // but never past 15 s, which is where the GIF encoder runs out of memory.
   if (lupenWeg) return Math.min(Math.max(max, lupenWeg), 15000);
-  return Math.min(max, Math.min(8000 * _tempo, 15000));
+  return Math.min(max, mitGrenze ? Math.min(8000 * _tempo, 15000) : 15000);
 }
 
 // ---- Export as a moving image (WebM) --------------------------------------

@@ -1,7 +1,7 @@
 // studio.js – Einstiegspunkt. Verdrahtet DOM ↔ Module.
 import { CONFIG } from './config.js';
 import { Editor, fabric } from './editor.js';
-import { toast, status, modal, wegDamit, esc, hexNorm } from './util.js';
+import { toast, status, modal, wegDamit, esc, hexNorm, laengeAus, laengeSetzen } from './util.js';
 import * as bg from './background.js';
 import * as io from './io.js';
 // Namespace import: if an export is missing (because the browser has an old
@@ -336,6 +336,11 @@ async function speichereAls(kind) {
 
 async function _speichereAls(kind) {
   _saveKind = kind;
+  // A length that cuts the animation short is asked about first.
+  if ((kind === 'gif' || kind === 'video') && !(await media.laengePruefen(editor))) {
+    status('Not saved', '#888');
+    return;
+  }
   let ok;
   if (kind === 'gif')        ok = await media.exportGif(editor);
   else if (kind === 'video') ok = await media.exportVideo(editor);
@@ -431,6 +436,10 @@ const actions = {
       if (!wahl) return;
       kind = wahl;
       _saveKind = wahl;
+    }
+    if ((kind === 'gif' || kind === 'video') && !(await media.laengePruefen(editor))) {
+      status('Not saved', '#888');
+      return;
     }
     _speichertGerade = true;
     try {
@@ -623,7 +632,7 @@ const actions = {
     if (!CONFIG.postData?.canvas_json) return;
     if (!window.studioDarfVerlassen || window.studioDarfVerlassen()) {
       status('⏳ Loading draft…');
-      await ladeCanvas(CONFIG.postData.canvas_json);
+      await ladeCanvas(CONFIG.postData.canvas_json, { mitLaenge: true });
       status('Ready.', '#888');
     }
   },
@@ -1889,6 +1898,11 @@ if (CONFIG.libData?.item_id || CONFIG.libData?.nc_path) {
    in the fourth. */
 async function ladeCanvas(json, opts) {
   const ok = await io.restoreCanvas(editor, json, opts);
+  // A post's design brings its video length back. A template never does.
+  if (ok && opts?.mitLaenge) {
+    const sek = laengeAus(json);
+    if (sek) laengeSetzen(sek);
+  }
   if (ok) {
     const umgewandelt = media.rahmenAusAltenEffekten(editor);
     if (umgewandelt) {
@@ -1924,7 +1938,7 @@ function fehlendeBilder() {
     // - and the user took the half-empty editor for their file.
     if (post?.canvas_json) {
       status('⏳ Loading draft…');
-      if (await ladeCanvas(post.canvas_json, { frisch: true })) {
+      if (await ladeCanvas(post.canvas_json, { frisch: true, mitLaenge: true })) {
         const fehlen = fehlendeBilder();
         status(fehlen
           ? '⚠️ ' + fehlen + ' image(s) in this draft point at a file that is no longer there.'
@@ -1976,7 +1990,7 @@ function fehlendeBilder() {
     }
     if (libD?.canvas_json) {
       status('⏳ Loading draft…');
-      if (await ladeCanvas(libD.canvas_json, { frisch: true })) status('Ready.', '#888');
+      if (await ladeCanvas(libD.canvas_json, { frisch: true, mitLaenge: true })) status('Ready.', '#888');
       return;
     }
     if (libD?.image_url) {

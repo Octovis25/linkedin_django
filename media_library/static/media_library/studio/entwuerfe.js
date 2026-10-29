@@ -7,7 +7,7 @@
 // Opening one puts it on the canvas like a template - one undo step - and
 // saving works as always, for the post the Studio was opened for.
 import { URLS, CONFIG } from './config.js';
-import { toast, status, modal, readJson, esc } from './util.js';
+import { toast, status, modal, readJson, esc, laengeAus, laengeSetzen } from './util.js';
 
 export const DRAFT_FOLDER = 'Studio_Work/Drafts';
 const MERKEN_MS = 5 * 60 * 1000;     // one folder listing per five minutes
@@ -69,12 +69,8 @@ async function oeffnen(e) {
     const zustand = JSON.parse(text);            // unreadable -> the catch below, canvas untouched
     const geladen = await _laden(text);
     // A prepared video knows how long it should run.
-    const sek = +zustand.videoLength;
-    if (geladen && sek > 0) {
-      window._videoLen = String(sek);
-      const el = document.getElementById('video-length');
-      if (el) el.value = String(sek);
-    }
+    const sek = laengeAus(zustand);
+    if (geladen && sek) laengeSetzen(sek);
     status(geladen ? 'Draft “' + e.titel + '” opened.' : '⚠️ Draft opened, but not everything could be loaded.',
            geladen ? '#198754' : '#854F0B');
     return geladen;

@@ -1,7 +1,7 @@
 // io.js - saving and loading. Builds the PNG plus canvas_json and talks to the
 // existing Django backend (studio_save). A reload rebuilds the Fabric state exactly.
 import { URLS, POST_ID, CONFIG, getCookie, proxyUrl } from './config.js';
-import { toast, status, readJson, herunterladen, dateiName } from './util.js';
+import { toast, status, readJson, herunterladen, dateiName, eingestellteLaenge } from './util.js';
 import { fabric, EXTRA_PROPS, Editor } from './editor.js';
 import { beendeVorschauen, vorschauenUebernehmen } from './retouch.js';
 import { vorschlagAusInhalt, vergebeneNamen, eindeutig, entschaerfe, frageNachNamen } from './namen.js';
@@ -153,7 +153,10 @@ function pfadeEinebnen(zustand, fn) {
   }
 }
 
-export function buildCanvasJson(editor, previewDataUrl) {
+// videoLength: the Video length field, saved with a post's design so that the
+// next save runs just as long. Templates leave it out - a template's length
+// would cut every longer post built on it.
+export function buildCanvasJson(editor, previewDataUrl, videoLength = 0) {
   const fabricState = editor.canvas.toJSON(FABRIC_PROPS);
   // _snap-Hilfslinien nicht mitspeichern
   fabricState.objects = (fabricState.objects || []).filter(o => !o._snap);
@@ -171,6 +174,7 @@ export function buildCanvasJson(editor, previewDataUrl) {
     fabric: fabricState,
     objects,
     previewDataUrl: previewDataUrl || '',
+    ...(videoLength > 0 ? { videoLength } : {}),
   });
 }
 
@@ -245,7 +249,7 @@ async function _saveImage(editor) {
   if (editor._templateId) fd.append('templateId', editor._templateId);
   // The layout as a file part too: form fields count against the server's
   // upload limit for plain fields, files do not.
-  fd.append('canvasJson', new Blob([buildCanvasJson(editor, preview)], { type: 'application/json' }), 'layout.json');
+  fd.append('canvasJson', new Blob([buildCanvasJson(editor, preview, eingestellteLaenge())], { type: 'application/json' }), 'layout.json');
 
   try {
     const res = await fetch(URLS.save, {
@@ -299,7 +303,7 @@ export async function saveAnimation(editor, blob, ext) {
   const fd = new FormData();
   fd.append('video', blob, safe);
   fd.append('title', title);
-  fd.append('canvas_json', buildCanvasJson(editor, preview));
+  fd.append('canvas_json', buildCanvasJson(editor, preview, eingestellteLaenge()));
   // Send lib_item_id ONLY when the open output has the same format. Otherwise
   // the image entry was repurposed as the GIF entry: the PNG file stayed where
   // it was, but was no longer reachable through any entry and opened without

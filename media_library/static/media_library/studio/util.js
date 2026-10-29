@@ -132,3 +132,28 @@ export async function readJson(res) {
     throw new Error('Unexpected server response');
   }
 }
+
+// ---- Video length -----------------------------------------------------------
+// The "Video length" field under the canvas, in seconds; empty = automatic.
+// It is saved with a post's design and comes back when the post is opened
+// again. Before, reopening left the field empty, the Studio worked the length
+// out by itself, and a second save quietly cut the video (#143, #155).
+export function eingestellteLaenge() {
+  const el = document.getElementById('video-length');
+  const s = parseFloat(el ? el.value : window._videoLen);
+  return s > 0 ? Math.min(s, 15) : 0;
+}
+export function laengeSetzen(sek) {
+  const wert = sek > 0 ? String(Math.min(sek, 15)) : '';
+  window._videoLen = wert;
+  const el = document.getElementById('video-length');
+  if (el) el.value = wert;
+}
+// The length a saved design carries (its JSON text or the parsed object), or 0.
+export function laengeAus(zustand) {
+  try {
+    const z = typeof zustand === 'string' ? JSON.parse(zustand) : zustand;
+    const s = +(z && z.videoLength);
+    return s > 0 ? Math.min(s, 15) : 0;
+  } catch (e) { return 0; }
+}
