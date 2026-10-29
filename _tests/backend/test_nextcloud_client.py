@@ -1,8 +1,9 @@
 """Step 1 of the Nextcloud refactor: the new client for controlled documents.
 
-It may list, read and create - and nothing else. These tests make sure of
-that: the root cannot be left, an existing name is never overwritten, and
-there is no way to delete or move anything.
+It may list, read, create and - since 29.10.2026 - move a file into the
+folder "Archive" next to it, and nothing else. These tests make sure of that:
+the root cannot be left, an existing name is never overwritten, nothing can be
+deleted, and a move goes into an archive or nowhere.
 
     python _tests/backend/lauf.py test_nextcloud_client
 """
@@ -152,7 +153,7 @@ class NothingElse(ClientTest):
         public = {n for n, _ in inspect.getmembers(NextcloudClient, inspect.isfunction)
                   if not n.startswith('_')}
         self.assertEqual(public, {'list_folder', 'read_file', 'create_folder', 'create_file',
-                                  'full_path'})
+                                  'archive_file', 'full_path'})
 
     def test_no_dangerous_method_is_ever_sent(self):
         self.nc.add_file(ROOT + '/a.md')
@@ -168,5 +169,21 @@ class NothingElse(ClientTest):
         sent = set(self.nc.methods())
         self.assertTrue(sent <= {'PROPFIND', 'GET', 'MKCOL', 'PUT'}, sent)
         source = inspect.getsource(NextcloudClient)
-        for word in ("'DELETE'", "'MOVE'", "'COPY'", "'PROPPATCH'", "'LOCK'"):
+        for word in ("'DELETE'", "'COPY'", "'PROPPATCH'", "'LOCK'"):
             self.assertNotIn(word, source)
+        # MOVE is sent in one place only: archive_file, with Overwrite: F.
+        self.assertEqual(source.count("'MOVE'"), 1)
+        self.assertIn("'MOVE'", inspect.getsource(NextcloudClient.archive_file))
+
+    def test_archive_moves_into_archive_and_never_overwrites(self):
+        self.nc.add_file(ROOT + '/Specs/Archive/a.docx', b'FIRST')
+        self.nc.add_file(ROOT + '/Specs/a.docx', b'SECOND')
+        old, new = self.client.archive_file('Specs/a.docx')
+        self.assertEqual(old, 'Specs/a.docx')
+        self.assertTrue(new.startswith('Specs/Archive/a_') and new.endswith('.docx'), new)
+        self.assertEqual(self.nc.files[ROOT + '/Specs/Archive/a.docx'].content, b'FIRST')
+        self.assertEqual(self.nc.overwritten, [])
+        self.assertTrue(set(self.nc.methods()) <= {'PROPFIND', 'MKCOL', 'MOVE'}, self.nc.methods())
+        for bad in ('Specs/Archive/a.docx', 'Specs', '../x.docx'):
+            with self.assertRaises(NextcloudError):
+                self.client.archive_file(bad)

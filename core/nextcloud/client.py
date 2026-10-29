@@ -1,4 +1,4 @@
-"""A small, safe Nextcloud client: list, read, create. Nothing else.
+"""A small, safe Nextcloud client: list, read, create, archive. Nothing else.
 
 Why it exists (Nextcloud refactor, step 1, 14.10.2026): the app has four
 separate sets of WebDAV helpers, and every one of them overwrites silently.
@@ -12,10 +12,15 @@ What it can do:
     create_folder(path)          a new folder (error if it exists)
     create_file(path, content)   a new file - PUT with If-None-Match: *, so
                                  Nextcloud itself refuses an existing name
+    archive_file(path)           moves one file into the folder "Archive" next
+                                 to it (29.10.2026), so old versions stop piling
+                                 up. MOVE with Overwrite: F; a name taken in the
+                                 archive gets the date added, nothing is replaced
 
 What it cannot do, on purpose, and there is no hidden switch: overwrite,
-delete, move, copy, rename, share, change properties. The class has no
-method for it and never sends DELETE, MOVE, COPY, PROPPATCH or LOCK.
+delete, copy, rename, share, change properties, move anywhere but into an
+archive. The class has no method for it and never sends DELETE, COPY,
+PROPPATCH or LOCK; MOVE is sent only by archive_file, only into "Archive".
 
 Own credentials: the client never reads the LinkedIn app's settings. It is
 given URL, user and app password directly, or reads them from environment
@@ -30,6 +35,7 @@ anything is sent.
 No Django import: the module only needs `requests`, so it can be copied into
 a separate service unchanged.
 """
+import datetime
 import email.utils
 import os
 import posixpath
@@ -49,6 +55,11 @@ PROPFIND_BODY = (
     '</d:prop></d:propfind>'
 )
 DEFAULT_MAX_READ = 25 * 1024 * 1024        # 25 MB - Render has 512 MB
+ARCHIVE = 'Archive'                        # where archive_file puts old versions
+
+
+def _today():
+    return datetime.date.today().isoformat()
 
 
 # -- errors --------------------------------------------------------------------
@@ -271,8 +282,66 @@ class NextcloudClient:
         self._log('create_file', path, 'created, %d bytes' % len(content))
         return self._relative(full)
 
+    def archive_file(self, path):
+        """Move one file into the folder "Archive" next to it:
+        'SOPs/SOP-001_v1.docx' -> 'SOPs/Archive/SOP-001_v1.docx'. The archive
+        folder is created when it is missing. A name already taken there gets
+        the date, then a number: 'SOP-001_v1_2026-10-29.docx', '..._2.docx'.
+        Nothing is ever replaced - Overwrite: F lets Nextcloud itself refuse a
+        taken name. Only files, and not ones that are in an archive already.
+        Returns (old path, new path), both relative to the root."""
+        full = self.full_path(path)
+        if not full or full == self.root or str(path).endswith('/'):
+            raise PathNotAllowed('Name the file to archive')
+        parent, _, name = full.rpartition('/')
+        inside = self._relative(parent).split('/') if self._relative(parent) else []
+        if any(p.lower() == ARCHIVE.lower() for p in inside):
+            raise PathNotAllowed('%s is in an archive already' % path)
+        entry = self._stat(full, path)
+        if entry.is_folder:
+            raise PathNotAllowed('%s is a folder - only files can be archived' % path)
+
+        archive = (parent + '/' if parent else '') + ARCHIVE
+        r = self._request('MKCOL', archive)
+        if r.status_code not in (201, 405):          # 405: the archive is there already
+            self._log('archive_file', path, 'error %d (archive folder)' % r.status_code)
+            self._raise_for(r.status_code, self._relative(archive) or ARCHIVE)
+
+        stem, dot, ext = name.rpartition('.')
+        if not stem:                                 # '.env' or a name without a dot
+            stem, dot, ext = name, '', ''
+        names = [name] + ['%s_%s%s%s' % (stem, _today(), suffix, dot + ext if dot else '')
+                          for suffix in [''] + ['_%d' % i for i in range(2, 10)]]
+        for candidate in names:
+            target = archive + '/' + candidate
+            r = self._request('MOVE', full, headers={'Destination': self._dav_url(target),
+                                                     'Overwrite': 'F'})
+            if r.status_code == 201:
+                self._log('archive_file', path, 'moved to %s' % self._relative(target))
+                return self._relative(full), self._relative(target)
+            if r.status_code == 204:
+                # 204 means a file was REPLACED - which Overwrite: F must prevent.
+                self._log('archive_file', path, 'ERROR: server replaced an existing file')
+                raise NextcloudError('Nextcloud replaced a file in the archive although it was '
+                                     'told not to')
+            if r.status_code != 412:                 # 412: name taken, try the next one
+                self._log('archive_file', path, 'error %d' % r.status_code)
+                self._raise_for(r.status_code, path)
+        self._log('archive_file', path, 'no free name in the archive')
+        raise AlreadyExists('No free name for %s in %s' % (name, self._relative(archive) or ARCHIVE))
+
+    def _stat(self, full, what):
+        r = self._request('PROPFIND', full, data=PROPFIND_BODY,
+                          headers={'Depth': '0', 'Content-Type': 'application/xml'})
+        if r.status_code not in (207, 200):
+            self._raise_for(r.status_code, what)
+        entries = self._parse(r.content, '', keep_self=True)
+        if not entries:
+            raise NotFound('%s does not exist' % what)
+        return entries[0]
+
     # -- parsing ---------------------------------------------------------------
-    def _parse(self, xml_bytes, folder_full):
+    def _parse(self, xml_bytes, folder_full, keep_self=False):
         try:
             tree = ET.fromstring(xml_bytes)
         except ET.ParseError:
@@ -284,7 +353,7 @@ class NextcloudClient:
             pos = href.find(prefix)
             full = href[pos + len(prefix):] if pos >= 0 else href
             full = full.strip('/')
-            if full == folder_full.strip('/'):
+            if full == folder_full.strip('/') and not keep_self:
                 continue                         # the folder itself
             if self.root and not (full == self.root or full.startswith(self.root + '/')):
                 continue                         # never report anything outside the root
