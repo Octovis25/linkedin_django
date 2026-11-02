@@ -3626,6 +3626,11 @@ def api_buffer_profiles(request):
 
     data = json.loads(request.body)
     buf_token = data.get('token', '').strip()
+    if not buf_token:
+        # API Connect no longer puts the saved key into the page; an empty
+        # field means "use the key that is already saved".
+        saved = _li_get_token(request) or {}
+        buf_token = (saved.get('buffer_token') or '').strip()
 
     if not buf_token:
         return JsonResponse({'error': 'No token provided'}, status=400)

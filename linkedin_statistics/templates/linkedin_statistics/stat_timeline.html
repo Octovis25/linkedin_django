@@ -1,6 +1,8 @@
 {% extends "base.html" %}
 {% block title %}Statistics – Timeline{% endblock %}
 {% block content %}
+{{ post_data|json_script:"co-data" }}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 <style>
 /* ── Layout ── */
 .tl-page { max-width: 1200px; margin: 0 auto; }
@@ -170,61 +172,27 @@
 <!-- ══════════════ AGGREGATE TRENDS ══════════════ -->
 <div class="section-divider"><span>Aggregate Trends</span></div>
 
-<!-- Content Metrics -->
+<!-- Per period: impressions + engagement rate + CTR (01.11.2026: Content Metrics and Interactions in one) -->
 <div class="chart-card">
   <div class="chart-card-header">
-    <h2>📈 Content Metrics</h2>
+    <h2>📈 Per {{ group_by }}</h2>
     <span class="chart-badge badge-blue">Impressions</span>
     <span class="chart-badge badge-orange">Eng. Rate</span>
+    <span class="chart-badge badge-teal">CTR</span>
   </div>
   <div class="chart-card-body">
-    <canvas id="contentMetrics" height="100"></canvas>
-    <p class="chart-note">Impressions as bars · Engagement Rate (%) as line · Right axis capped at 45%</p>
+    <canvas id="perPeriod" height="100"></canvas>
+    <p class="chart-note">Bars = impressions of the page in the period (left). Lines = engagement rate and CTR (clicks per impression) of the posts published in the period, in % (right) – a period without a post has no rate. Hover for clicks, reactions, comments, shares and video views.</p>
   </div>
 </div>
 
-<!-- Interactions -->
-<div class="chart-card">
-  <div class="chart-card-header">
-    <h2>📊 Interactions</h2>
-    <span class="chart-badge badge-teal">{{ agg_text }}</span>
-  </div>
-  <div class="chart-card-body">
-    <canvas id="interaktionen" height="100"></canvas>
-    <p class="chart-note">Latest snapshot per post · grouped by publish date</p>
-  </div>
-</div>
-
-<!-- ══════════════ POST GROWTH CURVES ══════════════ -->
-<div class="section-divider"><span>Post Growth Curves</span></div>
-
-<!-- Top 10 recent -->
-<div class="chart-card">
-  <div class="chart-card-header">
-    <h2>🕐 Top 10 Most Recent Posts</h2>
-    <span class="chart-badge badge-blue">Days since publication</span>
-  </div>
-  <div class="chart-card-body">
-    <canvas id="chart-recent" height="90"></canvas>
-    <p class="chart-note">Impressions by day since publication — most recently published posts</p>
-  </div>
-</div>
-
-<!-- Top 10 by impressions -->
-<div class="chart-card">
-  <div class="chart-card-header">
-    <h2>🏆 Top 10 by Total Impressions</h2>
-    <span class="chart-badge badge-orange">Growth curve</span>
-  </div>
-  <div class="chart-card-body">
-    <canvas id="chart-top" height="90"></canvas>
-    <p class="chart-note">Impressions growth since publication — posts with the highest total reach</p>
-  </div>
-</div>
+<!-- ══════════════ POSTS ══════════════ -->
+<div class="section-divider"><span>Posts</span></div>
+{% include "linkedin_statistics/_post_timeline.html" with prefix="co" data_id="co-data" %}
+<script>window.postTimelines.co.setRange('{{ date_from|escapejs }}', '{{ date_to|escapejs }}');</script>
 
 </div><!-- /.tl-page -->
 
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
 /* ── Data ── */
 const labels          = {{ chart_labels_json|safe }};
@@ -239,108 +207,41 @@ const viewsData       = {{ chart_views_json|safe }};
 /* shared axis style */
 const axisStyle = { grid: { color: 'rgba(0,0,0,.05)' }, ticks: { color: '#6c757d', font: { size: 11 } } };
 
-/* ── 1. Content Metrics ── */
+/* ── Per period: one chart instead of "Content Metrics" + "Interactions" ── */
+const ctrData = {{ chart_ctr_json|safe }};
 if (labels && labels.length) {
-  new Chart(document.getElementById('contentMetrics').getContext('2d'), {
+  new Chart(document.getElementById('perPeriod').getContext('2d'), {
     data: {
       labels,
       datasets: [
-        { type:'bar',  label:'Impressions',       data:impressionsData,
-          backgroundColor:'rgba(0,119,181,0.55)', borderColor:'rgba(0,119,181,0.8)',
-          borderWidth:1, yAxisID:'y', order:2 },
-        { type:'line', label:'Engagement Rate (%)', data:engagementData,
-          borderColor:'rgba(245,110,40,1)', backgroundColor:'rgba(245,110,40,0.1)',
-          borderWidth:2, pointRadius:3, tension:0.35, fill:true, yAxisID:'y1', order:1 }
+        { type:'bar',  label:'Impressions', data:impressionsData,
+          backgroundColor:'rgba(32,184,176,0.55)', borderColor:'rgba(32,184,176,0.9)', borderWidth:1, yAxisID:'y', order:3 },
+        { type:'line', label:'Eng. rate %', data:engagementData.map((x, i) => ctrData[i] == null ? null : x), spanGaps:true,
+          borderColor:'#EB6E08', backgroundColor:'#EB6E08', borderWidth:2, pointRadius:3, tension:0.35, yAxisID:'y1', order:1 },
+        { type:'line', label:'CTR %', data:ctrData, spanGaps:true,
+          borderColor:'#005F68', backgroundColor:'#005F68', borderWidth:2, pointRadius:3, tension:0.35, borderDash:[5,4], yAxisID:'y1', order:2 }
       ]
     },
     options: {
       responsive:true,
       interaction:{ mode:'index', intersect:false },
-      plugins:{ legend:{ position:'top', labels:{ boxWidth:12, font:{ size:11 } } } },
+      plugins:{
+        legend:{ position:'top', labels:{ boxWidth:12, font:{ size:11 } } },
+        tooltip:{ callbacks:{
+          label: it => it.dataset.yAxisID === 'y1' ? ` ${it.dataset.label}: ${it.parsed.y.toFixed(1)} %` : ` ${it.dataset.label}: ${it.parsed.y}`,
+          afterBody: it => { const i = it[0].dataIndex;
+            return [`Clicks: ${clicksData[i]}`, `Reactions: ${reactionsData[i]}`, `Comments: ${commentsData[i]}`, `Shares: ${sharesData[i]}`]
+              .concat(viewsData && viewsData[i] ? [`Video views: ${viewsData[i]}`] : []); } } }
+      },
       scales: {
-        x: { ...axisStyle, ticks:{ ...axisStyle.ticks, maxRotation:45, minRotation:0 } },
-        y:  { ...axisStyle, title:{ display:true, text:'Impressions', color:'#495057', font:{size:11} },
-              beginAtZero:true, position:'left' },
-        y1: { ...axisStyle, title:{ display:true, text:'Eng. Rate %', color:'#495057', font:{size:11} },
-              beginAtZero:true, max:45, position:'right', grid:{ drawOnChartArea:false } }
+        x:  { ...axisStyle, ticks:{ ...axisStyle.ticks, maxRotation:45, minRotation:0 } },
+        y:  { ...axisStyle, title:{ display:true, text:'Impressions', color:'#495057', font:{size:11} }, beginAtZero:true, position:'left' },
+        y1: { ...axisStyle, title:{ display:true, text:'%', color:'#495057', font:{size:11} }, beginAtZero:true, position:'right',
+              grid:{ drawOnChartArea:false }, ticks:{ ...axisStyle.ticks, callback: x => x + ' %' } }
       }
     }
   });
 }
 
-/* ── 2. Interactions ── */
-const hasViews = viewsData && viewsData.some(v => v > 0);
-if (labels && labels.length) {
-  const ds = [
-    { label:'Clicks',          data:clicksData,    backgroundColor:'rgba(59,130,200,0.75)',  borderWidth:0 },
-    { label:'Likes/Reactions', data:reactionsData, backgroundColor:'rgba(210,60,70,0.75)',   borderWidth:0 },
-    { label:'Comments',        data:commentsData,  backgroundColor:'rgba(240,140,50,0.75)',  borderWidth:0 },
-    { label:'Shares',          data:sharesData,    backgroundColor:'rgba(29,158,117,0.75)',  borderWidth:0 },
-  ];
-  if (hasViews) ds.push({ label:'Views', data:viewsData, backgroundColor:'rgba(120,80,200,0.7)', borderWidth:0 });
-  new Chart(document.getElementById('interaktionen').getContext('2d'), {
-    type:'bar',
-    data:{ labels, datasets:ds },
-    options: {
-      responsive:true,
-      interaction:{ mode:'index', intersect:false },
-      plugins:{ legend:{ position:'top', labels:{ boxWidth:12, font:{ size:11 } } } },
-      scales: {
-        x: { ...axisStyle, ticks:{ ...axisStyle.ticks, maxRotation:45, minRotation:0 } },
-        y: { ...axisStyle, title:{ display:true, text:'Count', color:'#495057', font:{size:11} }, beginAtZero:true }
-      }
-    }
-  });
-}
-
-/* ── 3 & 4. Per-post growth curves ── */
-const postColors = ['#0077B5','#e53935','#1D9E75','#F56E28','#9C27B0','#607D8B','#00ACC1','#7CB342','#FF7043','#795548'];
-
-function buildGrowthChart(canvasId, data) {
-  const el = document.getElementById(canvasId);
-  if (!data || !data.length) {
-    el.insertAdjacentHTML('afterend','<p style="text-align:center;color:#6c757d;padding:1.5rem 0;font-size:.85rem">No data available.</p>');
-    el.remove();
-    return;
-  }
-  const maxDay = Math.max(...data.flatMap(p => p.days), 30);
-  const dayLabels = Array.from({length: maxDay}, (_, i) => i + 1);
-  const datasets = data.map((p, i) => {
-    const d = new Array(maxDay).fill(null);
-    p.days.forEach((day, j) => { if (day >= 1 && day <= maxDay) d[day-1] = p.impressions[j]; });
-    return {
-      label: p.title,
-      data: d,
-      borderColor: postColors[i % postColors.length],
-      backgroundColor: postColors[i % postColors.length] + '18',
-      borderWidth: 2,
-      tension: 0.35,
-      fill: false,
-      spanGaps: true,
-      pointRadius: 2,
-      pointHoverRadius: 5,
-    };
-  });
-  new Chart(el, {
-    type:'line',
-    data:{ labels:dayLabels, datasets },
-    options: {
-      responsive:true,
-      interaction:{ mode:'index', intersect:false },
-      plugins:{ legend:{ position:'bottom', labels:{ boxWidth:10, font:{ size:10 }, padding:12 } } },
-      scales: {
-        x: { ...axisStyle,
-             title:{ display:true, text:'Days since publication', color:'#495057', font:{size:11} },
-             ticks:{ ...axisStyle.ticks, maxTicksLimit:20 } },
-        y: { ...axisStyle,
-             title:{ display:true, text:'Impressions', color:'#495057', font:{size:11} },
-             beginAtZero:true, ticks:{ ...axisStyle.ticks, precision:0 } }
-      }
-    }
-  });
-}
-
-buildGrowthChart('chart-recent', {{ top5_json|safe }});
-buildGrowthChart('chart-top',    {{ top_impressions_json|safe }});
 </script>
 {% endblock %}

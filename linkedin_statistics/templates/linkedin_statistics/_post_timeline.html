@@ -1,0 +1,233 @@
+{% comment %}
+Timeline of single posts + sortable post table that drives it (01.11.2026).
+Used by Statistics → Timeline (company page) and Statistics → OJ profile.
+
+    {% include "linkedin_statistics/_post_timeline.html" with prefix="oj" data_id="oj-data" %}
+
+The page renders {{ data|json_script:data_id }} with
+    today      ISO date
+    posts      [{id, date, title, full, img, days, m: {metric: value}}]
+    timelines  {post id: [{day, date, metric: value}]}   (day 0 = day of posting)
+    cfg        {chips, cols, detail, mini, maxGap, note, fetchUrl, csrf}
+and calls  window.postTimelines[prefix].setRange(from, to)  whenever its period changes.
+{% endcomment %}
+<style>
+.ptl { --muted:#868e96; --line:#e9ecef; }
+.ptl .card { background:#fff; border-radius:.5rem; box-shadow:0 1px 4px rgba(0,0,0,.08); margin-bottom:1.2rem; }
+.ptl .ch { display:flex; align-items:center; flex-wrap:wrap; gap:.6rem; padding:.85rem 1.2rem .6rem; border-bottom:1px solid #f0f0f0; }
+.ptl .ch h2 { margin:0; font-size:1rem; color:var(--octo-dark-petrol); }
+.ptl .ch .right { margin-left:auto; display:flex; gap:.5rem; align-items:center; flex-wrap:wrap; }
+.ptl .cb { padding:1rem 1.2rem; }
+.ptl .chips { display:flex; gap:.3rem; flex-wrap:wrap; }
+.ptl .chips button { border:1px solid #dee2e6; background:#fff; border-radius:99px; padding:.2rem .65rem; font-size:.76rem; cursor:pointer; color:#495057; }
+.ptl .chips button.on { background:var(--octo-petrol); border-color:var(--octo-petrol); color:#fff; }
+.ptl .btn { padding:.32rem 1rem; background:var(--octo-petrol); color:#fff; border:0; border-radius:.3rem; font-weight:600; font-size:.82rem; cursor:pointer; }
+.ptl .btn.light { background:#fff; color:var(--octo-petrol); border:1px solid var(--octo-petrol); }
+.ptl .lbl { font-size:.78rem; color:#495057; display:flex; align-items:center; gap:.3rem; }
+.ptl .tl { display:grid; grid-template-columns:1fr 250px; gap:1rem; } @media(max-width:900px){ .ptl .tl { grid-template-columns:1fr; } }
+.ptl .leg { display:flex; flex-direction:column; gap:.35rem; max-height:330px; overflow:auto; }
+.ptl .leg div { display:flex; align-items:center; gap:.5rem; font-size:.76rem; line-height:1.2; cursor:pointer; padding:.15rem; border-radius:4px; }
+.ptl .leg div:hover { background:#f1f8f8; }
+.ptl .leg img, .ptl .leg .ph { width:34px; height:34px; border-radius:4px; object-fit:cover; flex:none; background:#e9f4f4; border:3px solid transparent; }
+.ptl .leg .t { overflow:hidden; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; }
+.ptl .leg b { display:block; font-size:.7rem; color:var(--muted); font-weight:400; }
+.ptl .note { font-size:.76rem; color:var(--muted); margin-top:.6rem; }
+.ptl .muted { color:#adb5bd; }
+.ptl table.ptt { width:100%; border-collapse:collapse; font-size:.83rem; }
+.ptl .ptt th { font-size:.68rem; text-transform:uppercase; letter-spacing:.04em; color:var(--muted); text-align:right; padding:.55rem .5rem; border-bottom:1px solid var(--line); white-space:nowrap; cursor:pointer; user-select:none; }
+.ptl .ptt th.l, .ptl .ptt td.l { text-align:left; } .ptl .ptt th:hover { color:var(--octo-petrol); } .ptl .ptt th.nos { cursor:default; }
+.ptl .ptt td { padding:.35rem .5rem; border-bottom:1px solid #f1f3f5; text-align:right; white-space:nowrap; }
+.ptl .ptt td.t { text-align:left; white-space:normal; min-width:240px; }
+.ptl .ptt td.i { width:56px; padding:.3rem .4rem; }
+.ptl .ptt td.i img, .ptl .ptt td.i .ph { width:44px; height:44px; border-radius:5px; object-fit:cover; display:block; background:#e9f4f4; border:3px solid transparent; }
+.ptl .ptt td.c { width:34px; text-align:center; } .ptl .ptt td.x { width:28px; color:#adb5bd; cursor:pointer; text-align:center; }
+.ptl .ptt tr.post { cursor:pointer; } .ptl .ptt tr.sel td { background:#f3fafa; } .ptl .ptt tr.post:hover td { background:#eef8f8; }
+.ptl .ptt tr.det td { background:#fbfdfd; text-align:left; white-space:normal; padding:.8rem 1rem .9rem; }
+.ptl .ib { display:flex; align-items:center; gap:.45rem; justify-content:flex-end; }
+.ptl .ib .bar { width:80px; height:6px; background:#eef1f2; border-radius:3px; overflow:hidden; } .ptl .ib .bar i { display:block; height:100%; background:#20B8B0; }
+.ptl .badge { font-size:.62rem; font-weight:700; padding:.04rem .38rem; border-radius:99px; margin-left:.25rem; }
+.ptl .b-top { background:#EB6E08; color:#fff; } .ptl .b-avg { background:#E1F5EE; color:#0F6E56; }
+.ptl .pill { display:inline-block; font-size:.66rem; padding:.04rem .4rem; border-radius:99px; background:#FEF0E8; color:#C04A0A; margin-left:.3rem; }
+.ptl .dot { display:inline-block; width:10px; height:10px; border-radius:50%; margin-right:.35rem; vertical-align:middle; }
+.ptl .dg { display:grid; grid-template-columns:repeat(auto-fit,minmax(120px,1fr)); gap:.6rem; margin-bottom:.7rem; }
+.ptl .dg div { background:#fff; border:1px solid #edf0f1; border-radius:6px; padding:.4rem .6rem; }
+.ptl .dg em { display:block; font-style:normal; font-size:.68rem; color:var(--muted); text-transform:uppercase; letter-spacing:.04em; }
+.ptl .dg b { font-size:1.05rem; color:var(--octo-dark-petrol); } .ptl .dg .vid b { color:#C04A0A; }
+.ptl .mini { display:grid; grid-template-columns:1fr 150px; gap:.8rem; align-items:start; } @media(max-width:800px){ .ptl .mini { grid-template-columns:1fr; } }
+.ptl .mtg { display:flex; flex-direction:column; gap:.3rem; }
+.ptl .mtg button { display:flex; align-items:center; gap:.4rem; border:1px solid #dee2e6; background:#fff; border-radius:6px; padding:.25rem .5rem; font-size:.75rem; cursor:pointer; color:#adb5bd; text-align:left; }
+.ptl .mtg button i { width:10px; height:10px; border-radius:2px; flex:none; opacity:.35; }
+.ptl .mtg button.on { color:#212529; border-color:#adb5bd; } .ptl .mtg button.on i { opacity:1; }
+.ptl .full { font-size:.8rem; color:#495057; margin:.2rem 0 .6rem; max-width:900px; white-space:pre-line; }
+.ptl .full a { color:var(--octo-petrol); }
+</style>
+
+<div class="ptl" id="{{ prefix }}-ptl">
+  <div class="card"><div class="ch"><h2>Timeline</h2>
+      <div class="chips" data-r="mode"><button data-v="cum" class="on">Cumulative</button><button data-v="day">Daily</button></div>
+      <label class="lbl"><input type="checkbox" data-r="engov"> + Eng. rate %</label>
+      <div class="right chips" data-r="metric"></div></div>
+    <div class="cb"><div class="tl"><div style="height:330px"><canvas data-r="chart"></canvas></div><div class="leg" data-r="leg"></div></div>
+      <div class="note" data-r="note"></div></div></div>
+
+  <div class="card"><div class="ch"><h2>Posts</h2><span class="muted" data-r="cnt" style="font-size:.8rem"></span>
+      <div class="right"><label class="lbl"><input type="checkbox" data-r="follow" checked> Timeline follows the sort: first <select data-r="topn"><option>3</option><option selected>5</option><option>10</option></select></label>
+        <button class="btn light" type="button" data-r="clear">Clear</button><span data-r="extra"></span></div></div>
+    <div style="overflow-x:auto"><table class="ptt"><thead><tr data-r="head"></tr></thead><tbody data-r="rows"></tbody></table></div>
+    <div class="cb note" style="margin:0;padding-top:.6rem">Sort by a column – the timeline then shows the first posts of that order. Tick ⏱ to compare exactly those posts. Click a row for all numbers and its own course.</div></div>
+</div>
+
+<script>
+(() => {
+const ROOT = document.getElementById('{{ prefix|escapejs }}-ptl');
+const D = JSON.parse(document.getElementById('{{ data_id|escapejs }}').textContent);
+const CFG = D.cfg, P = D.posts, TL = D.timelines;
+const COL = ['#008591','#EB6E08','#6B21A8','#185FA5','#B8860B','#0F6E56','#A61B1B','#5C6BC0','#20B8B0','#7A7A7A'];
+const R = k => ROOT.querySelector(`[data-r="${k}"]`);
+const fmtD = s => { const [y, m, d] = s.split('-'); return `${d}.${m}.${y}`; };
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'}[c]));
+const v = (p, k) => p.m[k];
+const n = x => x == null ? '<span class="muted">–</span>' : (Number.isInteger(x) ? x : (+x).toFixed(1));
+const pct = x => x == null ? '<span class="muted">–</span>' : (+x).toFixed(1) + ' %';
+const img = (p, col) => p.img
+  ? `<img src="${esc(p.img)}" alt="" loading="lazy" referrerpolicy="no-referrer" style="border-color:${col || 'transparent'}" onerror="this.outerHTML='<div class=&quot;ph&quot; style=&quot;border-color:${col || 'transparent'}&quot;></div>'">`
+  : `<div class="ph" style="border-color:${col || 'transparent'}"></div>`;
+if (window.Chart) { Chart.defaults.font.family = getComputedStyle(document.body).fontFamily; Chart.defaults.color = '#555'; }
+
+let from = '0000', to = '9999', mode = 'cum', sk = 'date', sd = -1, metric = CFG.chips[0][0], sel = [], hidden = new Set(), rows = [], open = new Set(), chart;
+R('note').innerHTML = CFG.note;
+R('metric').innerHTML = CFG.chips.map((c, i) => `<button data-v="${c[0]}"${i ? '' : ' class="on"'}>${esc(c[1])}</button>`).join('');
+R('head').innerHTML = '<th class="nos c" title="Show in the timeline">⏱</th><th class="nos"></th><th class="l" data-k="date">Date</th><th class="l" data-k="title">Post</th>'
+  + '<th data-k="impressions" style="min-width:150px">Impressions</th>' + CFG.cols.map(c => `<th data-k="${c[0]}">${esc(c[1])}</th>`).join('') + '<th class="nos"></th>';
+if (CFG.fetchUrl) R('extra').innerHTML = `<form method="post" action="${esc(CFG.fetchUrl)}" style="margin:0"><input type="hidden" name="csrfmiddlewaretoken" value="${esc(CFG.csrf)}"><button class="btn" type="submit" title="Ask Buffer now instead of waiting for 14:00">Fetch now</button></form>`;
+
+// ── course of one post ──
+const points = (p, k) => (TL[p.id] || []).filter(d => d[k] != null).map(d => ({x: d.day, y: +d[k]}));
+// Fetches more than maxGap days apart are not joined (the line breaks there);
+// Daily = difference to the previous fetch, spread over the days in between.
+// Rates (engagement rate, CTR) are always shown as they are.
+function series(p, k, m) {
+  const c = points(p, k), out = [], gapMax = CFG.maxGap;
+  if ((m || mode) === 'cum' || CFG.rates.includes(k)) {
+    c.forEach((pt, i) => { if (i && pt.x - c[i - 1].x > gapMax) out.push({x: c[i - 1].x + 1, y: null}); out.push(pt); });
+    return out;
+  }
+  // A post starts at 0: the first fetch is compared with "nothing yet" the day
+  // before posting, so a first export on day 3 shows its total spread over days 0-3.
+  [{x: -1, y: 0}].concat(c).forEach((pt, i, all) => {
+    if (i === 0) return;
+    const prev = all[i - 1], gap = pt.x - prev.x;
+    if (gap <= 0) return;
+    if (gap > gapMax) { out.push({x: Math.max(0, prev.x + 1), y: null}); return; }
+    const per = (pt.y - prev.y) / gap;
+    for (let d = prev.x + 1; d <= pt.x; d++) out.push({x: d, y: +per.toFixed(2)});
+  });
+  return out;
+}
+const colorOf = id => { const i = sel.indexOf(id); return i < 0 ? null : COL[i % COL.length]; };
+
+function sortRows() {
+  const g = p => sk === 'date' || sk === 'title' ? p[sk] : (v(p, sk) ?? -1);
+  rows = P.filter(p => p.date >= from && p.date <= to).sort((a, b) => { const x = g(a), y = g(b); return (x > y ? 1 : x < y ? -1 : 0) * sd; });
+}
+function refresh() {
+  sortRows();
+  if (R('follow').checked) { sel = rows.slice(0, +R('topn').value).map(p => p.id); hidden.clear(); }
+  else sel = sel.filter(id => rows.some(p => p.id === id));
+  draw();
+}
+
+
+// ── the chart of one opened post: all its numbers, switchable on the right ──
+const miniOn = {};             // post id -> Set of shown metrics (kept while the page is open)
+const MINI_DEFAULT = ['impressions', 'clicks', 'reach', 'reactions', 'engagementRate'];
+function drawMini(cv) {
+  const p = P.find(q => q.id === cv.dataset.mini);
+  if (!p) return;
+  const avail = CFG.mini.filter(([k]) => points(p, k).length);
+  if (!miniOn[p.id]) miniOn[p.id] = new Set(avail.map(m => m[0]).filter(k => MINI_DEFAULT.includes(k)));
+  const on = miniOn[p.id];
+  const box = cv.closest('.mini');
+  box.querySelector('.mtg').innerHTML = avail.map(([k, lab, col]) =>
+    `<button type="button" data-k="${k}" class="${on.has(k) ? 'on' : ''}"><i style="background:${col}"></i>${esc(lab)}</button>`).join('');
+  box.querySelectorAll('.mtg button').forEach(b => b.onclick = ev => {
+    ev.stopPropagation();
+    on.has(b.dataset.k) ? on.delete(b.dataset.k) : on.add(b.dataset.k);
+    drawMini(cv);
+  });
+  const ds = [];
+  avail.filter(([k]) => on.has(k)).forEach(([k, lab, col, ax]) => {
+    const d = series(p, k);
+    if (!d.length) return;
+    const extra = ax === 'y2' ? {borderDash: [5, 4], borderWidth: 1.5, pointRadius: 0}
+                : ax === 'y1' ? {borderWidth: 1.5, pointRadius: 2, stepped: mode === 'cum'} : {};
+    ds.push(Object.assign({type: 'line', label: lab, data: d, spanGaps: false, borderColor: col, backgroundColor: col, yAxisID: ax, pointRadius: 2, tension: mode === 'day' ? 0 : .3, borderWidth: 2}, extra));
+  });
+  const xmax = Math.max(30, ...ds.flatMap(s => s.data.map(q => q.x)));
+  if (cv._chart) cv._chart.destroy();
+  cv._chart = new Chart(cv, {data: {datasets: ds}, options: {maintainAspectRatio: false, animation: false, interaction: {mode: 'index', intersect: false},
+    plugins: {legend: {display: false}, tooltip: {callbacks: {title: it => 'Day ' + it[0].parsed.x}}},
+    scales: {x: {type: 'linear', min: 0, max: xmax, ticks: {stepSize: 5, font: {size: 10}}, grid: {display: false}, title: {display: true, text: 'Days after posting', font: {size: 10}}},
+      y: {display: ds.some(s => s.yAxisID === 'y'), beginAtZero: true, ticks: {font: {size: 10}}, grid: {color: '#f1f3f5'}},
+      y1: {display: ds.some(s => s.yAxisID === 'y1'), beginAtZero: true, position: 'right', ticks: {font: {size: 10}, precision: 0}, grid: {display: false}},
+      y2: {display: ds.some(s => s.yAxisID === 'y2'), beginAtZero: true, position: 'right', ticks: {font: {size: 10}, callback: x => x + ' %'}, grid: {display: false}}}}});
+}
+
+function draw() {
+  R('cnt').textContent = `${rows.length} posts · ${sel.length} in the timeline`;
+  const mx = Math.max(1, ...rows.map(p => v(p, 'impressions') || 0));
+  const av = rows.length ? rows.reduce((a, p) => a + (v(p, 'impressions') || 0), 0) / rows.length : 0;
+  const ncol = 6 + CFG.cols.length;
+  R('rows').innerHTML = rows.map(p => {
+    const c = colorOf(p.id), imp = v(p, 'impressions') || 0, vid = v(p, 'views') != null && v(p, 'views') > 0, o = open.has(p.id);
+    return `<tr class="post${c ? ' sel' : ''}" data-id="${esc(p.id)}"><td class="c"><input type="checkbox" ${c ? 'checked' : ''}></td><td class="i">${img(p, c)}</td>
+      <td class="l">${c ? `<span class="dot" style="background:${c}"></span>` : ''}${fmtD(p.date)}</td><td class="t">${esc(p.title) || '<span class="muted">(no text)</span>'}${vid || p.video ? '<span class="pill">▶ video</span>' : ''}</td>
+      <td><div class="ib"><b>${imp}</b><span class="bar"><i style="width:${imp / mx * 100}%"></i></span></div>${imp === mx && rows.length > 1 ? '<span class="badge b-top">Top</span>' : imp > av ? '<span class="badge b-avg">above Ø</span>' : ''}</td>`
+      + CFG.cols.map(cl => `<td>${cl[2] === 'pct' ? pct(v(p, cl[0])) : n(v(p, cl[0]))}</td>`).join('')
+      + `<td class="x">${o ? '▾' : '▸'}</td></tr>`
+      + (o ? `<tr class="det"><td colspan="${ncol}"><div class="full">${esc(p.full || p.title)}${p.link ? ` · <a href="${esc(p.link)}" target="_blank" rel="noopener">open on LinkedIn</a>` : ''}</div><div class="dg">`
+        + CFG.detail.filter(dt => dt[2] !== 'vid' || vid).map(dt => `<div class="${dt[2] || ''}"><em>${esc(dt[1])}</em><b>${dt[3] === 'pct' ? pct(v(p, dt[0])) : n(v(p, dt[0]))}${dt[3] === 'min' && v(p, dt[0]) != null ? ' min' : ''}</b></div>`).join('')
+        + `<div><em>Impressions vs Ø</em><b>${av ? (imp >= av ? '+' : '') + Math.round((imp / av - 1) * 100) : 0} %</b></div><div><em>Days tracked</em><b>${p.days}</b></div></div>
+        <div class="mini"><div style="height:240px"><canvas data-mini="${esc(p.id)}"></canvas></div><div class="mtg"></div></div>
+        <div class="note" style="margin-top:.3rem">All numbers of this post in one chart – switch them on and off on the right. Impressions, reach and views on the left axis, clicks, reactions, comments and shares on the right, dashed = rates in %. ${mode === 'day' ? 'Daily: what came in on each day (a post starts at 0 on the day it went out).' : 'Cumulative: total up to each day.'}${p.days < 2 ? ' Only one fetch so far – the course grows with each fetch.' : ''}</div></td></tr>` : '');
+  }).join('') || `<tr><td colspan="${ncol}" class="l muted">No posts in this period.</td></tr>`;
+  ROOT.querySelectorAll('.ptt th[data-k]').forEach(th => { th.textContent = th.textContent.replace(/ [▲▼]$/, ''); if (th.dataset.k === sk) th.textContent += sd < 0 ? ' ▼' : ' ▲'; });
+  R('rows').querySelectorAll('tr.post').forEach(tr => {
+    const id = tr.dataset.id;
+    tr.querySelector('input').onclick = e => { e.stopPropagation(); R('follow').checked = false; sel = sel.includes(id) ? sel.filter(x => x !== id) : [...sel, id]; draw(); };
+    tr.onclick = () => { open.has(id) ? open.delete(id) : open.add(id); draw(); };
+  });
+  if (window.Chart) ROOT.querySelectorAll('canvas[data-mini]').forEach(cv => drawMini(cv));
+
+  const ps = sel.map(id => P.find(p => p.id === id)).filter(Boolean);
+  R('leg').innerHTML = ps.map(p => `<div data-id="${esc(p.id)}" style="opacity:${hidden.has(p.id) ? .35 : 1}">${img(p, colorOf(p.id))}<span class="t"><b>${fmtD(p.date)} · ${n(v(p, metric))}</b>${esc(p.title)}</span></div>`).join('') || '<span class="muted" style="font-size:.8rem">Tick posts in the table.</span>';
+  R('leg').querySelectorAll('div[data-id]').forEach(d => d.onclick = () => { const id = d.dataset.id; hidden.has(id) ? hidden.delete(id) : hidden.add(id); draw(); });
+  if (chart) chart.destroy();
+  if (!window.Chart) return;
+  const ov = R('engov').checked, ds = [];
+  ps.filter(p => !hidden.has(p.id)).forEach(p => {
+    const c = colorOf(p.id);
+    ds.push({label: fmtD(p.date) + ' ' + p.title.slice(0, 30), data: series(p, metric).filter(q => q.x <= 30), spanGaps: false, borderColor: c, backgroundColor: c, tension: mode === 'day' ? 0 : .3, pointRadius: 2.5, borderWidth: 2.2, yAxisID: 'y'});
+    if (ov) ds.push({label: 'Eng. rate · ' + fmtD(p.date), data: series(p, 'engagementRate').filter(q => q.x <= 30), spanGaps: false, borderColor: c, backgroundColor: c, borderDash: [5, 4], borderWidth: 1.5, pointRadius: 0, tension: .3, yAxisID: 'y2'});
+  });
+  chart = new Chart(R('chart'), {type: 'line', data: {datasets: ds},
+    options: {maintainAspectRatio: false, animation: false, interaction: {mode: 'nearest', intersect: false},
+      plugins: {legend: {display: false}, tooltip: {callbacks: {title: it => 'Day ' + it[0].parsed.x, label: it => it.dataset.yAxisID === 'y2' ? ` ${it.dataset.label}: ${it.parsed.y.toFixed(1)} %` : ` ${it.dataset.label}: ${it.parsed.y}`}}},
+      scales: {x: {type: 'linear', min: 0, max: 30, ticks: {stepSize: 5}, title: {display: true, text: 'Days after posting'}, grid: {color: '#f1f3f5'}},
+        y: {beginAtZero: true, grid: {color: '#f1f3f5'}, title: {display: true, text: R('metric').querySelector('.on').textContent + (mode === 'day' && !CFG.rates.includes(metric) ? ' per day' : '')}},
+        y2: {display: ov, position: 'right', beginAtZero: true, grid: {display: false}, title: {display: true, text: 'Eng. rate % (dashed)'}, ticks: {callback: x => x + ' %'}}}}});
+}
+
+const chips = (el, cb) => el.querySelectorAll('button').forEach(b => b.onclick = () => { el.querySelectorAll('button').forEach(x => x.classList.toggle('on', x === b)); cb(b.dataset.v); });
+chips(R('mode'), m => { mode = m; draw(); });
+chips(R('metric'), k => { metric = k; draw(); });
+ROOT.querySelectorAll('.ptt th[data-k]').forEach(th => th.onclick = () => { const k = th.dataset.k; sd = (sk === k) ? -sd : -1; sk = k; refresh(); });
+R('engov').onchange = draw;
+R('follow').onchange = refresh;
+R('topn').onchange = () => { R('follow').checked = true; refresh(); };
+R('clear').onclick = () => { R('follow').checked = false; sel = []; draw(); };
+
+window.postTimelines = window.postTimelines || {};
+window.postTimelines['{{ prefix|escapejs }}'] = { setRange(f, t) { from = f; to = t; refresh(); } };
+})();
+</script>

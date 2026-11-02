@@ -128,7 +128,7 @@ def _chart_content_metrics(d_from, d_to, group_by):
     return labels, imps, eng_rate
 
 
-def _chart_interactions(d_from, d_to, group_by):
+def _chart_interactions(d_from, d_to, group_by, with_ctr=False):
     """
     Chart 2: Interactions (Clicks, Likes, Comments, Shares, Views) + Engagement Rate.
     All metrics from linkedin_posts_metrics – latest snapshot per post,
@@ -164,11 +164,12 @@ def _chart_interactions(d_from, d_to, group_by):
 
     all_labels = _all_periods(d_from, d_to, group_by)
     if not all_labels:
-        return [], [], [], [], [], [], []
+        return ([], [], [], [], [], [], [], []) if with_ctr else ([], [], [], [], [], [], [])
 
     views_list = _views_series(d_from, d_to, group_by)
 
     labels, clicks, reactions, comments, shares, eng_rate, views = [], [], [], [], [], [], []
+    ctr = []   # clicks per impression of the posts published in the period, in %
     for i, lbl in enumerate(all_labels):
         cli, rea, com, sha, imp = db_data.get(lbl, (0, 0, 0, 0, 0))
         labels.append(lbl)
@@ -179,7 +180,10 @@ def _chart_interactions(d_from, d_to, group_by):
         views.append(views_list[i] if i < len(views_list) else 0)
         total_int = rea + com + sha
         eng_rate.append(round((total_int / imp * 100) if imp else 0, 2))
+        ctr.append(round(cli / imp * 100, 2) if imp else None)   # no post in the period: no rate
 
+    if with_ctr:
+        return labels, clicks, reactions, comments, shares, eng_rate, views, ctr
     return labels, clicks, reactions, comments, shares, eng_rate, views
 
 
@@ -372,158 +376,20 @@ def timeline(request):
     d_to     = request.GET.get('to', dt)
     group_by = request.GET.get('group_by', 'month')
 
-    # Alle Posts laden
-    all_posts = []
-    with connection.cursor() as c:
-        rows = _safe(c, """
-            SELECT lp.post_id, COALESCE(lp.post_title, lp.post_id),
-                   COALESCE(pp.post_date, lp.post_date),
-                   lp.post_url, lp.content_type,
-                   COALESCE(m.impressions,0), COALESCE(m.likes,0),
-                   COALESCE(m.comments,0), COALESCE(m.direct_shares,0),
-                   COALESCE(m.clicks,0), m.views
-            FROM linkedin_posts lp
-            LEFT JOIN linkedin_posts_posted pp ON lp.post_id = pp.post_id
-            LEFT JOIN linkedin_posts_metrics m ON lp.post_id = m.post_id
-                AND m.metric_date = (
-                    SELECT MAX(m2.metric_date) FROM linkedin_posts_metrics m2
-                    WHERE m2.post_id = m.post_id)
-            ORDER BY COALESCE(pp.post_date, lp.post_date) DESC
-        """)
-        if rows:
-            for r in rows:
-                all_posts.append({
-                    'post_id': r[0], 'title': r[1], 'post_date': r[2],
-                    'link': r[3] or '', 'content_type': r[4] or '',
-                    'impressions': r[5], 'likes': r[6], 'comments': r[7],
-                    'shares': r[8], 'clicks': r[9], 'views': r[10],
-                })
-
-        # Top 10 aktuellste Posts
-        top5_raw = _safe(c, """
-            SELECT lp.post_id, COALESCE(lp.post_title, lp.post_id)
-            FROM linkedin_posts lp
-            LEFT JOIN linkedin_posts_posted pp ON lp.post_id = pp.post_id
-            INNER JOIN linkedin_posts_metrics m ON lp.post_id = m.post_id
-            WHERE m.metric_date = (
-                SELECT MAX(m2.metric_date) FROM linkedin_posts_metrics m2
-                WHERE m2.post_id = m.post_id)
-            ORDER BY COALESCE(pp.post_date, lp.post_date) DESC LIMIT 10
-        """)
-        # Top 10 nach Impressionen
-        top_imp_raw = _safe(c, """
-            SELECT lp.post_id, COALESCE(lp.post_title, lp.post_id)
-            FROM linkedin_posts lp
-            INNER JOIN linkedin_posts_metrics m ON lp.post_id = m.post_id
-            WHERE m.metric_date = (
-                SELECT MAX(m2.metric_date) FROM linkedin_posts_metrics m2
-                WHERE m2.post_id = m.post_id)
-            ORDER BY m.impressions DESC LIMIT 10
-        """)
-
-        top5_json = []
-        # max_days = Tage seit ältestem Post bis heute
-        import datetime
-        oldest = _safe(c, "SELECT MIN(DATE(created_at)) FROM linkedin_posts WHERE created_at IS NOT NULL")
-        if oldest and oldest[0][0]:
-            max_days = (datetime.date.today() - oldest[0][0]).days + 1
-        else:
-            max_days = 30
-        if top5_raw:
-            for post_id, title in top5_raw:
-                detail = _safe(c, """
-                    SELECT metric_date, impressions
-                    FROM linkedin_posts_metrics
-                    WHERE post_id = %s
-                    ORDER BY metric_date
-                """, [post_id])
-                if detail:
-                    # Tag 1 = Post-Erstelldatum aus linkedin_posts
-                    post_date_row = _safe(c, """
-                        SELECT COALESCE(DATE(lp.created_at), pp.post_date)
-                        FROM linkedin_posts lp
-                        LEFT JOIN linkedin_posts_posted pp ON lp.post_id = pp.post_id
-                        WHERE lp.post_id = %s
-                    """, [post_id])
-                    import datetime
-                    if post_date_row and post_date_row[0][0]:
-                        first_date = post_date_row[0][0]
-                        if isinstance(first_date, datetime.datetime):
-                            first_date = first_date.date()
-                    else:
-                        first_date = detail[0][0]
-                    days, impressions = [], []
-                    import datetime
-                    today_day = (datetime.date.today() - first_date).days + 1
-                    for row in detail:
-                        day_nr = (row[0] - first_date).days + 1
-                        if day_nr >= 1:
-                            days.append(day_nr)
-                            impressions.append(int(row[1] or 0))
-                    # Ersten Wert auch an Tag 1 setzen damit Linie von Tag 1 startet
-                    if days and days[0] > 1:
-                        days.insert(0, 1)
-                        impressions.insert(0, impressions[0])
-                    # Letzten Wert bis heute verlängern
-                    if days and days[-1] < today_day:
-                        days.append(today_day)
-                        impressions.append(impressions[-1])
-                    max_days = max(max_days, max(days))
-                    top5_json.append({
-                        'title': title[:40],
-                        'days': days,
-                        'impressions': impressions,
-                    })
-
-        # Top Impressions Chart Daten aufbauen
-        top_imp_json = []
-        if top_imp_raw:
-            for post_id, title in top_imp_raw:
-                detail = _safe(c, """
-                    SELECT metric_date, impressions
-                    FROM linkedin_posts_metrics
-                    WHERE post_id = %s
-                    ORDER BY metric_date
-                """, [post_id])
-                if detail:
-                    post_date_row = _safe(c, """
-                        SELECT COALESCE(DATE(lp.created_at), pp.post_date)
-                        FROM linkedin_posts lp
-                        LEFT JOIN linkedin_posts_posted pp ON lp.post_id = pp.post_id
-                        WHERE lp.post_id = %s
-                    """, [post_id])
-                    import datetime
-                    if post_date_row and post_date_row[0][0]:
-                        first = post_date_row[0][0]
-                        if isinstance(first, datetime.datetime):
-                            first = first.date()
-                    else:
-                        first = detail[0][0]
-                    days, impressions = [], []
-                    today_day = (datetime.date.today() - first).days + 1
-                    for row in detail:
-                        day_nr = (row[0] - first).days + 1
-                        if day_nr >= 1:
-                            days.append(day_nr)
-                            impressions.append(int(row[1] or 0))
-                    if days and days[0] > 1:
-                        days.insert(0, 1)
-                        impressions.insert(0, impressions[0])
-                    if days and days[-1] < today_day:
-                        days.append(today_day)
-                        impressions.append(impressions[-1])
-                    top_imp_json.append({'title': title[:40], 'days': days, 'impressions': impressions})
+    # Post timeline + table (01.11.2026, same as under OJ profile) - replaces
+    # the two fixed growth charts "10 most recent" and "10 by impressions".
+    from . import company_posts
+    posts, timelines = company_posts.posts_and_timelines()
+    post_data = {'today': date.today().isoformat(), 'posts': posts, 'timelines': timelines,
+                 'cfg': company_posts.CFG}
 
     # Charts: Content Metrics + Interactions (same as Overview)
     tl_labels, tl_imps, _ = _chart_content_metrics(d_from, d_to, group_by)
-    _, tl_clicks, tl_reactions, tl_comments, tl_shares, tl_eng_rate, tl_views = \
-        _chart_interactions(d_from, d_to, group_by)
+    _, tl_clicks, tl_reactions, tl_comments, tl_shares, tl_eng_rate, tl_views, tl_ctr = \
+        _chart_interactions(d_from, d_to, group_by, with_ctr=True)
 
     return render(request, 'linkedin_statistics/stat_timeline.html', {
-        'all_posts': all_posts,
-        'top5_json': json.dumps(top5_json),
-        'top_impressions_json': json.dumps(top_imp_json),
-        'max_days':  max_days,
+        'post_data': post_data,
         'date_from': d_from, 'date_to': d_to,
         'tab': 'timeline', 'group_by': group_by,
         'agg_text': _agg_text(group_by),
@@ -535,6 +401,7 @@ def timeline(request):
         'chart_shares_json':      json.dumps(tl_shares),
         'chart_views_json':       json.dumps(tl_views),
         'chart_engagement_json':  json.dumps(tl_eng_rate),
+        'chart_ctr_json':         json.dumps(tl_ctr),
     })
 
 

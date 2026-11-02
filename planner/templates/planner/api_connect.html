@@ -190,7 +190,8 @@
 
   <form method="post" id="buf-form">
     {% csrf_token %}
-    <input type="hidden" name="buffer_token" id="buf-token-hidden" value="{{ token.buffer_token|default:'' }}">
+    {# The saved key is never written into the page: an empty field keeps it (COALESCE in api_connect_view). #}
+    <input type="hidden" name="buffer_token" id="buf-token-hidden" value="">
     <input type="hidden" name="buffer_profile_id" id="buf-pid-hidden" value="{{ token.buffer_profile_id|default:'' }}">
     <input type="hidden" name="buffer_profile_name" id="buf-pname-hidden" value="{{ token.buffer_profile_name|default:'' }}">
     <input type="hidden" name="buffer_profile_id_person" id="buf-pid-person-hidden" value="{{ token.buffer_profile_id_person|default:'' }}">
@@ -200,8 +201,8 @@
       <div>
         <label style="font-size:11px;color:#888;display:block;margin-bottom:3px">Buffer Access Token</label>
         <div style="display:flex;gap:8px;flex-wrap:wrap">
-          <input type="text" id="buf-token-input" value="{{ token.buffer_token|default:'' }}"
-                 placeholder="Paste new Buffer key here …"
+          <input type="text" id="buf-token-input" value="" autocomplete="off"
+                 placeholder="{% if token.buffer_token %}Saved key ••••{{ token.buffer_token|slice:'-4:' }} – paste a new one only to replace it{% else %}Paste new Buffer key here …{% endif %}"
                  style="font-size:13px;padding:5px 9px;border:0.5px solid #ced4da;border-radius:4px;flex:1;min-width:200px">
           <button type="button" onclick="loadBufferProfiles()"
                   style="padding:5px 14px;font-size:13px;border-radius:4px;background:#168DE2;color:#fff;border:none;cursor:pointer;font-weight:500">
@@ -419,12 +420,14 @@ document.getElementById('post-modal-bg').addEventListener('click', e => {
 });
 
 // ── Buffer ────────────────────────────────────────────────────────────
+const BUF_KEY_SAVED = {% if token.buffer_token %}true{% else %}false{% endif %};
 async function loadBufferProfiles() {
   const token = document.getElementById('buf-token-input').value.trim();
   const errEl = document.getElementById('buf-err');
   errEl.style.display = 'none';
 
-  if (!token) {
+  // Empty field + a saved key: the server uses the saved one.
+  if (!token && !BUF_KEY_SAVED) {
     errEl.textContent = 'Bitte erst den Buffer Access Token eintragen.';
     errEl.style.display = 'block';
     return;

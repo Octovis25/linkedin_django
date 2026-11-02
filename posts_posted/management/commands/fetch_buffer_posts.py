@@ -89,6 +89,8 @@ class Command(BaseCommand):
                             help='Buffer-Token direkt angeben (sonst aus DB).')
         parser.add_argument('--first', type=int, default=50,
                             help='Posts pro Seite (Standard 50).')
+        parser.add_argument('--no-metrics', action='store_true',
+                            help="Skip today's snapshot of the post numbers.")
 
     def handle(self, *args, **options):
         from planner.views import _buffer_first_org_id, _buffer_fetch_posts_basic
@@ -162,3 +164,18 @@ class Command(BaseCommand):
             ))
         except Exception as e:
             self.stdout.write(self.style.WARNING(f"Status-Abgleich uebersprungen: {e}"))
+
+        # Today's numbers per post (impressions, reach, video views, ...) for the
+        # timelines under Statistics -> OJ. Buffer only gives totals; one row per
+        # post and day is what makes a course out of them. Its own try: a failure
+        # here must never undo the sync above.
+        if options.get('no_metrics'):
+            return
+        try:
+            from linkedin_statistics.buffer_metrics import fetch_and_store
+            n_posts, n_rows = fetch_and_store(buf_token, org_id)
+            self.stdout.write(self.style.SUCCESS(
+                f"Post numbers: {n_posts} posts, {n_rows} values stored for today."
+            ))
+        except Exception as e:
+            self.stdout.write(self.style.WARNING(f"Post numbers skipped: {str(e)[:300]}"))

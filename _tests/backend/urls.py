@@ -8,4 +8,5 @@ urlpatterns = [
     path('webstats/', include('matomo.urls')),
     path('tutorials/', include('tutorials.urls')),
     path('db-admin/log/', include('audit.urls')),
+    path('statistics/', include('linkedin_statistics.stat_urls')),
 ]

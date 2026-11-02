@@ -29,6 +29,7 @@ INSTALLED_APPS = [
     'tutorials',
     'website_changes',
     'audit',
+    'linkedin_statistics',
 ]
 
 MIDDLEWARE = [

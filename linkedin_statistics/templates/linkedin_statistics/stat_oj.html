@@ -1,0 +1,213 @@
+{% extends "base.html" %}
+{% block title %}Statistics – OJ profile{% endblock %}
+{% block content %}
+{{ data|json_script:"oj-data" }}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<style>
+.oj { max-width:1240px; margin:0 auto; --muted:#868e96; --line:#e9ecef; }
+.oj .head { background:#fff; border-radius:.5rem; padding:.9rem 1.4rem; box-shadow:0 1px 3px rgba(0,0,0,.08); display:flex; align-items:center; flex-wrap:wrap; gap:1rem; border-left:4px solid var(--octo-petrol); margin-bottom:1.2rem; }
+.oj .head h1 { margin:0; font-size:1.25rem; color:var(--octo-petrol); }
+.oj .src { font-size:.76rem; color:var(--muted); line-height:1.5; }
+.oj .flt { margin-left:auto; display:flex; align-items:center; gap:.5rem; flex-wrap:wrap; font-size:.8rem; }
+.oj .flt label { font-weight:600; color:#495057; text-transform:uppercase; letter-spacing:.4px; }
+.oj .flt input[type=date] { padding:.28rem .5rem; border:1px solid #ced4da; border-radius:.3rem; background:#f8f9fa; font-size:.84rem; width:auto; }
+.oj .btn { padding:.32rem 1rem; background:var(--octo-petrol); color:#fff; border:0; border-radius:.3rem; font-weight:600; font-size:.82rem; cursor:pointer; }
+.oj .btn.light { background:#fff; color:var(--octo-petrol); border:1px solid var(--octo-petrol); }
+.oj .chips { display:flex; gap:.3rem; flex-wrap:wrap; }
+.oj .flt .chips { width:100%; justify-content:flex-end; }
+.oj .chips button { border:1px solid #dee2e6; background:#fff; border-radius:99px; padding:.2rem .65rem; font-size:.76rem; cursor:pointer; color:#495057; }
+.oj .chips button.on { background:var(--octo-petrol); border-color:var(--octo-petrol); color:#fff; }
+.oj .msg { padding:.5rem .9rem; border-radius:.4rem; font-size:.85rem; margin-bottom:1rem; }
+.oj .msg.ok { background:#E1F5EE; color:#0F6E56; } .oj .msg.err { background:#FDECEC; color:#A61B1B; }
+.oj .card { background:#fff; border-radius:.5rem; box-shadow:0 1px 4px rgba(0,0,0,.08); margin-bottom:1.2rem; }
+.oj .ch { display:flex; align-items:center; flex-wrap:wrap; gap:.6rem; padding:.85rem 1.2rem .6rem; border-bottom:1px solid #f0f0f0; }
+.oj .ch h2 { margin:0; font-size:1rem; color:var(--octo-dark-petrol); }
+.oj .ch .right { margin-left:auto; display:flex; gap:.5rem; align-items:center; flex-wrap:wrap; }
+.oj .cb { padding:1rem 1.2rem; }
+.oj .tl { display:grid; grid-template-columns:1fr 250px; gap:1rem; } @media(max-width:900px){ .oj .tl { grid-template-columns:1fr; } }
+.oj .leg { display:flex; flex-direction:column; gap:.35rem; max-height:330px; overflow:auto; }
+.oj .leg div { display:flex; align-items:center; gap:.5rem; font-size:.76rem; line-height:1.2; cursor:pointer; padding:.15rem; border-radius:4px; }
+.oj .leg div:hover { background:#f1f8f8; }
+.oj .leg img, .oj .leg .ph { width:34px; height:34px; border-radius:4px; object-fit:cover; flex:none; background:#e9f4f4; border:3px solid transparent; }
+.oj .leg .t { overflow:hidden; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; }
+.oj .leg b { display:block; font-size:.7rem; color:var(--muted); font-weight:400; }
+.oj .note { font-size:.76rem; color:var(--muted); margin-top:.6rem; }
+.oj .muted { color:#adb5bd; }
+.oj .lbl { font-size:.78rem; color:#495057; display:flex; align-items:center; gap:.3rem; }
+.oj table.ojt { width:100%; border-collapse:collapse; font-size:.83rem; }
+.oj .ojt th { font-size:.68rem; text-transform:uppercase; letter-spacing:.04em; color:var(--muted); text-align:right; padding:.55rem .5rem; border-bottom:1px solid var(--line); white-space:nowrap; cursor:pointer; user-select:none; }
+.oj .ojt th.l, .oj .ojt td.l { text-align:left; } .oj .ojt th:hover { color:var(--octo-petrol); } .oj .ojt th.nos { cursor:default; }
+.oj .ojt td { padding:.35rem .5rem; border-bottom:1px solid #f1f3f5; text-align:right; white-space:nowrap; }
+.oj .ojt td.t { text-align:left; white-space:normal; min-width:240px; }
+.oj .ojt td.i { width:56px; padding:.3rem .4rem; }
+.oj .ojt td.i img, .oj .ojt td.i .ph { width:44px; height:44px; border-radius:5px; object-fit:cover; display:block; background:#e9f4f4; border:3px solid transparent; }
+.oj .ojt td.c { width:34px; text-align:center; } .oj .ojt td.x { width:28px; color:#adb5bd; cursor:pointer; text-align:center; }
+.oj .ojt tr.post { cursor:pointer; } .oj .ojt tr.sel td { background:#f3fafa; } .oj .ojt tr.post:hover td { background:#eef8f8; }
+.oj .ojt tr.det td { background:#fbfdfd; text-align:left; white-space:normal; padding:.8rem 1rem .9rem; }
+.oj .ib { display:flex; align-items:center; gap:.45rem; justify-content:flex-end; }
+.oj .ib .bar { width:80px; height:6px; background:#eef1f2; border-radius:3px; overflow:hidden; } .oj .ib .bar i { display:block; height:100%; background:var(--octo-teal, #20B8B0); }
+.oj .badge { font-size:.62rem; font-weight:700; padding:.04rem .38rem; border-radius:99px; margin-left:.25rem; }
+.oj .b-top { background:#EB6E08; color:#fff; } .oj .b-avg { background:#E1F5EE; color:#0F6E56; }
+.oj .pill { display:inline-block; font-size:.66rem; padding:.04rem .4rem; border-radius:99px; background:#FEF0E8; color:#C04A0A; margin-left:.3rem; }
+.oj .dot { display:inline-block; width:10px; height:10px; border-radius:50%; margin-right:.35rem; vertical-align:middle; }
+.oj .dg { display:grid; grid-template-columns:repeat(auto-fit,minmax(120px,1fr)); gap:.6rem; margin-bottom:.7rem; }
+.oj .dg div { background:#fff; border:1px solid #edf0f1; border-radius:6px; padding:.4rem .6rem; }
+.oj .dg em, .oj .kp em { display:block; font-style:normal; font-size:.68rem; color:var(--muted); text-transform:uppercase; letter-spacing:.04em; }
+.oj .dg b { font-size:1.05rem; color:var(--octo-dark-petrol); } .oj .dg .vid b { color:#C04A0A; }
+.oj .full { font-size:.8rem; color:#495057; margin:.2rem 0 .6rem; max-width:900px; white-space:pre-line; }
+.oj .kp { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:.7rem; margin-bottom:.8rem; } @media(max-width:800px){ .oj .kp { grid-template-columns:repeat(2,1fr); } }
+.oj .kp div { background:#f8fbfb; border:1px solid #edf0f1; border-radius:6px; padding:.5rem .7rem; }
+.oj .kp b { font-size:1.35rem; color:var(--octo-dark-petrol); } .oj .kp small { color:#0F6E56; font-weight:600; margin-left:.3rem; }
+.oj .dem { display:grid; grid-template-columns:minmax(150px,36%) 1fr 1fr; gap:.35rem .8rem; align-items:center; font-size:.82rem; }
+.oj .dem .hd { font-size:.68rem; color:var(--muted); text-transform:uppercase; font-weight:600; }
+.oj .trk { background:#f1f3f5; border-radius:4px; height:14px; position:relative; } .oj .trk i { display:block; height:100%; border-radius:4px; }
+.oj .trk span { position:absolute; right:5px; top:-1px; font-size:.7rem; }
+.oj .upl { display:flex; gap:.6rem; align-items:center; flex-wrap:wrap; font-size:.82rem; }
+.oj .two { display:grid; grid-template-columns:1fr 1fr; gap:1rem; align-items:start; } @media(max-width:800px){ .oj .two { grid-template-columns:1fr; } }
+</style>
+
+<div class="oj">
+  <div class="head">
+    <div><h1>OJ profile</h1>
+      <div class="src">Posts: Buffer, daily at 14:00{% if last_fetch %} · last {{ last_fetch|date:"d.m.Y" }}{% endif %}
+        · Followers: LinkedIn export{% if export %} up to {{ export.period_to|date:"d.m.Y" }}{% else %} – not uploaded yet{% endif %}</div></div>
+    <div class="flt"><label>From</label><input type="date" id="oj-from"><label>To</label><input type="date" id="oj-to"><button class="btn" id="oj-apply">Apply</button>
+      <div class="chips" id="oj-chips"><button data-d="7">1 week</button><button data-d="30">30 days</button><button data-d="90">3 months</button><button data-d="365" class="on">12 months</button><button data-d="ytd">This year</button><button data-d="all">All</button></div></div>
+  </div>
+
+  {% if upload_msg == 'ok' %}<div class="msg ok">Export read and saved.</div>{% endif %}
+  {% if upload_msg == 'contacts' %}<div class="msg ok">Contact list read: {{ upload_n }} contacts. Only the day of connecting, company and job title are kept – no names, no links, no e-mail addresses.</div>{% endif %}
+  {% if upload_err %}<div class="msg err">{{ upload_err }}</div>{% endif %}
+  {% if fetch_msg %}<div class="msg {% if fetch_msg|slice:':8' == 'Fetched:' %}ok{% else %}err{% endif %}">{{ fetch_msg }}</div>{% endif %}
+  {% if not key_ok %}<div class="msg err">No Buffer key saved – enter it under API Connect.</div>
+  {% elif not channel_ok %}<div class="msg err">No personal Buffer channel chosen – choose it under API Connect.</div>{% endif %}
+
+  {% include "linkedin_statistics/_post_timeline.html" with prefix="oj" data_id="oj-data" %}
+
+  <div class="card"><div class="ch"><h2>Followers</h2><span class="muted" style="font-size:.8rem">from the LinkedIn export · follows the period above</span>
+      <div class="right chips" id="oj-fagg"><button data-a="day">Day</button><button data-a="week" class="on">Week</button><button data-a="month">Month</button></div></div>
+    <div class="cb">
+      {% if export %}
+      <div class="kp" id="oj-fkp"></div>
+      <div style="height:280px"><canvas id="oj-fchart"></canvas></div>
+      <div class="note">Bars: <span style="color:#008591">■</span> new followers (LinkedIn export){% if data.contacts %} · <span style="color:#B8860B">■</span> new contacts (your contact list){% endif %}. Line = followers in total (right, counted back from {{ export.followers_total }} on {{ export.followers_date|date:"d.m.Y" }}). <span style="color:#EB6E08">▲</span> = one of your posts – hover for which one. <b id="oj-fshare"></b></div>
+      {% else %}<p class="muted" style="margin:0">Upload the LinkedIn export below – followers come only from there.</p>{% endif %}
+    </div></div>
+
+  {% if data.contacts %}
+  <div class="card"><div class="ch"><h2>Your contacts</h2><span class="muted" style="font-size:.8rem" id="oj-ccnt"></span>
+      <div class="right"><div class="chips" id="oj-cdim"><button data-k="1" class="on">Field</button><button data-k="2">Level</button><button data-k="3">Company</button></div>
+        <div class="chips" id="oj-cscope"><button data-s="p" class="on">New in the period</button><button data-s="a">All</button></div></div></div>
+    <div class="cb"><div class="two"><div class="dem" id="oj-cbars" style="grid-template-columns:minmax(150px,45%) 1fr"></div>
+        <div><div style="height:220px"><canvas id="oj-cyears"></canvas></div><div class="note">New contacts per year.</div></div></div>
+      <div class="note">From your contact list (LinkedIn data archive, Connections.csv). Only the day of connecting, company and job title are kept – no names, no links, no e-mail addresses. Field and level are read from the job title; “Not clear from the title” = e.g. “Senior Manager” without a field.</div></div></div>
+  {% endif %}
+
+  {% if data.demo_categories %}
+  <div class="card"><div class="ch"><h2>Who follows you – and who reads your posts</h2><span class="muted" style="font-size:.8rem">whole export period – LinkedIn gives no finer split</span>
+      <div class="right chips" id="oj-dseg">{% for key, label in data.demo_categories %}<button data-k="{{ key }}"{% if forloop.first %} class="on"{% endif %}>{{ label }}</button>{% endfor %}</div></div>
+    <div class="cb"><div class="dem" id="oj-dem"></div></div></div>
+  {% endif %}
+
+  <div class="card"><div class="ch"><h2>LinkedIn files</h2></div>
+    <div class="cb">
+      <form class="upl" method="post" enctype="multipart/form-data" action="{% url 'linkedin_statistics:oj_upload' %}">{% csrf_token %}
+        <input type="file" name="export" accept=".xlsx,.zip,.csv" required>
+        <button class="btn" type="submit">Upload</button>
+        <span class="muted"><b>.xlsx</b> = Analytics export (your profile → Analytics → Export, “past 365 days”), once a month ·
+          <b>.zip</b> = data archive with your contacts (Settings → Data privacy → Get a copy of your data, larger archive), now and then.</span>
+      </form>
+      {% if data.contacts %}<div class="note">Contacts: {{ data.contacts|length }} from the last archive.</div>{% endif %}
+      {% if export %}<div class="note">Last analytics file: {{ export.file_name }} · uploaded {{ export.uploaded_at|date:"d.m.Y H:i" }} · period {{ export.period_from|date:"d.m.Y" }} – {{ export.period_to|date:"d.m.Y" }}. Days are added up; top posts and demographics are replaced by the newest file.</div>{% endif %}
+    </div></div>
+</div>
+
+<script>
+(() => {
+const D = JSON.parse(document.getElementById('oj-data').textContent);
+const P = D.posts, TODAY = new Date(D.today + 'T12:00:00');
+const $ = id => document.getElementById('oj-' + id);
+const fmtD = s => { const [y, m, d] = s.split('-'); return `${d}.${m}.${y}`; };
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'}[c]));
+const iso = d => d.toISOString().slice(0, 10);
+const CON = D.contacts || [];
+let fch, fagg = 'week', cy, cdim = 1, cscope = 'p';
+
+function preset(k) {
+  let from = new Date(TODAY);
+  if (k === 'all') from = new Date('2023-01-01T12:00:00');   // posts before 2023 are left out everywhere
+  else if (k === 'ytd') from = new Date(TODAY.getFullYear() + '-01-01T12:00:00');
+  else from.setDate(from.getDate() - (+k));
+  $('from').value = iso(from); $('to').value = iso(TODAY); refresh();
+}
+function refresh() {
+  window.postTimelines.oj.setRange($('from').value, $('to').value);
+  drawFollowers(); drawContacts();
+}
+
+// ── followers (LinkedIn export) ──
+const wkey = s => { const d = new Date(s + 'T12:00:00'); d.setDate(d.getDate() - ((d.getDay() + 6) % 7)); return iso(d); };
+function drawFollowers() {
+  if (!$('fchart') || !D.daily.length || D.followers_total == null) return;
+  const f = $('from').value, t = $('to').value;
+  let run = D.followers_total; const tot = {};
+  for (let i = D.daily.length - 1; i >= 0; i--) { tot[D.daily[i][0]] = run; run -= D.daily[i][3]; }
+  const ds = D.daily.filter(r => r[0] >= f && r[0] <= t);
+  const K = s => fagg === 'day' ? s : fagg === 'week' ? wkey(s) : s.slice(0, 7);
+  const g = {}; ds.forEach(r => { const k = K(r[0]); g[k] = g[k] || {n: 0, c: 0, last: r[0]}; g[k].n += r[3]; g[k].last = r[0]; });
+  const cin = CON.filter(c => c[0] >= f && c[0] <= t); cin.forEach(c => { const k = K(c[0]); if (g[k]) g[k].c++; });
+  const keys = Object.keys(g).sort();
+  const gained = ds.reduce((a, r) => a + r[3], 0), start = ds.length ? tot[ds[0][0]] - ds[0][3] : 0, end = ds.length ? tot[ds[ds.length - 1][0]] : D.followers_total;
+  const best = keys.reduce((a, k) => g[k].n > (a ? g[a].n : -1) ? k : a, null);
+  const lab = k => fagg === 'month' ? new Date(k + '-01T12:00:00').toLocaleString('en-US', {month: 'short', year: '2-digit'}) : fmtD(k).slice(0, 6);
+  const inP = P.filter(p => p.date >= f && p.date <= t);
+  $('fkp').innerHTML = `<div><em>Followers</em><b>${end}</b></div><div><em>New in the period</em><b>+${gained}</b><small>${start ? '+' + Math.round(gained / start * 100) + ' %' : ''}</small></div><div><em>Best ${fagg}</em><b>${best ? '+' + g[best].n : '–'}</b> <span class="muted" style="font-size:.75rem">${best ? lab(best) : ''}</span></div><div><em>Posts in the period</em><b>${inP.length}</b></div>`
+    + (CON.length ? `<div><em>Contacts</em><b>${CON.filter(c => c[0] <= t).length}</b></div><div><em>New contacts</em><b>+${cin.length}</b></div>` : '');
+  $('fshare').textContent = CON.length && gained ? `${Math.min(100, Math.round(cin.length / gained * 100))} % of the new followers in this period are new contacts (${cin.length} of ${gained}).` : '';
+  const mark = keys.map(k => { const ps = inP.filter(p => fagg === 'day' ? p.date === k : fagg === 'week' ? wkey(p.date) === k : p.date.slice(0, 7) === k); return ps.length ? ps.map(p => fmtD(p.date) + ' ' + p.title.slice(0, 40)).join(' | ') : null; });
+  if (fch) fch.destroy();
+  if (!window.Chart) return;
+  fch = new Chart($('fchart'), {data: {labels: keys.map(lab), datasets: [
+      {type: 'bar', label: 'New followers', data: keys.map(k => g[k].n), backgroundColor: '#008591', borderRadius: 3, yAxisID: 'y', order: 3},
+      ...(CON.length ? [{type: 'bar', label: 'New contacts', data: keys.map(k => g[k].c), backgroundColor: '#B8860B', borderRadius: 3, yAxisID: 'y', order: 4}] : []),
+      {type: 'line', label: 'Followers total', data: keys.map(k => tot[g[k].last]), borderColor: '#005F68', backgroundColor: '#005F68', pointRadius: 0, tension: .25, borderWidth: 2, yAxisID: 'y2', order: 1},
+      {type: 'line', label: 'Post', data: mark.map(m => m ? 0 : null), showLine: false, pointStyle: 'triangle', pointRadius: 8, pointHoverRadius: 10, backgroundColor: '#EB6E08', borderColor: '#EB6E08', yAxisID: 'y', order: 0, _t: mark}]},
+    options: {maintainAspectRatio: false, animation: false, interaction: {mode: 'index', intersect: false},
+      plugins: {legend: {display: false}, tooltip: {callbacks: {label: it => it.dataset.label === 'Post' ? (it.raw == null ? null : ' Post: ' + it.dataset._t[it.dataIndex]) : ` ${it.dataset.label}: ${it.parsed.y}`}}},
+      scales: {x: {grid: {display: false}, ticks: {maxRotation: 0, autoSkip: true, maxTicksLimit: 14}}, y: {beginAtZero: true, grid: {color: '#f1f3f5'}, title: {display: true, text: 'new'}}, y2: {position: 'right', grid: {display: false}, title: {display: true, text: 'total'}}}}});
+}
+
+// ── contacts (Connections.csv) ──
+function drawContacts() {
+  if (!$('cbars')) return;
+  const f = $('from').value, t = $('to').value, sub = cscope === 'p' ? CON.filter(c => c[0] >= f && c[0] <= t) : CON;
+  const cnt = {}; sub.forEach(c => { const k = c[cdim] || '(none)'; cnt[k] = (cnt[k] || 0) + 1; });
+  let rows = Object.entries(cnt).sort((a, b) => b[1] - a[1]); if (cdim === 3) rows = rows.slice(0, 10);
+  const mx = Math.max(1, ...rows.map(r => r[1]));
+  $('ccnt').textContent = `${sub.length} contacts${cscope === 'p' ? ' new in the period' : ' in total'}`;
+  $('cbars').innerHTML = rows.map(r => `<div>${esc(r[0])}</div><div class="trk"><i style="width:${r[1] / mx * 100}%;background:#B8860B"></i><span>${r[1]} · ${Math.round(r[1] / sub.length * 100)} %</span></div>`).join('') || '<span class="muted">No new contacts in this period.</span>';
+  if (cy || !window.Chart) return;
+  const Y = {}; CON.forEach(c => { const y = c[0].slice(0, 4); Y[y] = (Y[y] || 0) + 1; }); const ys = Object.keys(Y).sort(), last2 = ys.slice(-2);
+  cy = new Chart($('cyears'), {type: 'bar', data: {labels: ys, datasets: [{data: ys.map(y => Y[y]), backgroundColor: ys.map(y => last2.includes(y) ? '#B8860B' : '#e3d3a8'), borderRadius: 3}]},
+    options: {maintainAspectRatio: false, animation: false, plugins: {legend: {display: false}}, scales: {y: {beginAtZero: true, grid: {color: '#f1f3f5'}}, x: {grid: {display: false}, ticks: {maxRotation: 0, autoSkip: true}}}}});
+}
+
+// ── demographics ──
+function drawDem(k) {
+  const rows = D.demo[k] || [], mx = Math.max(1, ...rows.map(r => Math.max(r.audience || 0, r.content || 0)));
+  const bar = (x, c) => `<div class="trk"><i style="width:${(x || 0) / mx * 100}%;background:${c}"></i><span>${x == null ? '–' : (x < 1 ? '<1' : Math.round(x)) + ' %'}</span></div>`;
+  $('dem').innerHTML = '<div class="hd"></div><div class="hd">Followers</div><div class="hd">Readers of your posts</div>' + rows.map(r => `<div>${esc(r.value)}</div>${bar(r.audience, '#20B8B0')}${bar(r.content, '#EB6E08')}`).join('');
+}
+
+const chips = (id, attr, cb) => { const el = $(id); if (!el) return; el.querySelectorAll('button').forEach(b => b.onclick = () => { el.querySelectorAll('button').forEach(x => x.classList.toggle('on', x === b)); cb(b.dataset[attr]); }); };
+chips('chips', 'd', preset);
+chips('fagg', 'a', a => { fagg = a; drawFollowers(); });
+chips('dseg', 'k', drawDem);
+chips('cdim', 'k', k => { cdim = +k; drawContacts(); });
+chips('cscope', 's', s => { cscope = s; drawContacts(); });
+$('apply').onclick = () => { $('chips').querySelectorAll('button').forEach(x => x.classList.remove('on')); refresh(); };
+if ($('dem')) { const first = $('dseg').querySelector('button'); if (first) drawDem(first.dataset.k); }
+preset('365');
+})();
+</script>
+{% endblock %}

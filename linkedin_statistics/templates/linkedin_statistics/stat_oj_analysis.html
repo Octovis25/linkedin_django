@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+{% block title %}Statistics – OJ analysis{% endblock %}
+{% block content %}
+<style>
+.oja { max-width:1240px; margin:0 auto; --muted:#868e96; }
+.oja .head { background:#fff; border-radius:.5rem; padding:.9rem 1.4rem; box-shadow:0 1px 3px rgba(0,0,0,.08); border-left:4px solid var(--octo-petrol); margin-bottom:1.2rem; }
+.oja .head h1 { margin:0; font-size:1.25rem; color:var(--octo-petrol); }
+.oja .head p { margin:.3rem 0 0; font-size:.8rem; color:var(--muted); }
+.oja .card { background:#fff; border-radius:.5rem; box-shadow:0 1px 4px rgba(0,0,0,.08); margin-bottom:1.2rem; }
+.oja .ch { display:flex; align-items:center; flex-wrap:wrap; gap:.6rem; padding:.85rem 1.2rem .6rem; border-bottom:1px solid #f0f0f0; }
+.oja .ch h2 { margin:0; font-size:1rem; color:var(--octo-dark-petrol); }
+.oja .cb { padding:1rem 1.2rem; }
+.oja .sure { font-size:.7rem; font-weight:600; padding:.12rem .55rem; border-radius:99px; margin-left:auto; }
+.oja .v-solid { background:#E1F5EE; color:#0F6E56; } .oja .v-hint { background:#FEF0E8; color:#C04A0A; }
+.oja .v-few, .oja .v-none { background:#f1f3f5; color:#868e96; }
+.oja .lead { font-size:.88rem; margin:.1rem 0 .7rem; line-height:1.5; }
+.oja .so { font-size:.84rem; margin:.7rem 0 0; padding:.5rem .7rem; background:#f3fafa; border-left:3px solid var(--octo-petrol); border-radius:4px; }
+.oja table { width:100%; border-collapse:collapse; font-size:.84rem; }
+.oja th { font-size:.68rem; text-transform:uppercase; letter-spacing:.04em; color:var(--muted); text-align:left; padding:.45rem .5rem; border-bottom:1px solid #e9ecef; }
+.oja td { padding:.4rem .5rem; border-bottom:1px solid #f1f3f5; }
+.oja td.r, .oja th.r { text-align:right; }
+.oja .muted { color:#adb5bd; }
+</style>
+
+<div class="oja">
+  <div class="head"><h1>OJ analysis</h1>
+    <p>Patterns in your own posts: {{ result.n_posts }} posts with Buffer numbers in the last 12 months{% if last_fetch %} (last fetch {{ last_fetch|date:"d.m.Y" }}){% endif %}{% if export %}, LinkedIn export {{ export.period_from|date:"d.m.Y" }} – {{ export.period_to|date:"d.m.Y" }}{% endif %}.
+      Each finding says how sure it is: <span class="sure v-solid">solid</span> <span class="sure v-hint">hint</span> <span class="sure v-few">too few posts</span>. The page recalculates itself as data comes in.</p></div>
+
+  {% if not result.has_export %}<div class="card"><div class="cb muted">Upload the LinkedIn export under <a href="{% url 'linkedin_statistics:oj' %}">OJ profile</a> – most findings need the daily values from it.</div></div>{% endif %}
+
+  {% for f in result.findings %}
+  <div class="card"><div class="ch"><h2>{{ forloop.counter }} · {{ f.title }}</h2>
+      <span class="sure v-{{ f.verdict }}">{% if f.verdict == 'solid' %}solid{% elif f.verdict == 'hint' %}hint{% elif f.verdict == 'none' %}no clear effect{% else %}too few posts yet{% endif %} · {{ f.basis }}</span></div>
+    <div class="cb">
+      {% if f.text %}<p class="lead">{{ f.text|safe }}</p>{% endif %}
+      {% if f.chart %}<div style="height:{% if f.chart.height %}{{ f.chart.height }}px{% elif f.chart.kind == 'pair' %}190px{% else %}230px{% endif %}"><canvas id="oja-{{ f.key }}"></canvas></div>{% endif %}
+      {% if f.table %}<table><thead><tr><th>Factor</th><th>What your posts show</th><th class="r">Posts</th></tr></thead><tbody>
+        {% for row in f.table %}<tr><td>{{ row.0 }}</td><td>{{ row.1 }}</td><td class="r">{{ row.2 }}</td></tr>{% endfor %}</tbody></table>{% endif %}
+      {% if f.so %}<p class="so">{{ f.so }}</p>{% endif %}
+    </div></div>
+  {% empty %}
+  <div class="card"><div class="cb muted">No posts with numbers yet – press “Fetch now” under OJ profile.</div></div>
+  {% endfor %}
+</div>
+
+{{ charts|json_script:"oja-charts" }}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script>
+(() => {
+  if (!window.Chart) return;
+  Chart.defaults.font.family = getComputedStyle(document.body).fontFamily; Chart.defaults.color = '#555';
+  const C = JSON.parse(document.getElementById('oja-charts').textContent);
+  const el = k => document.getElementById('oja-' + k);
+  const TYPE = {Conference: '#008591', Achievement: '#6B21A8', Topic: '#EB6E08'};
+  const grid = {color: '#f1f3f5'}, base = {maintainAspectRatio: false, animation: false};
+  const mon = k => new Date(k + '-01T12:00:00').toLocaleString('en-US', {month: 'short', year: '2-digit'});
+  Object.entries(C).forEach(([key, c]) => {
+    if (!c || !el(key)) return;
+    if (c.kind === 'event') new Chart(el(key), {data: {labels: c.values.map((_, i) => 'Day ' + i), datasets: [
+        {type: 'bar', label: 'Ø impressions of your profile', data: c.values, backgroundColor: '#20B8B0', borderRadius: 3},
+        {type: 'line', label: 'a normal day without a post', data: c.values.map(() => c.baseline), borderColor: '#868e96', borderDash: [4, 4], pointRadius: 0}]},
+      options: {...base, plugins: {legend: {position: 'bottom', labels: {boxWidth: 10}}}, scales: {y: {beginAtZero: true, grid}, x: {grid: {display: false}}}}});
+    if (c.kind === 'pair') new Chart(el(key), {type: 'bar', data: {labels: c.labels, datasets: [{data: c.values, backgroundColor: ['#008591', '#ced4da'], borderRadius: 4}]},
+      options: {...base, indexAxis: c.horizontal ? 'y' : 'x', plugins: {legend: {display: false}}, scales: {x: {beginAtZero: true, grid: c.horizontal ? grid : {display: false}}, y: {beginAtZero: true, grid: c.horizontal ? {display: false} : grid}}}});
+    if (c.kind === 'bars') new Chart(el(key), {type: 'bar', data: {labels: c.rows.map(r => r.label + (r.young ? ' (young)' : '')),
+        datasets: [{data: c.rows.map(r => r.impressions), backgroundColor: c.rows.map(r => (TYPE[r.type] || '#868e96') + (r.young ? '66' : '')), borderRadius: 4}]},
+      options: {...base, indexAxis: 'y', plugins: {legend: {display: false}, tooltip: {callbacks: {afterLabel: it => c.rows[it.dataIndex].type}}},
+        scales: {x: {beginAtZero: true, grid, title: {display: true, text: 'impressions · teal = conference, purple = achievement, orange = topic'}}, y: {grid: {display: false}, ticks: {font: {size: 11}}}}}});
+    if (c.kind === 'months2') new Chart(el(key), {type: 'bar', data: {labels: c.labels.map(mon), datasets: [
+        {label: 'New followers', data: c.followers, backgroundColor: '#008591', borderRadius: 3},
+        {label: 'New contacts', data: c.contacts, backgroundColor: '#B8860B', borderRadius: 3}]},
+      options: {...base, plugins: {legend: {position: 'bottom', labels: {boxWidth: 10}}}, scales: {y: {beginAtZero: true, grid}, x: {grid: {display: false}}}}});
+    if (c.kind === 'months') new Chart(el(key), {data: {labels: c.months.map(m => mon(m.month)), datasets: [
+        {type: 'bar', label: 'Impressions (grey = no post that month)', data: c.months.map(m => m.impressions), backgroundColor: c.months.map(m => m.posts ? '#20B8B0' : '#ced4da'), borderRadius: 3, yAxisID: 'y'},
+        {type: 'line', label: 'New followers', data: c.months.map(m => m.followers), borderColor: '#005F68', backgroundColor: '#005F68', tension: .3, yAxisID: 'y2'}]},
+      options: {...base, plugins: {legend: {position: 'bottom', labels: {boxWidth: 10}}, tooltip: {callbacks: {afterTitle: it => { const m = c.months[it[0].dataIndex]; return m.posts + ' post' + (m.posts === 1 ? '' : 's'); }}}},
+        scales: {y: {beginAtZero: true, grid}, y2: {position: 'right', beginAtZero: true, grid: {display: false}}, x: {grid: {display: false}}}}});
+  });
+})();
+</script>
+{% endblock %}

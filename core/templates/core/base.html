@@ -181,6 +181,8 @@ up, so it moved right; Collectives became a sub-entry under Data.
     <a href="/statistics/timeline/" {% if '/statistics/timeline' in request.path %}class="active"{% endif %}>Timeline</a>
     <a href="/statistics/video/" {% if '/statistics/video' in request.path %}class="active"{% endif %}>Video vs. No Video</a>
     <a href="/statistics/clicks/" {% if '/statistics/clicks' in request.path %}class="active"{% endif %}>Clicks</a>
+    {% if user.is_superuser %}<a href="/statistics/oj/" {% if request.path == '/statistics/oj/' %}class="active"{% endif %}>OJ profile</a>
+    <a href="/statistics/oj/analysis/" {% if '/statistics/oj/analysis' in request.path %}class="active"{% endif %}>OJ analysis</a>{% endif %}
   </div>
   {% endif %}
   {% if '/webstats/' in request.path %}
