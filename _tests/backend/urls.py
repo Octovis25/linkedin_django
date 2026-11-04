@@ -5,6 +5,7 @@ from django.urls import include, path
 urlpatterns = [
     path('library/', include('media_library.urls')),
     path('planner/', include('planner.urls')),
+    path('webstats/changes/', include('website_changes.urls')),
     path('webstats/', include('matomo.urls')),
     path('tutorials/', include('tutorials.urls')),
     path('db-admin/log/', include('audit.urls')),

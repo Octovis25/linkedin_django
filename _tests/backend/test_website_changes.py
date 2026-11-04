@@ -38,7 +38,7 @@ class Rest(SimpleTestCase):
                 {'id': 3, 'author': 1, 'modified_gmt': '2026-10-07T08:05:00', 'slug': '9-autosave-v1',
                  'title': {'raw': 'Home'}, 'content': {'raw': ''}}]
         with mock.patch('requests.get', return_value=antwort(200, revs)) as get:
-            r = wp.revisions('pages', 9)
+            r = wp.revisions('pages', 9, 10)
         self.assertEqual([2], [x['id'] for x in r])
         self.assertEqual('https://octotrial.com/wp-json/wp/v2/pages/9/revisions', get.call_args.args[0])
         self.assertEqual(('u', 'p'), get.call_args.kwargs['auth'])

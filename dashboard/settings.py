@@ -218,6 +218,9 @@ if PUBLIC_BASE_URL.startswith("https://") and PUBLIC_BASE_URL not in CSRF_TRUSTE
 MATOMO_URL = os.getenv("MATOMO_URL", "https://octotrial.com")
 MATOMO_SITE_ID = os.getenv("MATOMO_SITE_ID", "1")
 MATOMO_TOKEN = os.getenv("MATOMO_TOKEN", "")
+# Website log (website_changes): WordPress user octovis-log (role editor),
+# "octovis-log:<application password>". Only in .env / on Render.
+WP_LOG_TOKEN = os.getenv("WP_LOG_TOKEN", "")
 MATOMO_CACHE_SECONDS = int(os.getenv("MATOMO_CACHE_SECONDS", "900"))  # Live-Ansicht 15 min
 # Adresse der Live-Instanz für den Link im Kopfbereich. Render setzt
 # RENDER_EXTERNAL_URL von selbst; lokal kommt DASHBOARD_URL aus der .env.

@@ -1,0 +1,159 @@
+{% extends "base.html" %}
+{% block title %}Website log{% endblock %}
+{% block content %}
+<style>
+.wl { max-width:1240px; margin:0 auto; --muted:#868e96; --line:#e9ecef; }
+.wl .head { background:#fff; border-radius:.5rem; padding:.9rem 1.3rem; box-shadow:0 1px 3px rgba(0,0,0,.08); border-left:4px solid var(--octo-petrol, #008591); margin-bottom:1rem; display:flex; align-items:center; gap:1rem; flex-wrap:wrap; }
+.wl .head h1 { margin:0; font-size:1.25rem; color:var(--octo-petrol, #008591); }
+.wl .head p { margin:.25rem 0 0; font-size:.78rem; color:var(--muted); }
+.wl .sp { flex:1; }
+.wl .status { font-size:.78rem; color:var(--muted); text-align:right; }
+.wl .status .bad { color:#C04A0A; }
+.wl .btn { border:1px solid #008591; background:#008591; color:#fff; border-radius:6px; padding:.45rem .9rem; font-weight:600; cursor:pointer; font-size:.82rem; }
+.wl .btn.ghost { background:#fff; color:#008591; }
+.wl .tabs { display:flex; gap:4px; margin-bottom:-1px; }
+.wl .tab { padding:.55rem 1rem; border-radius:8px 8px 0 0; background:#e9eef0; cursor:pointer; font-weight:600; color:#005F68; border:0; font-size:.88rem; }
+.wl .tab.on { background:#fff; color:#008591; }
+.wl .card { background:#fff; border-radius:0 8px 8px 8px; box-shadow:0 1px 4px rgba(0,0,0,.08); padding:.9rem 1.1rem; margin-bottom:1rem; }
+.wl .filters { display:flex; gap:.6rem; flex-wrap:wrap; align-items:end; margin-bottom:.8rem; }
+.wl .filters label { font-size:.68rem; color:var(--muted); text-transform:uppercase; letter-spacing:.04em; display:flex; flex-direction:column; gap:3px; }
+.wl select, .wl input[type=text], .wl input[type=date], .wl input[type=number] { font:inherit; font-size:.85rem; padding:.35rem .5rem; border:1px solid #ced4da; border-radius:6px; background:#fff; }
+.wl table { width:100%; border-collapse:collapse; font-size:.84rem; }
+.wl th { font-size:.68rem; text-transform:uppercase; letter-spacing:.04em; color:var(--muted); text-align:left; padding:.45rem .5rem; border-bottom:1px solid var(--line); white-space:nowrap; }
+.wl td { padding:.45rem .5rem; border-bottom:1px solid #f1f3f5; vertical-align:top; }
+.wl td.r, .wl th.r { text-align:right; }
+.wl tr.row { cursor:pointer; } .wl tr.row:hover td { background:#f3fafa; }
+.wl .kind { font-size:.7rem; font-weight:600; padding:.1rem .5rem; border-radius:99px; white-space:nowrap; display:inline-block; margin:0 2px 2px 0; }
+.wl .k-Text { background:#E1F5EE; color:#0F6E56; } .wl .k-Title, .wl .claude { background:#e7f0ff; color:#2b5bb5; }
+.wl .k-Image, .wl .k-Upload { background:#FEF0E8; color:#C04A0A; } .wl .k-New { background:#f3f0ff; color:#5b3fb5; }
+.wl .k-No { background:#f1f3f5; color:#868e96; }
+.wl .muted { color:var(--muted); } .wl a { color:#008591; }
+.wl .notechip { display:inline-block; margin-top:3px; font-size:.78rem; background:#f3fafa; border-left:3px solid #20B8B0; padding:1px 8px; border-radius:3px; }
+.wl .detail td { background:#fbfcfc; }
+.wl .diff { display:grid; grid-template-columns:1fr 1fr; gap:.8rem; }
+.wl .diff h4 { margin:0 0 .35rem; font-size:.7rem; color:var(--muted); text-transform:uppercase; letter-spacing:.04em; }
+.wl .diff .box { border:1px solid var(--line); border-radius:6px; padding:.6rem .7rem; line-height:1.55; background:#fff; max-height:420px; overflow:auto; }
+.wl del { background:#fde2e2; color:#9b1c1c; } .wl ins { background:#d8f3e6; color:#0F6E56; text-decoration:none; }
+.wl .gap { color:#adb5bd; padding:0 .2rem; }
+.wl .noteform { margin-top:.6rem; display:flex; gap:.5rem; } .wl .noteform input[type=text] { flex:1; }
+.wl h3 { margin:1.2rem 0 .5rem; font-size:.9rem; color:#005F68; }
+.wl .hint { font-size:.75rem; color:var(--muted); margin:.5rem 0 0; }
+@media (max-width:800px) { .wl .diff { grid-template-columns:1fr; } }
+</style>
+
+<div class="wl">
+  <div class="head">
+    <div><h1>Website log – octotrial.com</h1>
+      <p>Read only through the WordPress REST API: revisions of all pages and posts, media uploads. Times in Berlin time.</p></div>
+    <div class="sp"></div>
+    <div class="status">
+      {% if sync.at %}Last sync {{ sync.at|date:"d.m.Y H:i" }}{% if not sync.ok %} · <span class="bad">{{ sync.message }}</span>{% elif not sync.complete %} · <span class="bad">not complete yet</span>{% endif %}<br>{% else %}Not synced yet<br>{% endif %}
+      {{ sync.revisions }} revisions · {{ sync.media }} uploads
+    </div>
+    <form method="post" action="{% url 'website_changes:sync' %}">{% csrf_token %}<button class="btn" type="submit">Sync now</button></form>
+  </div>
+
+  <div class="tabs">
+    <button class="tab {% if tab != 'notes' %}on{% endif %}" data-t="changes" type="button">Changes</button>
+    <button class="tab {% if tab == 'notes' %}on{% endif %}" data-t="notes" type="button">Notes</button>
+  </div>
+
+  <div class="card" id="t-changes" {% if tab == 'notes' %}style="display:none"{% endif %}>
+    <form class="filters" method="get">
+      <label>Person<select name="person"><option value="">All</option>{% for p in people %}<option {% if p == person %}selected{% endif %}>{{ p }}</option>{% endfor %}</select></label>
+      <label>From<input type="date" name="from" value="{{ day_from|date:'Y-m-d' }}"></label>
+      <label>To<input type="date" name="to" value="{{ day_to|date:'Y-m-d' }}"></label>
+      <label>Page / post<select name="page"><option value="">All</option>{% for p in pages %}<option value="{{ p.id }}" {% if p.id|stringformat:'s' == page %}selected{% endif %}>{{ p.title }}</option>{% endfor %}</select></label>
+      <label>Kind<select name="kind"><option value="">All</option>{% for k in kinds %}<option {% if k == kind %}selected{% endif %}>{{ k }}</option>{% endfor %}</select></label>
+      <button class="btn ghost" type="submit">Show</button>
+    </form>
+    <table>
+      <thead><tr><th>Time (Berlin)</th><th>Person</th><th>Page / post</th><th>Kind</th><th class="r">Sentences changed</th><th class="r">Revisions</th></tr></thead>
+      <tbody>
+      {% for r in rows %}
+        <tr class="{% if r.type != 'upload' %}row{% endif %}" data-key="{{ r.key }}">
+          <td style="white-space:nowrap">{{ r.berlin|date:"d.m.Y H:i" }}</td>
+          <td>{{ r.person }}{% if r.with_claude %} <span class="kind claude">with Claude</span>{% endif %}</td>
+          <td>{% if r.link %}<a href="{{ r.link }}" target="_blank" rel="noopener">{{ r.title }}</a>{% else %}{{ r.title }}{% endif %} <span class="muted">{{ r.type }}</span>
+            {% for n in r.notes %}<br><span class="notechip">{{ n }}</span>{% endfor %}</td>
+          <td>{% for k in r.kinds %}<span class="kind k-{{ k|cut:' text change' }}">{{ k }}</span>{% endfor %}</td>
+          <td class="r">{{ r.changed|default:"–" }}</td>
+          <td class="r">{{ r.revisions|default:"–" }}</td>
+        </tr>
+        {% if r.type != 'upload' %}
+        <tr class="detail" style="display:none"><td colspan="6">
+          <div class="diff-slot muted">Loading …</div>
+          <form class="noteform" method="post" action="{% url 'website_changes:note' %}">{% csrf_token %}
+            <input type="hidden" name="key" value="{{ r.key }}"><input type="hidden" name="wp_id" value="{{ r.wp_id }}">
+            <input type="hidden" name="next" value="{{ request.get_full_path }}">
+            <input type="text" name="text" placeholder="Note: what was changed and why">
+            <button class="btn" type="submit">Save note</button></form>
+        </td></tr>
+        {% endif %}
+      {% empty %}
+        <tr><td colspan="6" class="muted">No changes in this period{% if not sync.at %} – press “Sync now” first{% endif %}.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    {% if total > rows|length %}<p class="hint">Showing the newest {{ rows|length }} of {{ total }} changes – narrow the period to see older ones.</p>{% endif %}
+    <p class="hint">“with Claude” appears for WordPress users that Claude signs in with for a person (see Notes → People in WordPress). Changes Claude makes with a person's own login show only that person.</p>
+  </div>
+
+  <div class="card" id="t-notes" {% if tab != 'notes' %}style="display:none"{% endif %}>
+    <form class="noteform" method="post" action="{% url 'website_changes:note' %}" style="margin:0 0 .8rem">{% csrf_token %}
+      <input type="hidden" name="next" value="{% url 'website_changes:index' %}?tab=notes">
+      <input type="text" name="text" placeholder="What was changed and why – e.g. “AI section OctoSOP, 3 Nov”">
+      <select name="wp_id"><option value="">No page</option>{% for p in pages %}<option value="{{ p.id }}">{{ p.title }}</option>{% endfor %}</select>
+      <button class="btn" type="submit">Add note</button></form>
+    <table>
+      <thead><tr><th>Time (Berlin)</th><th>Page / post</th><th>Note</th><th>By</th></tr></thead>
+      <tbody>{% for n in notes %}<tr><td style="white-space:nowrap">{{ n.berlin|date:"d.m.Y H:i" }}</td><td>{{ n.title|default:"–" }}</td><td>{{ n.text }}</td><td>{{ n.author }}</td></tr>
+      {% empty %}<tr><td colspan="4" class="muted">No notes yet.</td></tr>{% endfor %}</tbody>
+    </table>
+
+    <h3>People in WordPress</h3>
+    <p class="hint" style="margin-top:0">WordPress only stores a user id with each revision. Here the id gets its name. For a Claude user, enter the person Claude works for and tick “with Claude”.</p>
+    <table>
+      <thead><tr><th class="r">WP user id</th><th>Name</th><th>Shown as</th><th>with Claude</th></tr></thead>
+      <tbody>{% for a in authors %}<tr><td class="r">{{ a.id }}</td><td>{{ a.name }}</td><td>{{ a.person|default:a.name }}</td><td>{% if a.with_claude %}yes{% endif %}</td></tr>{% endfor %}</tbody>
+    </table>
+    <form class="filters" method="post" action="{% url 'website_changes:author' %}" style="margin-top:.7rem">{% csrf_token %}
+      <label>WP user id<input type="number" name="wp_user_id" min="1" style="width:90px" required></label>
+      <label>Name<input type="text" name="name" placeholder="e.g. Claude (Ortrud)" required></label>
+      <label>Shown as (person)<input type="text" name="person" placeholder="e.g. Ortrud Junker-Wolf"></label>
+      <label>with Claude<select name="with_claude"><option value="0">no</option><option value="1">yes</option></select></label>
+      <button class="btn ghost" type="submit">Save</button>
+    </form>
+  </div>
+</div>
+
+<script>
+(() => {
+  const tabs = document.querySelectorAll('.wl .tab');
+  tabs.forEach(t => t.addEventListener('click', () => {
+    tabs.forEach(x => x.classList.toggle('on', x === t));
+    ['changes', 'notes'].forEach(k => { document.getElementById('t-' + k).style.display = k === t.dataset.t ? '' : 'none'; });
+  }));
+  const esc = s => String(s || '').replace(/[&<>"]/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'}[c]));
+  document.querySelectorAll('.wl tr.row').forEach(row => row.addEventListener('click', async () => {
+    const d = row.nextElementSibling;
+    const open = d.style.display === 'none';
+    d.style.display = open ? '' : 'none';
+    const slot = d.querySelector('.diff-slot');
+    if (!open || slot.dataset.done) return;
+    try {
+      const r = await fetch('{% url "website_changes:detail" %}?key=' + encodeURIComponent(row.dataset.key));
+      if (!r.ok) throw new Error(r.status);
+      const j = await r.json();
+      const head = j.before_when ? 'Before (' + esc(j.before_when) + ' · ' + esc(j.before_who) + ')' : 'Before (no earlier revision)';
+      const title = j.title_changed ? '<p style="margin:0 0 .5rem"><strong>Title:</strong> <del>' + esc(j.title_before) + '</del> → <ins>' + esc(j.title_after) + '</ins></p>' : '';
+      slot.classList.remove('muted');
+      slot.innerHTML = title + '<div class="diff"><div><h4>' + head + '</h4><div class="box">' + (j.before || '<span class="muted">–</span>') +
+        '</div></div><div><h4>After</h4><div class="box">' + (j.after || '<span class="muted">–</span>') + '</div></div></div>';
+      slot.dataset.done = '1';
+    } catch (e) { slot.textContent = 'Could not load the comparison (' + e.message + ').'; }
+  }));
+  document.querySelectorAll('.wl .noteform').forEach(f => f.addEventListener('click', e => e.stopPropagation()));
+})();
+</script>
+{% endblock %}
