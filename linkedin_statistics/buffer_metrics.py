@@ -11,9 +11,11 @@ Storage is the table ``buffer_post_metrics`` from June 2026: one row per day,
 post and metric (unique key ``uniq_day_post_metric``). Running the fetch twice
 on one day overwrites that day's row, it never adds a second one.
 
-The daily run is part of ``fetch_buffer_posts`` (Render cron job
-``buffer-posts-daily``, 14:00 German summer time). The Statistics page can
-also start it by hand.
+The snapshot is taken by ``fetch_buffer_posts``. There is no cron job on
+Render (render.yaml describes one, it was never set up - see
+posts_posted/buffer_sync.py). So the fetch runs in the background when OJ
+profile or the planner's Scheduled tab is opened and today's snapshot is
+still missing, and by hand with "Fetch now" (05.11.2026: 04.11. was missing).
 """
 from datetime import date, datetime
 from zoneinfo import ZoneInfo
@@ -210,6 +212,25 @@ def posts_with_latest(channel_id):
                     posts[bpid]['thumb'] = thumb or ''
             except Exception:
                 pass
+        with connection.cursor() as c:
+            try:
+                c.execute("SELECT buffer_post_id, planner_post_id FROM buffer_posts_posted "
+                          "WHERE planner_post_id IS NOT NULL AND buffer_post_id IN (%s)"
+                          % ','.join(['%s'] * len(ids)), ids)
+                for bpid, pid in c.fetchall():
+                    if not posts[bpid]['planner_post_id']:
+                        posts[bpid]['planner_post_id'] = pid
+            except Exception:
+                pass
+    # Buffer's thumbnail links (images.buffer.com/thumbnail/...) often do not
+    # load any more (05.11.2026: #155, #157 empty). The planner's own preview
+    # of the post stands in: as the picture when Buffer has none, otherwise
+    # as the fallback the page switches to when Buffer's picture fails.
+    for p in posts.values():
+        pid = p['planner_post_id']
+        p['thumb2'] = f'/planner/thumb/{pid}/' if pid else ''
+        if not p['thumb'] and p['thumb2']:
+            p['thumb'], p['thumb2'] = p['thumb2'], ''
     out = sorted((p for p in posts.values() if p['date'] and p['date'] >= OLDEST),
                  key=lambda p: (p['date'], p['id']), reverse=True)
     for p in out:

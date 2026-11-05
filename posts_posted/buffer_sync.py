@@ -10,7 +10,9 @@ fetch_buffer_posts too.
 Two ways in, both from here:
 
   * `sync_in_background()` - at most once a day, when someone opens the
-    Scheduled page. It returns immediately and does the work in a thread; a
+    Scheduled page. `sync_for_today_in_background()` (Scheduled page and
+    Statistics -> OJ profile) also runs when today's statistics snapshot is
+    still missing. It returns immediately and does the work in a thread; a
     page load must not wait on Buffer's API.
   * `sync_now()` - the button on that page. Runs to completion and reports
     what it did, because the user is waiting for exactly that answer.
@@ -134,6 +136,9 @@ def sync_in_background(min_stunden=20):
     API takes seconds, and nobody should stare at a blank Scheduled page for
     that. The result shows up on the next visit.
     """
+    from django.conf import settings
+    if not getattr(settings, 'BUFFER_BACKGROUND_SYNC', True):
+        return False           # the test settings switch it off: no thread may call Buffer there
     try:
         lauf_id = _belegen(min_stunden, 'auto')
     except Exception:
@@ -151,6 +156,27 @@ def sync_in_background(min_stunden=20):
 
     threading.Thread(target=arbeiten, daemon=True).start()
     return True
+
+
+def snapshot_missing_today():
+    """True when the statistics have no Buffer numbers for today (Berlin) yet."""
+    try:
+        from linkedin_statistics import buffer_metrics as bm
+        last = bm.last_fetch_day()
+        return last is None or last < bm.today_berlin()
+    except Exception:
+        return False
+
+
+def sync_for_today_in_background():
+    """Like sync_in_background(), but a day whose numbers are missing is
+    fetched even if the last run is younger than 20 hours - a visit at 09:00
+    after a run at 14:00 the day before used to skip that whole day for the
+    statistics (05.11.2026). One try per hour at most, so a failing Buffer
+    is not asked on every page load."""
+    if snapshot_missing_today():
+        return sync_in_background(min_stunden=1)
+    return sync_in_background()
 
 
 def sync_now():

@@ -75,3 +75,7 @@ DEFAULT_AUTO_FIELD = 'django.db.models.AutoField'
 # leere Zugangsdaten zurueck und damit auf einen sauberen Fehlerweg.
 for _schluessel in ('NEXTCLOUD_URL', 'NEXTCLOUD_USER', 'NEXTCLOUD_APP_PASSWORD'):
     os.environ.pop(_schluessel, None)
+
+# No page load may start a Buffer sync in a thread during the tests
+# (posts_posted/buffer_sync.py); the tests that check it switch it on.
+BUFFER_BACKGROUND_SYNC = False

@@ -25,7 +25,7 @@ superuser_required = user_passes_test(lambda u: u.is_active and u.is_superuser)
 
 def _post_json(p):
     return {'id': p['id'], 'date': p['date'].isoformat() if p['date'] else '', 'title': p['title'],
-            'full': p['text'][:1500], 'img': p.get('thumb') or '', 'days': p['days'],
+            'full': p['text'][:1500], 'img': p.get('thumb') or '', 'img2': p.get('thumb2') or '', 'days': p['days'],
             'm': {k: v for k, v in p['m'].items() if v is not None}}
 
 
@@ -33,6 +33,15 @@ def _post_json(p):
 def oj(request):
     buf = bm.superuser_buffer()
     channel = buf['person_channel']
+    # Today's numbers are fetched in the background when they are missing
+    # (there is no cron job). They show after a reload.
+    fetching = False
+    if buf['token']:
+        try:
+            from posts_posted.buffer_sync import snapshot_missing_today, sync_for_today_in_background
+            fetching = snapshot_missing_today() and sync_for_today_in_background()
+        except Exception:
+            fetching = False
     posts = bm.posts_with_latest(channel)
     timelines = bm.channel_timelines(channel)
     meta = oj_export.meta()
@@ -62,7 +71,9 @@ def oj(request):
                      'drawn dashed in the same colour (right axis). X = the first 30 days after posting. '
                      '<b>Cumulative</b> = total up to that day, <b>Daily</b> = what came in on that day. Buffer keeps '
                      'no history – the course of a post starts with the first daily fetch (01.11.2026; a few posts '
-                     'also have three days from a test in June). Click a post on the right to hide or show it.'),
+                     'also have three days from a test in June). In Cumulative the line starts at 0 on the day of '
+                     'posting and is dashed up to the first fetch – that stretch is estimated. Posts without numbers '
+                     'in their first 30 days are greyed out on the right. Click a post on the right to hide or show it.'),
             'fetchUrl': reverse('linkedin_statistics:oj_fetch'),
             'csrf': get_token(request),
         },
@@ -77,6 +88,7 @@ def oj(request):
         'upload_n': request.GET.get('n'),
         'upload_err': request.session.pop('oj_upload_error', None),
         'fetch_msg': request.session.pop('oj_fetch_msg', None),
+        'fetching': fetching,
     })
 
 
@@ -138,7 +150,7 @@ def oj_upload(request):
 @superuser_required
 @require_POST
 def oj_fetch(request):
-    """Fetch today's Buffer numbers now instead of waiting for the 14:00 run."""
+    """Fetch today's Buffer numbers now."""
     buf = bm.superuser_buffer()
     if not buf['token']:
         request.session['oj_fetch_msg'] = 'No Buffer key saved under API Connect.'

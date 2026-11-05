@@ -89,8 +89,10 @@ const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&': '&amp;', '<': '&
 const v = (p, k) => p.m[k];
 const n = x => x == null ? '<span class="muted">–</span>' : (Number.isInteger(x) ? x : (+x).toFixed(1));
 const pct = x => x == null ? '<span class="muted">–</span>' : (+x).toFixed(1) + ' %';
+// A picture that does not load switches to the second source (the planner's
+// preview of the post), then to an empty box.
 const img = (p, col) => p.img
-  ? `<img src="${esc(p.img)}" alt="" loading="lazy" referrerpolicy="no-referrer" style="border-color:${col || 'transparent'}" onerror="this.outerHTML='<div class=&quot;ph&quot; style=&quot;border-color:${col || 'transparent'}&quot;></div>'">`
+  ? `<img src="${esc(p.img)}"${p.img2 ? ` data-alt="${esc(p.img2)}"` : ''} alt="" loading="lazy" referrerpolicy="no-referrer" style="border-color:${col || 'transparent'}" onerror="if(this.dataset.alt){this.src=this.dataset.alt;this.removeAttribute('data-alt');}else{this.outerHTML='<div class=&quot;ph&quot; style=&quot;border-color:${col || 'transparent'}&quot;></div>'}">`
   : `<div class="ph" style="border-color:${col || 'transparent'}"></div>`;
 if (window.Chart) { Chart.defaults.font.family = getComputedStyle(document.body).fontFamily; Chart.defaults.color = '#555'; }
 
@@ -99,7 +101,7 @@ R('note').innerHTML = CFG.note;
 R('metric').innerHTML = CFG.chips.map((c, i) => `<button data-v="${c[0]}"${i ? '' : ' class="on"'}>${esc(c[1])}</button>`).join('');
 R('head').innerHTML = '<th class="nos c" title="Show in the timeline">⏱</th><th class="nos"></th><th class="l" data-k="date">Date</th><th class="l" data-k="title">Post</th>'
   + '<th data-k="impressions" style="min-width:150px">Impressions</th>' + CFG.cols.map(c => `<th data-k="${c[0]}">${esc(c[1])}</th>`).join('') + '<th class="nos"></th>';
-if (CFG.fetchUrl) R('extra').innerHTML = `<form method="post" action="${esc(CFG.fetchUrl)}" style="margin:0"><input type="hidden" name="csrfmiddlewaretoken" value="${esc(CFG.csrf)}"><button class="btn" type="submit" title="Ask Buffer now instead of waiting for 14:00">Fetch now</button></form>`;
+if (CFG.fetchUrl) R('extra').innerHTML = `<form method="post" action="${esc(CFG.fetchUrl)}" style="margin:0"><input type="hidden" name="csrfmiddlewaretoken" value="${esc(CFG.csrf)}"><button class="btn" type="submit" title="Ask Buffer now">Fetch now</button></form>`;
 
 // ── course of one post ──
 const points = (p, k) => (TL[p.id] || []).filter(d => d[k] != null).map(d => ({x: d.day, y: +d[k]}));
@@ -109,6 +111,9 @@ const points = (p, k) => (TL[p.id] || []).filter(d => d[k] != null).map(d => ({x
 function series(p, k, m) {
   const c = points(p, k), out = [], gapMax = CFG.maxGap;
   if ((m || mode) === 'cum' || CFG.rates.includes(k)) {
+    // Cumulative counts start at 0 on the day of posting. When the first fetch
+    // came later, that stretch is drawn dashed: it is estimated, not measured.
+    if (!CFG.rates.includes(k) && c.length && c[0].x > 0 && c[0].x <= 30) out.push({x: 0, y: 0, est: 1});
     c.forEach((pt, i) => { if (i && pt.x - c[i - 1].x > gapMax) out.push({x: c[i - 1].x + 1, y: null}); out.push(pt); });
     return out;
   }
@@ -125,6 +130,12 @@ function series(p, k, m) {
   return out;
 }
 const colorOf = id => { const i = sel.indexOf(id); return i < 0 ? null : COL[i % COL.length]; };
+// Does the post have numbers in its first 30 days? Posts that went out long
+// before the first fetch have none - the timeline cannot show them.
+const inWindow = (p, k) => points(p, k).some(q => q.x >= 0 && q.x <= 30);
+const firstDay = (p, k) => { const c = points(p, k); return c.length ? c[0].x : null; };
+const estDash = {borderDash: s => (s.p0.raw && s.p0.raw.est ? [5, 4] : undefined)};
+const estPoint = r => ctx => (ctx.raw && ctx.raw.est ? 0 : r);
 
 function sortRows() {
   const g = p => sk === 'date' || sk === 'title' ? p[sk] : (v(p, sk) ?? -1);
@@ -132,7 +143,7 @@ function sortRows() {
 }
 function refresh() {
   sortRows();
-  if (R('follow').checked) { sel = rows.slice(0, +R('topn').value).map(p => p.id); hidden.clear(); }
+  if (R('follow').checked) { sel = rows.filter(p => inWindow(p, metric)).slice(0, +R('topn').value).map(p => p.id); hidden.clear(); }
   else sel = sel.filter(id => rows.some(p => p.id === id));
   draw();
 }
@@ -161,7 +172,7 @@ function drawMini(cv) {
     if (!d.length) return;
     const extra = ax === 'y2' ? {borderDash: [5, 4], borderWidth: 1.5, pointRadius: 0}
                 : ax === 'y1' ? {borderWidth: 1.5, pointRadius: 2, stepped: mode === 'cum'} : {};
-    ds.push(Object.assign({type: 'line', label: lab, data: d, spanGaps: false, borderColor: col, backgroundColor: col, yAxisID: ax, pointRadius: 2, tension: mode === 'day' ? 0 : .3, borderWidth: 2}, extra));
+    ds.push(Object.assign({type: 'line', label: lab, data: d, spanGaps: false, borderColor: col, backgroundColor: col, yAxisID: ax, pointRadius: estPoint(2), tension: mode === 'day' ? 0 : .3, cubicInterpolationMode: 'monotone', borderWidth: 2, segment: estDash}, extra));
   });
   const xmax = Math.max(30, ...ds.flatMap(s => s.data.map(q => q.x)));
   if (cv._chart) cv._chart.destroy();
@@ -200,19 +211,23 @@ function draw() {
   if (window.Chart) ROOT.querySelectorAll('canvas[data-mini]').forEach(cv => drawMini(cv));
 
   const ps = sel.map(id => P.find(p => p.id === id)).filter(Boolean);
-  R('leg').innerHTML = ps.map(p => `<div data-id="${esc(p.id)}" style="opacity:${hidden.has(p.id) ? .35 : 1}">${img(p, colorOf(p.id))}<span class="t"><b>${fmtD(p.date)} · ${n(v(p, metric))}</b>${esc(p.title)}</span></div>`).join('') || '<span class="muted" style="font-size:.8rem">Tick posts in the table.</span>';
+  R('leg').innerHTML = ps.map(p => {
+    const ok = inWindow(p, metric), d1 = firstDay(p, metric);
+    const head = ok ? `${fmtD(p.date)} · ${n(v(p, metric))}` : `${fmtD(p.date)} · ${d1 == null ? 'no numbers yet' : 'numbers only from day ' + d1}`;
+    return `<div data-id="${esc(p.id)}" style="opacity:${hidden.has(p.id) || !ok ? .45 : 1}${ok ? '' : ';filter:grayscale(1)'}" title="${ok ? '' : 'Not in the first 30 days – Buffer keeps no history, the numbers start with the first fetch.'}">${img(p, colorOf(p.id))}<span class="t"><b>${head}</b>${esc(p.title)}</span></div>`;
+  }).join('') || '<span class="muted" style="font-size:.8rem">Tick posts in the table.</span>';
   R('leg').querySelectorAll('div[data-id]').forEach(d => d.onclick = () => { const id = d.dataset.id; hidden.has(id) ? hidden.delete(id) : hidden.add(id); draw(); });
   if (chart) chart.destroy();
   if (!window.Chart) return;
   const ov = R('engov').checked, ds = [];
   ps.filter(p => !hidden.has(p.id)).forEach(p => {
     const c = colorOf(p.id);
-    ds.push({label: fmtD(p.date) + ' ' + p.title.slice(0, 30), data: series(p, metric).filter(q => q.x <= 30), spanGaps: false, borderColor: c, backgroundColor: c, tension: mode === 'day' ? 0 : .3, pointRadius: 2.5, borderWidth: 2.2, yAxisID: 'y'});
+    ds.push({label: fmtD(p.date) + ' ' + p.title.slice(0, 30), data: series(p, metric).filter(q => q.x <= 30), spanGaps: false, borderColor: c, backgroundColor: c, tension: mode === 'day' ? 0 : .3, cubicInterpolationMode: 'monotone', pointRadius: estPoint(2.5), pointHoverRadius: estPoint(4), borderWidth: 2.2, yAxisID: 'y', segment: estDash});
     if (ov) ds.push({label: 'Eng. rate · ' + fmtD(p.date), data: series(p, 'engagementRate').filter(q => q.x <= 30), spanGaps: false, borderColor: c, backgroundColor: c, borderDash: [5, 4], borderWidth: 1.5, pointRadius: 0, tension: .3, yAxisID: 'y2'});
   });
   chart = new Chart(R('chart'), {type: 'line', data: {datasets: ds},
     options: {maintainAspectRatio: false, animation: false, interaction: {mode: 'nearest', intersect: false},
-      plugins: {legend: {display: false}, tooltip: {callbacks: {title: it => 'Day ' + it[0].parsed.x, label: it => it.dataset.yAxisID === 'y2' ? ` ${it.dataset.label}: ${it.parsed.y.toFixed(1)} %` : ` ${it.dataset.label}: ${it.parsed.y}`}}},
+      plugins: {legend: {display: false}, tooltip: {filter: it => !(it.raw && it.raw.est), callbacks: {title: it => 'Day ' + it[0].parsed.x, label: it => it.dataset.yAxisID === 'y2' ? ` ${it.dataset.label}: ${it.parsed.y.toFixed(1)} %` : ` ${it.dataset.label}: ${it.parsed.y}`}}},
       scales: {x: {type: 'linear', min: 0, max: 30, ticks: {stepSize: 5}, title: {display: true, text: 'Days after posting'}, grid: {color: '#f1f3f5'}},
         y: {beginAtZero: true, grid: {color: '#f1f3f5'}, title: {display: true, text: R('metric').querySelector('.on').textContent + (mode === 'day' && !CFG.rates.includes(metric) ? ' per day' : '')}},
         y2: {display: ov, position: 'right', beginAtZero: true, grid: {display: false}, title: {display: true, text: 'Eng. rate % (dashed)'}, ticks: {callback: x => x + ' %'}}}}});
@@ -220,7 +235,7 @@ function draw() {
 
 const chips = (el, cb) => el.querySelectorAll('button').forEach(b => b.onclick = () => { el.querySelectorAll('button').forEach(x => x.classList.toggle('on', x === b)); cb(b.dataset.v); });
 chips(R('mode'), m => { mode = m; draw(); });
-chips(R('metric'), k => { metric = k; draw(); });
+chips(R('metric'), k => { metric = k; R('follow').checked ? refresh() : draw(); });
 ROOT.querySelectorAll('.ptt th[data-k]').forEach(th => th.onclick = () => { const k = th.dataset.k; sd = (sk === k) ? -sd : -1; sk = k; refresh(); });
 R('engov').onchange = draw;
 R('follow').onchange = refresh;

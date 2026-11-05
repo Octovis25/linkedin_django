@@ -596,8 +596,8 @@ def scheduled_view(request):
     # page is the moment to catch up: once a day, in a thread, so nobody
     # waits on Buffer's API. What it finds shows on the next visit.
     try:
-        from posts_posted.buffer_sync import sync_in_background, letzter_lauf
-        sync_in_background()
+        from posts_posted.buffer_sync import sync_for_today_in_background, letzter_lauf
+        sync_for_today_in_background()
         _lauf = letzter_lauf()
     except Exception as _sync_fehler:
         # The note at the top of the list is a convenience; the list of
