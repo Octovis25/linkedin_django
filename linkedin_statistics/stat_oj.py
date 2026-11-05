@@ -72,14 +72,14 @@ def oj(request):
             'rates': ['engagementRate'],
             'maxGap': 3,
             'note': ('One line per post selected in the table below; with “+ Eng. rate %” its engagement rate is '
-                     'drawn dashed in the same colour (right axis). X = the first 30 days after posting, counted '
+                     'drawn dashed in the same colour (right axis). X = the first 3, 7 or 30 days after posting (buttons above), counted '
                      'to the hour when Buffer got the numbers from LinkedIn (Buffer refreshes them about once a day; '
                      'the app asks every hour and keeps each refresh). '
                      '<b>Cumulative</b> = total up to that day, <b>Daily</b> = what came in on that day. Buffer keeps '
                      'no history – the course of a post starts with the first daily fetch (01.11.2026; a few posts '
                      'also have three days from a test in June). In Cumulative the line starts at 0 on the day of '
                      'posting and is dashed up to the first fetch – that stretch is estimated. Posts without numbers '
-                     'in their first 30 days are greyed out on the right. Click a post on the right to hide or show it.'),
+                     'in the chosen days are greyed out on the right. Click a post on the right to hide or show it.'),
             'fetchUrl': reverse('linkedin_statistics:oj_fetch'),
             'csrf': get_token(request),
         },
@@ -102,15 +102,18 @@ def oj(request):
 @superuser_required
 def oj_analysis(request):
     from . import oj_analysis as analysis
+    from . import posting_times
     buf = bm.superuser_buffer()
     meta = oj_export.meta()
-    result = analysis.analyse(bm.posts_with_latest(buf['person_channel']),
-                              bm.posts_with_latest(buf['org_channel']),
+    person = bm.posts_with_latest(buf['person_channel'])
+    company = bm.posts_with_latest(buf['org_channel'])
+    result = analysis.analyse(person, company,
                               oj_export.daily(), meta['followers_total'] if meta else None,
                               contacts=oj_contacts.listing())
     return render(request, 'linkedin_statistics/stat_oj_analysis.html', {
         'result': result, 'charts': {f['key']: f.get('chart') for f in result['findings']},
         'export': meta, 'last_fetch': bm.last_fetch_day(),
+        'heatmaps': {'company': posting_times.heatmap(company), 'oj': posting_times.heatmap(person)},
     })
 
 

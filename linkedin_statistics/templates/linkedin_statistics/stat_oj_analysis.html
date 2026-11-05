@@ -20,6 +20,15 @@
 .oja td { padding:.4rem .5rem; border-bottom:1px solid #f1f3f5; }
 .oja td.r, .oja th.r { text-align:right; }
 .oja .muted { color:#adb5bd; }
+.oja .chips { display:flex; gap:4px; } .oja .chips button { border:1px solid #ced4da; background:#fff; border-radius:99px; padding:.2rem .7rem; font-size:.78rem; cursor:pointer; }
+.oja .chips button.on { background:var(--octo-petrol, #008591); color:#fff; border-color:var(--octo-petrol, #008591); }
+.oja .hm-wrap { display:grid; grid-template-columns:auto 1fr; gap:1.4rem; align-items:start; } @media(max-width:900px){ .oja .hm-wrap { grid-template-columns:1fr; } }
+.oja table.hm { width:auto; border-collapse:separate; border-spacing:3px; font-size:.78rem; }
+.oja table.hm th { text-align:center; border:0; padding:2px 6px; } .oja table.hm th.d { text-align:right; }
+.oja table.hm td { width:70px; height:44px; text-align:center; border-radius:5px; vertical-align:middle; border:0; padding:0; }
+.oja table.hm td b { display:block; font-size:.88rem; } .oja table.hm td span { font-size:.64rem; opacity:.85; }
+.oja table.hm td.e { background:#f8f9fa; } .oja table.hm td.few { background:#eef1f2; color:#868e96; background-image:repeating-linear-gradient(45deg,rgba(255,255,255,.7) 0 4px,transparent 4px 8px); }
+.oja .hm-leg { display:flex; align-items:center; gap:6px; font-size:.7rem; color:#868e96; margin-top:.5rem; } .oja .hm-leg i { display:inline-block; width:24px; height:10px; border-radius:2px; }
 </style>
 
 <div class="oja">
@@ -42,7 +51,19 @@
   {% empty %}
   <div class="card"><div class="cb muted">No posts with numbers yet – press “Fetch now” under OJ profile.</div></div>
   {% endfor %}
+
+  <div class="card" id="hm-card"><div class="ch"><h2>When the posts went out</h2>
+      <div class="chips" id="hm-chan"><button data-c="company" class="on">Company page</button><button data-c="oj">OJ profile</button></div>
+      <div class="chips" id="hm-stat"><button data-s="med" class="on">Median per post</button><button data-s="sum">Total impressions</button></div>
+      <span class="sure" id="hm-sure"></span></div>
+    <div class="cb"><div class="hm-wrap">
+      <div><table class="hm" id="hm-table"></table>
+        <div class="hm-leg">fewer <i style="background:#e6f4f3"></i><i style="background:#9fd9d5"></i><i style="background:#20B8B0"></i><i style="background:#005F68"></i> more · grey = fewer than {{ heatmaps.company.min_posts }} posts, no colour on purpose</div></div>
+      <div><div id="hm-text"></div>
+        <p class="lead muted" style="font-size:.78rem">Weekday and time of day in Berlin time, from Buffer's sending time. Impressions per post so far (newest numbers); posts with 0 impressions are left out.</p></div>
+    </div></div></div>
 </div>
+{{ heatmaps|json_script:"oja-heatmaps" }}
 
 {{ charts|json_script:"oja-charts" }}
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
@@ -77,6 +98,43 @@
       options: {...base, plugins: {legend: {position: 'bottom', labels: {boxWidth: 10}}, tooltip: {callbacks: {afterTitle: it => { const m = c.months[it[0].dataIndex]; return m.posts + ' post' + (m.posts === 1 ? '' : 's'); }}}},
         scales: {y: {beginAtZero: true, grid}, y2: {position: 'right', beginAtZero: true, grid: {display: false}}, x: {grid: {display: false}}}}});
   });
+})();
+
+// ── heatmap: weekday × time of day ──
+(() => {
+  const H = JSON.parse(document.getElementById('oja-heatmaps').textContent);
+  let ch = 'company', st = 'med';
+  const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'}[c]));
+  const med = a => { const s = [...a].sort((x, y) => x - y), m = s.length >> 1; return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2; };
+  const sum = a => a.reduce((x, y) => x + y, 0);
+  const STOPS = [[230, 244, 243], [159, 217, 213], [32, 184, 176], [0, 95, 104]];
+  const colour = f => { const x = Math.min(.999, Math.max(0, f)) * (STOPS.length - 1), i = Math.floor(x), t = x - i, a = STOPS[i], b = STOPS[i + 1];
+    return `rgb(${a.map((v, k) => Math.round(v + (b[k] - v) * t))})`; };
+  const LABEL = {solid: 'solid', hint: 'hint', none: 'no clear effect', few: 'too few posts yet'};
+  function draw() {
+    const h = H[ch], cells = h.cells, val = a => st === 'med' ? med(a) : sum(a);
+    const counted = Object.values(cells).filter(a => a.length >= h.min_posts).map(val), mx = Math.max(1, ...counted);
+    let t = '<tr><th></th>' + h.blocks.map(b => `<th>${esc(b)}</th>`).join('') + '</tr>';
+    h.days.forEach((d, di) => {
+      t += `<tr><th class="d">${d}</th>` + h.blocks.map((b, bi) => {
+        const a = cells[di + ',' + bi];
+        if (!a) return '<td class="e"></td>';
+        const v = val(a), few = a.length < h.min_posts, f = v / mx;
+        const style = few ? '' : ` style="background:${colour(f)};color:${f > .55 ? '#fff' : '#161616'}"`;
+        return `<td class="${few ? 'few' : ''}"${style} title="${d} ${esc(b)} · ${a.length} post${a.length > 1 ? 's' : ''} · median ${Math.round(med(a))} · total ${sum(a)}"><b>${Math.round(v)}</b><span>${a.length} post${a.length > 1 ? 's' : ''}</span></td>`;
+      }).join('') + '</tr>';
+    });
+    document.getElementById('hm-table').innerHTML = t;
+    const s = h.summary;
+    const sure = document.getElementById('hm-sure');
+    sure.className = 'sure v-' + s.verdict; sure.textContent = LABEL[s.verdict] + ' · ' + h.n + ' posts';
+    document.getElementById('hm-text').innerHTML = s.lines.map(l => `<p class="lead">${esc(l)}</p>`).join('') + (s.so ? `<p class="so">${esc(s.so)}</p>` : '');
+  }
+  const chips = (id, cb) => document.querySelectorAll('#' + id + ' button').forEach(b => b.onclick = () => {
+    document.querySelectorAll('#' + id + ' button').forEach(x => x.classList.toggle('on', x === b)); cb(b.dataset); draw(); });
+  chips('hm-chan', d => { ch = d.c; });
+  chips('hm-stat', d => { st = d.s; });
+  draw();
 })();
 </script>
 {% endblock %}

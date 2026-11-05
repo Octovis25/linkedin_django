@@ -100,7 +100,7 @@ CFG = {
     'rates': ['engagementRate', 'ctr'],
     'maxGap': 14,
     'note': ('One line per post selected in the table below; with “+ Eng. rate %” its engagement rate is drawn '
-             'dashed in the same colour (right axis). X = the first 30 days after posting. <b>Cumulative</b> = '
+             'dashed in the same colour (right axis). X = the first 3, 7 or 30 days after posting (buttons above). <b>Cumulative</b> = '
              'total up to that day, <b>Daily</b> = what came in on that day. The numbers come from the LinkedIn '
              'exports under Data – one point per export since 17.02.2026; exports more than 14 days apart are not '
              'joined. Totals never go down: an export over a shorter period that shows less is ignored.'),

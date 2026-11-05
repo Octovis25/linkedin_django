@@ -65,6 +65,7 @@ and calls  window.postTimelines[prefix].setRange(from, to)  whenever its period 
 <div class="ptl" id="{{ prefix }}-ptl">
   <div class="card"><div class="ch"><h2>Timeline</h2>
       <div class="chips" data-r="mode"><button data-v="cum" class="on">Cumulative</button><button data-v="day">Daily</button></div>
+      <div class="chips" data-r="span" title="How much of each post's life the timeline shows"><button data-v="3">3 days</button><button data-v="7">7 days</button><button data-v="30" class="on">30 days</button></div>
       <label class="lbl"><input type="checkbox" data-r="engov"> + Eng. rate %</label>
       <div class="right chips" data-r="metric"></div></div>
     <div class="cb"><div class="tl"><div style="height:330px"><canvas data-r="chart"></canvas></div><div class="leg" data-r="leg"></div></div>
@@ -96,7 +97,7 @@ const img = (p, col) => p.img
   : `<div class="ph" style="border-color:${col || 'transparent'}"></div>`;
 if (window.Chart) { Chart.defaults.font.family = getComputedStyle(document.body).fontFamily; Chart.defaults.color = '#555'; }
 
-let from = '0000', to = '9999', mode = 'cum', sk = 'date', sd = -1, metric = CFG.chips[0][0], sel = [], hidden = new Set(), rows = [], open = new Set(), chart;
+let span = 30, from = '0000', to = '9999', mode = 'cum', sk = 'date', sd = -1, metric = CFG.chips[0][0], sel = [], hidden = new Set(), rows = [], open = new Set(), chart;
 R('note').innerHTML = CFG.note;
 R('metric').innerHTML = CFG.chips.map((c, i) => `<button data-v="${c[0]}"${i ? '' : ' class="on"'}>${esc(c[1])}</button>`).join('');
 R('head').innerHTML = '<th class="nos c" title="Show in the timeline">⏱</th><th class="nos"></th><th class="l" data-k="date">Date</th><th class="l" data-k="title">Post</th>'
@@ -136,12 +137,12 @@ function series(p, k, m) {
 const colorOf = id => { const i = sel.indexOf(id); return i < 0 ? null : COL[i % COL.length]; };
 // Does the post have numbers in its first 30 days? Posts that went out long
 // before the first fetch have none - the timeline cannot show them.
-const inWindow = (p, k) => points(p, k).some(q => q.x >= 0 && q.x <= 30);
+const inWindow = (p, k) => points(p, k).some(q => q.x >= 0 && q.x <= span);
 const firstDay = (p, k) => { const c = points(p, k); return c.length ? c[0].x : null; };
 const estDash = {borderDash: s => (s.p0.raw && s.p0.raw.est ? [5, 4] : undefined)};
 const estPoint = r => ctx => (ctx.raw && ctx.raw.est ? 0 : r);
 // 1.54 -> "Day 1 + 13 h" (the time since posting, to the hour)
-const dayTitle = x => { let d = Math.floor(x), h = Math.round((x - d) * 24); if (h === 24) { d += 1; h = 0; } return 'Day ' + d + (h ? ' + ' + h + ' h' : ''); };
+const dayTitle = x => { if (span === 3) return Math.round(x * 24) + ' h after posting'; let d = Math.floor(x), h = Math.round((x - d) * 24); if (h === 24) { d += 1; h = 0; } return 'Day ' + d + (h ? ' + ' + h + ' h' : ''); };
 
 function sortRows() {
   const g = p => sk === 'date' || sk === 'title' ? p[sk] : (v(p, sk) ?? -1);
@@ -220,7 +221,7 @@ function draw() {
   R('leg').innerHTML = ps.map(p => {
     const ok = inWindow(p, metric), d1 = firstDay(p, metric);
     const head = ok ? `${fmtD(p.date)} · ${n(v(p, metric))}` : `${fmtD(p.date)} · ${d1 == null ? 'no numbers yet' : 'numbers only from day ' + Math.floor(d1)}`;
-    return `<div data-id="${esc(p.id)}" style="opacity:${hidden.has(p.id) || !ok ? .45 : 1}${ok ? '' : ';filter:grayscale(1)'}" title="${ok ? '' : 'Not in the first 30 days – Buffer keeps no history, the numbers start with the first fetch.'}">${img(p, colorOf(p.id))}<span class="t"><b>${head}</b>${esc(p.title)}</span></div>`;
+    return `<div data-id="${esc(p.id)}" style="opacity:${hidden.has(p.id) || !ok ? .45 : 1}${ok ? '' : ';filter:grayscale(1)'}" title="${ok ? '' : 'Not in the first ' + span + ' days – Buffer keeps no history, the numbers start with the first fetch.'}">${img(p, colorOf(p.id))}<span class="t"><b>${head}</b>${esc(p.title)}</span></div>`;
   }).join('') || '<span class="muted" style="font-size:.8rem">Tick posts in the table.</span>';
   R('leg').querySelectorAll('div[data-id]').forEach(d => d.onclick = () => { const id = d.dataset.id; hidden.has(id) ? hidden.delete(id) : hidden.add(id); draw(); });
   if (chart) chart.destroy();
@@ -228,19 +229,21 @@ function draw() {
   const ov = R('engov').checked, ds = [];
   ps.filter(p => !hidden.has(p.id)).forEach(p => {
     const c = colorOf(p.id);
-    ds.push({label: fmtD(p.date) + ' ' + p.title.slice(0, 30), data: series(p, metric).filter(q => q.x <= 30), spanGaps: false, borderColor: c, backgroundColor: c, tension: mode === 'day' ? 0 : .3, cubicInterpolationMode: 'monotone', pointRadius: estPoint(2.5), pointHoverRadius: estPoint(4), borderWidth: 2.2, yAxisID: 'y', segment: estDash});
-    if (ov) ds.push({label: 'Eng. rate · ' + fmtD(p.date), data: series(p, 'engagementRate').filter(q => q.x <= 30), spanGaps: false, borderColor: c, backgroundColor: c, borderDash: [5, 4], borderWidth: 1.5, pointRadius: 0, tension: .3, yAxisID: 'y2'});
+    ds.push({label: fmtD(p.date) + ' ' + p.title.slice(0, 30), data: series(p, metric).filter(q => q.x <= span), spanGaps: false, borderColor: c, backgroundColor: c, tension: mode === 'day' ? 0 : .3, cubicInterpolationMode: 'monotone', pointRadius: estPoint(2.5), pointHoverRadius: estPoint(4), borderWidth: 2.2, yAxisID: 'y', segment: estDash});
+    if (ov) ds.push({label: 'Eng. rate · ' + fmtD(p.date), data: series(p, 'engagementRate').filter(q => q.x <= span), spanGaps: false, borderColor: c, backgroundColor: c, borderDash: [5, 4], borderWidth: 1.5, pointRadius: 0, tension: .3, yAxisID: 'y2'});
   });
   chart = new Chart(R('chart'), {type: 'line', data: {datasets: ds},
     options: {maintainAspectRatio: false, animation: false, interaction: {mode: 'nearest', intersect: false},
       plugins: {legend: {display: false}, tooltip: {filter: it => !(it.raw && it.raw.est), callbacks: {title: it => dayTitle(it[0].parsed.x), label: it => it.dataset.yAxisID === 'y2' ? ` ${it.dataset.label}: ${it.parsed.y.toFixed(1)} %` : ` ${it.dataset.label}: ${it.parsed.y}`}}},
-      scales: {x: {type: 'linear', min: 0, max: 30, ticks: {stepSize: 5}, title: {display: true, text: 'Days after posting'}, grid: {color: '#f1f3f5'}},
+      scales: {x: {type: 'linear', min: 0, max: span, ticks: {stepSize: span === 3 ? .25 : span === 7 ? 1 : 5, callback: x => span === 3 ? Math.round(x * 24) + ' h' : x},
+          title: {display: true, text: span === 3 ? 'Hours after posting' : 'Days after posting'}, grid: {color: s => span === 3 && s.tick && s.tick.value % 1 === 0 ? '#ced4da' : '#f1f3f5'}},
         y: {beginAtZero: true, grid: {color: '#f1f3f5'}, title: {display: true, text: R('metric').querySelector('.on').textContent + (mode === 'day' && !CFG.rates.includes(metric) ? ' per day' : '')}},
         y2: {display: ov, position: 'right', beginAtZero: true, grid: {display: false}, title: {display: true, text: 'Eng. rate % (dashed)'}, ticks: {callback: x => x + ' %'}}}}});
 }
 
 const chips = (el, cb) => el.querySelectorAll('button').forEach(b => b.onclick = () => { el.querySelectorAll('button').forEach(x => x.classList.toggle('on', x === b)); cb(b.dataset.v); });
 chips(R('mode'), m => { mode = m; draw(); });
+chips(R('span'), d => { span = +d; R('follow').checked ? refresh() : draw(); });
 chips(R('metric'), k => { metric = k; R('follow').checked ? refresh() : draw(); });
 ROOT.querySelectorAll('.ptt th[data-k]').forEach(th => th.onclick = () => { const k = th.dataset.k; sd = (sk === k) ? -sd : -1; sk = k; refresh(); });
 R('engov').onchange = draw;
