@@ -117,9 +117,13 @@ function series(p, k, m) {
     c.forEach((pt, i) => { if (i && pt.x - c[i - 1].x > gapMax) out.push({x: c[i - 1].x + 1, y: null}); out.push(pt); });
     return out;
   }
+  // Daily works on whole days: the last number of each day after posting
+  // (points can be hours apart, "day" has decimals).
+  const byDay = [];
+  c.forEach(pt => { const d = Math.floor(pt.x); if (byDay.length && byDay[byDay.length - 1].x === d) byDay[byDay.length - 1].y = pt.y; else byDay.push({x: d, y: pt.y}); });
   // A post starts at 0: the first fetch is compared with "nothing yet" the day
   // before posting, so a first export on day 3 shows its total spread over days 0-3.
-  [{x: -1, y: 0}].concat(c).forEach((pt, i, all) => {
+  [{x: -1, y: 0}].concat(byDay).forEach((pt, i, all) => {
     if (i === 0) return;
     const prev = all[i - 1], gap = pt.x - prev.x;
     if (gap <= 0) return;
@@ -136,6 +140,8 @@ const inWindow = (p, k) => points(p, k).some(q => q.x >= 0 && q.x <= 30);
 const firstDay = (p, k) => { const c = points(p, k); return c.length ? c[0].x : null; };
 const estDash = {borderDash: s => (s.p0.raw && s.p0.raw.est ? [5, 4] : undefined)};
 const estPoint = r => ctx => (ctx.raw && ctx.raw.est ? 0 : r);
+// 1.54 -> "Day 1 + 13 h" (the time since posting, to the hour)
+const dayTitle = x => { let d = Math.floor(x), h = Math.round((x - d) * 24); if (h === 24) { d += 1; h = 0; } return 'Day ' + d + (h ? ' + ' + h + ' h' : ''); };
 
 function sortRows() {
   const g = p => sk === 'date' || sk === 'title' ? p[sk] : (v(p, sk) ?? -1);
@@ -177,7 +183,7 @@ function drawMini(cv) {
   const xmax = Math.max(30, ...ds.flatMap(s => s.data.map(q => q.x)));
   if (cv._chart) cv._chart.destroy();
   cv._chart = new Chart(cv, {data: {datasets: ds}, options: {maintainAspectRatio: false, animation: false, interaction: {mode: 'index', intersect: false},
-    plugins: {legend: {display: false}, tooltip: {callbacks: {title: it => 'Day ' + it[0].parsed.x}}},
+    plugins: {legend: {display: false}, tooltip: {callbacks: {title: it => dayTitle(it[0].parsed.x)}}},
     scales: {x: {type: 'linear', min: 0, max: xmax, ticks: {stepSize: 5, font: {size: 10}}, grid: {display: false}, title: {display: true, text: 'Days after posting', font: {size: 10}}},
       y: {display: ds.some(s => s.yAxisID === 'y'), beginAtZero: true, ticks: {font: {size: 10}}, grid: {color: '#f1f3f5'}},
       y1: {display: ds.some(s => s.yAxisID === 'y1'), beginAtZero: true, position: 'right', ticks: {font: {size: 10}, precision: 0}, grid: {display: false}},
@@ -213,7 +219,7 @@ function draw() {
   const ps = sel.map(id => P.find(p => p.id === id)).filter(Boolean);
   R('leg').innerHTML = ps.map(p => {
     const ok = inWindow(p, metric), d1 = firstDay(p, metric);
-    const head = ok ? `${fmtD(p.date)} · ${n(v(p, metric))}` : `${fmtD(p.date)} · ${d1 == null ? 'no numbers yet' : 'numbers only from day ' + d1}`;
+    const head = ok ? `${fmtD(p.date)} · ${n(v(p, metric))}` : `${fmtD(p.date)} · ${d1 == null ? 'no numbers yet' : 'numbers only from day ' + Math.floor(d1)}`;
     return `<div data-id="${esc(p.id)}" style="opacity:${hidden.has(p.id) || !ok ? .45 : 1}${ok ? '' : ';filter:grayscale(1)'}" title="${ok ? '' : 'Not in the first 30 days – Buffer keeps no history, the numbers start with the first fetch.'}">${img(p, colorOf(p.id))}<span class="t"><b>${head}</b>${esc(p.title)}</span></div>`;
   }).join('') || '<span class="muted" style="font-size:.8rem">Tick posts in the table.</span>';
   R('leg').querySelectorAll('div[data-id]').forEach(d => d.onclick = () => { const id = d.dataset.id; hidden.has(id) ? hidden.delete(id) : hidden.add(id); draw(); });
@@ -227,7 +233,7 @@ function draw() {
   });
   chart = new Chart(R('chart'), {type: 'line', data: {datasets: ds},
     options: {maintainAspectRatio: false, animation: false, interaction: {mode: 'nearest', intersect: false},
-      plugins: {legend: {display: false}, tooltip: {filter: it => !(it.raw && it.raw.est), callbacks: {title: it => 'Day ' + it[0].parsed.x, label: it => it.dataset.yAxisID === 'y2' ? ` ${it.dataset.label}: ${it.parsed.y.toFixed(1)} %` : ` ${it.dataset.label}: ${it.parsed.y}`}}},
+      plugins: {legend: {display: false}, tooltip: {filter: it => !(it.raw && it.raw.est), callbacks: {title: it => dayTitle(it[0].parsed.x), label: it => it.dataset.yAxisID === 'y2' ? ` ${it.dataset.label}: ${it.parsed.y.toFixed(1)} %` : ` ${it.dataset.label}: ${it.parsed.y}`}}},
       scales: {x: {type: 'linear', min: 0, max: 30, ticks: {stepSize: 5}, title: {display: true, text: 'Days after posting'}, grid: {color: '#f1f3f5'}},
         y: {beginAtZero: true, grid: {color: '#f1f3f5'}, title: {display: true, text: R('metric').querySelector('.on').textContent + (mode === 'day' && !CFG.rates.includes(metric) ? ' per day' : '')}},
         y2: {display: ov, position: 'right', beginAtZero: true, grid: {display: false}, title: {display: true, text: 'Eng. rate % (dashed)'}, ticks: {callback: x => x + ' %'}}}}});

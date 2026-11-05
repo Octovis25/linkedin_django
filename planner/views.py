@@ -3524,6 +3524,15 @@ def api_trigger_scheduled(request):
     if provided != expected:
         return JsonResponse({'error': 'forbidden'}, status=403)
 
+    # Make's schedule is also the clock for the statistics: Buffer's post
+    # numbers once an hour, in the background (05.11.2026). The app has no
+    # timer of its own.
+    try:
+        from linkedin_statistics.buffer_metrics import fetch_hourly
+        fetch_hourly()
+    except Exception as _stat_fehler:
+        print('hourly Buffer numbers skipped:', _stat_fehler)
+
     token = _li_get_superuser_token()
     if not token:
         return JsonResponse({'ok': False, 'error': 'linkedin_not_connected'})

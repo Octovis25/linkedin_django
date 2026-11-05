@@ -42,6 +42,10 @@ def oj(request):
             fetching = snapshot_missing_today() and sync_for_today_in_background()
         except Exception:
             fetching = False
+        try:
+            bm.fetch_hourly()             # the hour's numbers, if nobody fetched them yet
+        except Exception:
+            pass
     posts = bm.posts_with_latest(channel)
     timelines = bm.channel_timelines(channel)
     meta = oj_export.meta()
@@ -68,7 +72,9 @@ def oj(request):
             'rates': ['engagementRate'],
             'maxGap': 3,
             'note': ('One line per post selected in the table below; with “+ Eng. rate %” its engagement rate is '
-                     'drawn dashed in the same colour (right axis). X = the first 30 days after posting. '
+                     'drawn dashed in the same colour (right axis). X = the first 30 days after posting, counted '
+                     'to the hour when Buffer got the numbers from LinkedIn (Buffer refreshes them about once a day; '
+                     'the app asks every hour and keeps each refresh). '
                      '<b>Cumulative</b> = total up to that day, <b>Daily</b> = what came in on that day. Buffer keeps '
                      'no history – the course of a post starts with the first daily fetch (01.11.2026; a few posts '
                      'also have three days from a test in June). In Cumulative the line starts at 0 on the day of '
@@ -89,6 +95,7 @@ def oj(request):
         'upload_err': request.session.pop('oj_upload_error', None),
         'fetch_msg': request.session.pop('oj_fetch_msg', None),
         'fetching': fetching,
+        'tick_url': request.build_absolute_uri(reverse('linkedin_statistics:oj_tick')) + '?key=' + bm.tick_key(),
     })
 
 
@@ -167,3 +174,15 @@ def oj_fetch(request):
 def _url():
     from django.urls import reverse
     return reverse('linkedin_statistics:oj')
+
+
+def oj_tick(request):
+    """For a scheduler, once an hour: fetch Buffer's numbers (05.11.2026).
+
+    No login - the key in the address is the permission, and all it can do
+    is start a fetch, at most one per hour. Wrong key: 403.
+    """
+    import hmac
+    if not hmac.compare_digest(request.GET.get('key', ''), bm.tick_key()):
+        return JsonResponse({'error': 'forbidden'}, status=403)
+    return JsonResponse({'ok': True, 'started': bool(bm.fetch_hourly())})

@@ -48,6 +48,29 @@ def today_berlin():
     return datetime.now(BERLIN).date()
 
 
+UTC = ZoneInfo('UTC')
+# Every refresh is kept for posts up to this age; older posts only get the
+# daily row (their numbers hardly move, and the table stays small).
+MEASURE_MAX_AGE_DAYS = 90
+
+
+def _utcnow():
+    return datetime.now(UTC).replace(tzinfo=None, microsecond=0)
+
+
+def _ts(text):
+    """Buffer's ISO time ('2026-11-04T16:28:40.946Z') -> naive UTC datetime."""
+    if not text:
+        return None
+    try:
+        dt = datetime.fromisoformat(str(text).replace('Z', '+00:00'))
+    except ValueError:
+        return None
+    if dt.tzinfo is not None:
+        dt = dt.astimezone(UTC).replace(tzinfo=None)
+    return dt.replace(microsecond=0)
+
+
 def ensure_table():
     """The table exists in production since June 2026; this is for a fresh database."""
     with connection.cursor() as c:
@@ -72,6 +95,30 @@ def ensure_table():
                 KEY idx_fetched_date (fetched_date)
             )
         """)
+        # Every refresh of Buffer's numbers with its time (05.11.2026). The
+        # day table above keeps one row per day, so a second refresh on the
+        # same day overwrote the first. measured_at is Buffer's
+        # metrics_updated_at: when Buffer got the numbers from LinkedIn - the
+        # same numbers fetched again add no row.
+        c.execute("""
+            CREATE TABLE IF NOT EXISTS buffer_post_measurements (
+                buffer_post_id VARCHAR(100) NOT NULL,
+                channel_id VARCHAR(100),
+                metric_type VARCHAR(100) NOT NULL,
+                measured_at DATETIME NOT NULL,
+                metric_value DOUBLE DEFAULT 0,
+                fetched_at DATETIME,
+                PRIMARY KEY (buffer_post_id, metric_type, measured_at),
+                KEY idx_meas_channel (channel_id)
+            )
+        """)
+        # One fetch per hour at most, whoever asks (Make's call, a page load).
+        c.execute("""
+            CREATE TABLE IF NOT EXISTS buffer_metrics_runs (
+                slot DATETIME PRIMARY KEY, started_at DATETIME, finished_at DATETIME NULL,
+                ok TINYINT DEFAULT 0, note VARCHAR(255) DEFAULT ''
+            )
+        """)
 
 
 def _planner_post_id(c, buffer_post_id):
@@ -87,6 +134,7 @@ def store_snapshot(posts, day=None):
     """Write today's numbers of every post that has any. Returns (posts, rows)."""
     day = day or today_berlin()
     ensure_table()
+    now = _utcnow()
     n_posts = n_rows = 0
     with connection.cursor() as c:
         for p in posts:
@@ -98,6 +146,9 @@ def store_snapshot(posts, day=None):
             if (_as_date(p['sent_at']) or OLDEST) < OLDEST:
                 continue
             pid = _planner_post_id(c, bpid)
+            # Without Buffer's time of the numbers the day row is all there is.
+            measured = _ts(p.get('metrics_updated_at'))
+            young = bool(measured) and (now - (_ts(p['sent_at']) or now)).days <= MEASURE_MAX_AGE_DAYS
             for m in metrics:
                 try:
                     value = float(m.get('value') or 0)
@@ -120,6 +171,11 @@ def store_snapshot(posts, day=None):
                       m.get('type'), m.get('name'), value, m.get('unit'),
                       p.get('metrics_updated_at'), pid,
                       (p.get('text') or '')[:5000], p.get('thumbnail_url')])
+                if young:
+                    c.execute("""INSERT IGNORE INTO buffer_post_measurements
+                                 (buffer_post_id, channel_id, metric_type, measured_at, metric_value, fetched_at)
+                                 VALUES (%s,%s,%s,%s,%s,%s)""",
+                              [bpid, p.get('channel_id'), m.get('type'), measured, value, now])
                 n_rows += 1
             n_posts += 1
     return n_posts, n_rows
@@ -286,24 +342,107 @@ def last_fetch_day():
 
 
 def channel_timelines(channel_id):
-    """All snapshots of one channel in one query: {post id: [{'day', 'date', metric: value}]}.
+    """All numbers of one channel: {post id: [{'day', 'date', metric: value}]}.
 
-    'day' counts from the Berlin day the post went out (0 = that day).
+    'day' is the time from posting to the moment Buffer got the numbers
+    (metrics_updated_at), in days with decimals: 1.5 = 36 hours after the
+    post went out (05.11.2026). Counting calendar days of the fetch made the
+    lines crooked - numbers Buffer got on 04.11. at 16:28 and fetched on
+    05.11. counted as a day later. Rows without that time (June 2026) count
+    calendar days from the Berlin posting day, as before. The same numbers
+    fetched twice are one point.
     """
     if not channel_id:
         return {}
     ensure_table()
     with connection.cursor() as c:
-        c.execute("""SELECT buffer_post_id, fetched_date, metric_type, metric_value, sent_at
-                     FROM buffer_post_metrics WHERE channel_id=%s
-                     ORDER BY buffer_post_id, fetched_date""", [channel_id])
-        rows = c.fetchall()
+        c.execute("""SELECT buffer_post_id, fetched_date, metric_type, metric_value, sent_at, metrics_updated_at
+                     FROM buffer_post_metrics WHERE channel_id=%s""", [channel_id])
+        rows = list(c.fetchall())
+        c.execute("""SELECT m.buffer_post_id, m.metric_type, m.metric_value, m.measured_at, d.sent_at
+                     FROM buffer_post_measurements m
+                     JOIN (SELECT buffer_post_id, MAX(sent_at) AS sent_at FROM buffer_post_metrics
+                           WHERE channel_id=%s GROUP BY buffer_post_id) d ON d.buffer_post_id = m.buffer_post_id""",
+                  [channel_id])
+        measured = c.fetchall()
     out = {}
-    for bpid, fetched, mtype, value, sent_at in rows:
+
+    def put(bpid, key, day, label, mtype, value):
+        pts = out.setdefault(bpid, {})
+        d = pts.setdefault(key, {'date': label, 'day': day})
+        d[mtype] = value
+
+    for bpid, fetched, mtype, value, sent_at, updated in rows:
         start = _as_date(sent_at) or fetched
         if start < OLDEST:
             continue
-        days = out.setdefault(bpid, {})
-        d = days.setdefault(fetched, {'date': fetched.isoformat(), 'day': (fetched - start).days})
-        d[mtype] = value
-    return {bpid: [days[k] for k in sorted(days)] for bpid, days in out.items()}
+        sent, at = _ts(sent_at), _ts(updated)
+        if sent and at:
+            put(bpid, at, round(max(0.0, (at - sent).total_seconds() / 86400), 2),
+                at.replace(tzinfo=UTC).astimezone(BERLIN).date().isoformat(), mtype, value)
+        else:
+            put(bpid, fetched, (fetched - start).days, fetched.isoformat(), mtype, value)
+    for bpid, mtype, value, at, sent_at in measured:
+        sent = _ts(sent_at)
+        if not sent or (_as_date(sent_at) or OLDEST) < OLDEST:
+            continue
+        put(bpid, at, round(max(0.0, (at - sent).total_seconds() / 86400), 2),
+            at.replace(tzinfo=UTC).astimezone(BERLIN).date().isoformat(), mtype, value)
+    return {bpid: sorted(pts.values(), key=lambda d: d['day']) for bpid, pts in out.items()}
+
+
+def tick_key():
+    """Key of the address a scheduler calls every hour (oj/tick/). Derived
+    from SECRET_KEY like the planner's trigger key, so there is no extra
+    secret to keep; it only lets the caller start a fetch."""
+    import hashlib
+    import hmac
+    from django.conf import settings
+    return hmac.new(settings.SECRET_KEY.encode(), b'statistics-tick', hashlib.sha256).hexdigest()[:32]
+
+
+def fetch_hourly(background=True):
+    """Fetch Buffer's numbers once per hour at most (05.11.2026: "stündlich,
+    damit wir sehen, ob sich alle Posts ähnlich entwickeln").
+
+    Called by a scheduler on /statistics/oj/tick/?key=... (Make, GitHub
+    Actions - whatever is free), by Make's scheduled call to the planner and
+    when OJ profile is opened. The hour is claimed with one INSERT, so two callers in the same
+    hour cannot both fetch. Returns True when a fetch was started.
+    Buffer itself refreshes the numbers about once a day; a fetch that finds
+    the same numbers adds nothing (see buffer_post_measurements).
+    """
+    from django.conf import settings
+    if background and not getattr(settings, 'BUFFER_BACKGROUND_SYNC', True):
+        return False
+    buf = superuser_buffer()
+    if not buf['token']:
+        return False
+    ensure_table()
+    now = _utcnow()
+    slot = now.replace(minute=0, second=0)
+    with connection.cursor() as c:
+        c.execute("INSERT IGNORE INTO buffer_metrics_runs (slot, started_at) VALUES (%s,%s)", [slot, now])
+        if c.rowcount != 1:
+            return False
+
+    def run():
+        ok, note = 0, ''
+        try:
+            n_posts, _ = fetch_and_store(buf['token'])
+            ok, note = 1, f'{n_posts} posts'
+        except Exception as e:
+            note = str(e)[:250]          # _buffer_graphql never puts the key in its message
+        finally:
+            with connection.cursor() as c:
+                c.execute("UPDATE buffer_metrics_runs SET finished_at=%s, ok=%s, note=%s WHERE slot=%s",
+                          [_utcnow(), ok, note, slot])
+            if background:
+                connection.close()
+
+    if background:
+        import threading
+        threading.Thread(target=run, daemon=True).start()
+    else:
+        run()
+    return True

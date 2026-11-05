@@ -15,4 +15,5 @@ urlpatterns = [
     path('oj/post/<str:buffer_post_id>/', stat_oj.oj_post,      name='oj_post'),
     path('oj/upload/',               stat_oj.oj_upload,         name='oj_upload'),
     path('oj/fetch/',                stat_oj.oj_fetch,          name='oj_fetch'),
+    path('oj/tick/',                 stat_oj.oj_tick,           name='oj_tick'),
 ]

@@ -118,6 +118,9 @@
           <b>.zip</b> = data archive with your contacts (Settings → Data privacy → Get a copy of your data, larger archive), now and then.</span>
       </form>
       {% if data.contacts %}<div class="note">Contacts: {{ data.contacts|length }} from the last archive.</div>{% endif %}
+      <details class="note" style="margin-top:.6rem"><summary style="cursor:pointer">Hourly Buffer numbers – address for a scheduler</summary>
+        A scheduler (e.g. a Make scenario with one HTTP module, or GitHub Actions) calls this address once an hour; each call fetches Buffer's numbers, at most once per hour. Keep the address to yourself.
+        <input type="text" readonly value="{{ tick_url }}" style="width:100%;margin-top:.3rem;font-size:.78rem" onclick="this.select()"></details>
       {% if export %}<div class="note">Last analytics file: {{ export.file_name }} · uploaded {{ export.uploaded_at|date:"d.m.Y H:i" }} · period {{ export.period_from|date:"d.m.Y" }} – {{ export.period_to|date:"d.m.Y" }}. Days are added up; top posts and demographics are replaced by the newest file.</div>{% endif %}
     </div></div>
 </div>

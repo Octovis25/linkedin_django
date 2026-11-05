@@ -20,18 +20,20 @@ from planner import views as pv
 from posts_posted import buffer_sync
 
 from .basis import schema_aufbauen
-from .test_oj_statistik import KEY, ORG, PERSON, OjStatistik, buffer_post, page_data
+from . import test_oj_statistik as base
+from .test_oj_statistik import KEY, ORG, PERSON, buffer_post, page_data
 
 
-class Tagesstand(TransactionTestCase):
-    rows = OjStatistik.rows
+class _Basis(TransactionTestCase):
+    rows = base.OjStatistik.rows
 
     def setUp(self):
         super().setUp()
         schema_aufbauen()
         pv._li_tabelle_geprueft = False
         with connection.cursor() as c:
-            for t in ('buffer_post_metrics', 'buffer_posts_posted', 'planner_linkedin_tokens', 'buffer_sync_log'):
+            for t in ('buffer_post_metrics', 'buffer_posts_posted', 'planner_linkedin_tokens', 'buffer_sync_log',
+                      'buffer_post_measurements', 'buffer_metrics_runs'):
                 c.execute(f"DROP TABLE IF EXISTS {t}")
         buffer_sync._tabelle_geprueft = False
         pv._li_ensure_table()
@@ -55,6 +57,8 @@ class Tagesstand(TransactionTestCase):
             t = timezone.now().replace(tzinfo=None) - timedelta(hours=hours_ago)   # as buffer_sync counts
             c.execute("INSERT INTO buffer_sync_log (started_at, finished_at, ok, ausloeser) VALUES (%s,%s,1,'auto')", [t, t])
 
+
+class Tagesstand(_Basis):
     def test_fehlt_heute(self):
         bm.store_snapshot([buffer_post('p1', PERSON, '2026-10-30T08:00:00Z', impressions=5)],
                           day=bm.today_berlin() - timedelta(days=2))
@@ -124,3 +128,84 @@ class Tagesstand(TransactionTestCase):
                          (posts['b155']['img'], posts['b155']['img2']))
         self.assertEqual(('/planner/thumb/157/', ''), (posts['b157']['img'], posts['b157']['img2']))
         self.assertEqual(('', ''), (posts['b0']['img'], posts['b0']['img2']))
+
+
+def refreshed(post, at):
+    post['metrics_updated_at'] = at
+    return post
+
+
+class Stuendlich(_Basis):
+    """Every refresh of Buffer's numbers with its time; a fetch once an hour."""
+
+    def test_jede_aktualisierung_mit_uhrzeit(self):
+        now = bm._utcnow()
+        sent = (now - timedelta(days=3)).strftime('%Y-%m-%dT%H:%M:%SZ')
+        a = (now - timedelta(days=1, hours=12)).strftime('%Y-%m-%dT%H:%M:%S.123Z')
+        b = (now - timedelta(hours=6)).strftime('%Y-%m-%dT%H:%M:%S.456Z')
+        bm.store_snapshot([refreshed(buffer_post('p1', PERSON, sent, impressions=40), a)])
+        bm.store_snapshot([refreshed(buffer_post('p1', PERSON, sent, impressions=40), a)])   # same numbers again
+        bm.store_snapshot([refreshed(buffer_post('p1', PERSON, sent, impressions=58), b)])   # same day, later refresh
+        self.assertEqual(2, self.rows("SELECT COUNT(*) FROM buffer_post_measurements WHERE metric_type='impressions'")[0][0])
+        tl = bm.channel_timelines(PERSON)['p1']
+        self.assertEqual([(1.5, 40), (2.75, 58)], [(d['day'], d['impressions']) for d in tl])
+
+    def test_alte_posts_nur_im_tagesstand(self):
+        now = bm._utcnow()
+        bm.store_snapshot([refreshed(buffer_post('alt', PERSON, '2026-05-19T14:00:00Z', impressions=104),
+                                     now.strftime('%Y-%m-%dT%H:%M:%SZ'))])
+        self.assertEqual(0, self.rows("SELECT COUNT(*) FROM buffer_post_measurements")[0][0])
+        self.assertEqual(1, len(bm.channel_timelines(PERSON)['alt']))
+
+    @override_settings(BUFFER_BACKGROUND_SYNC=True)
+    def test_hoechstens_einmal_pro_stunde_geholt(self):
+        with mock.patch('threading.Thread') as th:
+            self.assertTrue(bm.fetch_hourly())
+            self.assertFalse(bm.fetch_hourly())          # same hour: claimed already
+        th.return_value.start.assert_called_once()
+
+    def test_ohne_faden_in_tests_und_ohne_schluessel(self):
+        with mock.patch('threading.Thread') as th:
+            self.assertFalse(bm.fetch_hourly())
+        th.assert_not_called()
+        with connection.cursor() as c:
+            c.execute("UPDATE planner_linkedin_tokens SET buffer_token=NULL")
+        with mock.patch.object(bm, 'fetch_and_store') as f:
+            self.assertFalse(bm.fetch_hourly(background=False))
+        f.assert_not_called()
+
+    def test_lauf_wird_protokolliert(self):
+        with mock.patch.object(bm, 'fetch_and_store', return_value=(132, 900)):
+            self.assertTrue(bm.fetch_hourly(background=False))
+        self.assertEqual((1, '132 posts'), self.rows("SELECT ok, note FROM buffer_metrics_runs")[0])
+
+    def test_makes_zeitplan_stoesst_an(self):
+        import hashlib
+        import hmac
+        from django.conf import settings
+        key = hmac.new(settings.SECRET_KEY[:32].encode(), b'trigger-scheduled', hashlib.sha256).hexdigest()[:24]
+        with mock.patch.object(bm, 'fetch_hourly', return_value=True) as f:
+            self.client.logout()
+            self.assertEqual(403, self.client.get('/planner/api/trigger-scheduled/?key=wrong').status_code)
+            f.assert_not_called()
+            self.client.get('/planner/api/trigger-scheduled/', {'key': key})
+        f.assert_called_once()
+
+    def test_oj_seite_stoesst_an(self):
+        with mock.patch.object(bm, 'fetch_hourly', return_value=False) as f, \
+             mock.patch.object(buffer_sync, 'sync_for_today_in_background', return_value=False):
+            self.client.get('/statistics/oj/')
+        f.assert_called_once()
+
+    def test_adresse_fuer_den_zeitplan(self):
+        with mock.patch.object(bm, 'fetch_hourly', return_value=True) as f:
+            self.client.logout()
+            self.assertEqual(403, self.client.get('/statistics/oj/tick/?key=wrong').status_code)
+            f.assert_not_called()
+            r = self.client.get('/statistics/oj/tick/', {'key': bm.tick_key()})
+        self.assertEqual({'ok': True, 'started': True}, r.json())
+        self.client.force_login(self.chefin)
+        with mock.patch.object(bm, 'fetch_hourly', return_value=False), \
+             mock.patch.object(buffer_sync, 'sync_for_today_in_background', return_value=False):
+            html = self.client.get('/statistics/oj/').content.decode()
+        self.assertIn('/statistics/oj/tick/?key=' + bm.tick_key(), html)
