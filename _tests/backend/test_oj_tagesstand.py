@@ -213,20 +213,21 @@ class Stuendlich(_Basis):
         self.assertNotIn('tick/?key=', html)
 
 
-class MeldungBeimLogin(_Basis):
-    """07.11.2026: "eine kurze Nachricht, wenn the last zu lange her ist, wenn ich mich einlogge"."""
+class MeldungTaeglich(_Basis):
+    """07.11.2026: a short note when the last fetch is too long ago - after
+    logging in ("wenn ich mich einlogge") and at least once a day."""
 
-    def login_note(self, user=None):
-        from django.contrib.auth.signals import user_logged_in
-        from django.contrib.messages import get_messages
-        from django.contrib.messages.storage.fallback import FallbackStorage
+    def setUp(self):
+        super().setUp()
         from django.contrib.sessions.backends.db import SessionStore
+        self.session = SessionStore()
+
+    def page_note(self, user=None):
+        from django.template import Context, Template
         from django.test import RequestFactory
-        req = RequestFactory().post('/login/')
-        req.session = SessionStore()
-        req._messages = FallbackStorage(req)
-        user_logged_in.send(sender=User, request=req, user=user or self.chefin)
-        return [str(m) for m in get_messages(req)]
+        req = RequestFactory().get('/')
+        req.user, req.session = user or self.chefin, self.session
+        return Template('{% load oj_fetch %}{% oj_fetch_note %}').render(Context({'request': req}))
 
     def set_tick(self, hours_ago):
         bm.ensure_table()
@@ -236,37 +237,48 @@ class MeldungBeimLogin(_Basis):
     def test_alles_gut_keine_nachricht(self):
         self.client.logout()
         self.client.get('/statistics/oj/tick/')
-        self.assertEqual([], self.login_note())
+        self.assertEqual('', self.page_note())
 
     def test_make_ruft_nicht_mehr_an(self):
         self.set_tick(5)
-        notes = self.login_note()
-        self.assertEqual(1, len(notes))
-        self.assertIn('no call from Make since', notes[0])
-        self.assertIn('(5 hours)', notes[0])
-        self.assertEqual([], self.login_note(User.objects.create_user('kollegin', password='x')))
+        note = self.page_note()
+        self.assertIn('alert-warning', note)
+        self.assertIn('no call from Make since', note)
+        self.assertIn('(5 hours)', note)
         self.client.logout()
         self.client.get('/statistics/oj/tick/')                # Make calls again
-        self.assertEqual([], self.login_note())
+        self.session.flush()
+        self.assertEqual('', self.page_note())
+
+    def test_einmal_am_tag(self):
+        self.set_tick(5)
+        self.assertIn('no call from Make', self.page_note())
+        self.assertEqual('', self.page_note())                 # same day, next page: quiet
+        self.session['oj_fetch_note_day'] = (bm.today_berlin() - timedelta(days=1)).isoformat()
+        self.assertIn('no call from Make', self.page_note())   # still signed in the next day: again
+
+    def test_nur_fuer_superuser(self):
+        self.set_tick(5)
+        self.assertEqual('', self.page_note(User.objects.create_user('kollegin', password='x')))
 
     def test_ohne_jeden_aufruf_faellt_es_auch_auf(self):
         self.set_tick(4)                                       # table made 4 hours ago, Make never called
-        self.assertIn('no call from Make', self.login_note()[0])
+        self.assertIn('no call from Make', self.page_note())
 
     def test_abruf_fehlgeschlagen(self):
         with mock.patch.object(bm, 'fetch_and_store', side_effect=Exception('Buffer did not answer as expected: 401')):
             self.assertTrue(bm.fetch_hourly(background=False))
-        notes = self.login_note()
-        self.assertIn('Hourly Buffer fetch failed at', notes[0])
-        self.assertIn('401', notes[0])
+        note = self.page_note()
+        self.assertIn('Hourly Buffer fetch failed at', note)
+        self.assertIn('401', note)
 
     def test_ohne_tabellen_keine_nachricht(self):
         with connection.cursor() as c:
             c.execute("DROP TABLE IF EXISTS buffer_metrics_ticks")
-        self.assertEqual([], self.login_note())
+        self.assertEqual('', self.page_note())
         self.assertEqual(0, self.rows("SELECT COUNT(*) FROM information_schema.tables "
                                       "WHERE table_name='buffer_metrics_ticks' AND table_schema=DATABASE()")[0][0])
 
-    def test_login_bricht_nie(self):
+    def test_seite_bricht_nie(self):
         with mock.patch.object(bm, 'fetch_problem', side_effect=Exception('db down')):
-            self.assertEqual([], self.login_note())
+            self.assertEqual('', self.page_note())

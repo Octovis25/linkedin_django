@@ -266,7 +266,7 @@ def oj_tick(request):
     one per hour, and it hands out nothing. With a key it answered 403 to
     Make's saved address, and Make switches a scenario off after a 403 - the
     hourly fetch had stopped on 05.11. after its first scheduled run.
-    Every call is noted, so a login can tell when Make stopped calling.
+    Every call is noted, so the page can tell when Make stopped calling.
     """
     bm.note_tick()
     return JsonResponse({'ok': True, 'started': bool(bm.fetch_hourly())})

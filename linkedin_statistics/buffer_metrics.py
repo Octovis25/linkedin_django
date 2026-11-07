@@ -381,9 +381,9 @@ def note_tick():
 def fetch_problem():
     """One short sentence when the hourly fetch has stopped or failed, else ''.
 
-    Shown to a superuser after logging in (07.11.2026: "eine kurze Nachricht,
-    wenn the last zu lange her ist, wenn ich mich einlogge").
-    Runs during the login: no CREATE TABLE here (MySQL commits on DDL), and
+    Shown to a superuser at the top of the page after logging in and at
+    least once a day (07.11.2026), see templatetags/oj_fetch.py.
+    Runs while a page is built: no CREATE TABLE here (MySQL commits on DDL), and
     a missing table only rolls back its own savepoint - then there is no note.
     """
     from django.db import transaction
