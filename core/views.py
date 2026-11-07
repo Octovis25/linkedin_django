@@ -19,83 +19,12 @@ def is_staff(user):
     return user.is_staff
 
 def home_view(request):
+    """The start page is Create Posts (07.11.2026). The old "All Posts" list
+    is gone: its numbers are under Statistics → Timeline, and the one status
+    that mattered, "Event", is set there."""
     if not request.user.is_authenticated:
         return redirect("/login/")
-    from django.db import connection
-    from datetime import date, timedelta
-
-    content_type = request.GET.get('content_type', '')
-    search = request.GET.get('search', '')
-    category_filter = request.GET.get('category', '')
-    d_from = request.GET.get('from', (date.today() - timedelta(days=365)).isoformat())
-    d_to   = request.GET.get('to', date.today().isoformat())
-
-    all_posts = []
-    with connection.cursor() as c:
-        sql = """
-            SELECT lp.post_id, COALESCE(pp.post_title, lp.post_title, lp.post_id),
-                   COALESCE(pp.post_date, lp.post_date),
-                   lp.post_url, lp.content_type,
-                   COALESCE(m.impressions,0), COALESCE(m.likes,0),
-                   COALESCE(m.comments,0), COALESCE(m.direct_shares,0),
-                   COALESCE(m.clicks,0), pp.post_image, pp.category, pp.comment,
-                   m.views
-            FROM linkedin_posts lp
-            LEFT JOIN linkedin_posts_posted pp ON lp.post_id = pp.post_id
-            LEFT JOIN linkedin_posts_metrics m ON lp.post_id = m.post_id
-                AND m.metric_date = (
-                    SELECT MAX(m2.metric_date) FROM linkedin_posts_metrics m2
-                    WHERE m2.post_id = m.post_id)
-            WHERE COALESCE(pp.post_date, lp.post_date) BETWEEN %s AND %s
-        """
-        params = [d_from, d_to]
-        if category_filter:
-            sql += " AND pp.category = %s"
-            params.append(category_filter)
-        if content_type == 'video':
-            sql += " AND lp.content_type = 'Video'"
-        elif content_type == 'novideo':
-            sql += " AND (lp.content_type != 'Video' OR lp.content_type IS NULL)"
-        if search:
-            # Der Beitragstext selbst liegt NICHT in diesen Tabellen - linkedin_posts
-            # und linkedin_posts_posted fuehren nur Titel, Datum und Kennzahlen.
-            # Gesucht wird deshalb ueber alles, was hier ueberhaupt an Text steht:
-            # beide Titel, die Kategorie und die Notiz.
-            sql += (" AND (lp.post_title LIKE %s OR pp.post_title LIKE %s"
-                    " OR pp.category LIKE %s OR pp.comment LIKE %s)")
-            params += [f'%{search}%'] * 4
-        sql += " ORDER BY COALESCE(pp.post_date, lp.post_date) DESC"
-        try:
-            c.execute(sql, params)
-            rows = c.fetchall()
-            for r in rows:
-                all_posts.append({
-                    'post_id':      r[0],
-                    'title':        r[1],
-                    'post_date':    r[2],
-                    'link':         r[3] or "",
-                    'content_type': r[4] or "",
-                    'impressions':  r[5],
-                    'likes':        r[6],
-                    'comments':     r[7],
-                    'shares':       r[8],
-                    'clicks':       r[9],
-                    'has_image':    bool(r[10]),
-                    'category':     r[11] or '',
-                    'comment':      r[12] or '',
-                    'views':        r[13],
-                })
-        except Exception as e:
-            print("home_view error:", e)
-    return render(request, "core/home.html", {
-        "all_posts":    all_posts,
-        "content_type": content_type,
-        "category_filter": category_filter,
-        "category_filter": category_filter,
-        "search":       search,
-        "date_from":    d_from,
-        "date_to":      d_to,
-    })
+    return redirect("/planner/")
 
 @login_required
 def upload_view(request):

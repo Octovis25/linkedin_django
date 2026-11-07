@@ -478,14 +478,14 @@ class FirmaTimeline(TransactionTestCase):
             c.execute("""CREATE TABLE linkedin_posts (post_id VARCHAR(40) PRIMARY KEY, post_title TEXT, post_date DATE,
                          post_url TEXT, content_type VARCHAR(40), created_at DATETIME NULL)""")
             c.execute("""CREATE TABLE linkedin_posts_posted (post_id VARCHAR(40) PRIMARY KEY, post_date DATE,
-                         post_image TEXT, post_title TEXT)""")
+                         post_image TEXT, post_title TEXT, category VARCHAR(100) NULL, comment TEXT NULL)""")
             c.execute("""CREATE TABLE linkedin_posts_metrics (id INT AUTO_INCREMENT PRIMARY KEY, post_id VARCHAR(40),
                          metric_date DATE, impressions INT, clicks INT, likes INT, comments INT, direct_shares INT,
                          views INT NULL)""")
             c.execute("""INSERT INTO linkedin_posts VALUES
                 ('111', 'Good SOPs reduce workarounds.', '2026-10-01', 'https://www.linkedin.com/feed/update/urn:li:activity:111', 'Video', NULL),
                 ('222', 'Data is the new oil', '2026-06-12', '', 'Image', NULL)""")
-            c.execute("INSERT INTO linkedin_posts_posted VALUES ('111', '2026-10-01', 'Marketing_and_Design/x.png', NULL)")
+            c.execute("INSERT INTO linkedin_posts_posted VALUES ('111', '2026-10-01', 'Marketing_and_Design/x.png', NULL, 'Event', NULL)")
             for row in [('111', '2026-10-01', 20, 1, 1, 0, 0, 5), ('111', '2026-10-04', 60, 3, 2, 1, 0, 12),
                         ('111', '2026-10-20', 40, 2, 2, 1, 0, 12),          # shorter export: lower, ignored
                         ('222', '2026-06-15', 100, 10, 4, 0, 1, None)]:
@@ -512,6 +512,7 @@ class FirmaTimeline(TransactionTestCase):
         self.assertEqual((p['m']['ctr'], p['m']['engagementRate']), (5.0, 5.0))
         self.assertEqual([(d['day'], d['impressions']) for d in tl['111']], [(0, 20), (3, 60), (19, 60)])
         self.assertNotIn('views', posts[1]['m'])
+        self.assertEqual([True, False], [p['event'] for p in posts])      # 07.11.2026: set under Timeline now
         self.assertEqual(posts[1]['days'], 1)
 
     def test_page(self):
@@ -521,6 +522,8 @@ class FirmaTimeline(TransactionTestCase):
         data = json.loads(re.search(r'<script id="co-data" type="application/json">(.*?)</script>', html, re.S).group(1))
         self.assertEqual(len(data['posts']), 2)
         self.assertEqual(data['cfg']['rates'], ['engagementRate', 'ctr'])
+        self.assertEqual('/api/post-category/', data['cfg']['eventUrl'])
+        self.assertTrue(data['cfg']['csrf'])
         self.assertIn("window.postTimelines.co.setRange('2026\\u002D01\\u002D01', '2026\\u002D11\\u002D01')", html)
         self.assertNotIn('buildGrowthChart', html)
         self.assertIn('id="perPeriod"', html)                    # one chart instead of two
@@ -529,3 +532,17 @@ class FirmaTimeline(TransactionTestCase):
         labels = json.loads(re.search(r'const labels\s*=\s*(\[.*?\]);', html).group(1))
         self.assertEqual(ctr[labels.index('2026-10')], 5.0)       # 3 clicks / 60 impressions
         self.assertEqual(ctr[labels.index('2026-06')], 10.0)
+
+
+class Startseite(TransactionTestCase):
+    """07.11.2026: Overview ("All Posts") is gone, the start page is Create Posts."""
+
+    def test_start_ist_create_posts(self):
+        from django.contrib.auth.models import AnonymousUser
+        from django.test import RequestFactory
+        from core.views import home_view
+        req = RequestFactory().get('/')
+        req.user = User.objects.create_user('kollegin', password='x')
+        self.assertEqual('/planner/', home_view(req)['Location'])
+        req.user = AnonymousUser()
+        self.assertEqual('/login/', home_view(req)['Location'])

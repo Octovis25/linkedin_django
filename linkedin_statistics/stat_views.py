@@ -380,8 +380,11 @@ def timeline(request):
     # the two fixed growth charts "10 most recent" and "10 by impressions".
     from . import company_posts
     posts, timelines = company_posts.posts_and_timelines()
+    # "Event" leaves a post out of General and Video vs. No video; it is set
+    # in the opened row (07.11.2026, it used to be the status on Overview).
+    from django.middleware.csrf import get_token
     post_data = {'today': date.today().isoformat(), 'posts': posts, 'timelines': timelines,
-                 'cfg': company_posts.CFG}
+                 'cfg': {**company_posts.CFG, 'eventUrl': '/api/post-category/', 'csrf': get_token(request)}}
 
     # The first 5 days of every company post, hour by hour, from Buffer
     # (07.11.2026: the Octovis posts belong here, not under OJ analysis).

@@ -41,7 +41,7 @@ def posts_and_timelines():
             c.execute("""
                 SELECT lp.post_id, COALESCE(lp.post_title, ''), COALESCE(pp.post_date, lp.post_date),
                        lp.post_url, lp.content_type,
-                       (pp.post_image IS NOT NULL AND pp.post_image <> '')
+                       (pp.post_image IS NOT NULL AND pp.post_image <> ''), pp.category
                 FROM linkedin_posts lp
                 LEFT JOIN linkedin_posts_posted pp ON pp.post_id = lp.post_id
             """)
@@ -52,12 +52,13 @@ def posts_and_timelines():
         except Exception:
             return [], {}
     posted = {}
-    for pid, title, pdate, url, ctype, has_img in head:
+    for pid, title, pdate, url, ctype, has_img, category in head:
         pdate = _as_date(pdate)
         if not pdate:
             continue
         posted[pid] = {'date': pdate, 'title': title or '', 'url': url or '', 'video': (ctype or '').lower() == 'video',
-                       'img': reverse('linkedin_statistics:post_image', args=[pid]) if has_img else ''}
+                       'img': reverse('linkedin_statistics:post_image', args=[pid]) if has_img else '',
+                       'event': category == 'Event'}
 
     timelines, latest = {}, {}
     for pid, mdate, imp, clk, rea, com, sha, vws in rows:
@@ -83,7 +84,7 @@ def posts_and_timelines():
         posts.append({'id': pid, 'date': p['date'].isoformat(),
                       'title': (title[:110] + '…') if len(title) > 110 else title,
                       'full': p['title'][:1500], 'img': p['img'], 'link': p['url'], 'video': p['video'],
-                      'days': len(timelines.get(pid, [])), 'm': m})
+                      'days': len(timelines.get(pid, [])), 'm': m, 'event': p['event']})
     posts.sort(key=lambda p: p['date'], reverse=True)
     return posts, timelines
 

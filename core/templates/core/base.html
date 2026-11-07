@@ -117,16 +117,16 @@
   </div>
         {% comment %}
 Order follows the working day, not the history of the app:
-Overview and Statistics sit together because both answer "how did it go";
-Create Posts and Image Studio are the daily work; Data is for looking things
-up, so it moved right; Collectives became a sub-entry under Data.
+Create Posts and Image Studio are the daily work, so they come first
+(07.11.2026: Create Posts is also the start page; the old Overview with
+"All Posts" is gone). Data is for looking things up, so it sits right;
+Collectives became a sub-entry under Data.
 {% endcomment %}
         <nav>
-    <a href="/" {% if request.path == '/' %}class="active"{% endif %}>Overview</a>
-    <a href="/statistics/" {% if '/statistics/' in request.path %}class="active"{% endif %}>LinkedIn Statistics</a>
-    <a href="/webstats/" {% if '/webstats/' in request.path %}class="active"{% endif %}>Web Analytics</a>
     <a href="/planner/" {% if '/planner/' in request.path %}class="active"{% endif %}>Create Posts</a>
     <a href="/library/studio/" {% if '/library/' in request.path %}class="active"{% endif %}>Image Studio</a>
+    <a href="/statistics/" {% if '/statistics/' in request.path %}class="active"{% endif %}>LinkedIn Statistics</a>
+    <a href="/webstats/" {% if '/webstats/' in request.path %}class="active"{% endif %}>Web Analytics</a>
     <a href="/tutorials/" {% if '/tutorials/' in request.path %}class="active"{% endif %}>Tutorials</a>
     <a href="/assets/" {% if '/assets/' in request.path %}class="active"{% endif %}>Assets</a>
     <a href="/data/posts/" {% if '/data/' in request.path or '/collectives/' in request.path %}class="active"{% endif %}>Data</a>
