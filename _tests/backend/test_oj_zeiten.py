@@ -157,6 +157,33 @@ class Zeitraum(_Basis):
         self.assertEqual(self.today.isoformat(), timeline(html)['bis'])
 
 
+def first(html):
+    return json.loads(re.search(r'<script id="oja-first" type="application/json">(.*?)</script>', html, re.S).group(1))
+
+
+class ErsteFuenfTage(_Basis):
+    """07.11.2026: "damit ich die Posts über die ersten 5 Tage vergleichen kann"."""
+
+    def test_stunden_nach_dem_posten(self):
+        now = bm._utcnow()
+        sent = now - timedelta(days=3)
+        iso = lambda dt: dt.strftime('%Y-%m-%dT%H:%M:%SZ')
+        for hours, imp in ((9, 120), (33, 300)):
+            p = buffer_post('p1', PERSON, iso(sent), impressions=imp)
+            p['metrics_updated_at'] = iso(sent + timedelta(hours=hours))
+            bm.store_snapshot([p])
+        old = buffer_post('o1', ORG, iso(now - timedelta(days=40)), impressions=500)
+        old['metrics_updated_at'] = iso(now - timedelta(days=40) + timedelta(hours=200))   # day 8: outside
+        bm.store_snapshot([old])
+        html = self.client.get('/statistics/oj/analysis/').content.decode()
+        f = first(html)
+        self.assertEqual([[9.0, 120], [33.0, 300]], f['oj'][0]['pts'])
+        self.assertTrue(f['oj'][0]['young'])
+        self.assertEqual([], f['company'])
+        self.assertLess(html.index('id="tl-card"'), html.index('id="fd-card"'))
+        self.assertLess(html.index('id="fd-card"'), html.index('id="hm-card"'))
+
+
 class LetzterAbruf(_Basis):
     """OJ profile, 07.11.2026: "bei last auch die Uhrzeit"."""
 

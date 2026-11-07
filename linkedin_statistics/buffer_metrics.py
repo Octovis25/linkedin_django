@@ -444,7 +444,7 @@ def channel_timelines(channel_id):
             continue
         sent, at = _ts(sent_at), _ts(updated)
         if sent and at:
-            put(bpid, at, round(max(0.0, (at - sent).total_seconds() / 86400), 2),
+            put(bpid, at, round(max(0.0, (at - sent).total_seconds() / 86400), 3),
                 at.replace(tzinfo=UTC).astimezone(BERLIN).date().isoformat(), mtype, value)
         else:
             put(bpid, fetched, (fetched - start).days, fetched.isoformat(), mtype, value)
@@ -452,7 +452,7 @@ def channel_timelines(channel_id):
         sent = _ts(sent_at)
         if not sent or (_as_date(sent_at) or OLDEST) < OLDEST:
             continue
-        put(bpid, at, round(max(0.0, (at - sent).total_seconds() / 86400), 2),
+        put(bpid, at, round(max(0.0, (at - sent).total_seconds() / 86400), 3),
             at.replace(tzinfo=UTC).astimezone(BERLIN).date().isoformat(), mtype, value)
     return {bpid: sorted(pts.values(), key=lambda d: d['day']) for bpid, pts in out.items()}
 
