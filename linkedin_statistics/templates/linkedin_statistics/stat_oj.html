@@ -82,6 +82,13 @@
   {% if not key_ok %}<div class="msg err">No Buffer key saved – enter it under API Connect.</div>
   {% elif not channel_ok %}<div class="msg err">No personal Buffer channel chosen – choose it under API Connect.</div>{% endif %}
 
+  {% if months %}
+  <div class="card"><div class="ch"><h2>{{ months.title }}</h2><span class="muted" style="font-size:.8rem">from the LinkedIn export · whole export period</span></div>
+    <div class="cb">{% if months.text %}<p style="font-size:.88rem;margin:.1rem 0 .7rem">{{ months.text|safe }}</p>{% endif %}
+      <div style="height:230px"><canvas id="oj-months"></canvas></div></div></div>
+  {{ months.chart|json_script:"oj-months-data" }}
+  {% endif %}
+
   {% include "linkedin_statistics/_post_timeline.html" with prefix="oj" data_id="oj-data" %}
 
   <div class="card"><div class="ch"><h2>Followers</h2><span class="muted" style="font-size:.8rem">from the LinkedIn export · follows the period above</span>
@@ -119,7 +126,7 @@
       </form>
       {% if data.contacts %}<div class="note">Contacts: {{ data.contacts|length }} from the last archive.</div>{% endif %}
       <details class="note" style="margin-top:.6rem"><summary style="cursor:pointer">Hourly Buffer numbers – address for a scheduler</summary>
-        A scheduler (e.g. a Make scenario with one HTTP module, or GitHub Actions) calls this address once an hour; each call fetches Buffer's numbers, at most once per hour. Keep the address to yourself.
+        A scheduler (the Make scenario “Integration HTTP”) calls this address once an hour; each call fetches Buffer's numbers, at most once per hour. It needs no key – it can only start that fetch.
         <input type="text" readonly value="{{ tick_url }}" style="width:100%;margin-top:.3rem;font-size:.78rem" onclick="this.select()"></details>
       {% if export %}<div class="note">Last analytics file: {{ export.file_name }} · uploaded {{ export.uploaded_at|date:"d.m.Y H:i" }} · period {{ export.period_from|date:"d.m.Y" }} – {{ export.period_to|date:"d.m.Y" }}. Days are added up; top posts and demographics are replaced by the newest file.</div>{% endif %}
     </div></div>
@@ -211,6 +218,20 @@ chips('cscope', 's', s => { cscope = s; drawContacts(); });
 $('apply').onclick = () => { $('chips').querySelectorAll('button').forEach(x => x.classList.remove('on')); refresh(); };
 if ($('dem')) { const first = $('dseg').querySelector('button'); if (first) drawDem(first.dataset.k); }
 preset('365');
+})();
+</script>
+<script>
+(() => {
+  const el = document.getElementById('oj-months'), src = document.getElementById('oj-months-data');
+  if (!el || !src || !window.Chart) return;
+  const c = JSON.parse(src.textContent);
+  const mon = k => new Date(k + '-01T12:00:00').toLocaleString('en-US', {month: 'short', year: '2-digit'});
+  new Chart(el, {data: {labels: c.months.map(m => mon(m.month)), datasets: [
+      {type: 'bar', label: 'Impressions (grey = no post that month, light = this month so far)', data: c.months.map(m => m.impressions), backgroundColor: c.months.map(m => m.partial ? 'rgba(32,184,176,.45)' : m.posts ? '#20B8B0' : '#ced4da'), borderRadius: 3, yAxisID: 'y'},
+      {type: 'line', label: 'New followers', data: c.months.map(m => m.followers), borderColor: '#005F68', backgroundColor: '#005F68', tension: .3, yAxisID: 'y2'}]},
+    options: {maintainAspectRatio: false, animation: false,
+      plugins: {legend: {position: 'bottom', labels: {boxWidth: 10}}, tooltip: {callbacks: {afterTitle: it => { const m = c.months[it[0].dataIndex]; return m.posts + ' post' + (m.posts === 1 ? '' : 's') + (m.partial ? ' · so far, from Buffer (the LinkedIn export does not cover this month yet)' : ''); }}}},
+      scales: {y: {beginAtZero: true, grid: {color: '#f1f3f5'}}, y2: {position: 'right', beginAtZero: true, grid: {display: false}}, x: {grid: {display: false}}}}});
 })();
 </script>
 {% endblock %}

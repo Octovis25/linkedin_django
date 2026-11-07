@@ -198,14 +198,16 @@ class Stuendlich(_Basis):
         f.assert_called_once()
 
     def test_adresse_fuer_den_zeitplan(self):
+        # No key (07.11.2026): Make switched the scenario off after a 403.
         with mock.patch.object(bm, 'fetch_hourly', return_value=True) as f:
             self.client.logout()
-            self.assertEqual(403, self.client.get('/statistics/oj/tick/?key=wrong').status_code)
-            f.assert_not_called()
-            r = self.client.get('/statistics/oj/tick/', {'key': bm.tick_key()})
-        self.assertEqual({'ok': True, 'started': True}, r.json())
+            for url in ('/statistics/oj/tick/', '/statistics/oj/tick/?key=old'):
+                r = self.client.get(url)
+                self.assertEqual((200, {'ok': True, 'started': True}), (r.status_code, r.json()))
+        self.assertEqual(2, f.call_count)
         self.client.force_login(self.chefin)
         with mock.patch.object(bm, 'fetch_hourly', return_value=False), \
              mock.patch.object(buffer_sync, 'sync_for_today_in_background', return_value=False):
             html = self.client.get('/statistics/oj/').content.decode()
-        self.assertIn('/statistics/oj/tick/?key=' + bm.tick_key(), html)
+        self.assertIn('/statistics/oj/tick/"', html)
+        self.assertNotIn('tick/?key=', html)

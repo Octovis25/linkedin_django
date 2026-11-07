@@ -391,22 +391,44 @@ def channel_timelines(channel_id):
     return {bpid: sorted(pts.values(), key=lambda d: d['day']) for bpid, pts in out.items()}
 
 
-def tick_key():
-    """Key of the address a scheduler calls every hour (oj/tick/). Derived
-    from SECRET_KEY like the planner's trigger key, so there is no extra
-    secret to keep; it only lets the caller start a fetch."""
-    import hashlib
-    import hmac
-    from django.conf import settings
-    return hmac.new(settings.SECRET_KEY.encode(), b'statistics-tick', hashlib.sha256).hexdigest()[:32]
+def month_gain(channel_id, first_day, metric='impressions'):
+    """What the posts of one channel gained since first_day, from the daily
+    rows: for each post its newest value minus its value before first_day
+    (or, when tracking started later, its first value from first_day on;
+    0 for posts sent on or after first_day). For the month the LinkedIn
+    export does not cover yet (06.11.2026)."""
+    if not channel_id:
+        return 0
+    ensure_table()
+    with connection.cursor() as c:
+        c.execute("""SELECT buffer_post_id, sent_at, fetched_date, metric_value FROM buffer_post_metrics
+                     WHERE channel_id=%s AND metric_type=%s ORDER BY buffer_post_id, fetched_date""",
+                  [channel_id, metric])
+        rows = c.fetchall()
+    per = {}
+    for bpid, sent_at, day, value in rows:
+        per.setdefault(bpid, {'sent': _as_date(sent_at), 'rows': []})['rows'].append((day, float(value or 0)))
+    total = 0.0
+    for p in per.values():
+        if not p['sent'] or p['sent'] < OLDEST:
+            continue
+        before = [v for d, v in p['rows'] if d < first_day]
+        since = [v for d, v in p['rows'] if d >= first_day]
+        if not since:
+            continue
+        if p['sent'] >= first_day:
+            base = 0.0
+        else:
+            base = before[-1] if before else since[0]
+        total += max(0.0, since[-1] - base)
+    return int(round(total))
 
 
 def fetch_hourly(background=True):
     """Fetch Buffer's numbers once per hour at most (05.11.2026: "stündlich,
     damit wir sehen, ob sich alle Posts ähnlich entwickeln").
 
-    Called by a scheduler on /statistics/oj/tick/?key=... (Make, GitHub
-    Actions - whatever is free), by Make's scheduled call to the planner and
+    Called by a scheduler on /statistics/oj/tick/ (the Make scenario), by Make's scheduled call to the planner and
     when OJ profile is opened. The hour is claimed with one INSERT, so two callers in the same
     hour cannot both fetch. Returns True when a fetch was started.
     Buffer itself refreshes the numbers about once a day; a fetch that finds

@@ -93,9 +93,9 @@
         {label: 'New contacts', data: c.contacts, backgroundColor: '#B8860B', borderRadius: 3}]},
       options: {...base, plugins: {legend: {position: 'bottom', labels: {boxWidth: 10}}}, scales: {y: {beginAtZero: true, grid}, x: {grid: {display: false}}}}});
     if (c.kind === 'months') new Chart(el(key), {data: {labels: c.months.map(m => mon(m.month)), datasets: [
-        {type: 'bar', label: 'Impressions (grey = no post that month)', data: c.months.map(m => m.impressions), backgroundColor: c.months.map(m => m.posts ? '#20B8B0' : '#ced4da'), borderRadius: 3, yAxisID: 'y'},
+        {type: 'bar', label: 'Impressions (grey = no post that month, light = this month so far)', data: c.months.map(m => m.impressions), backgroundColor: c.months.map(m => m.partial ? 'rgba(32,184,176,.45)' : m.posts ? '#20B8B0' : '#ced4da'), borderRadius: 3, yAxisID: 'y'},
         {type: 'line', label: 'New followers', data: c.months.map(m => m.followers), borderColor: '#005F68', backgroundColor: '#005F68', tension: .3, yAxisID: 'y2'}]},
-      options: {...base, plugins: {legend: {position: 'bottom', labels: {boxWidth: 10}}, tooltip: {callbacks: {afterTitle: it => { const m = c.months[it[0].dataIndex]; return m.posts + ' post' + (m.posts === 1 ? '' : 's'); }}}},
+      options: {...base, plugins: {legend: {position: 'bottom', labels: {boxWidth: 10}}, tooltip: {callbacks: {afterTitle: it => { const m = c.months[it[0].dataIndex]; return m.posts + ' post' + (m.posts === 1 ? '' : 's') + (m.partial ? ' · so far, from Buffer (the LinkedIn export does not cover this month yet)' : ''); }}}},
         scales: {y: {beginAtZero: true, grid}, y2: {position: 'right', beginAtZero: true, grid: {display: false}}, x: {grid: {display: false}}}}});
   });
 })();

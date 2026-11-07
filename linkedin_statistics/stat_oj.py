@@ -62,9 +62,11 @@ def oj(request):
         'contacts': oj_contacts.listing(),
         'cfg': {
             'chips': [['impressions', 'Impressions'], ['reach', 'Reach'], ['reactions', 'Reactions'], ['views', 'Video views']],
-            'cols': [['reactions', 'Reactions'], ['comments', 'Comments'], ['engagementRate', 'Eng. rate', 'pct']],
-            'detail': [['reach', 'Reach'], ['shares', 'Shares'], ['views', 'Video views', 'vid'],
-                       ['viewers', 'Unique viewers', 'vid'], ['totalTimeWatched', 'Watch time', 'vid', 'min']],
+            # LinkedIn's words: Erreichte Mitglieder = reach, Aufrufe = video views,
+            # Zuschauer = unique viewers (Ortrud, 06.11.2026: more columns).
+            'cols': [['reach', 'Reach'], ['views', 'Video views'], ['viewers', 'Viewers'],
+                     ['reactions', 'Reactions'], ['comments', 'Comments'], ['engagementRate', 'Eng. rate', 'pct']],
+            'detail': [['shares', 'Shares'], ['totalTimeWatched', 'Watch time', 'vid', 'min']],
             'mini': [['impressions', 'Impressions', '#008591', 'y', 'line'], ['reach', 'Reach', '#20B8B0', 'y', 'line'],
                      ['views', 'Video views', '#185FA5', 'y', 'line'], ['reactions', 'Reactions', '#EB6E08', 'y1', 'bar'],
                      ['comments', 'Comments', '#6B21A8', 'y1', 'bar'], ['shares', 'Shares', '#5C6BC0', 'y1', 'bar'],
@@ -75,7 +77,7 @@ def oj(request):
                      'drawn dashed in the same colour (right axis). X = the first 3, 7 or 30 days after posting (buttons above), counted '
                      'to the hour when Buffer got the numbers from LinkedIn (Buffer refreshes them about once a day; '
                      'the app asks every hour and keeps each refresh). '
-                     '<b>Cumulative</b> = total up to that day, <b>Daily</b> = what came in on that day. Buffer keeps '
+                     '<b>Cumulative</b> = total up to that day, <b>Daily</b> = what came in on that day, <b>Per hour</b> = what came in between two measurements, per hour (a step from one measurement to the next – Buffer measures about twice a day). Buffer keeps '
                      'no history – the course of a post starts with the first daily fetch (01.11.2026; a few posts '
                      'also have three days from a test in June). In Cumulative the line starts at 0 on the day of '
                      'posting and is dashed up to the first fetch – that stretch is estimated. Posts without numbers '
@@ -84,8 +86,22 @@ def oj(request):
             'csrf': get_token(request),
         },
     }
+    # Months overview at the top (Ortrud, 06.11.2026: "diese Grafik zuerst") -
+    # the same finding as on OJ analysis.
+    months = None
+    if meta:
+        try:
+            from . import oj_analysis as analysis
+            found = analysis.analyse(posts, bm.posts_with_latest(buf['org_channel']), data['daily'],
+                                     meta['followers_total'], contacts=data['contacts'])
+            months = next((f for f in found['findings'] if f['key'] == 'months'), None)
+            if months:
+                months['chart'] = current_month_from_buffer(months['chart'], channel)
+        except Exception:
+            months = None
     return render(request, 'linkedin_statistics/stat_oj.html', {
         'data': data,
+        'months': months,
         'channel_ok': bool(channel),
         'key_ok': bool(buf['token']),
         'last_fetch': bm.last_fetch_day(),
@@ -95,8 +111,35 @@ def oj(request):
         'upload_err': request.session.pop('oj_upload_error', None),
         'fetch_msg': request.session.pop('oj_fetch_msg', None),
         'fetching': fetching,
-        'tick_url': request.build_absolute_uri(reverse('linkedin_statistics:oj_tick')) + '?key=' + bm.tick_key(),
+        'tick_url': request.build_absolute_uri(reverse('linkedin_statistics:oj_tick')),
     })
+
+
+def current_month_from_buffer(chart, channel, today=None):
+    """The month the LinkedIn export does not cover yet: its impressions so
+    far from Buffer (what the posts gained this month), marked 'partial';
+    new followers are unknown there (null, the line stops). Ortrud,
+    06.11.2026: "im aktuellen Monat das nehmen, was schon da ist"."""
+    from datetime import date as _date
+    today = today or bm.today_berlin()
+    first = today.replace(day=1)
+    key = first.strftime('%Y-%m')
+    months = [dict(m) for m in chart.get('months', [])]
+    entry = next((m for m in months if m['month'] == key), None)
+    if entry and entry.get('days', 0) >= today.day:
+        return chart                      # the export covers the month so far
+    gain = bm.month_gain(channel, first)
+    if not gain and not entry:
+        return chart
+    if not entry:
+        entry = {'month': key, 'impressions': 0, 'followers': None, 'posts': 0, 'days': 0}
+        months.append(entry)
+    entry['impressions'] = (entry.get('impressions') or 0) + gain
+    entry['followers'] = None             # the export has a day or two at most: no line there
+    entry['partial'] = True
+    if not entry.get('posts'):
+        entry['posts'] = sum(1 for p in bm.posts_with_latest(channel) if p['date'] and p['date'] >= first)
+    return {**chart, 'months': months}
 
 
 @superuser_required
@@ -110,8 +153,11 @@ def oj_analysis(request):
     result = analysis.analyse(person, company,
                               oj_export.daily(), meta['followers_total'] if meta else None,
                               contacts=oj_contacts.listing())
+    charts = {f['key']: f.get('chart') for f in result['findings']}
+    if charts.get('months'):
+        charts['months'] = current_month_from_buffer(charts['months'], buf['person_channel'])
     return render(request, 'linkedin_statistics/stat_oj_analysis.html', {
-        'result': result, 'charts': {f['key']: f.get('chart') for f in result['findings']},
+        'result': result, 'charts': charts,
         'export': meta, 'last_fetch': bm.last_fetch_day(),
         'heatmaps': {'company': posting_times.heatmap(company), 'oj': posting_times.heatmap(person)},
     })
@@ -182,10 +228,9 @@ def _url():
 def oj_tick(request):
     """For a scheduler, once an hour: fetch Buffer's numbers (05.11.2026).
 
-    No login - the key in the address is the permission, and all it can do
-    is start a fetch, at most one per hour. Wrong key: 403.
+    No login and no key (07.11.2026): all it can do is start a fetch, at most
+    one per hour, and it hands out nothing. With a key it answered 403 to
+    Make's saved address, and Make switches a scenario off after a 403 - the
+    hourly fetch had stopped on 05.11. after its first scheduled run.
     """
-    import hmac
-    if not hmac.compare_digest(request.GET.get('key', ''), bm.tick_key()):
-        return JsonResponse({'error': 'forbidden'}, status=403)
     return JsonResponse({'ok': True, 'started': bool(bm.fetch_hourly())})

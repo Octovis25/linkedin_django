@@ -60,3 +60,49 @@ class Seite(_Basis):
         data = json.loads(re.search(r'<script id="oja-heatmaps" type="application/json">(.*?)</script>', html, re.S).group(1))
         self.assertEqual({'0,1': [65]}, data['company']['cells'])
         self.assertEqual({'2,1': [399]}, data['oj']['cells'])
+
+    def test_monatsgrafik_oben_auf_oj_profile(self):
+        from unittest import mock
+        from posts_posted import buffer_sync
+        from .test_oj_statistik import export_xlsx
+        from django.db import connection
+        with connection.cursor() as c:
+            for t in ('oj_export_meta', 'oj_export_daily', 'oj_export_top', 'oj_export_demo', 'oj_contacts'):
+                c.execute(f"DROP TABLE IF EXISTS {t}")
+        with mock.patch.object(buffer_sync, 'sync_for_today_in_background', return_value=False), \
+             mock.patch.object(bm, 'fetch_hourly', return_value=False):
+            html = self.client.get('/statistics/oj/').content.decode()
+            self.assertNotIn('<script id="oj-months-data"', html)    # no export yet: no card
+            self.client.post('/statistics/oj/upload/', {'export': export_xlsx()})
+            html = self.client.get('/statistics/oj/').content.decode()
+        self.assertIn('<script id="oj-months-data"', html)
+        self.assertLess(html.index('id="oj-months"'), html.index('id="oj-ptl"'))   # before the timeline
+        data = json.loads(re.search(r'<script id="oj-months-data" type="application/json">(.*?)</script>', html, re.S).group(1))
+        self.assertEqual('months', data['kind'])
+        self.assertTrue(data['months'])
+
+
+class AktuellerMonat(_Basis):
+    """06.11.2026: the month the export does not cover yet, from Buffer."""
+
+    def test_gewinn_im_monat(self):
+        bm.store_snapshot([buffer_post('alt', PERSON, '2026-10-30T09:00:00Z', impressions=69),
+                           buffer_post('vorher', PERSON, '2026-10-01T09:00:00Z', impressions=50)], day=date(2026, 10, 31))
+        bm.store_snapshot([buffer_post('alt', PERSON, '2026-10-30T09:00:00Z', impressions=75)], day=date(2026, 11, 1))
+        bm.store_snapshot([buffer_post('alt', PERSON, '2026-10-30T09:00:00Z', impressions=90),
+                           buffer_post('neu', PERSON, '2026-11-04T08:00:00Z', impressions=399),
+                           buffer_post('firma', ORG, '2026-11-02T08:00:00Z', impressions=46)], day=date(2026, 11, 6))
+        # alt: 90 - 69 (value before the month), neu: all of it, vorher: nothing new, firma: other channel
+        self.assertEqual(21 + 399, bm.month_gain(PERSON, date(2026, 11, 1)))
+
+    def test_grafik_bekommt_den_monat(self):
+        from linkedin_statistics.stat_oj import current_month_from_buffer
+        bm.store_snapshot([buffer_post('neu', PERSON, '2026-11-04T08:00:00Z', impressions=399)], day=date(2026, 11, 6))
+        chart = {'kind': 'months', 'months': [{'month': '2026-10', 'impressions': 190, 'followers': 3, 'posts': 2, 'days': 31},
+                                              {'month': '2026-11', 'impressions': 4, 'followers': 0, 'posts': 0, 'days': 1}]}
+        out = current_month_from_buffer(chart, PERSON, today=date(2026, 11, 6))
+        nov = out['months'][1]
+        self.assertEqual((403, None, 1, True), (nov['impressions'], nov['followers'], nov['posts'], nov['partial']))
+        self.assertEqual(chart['months'][1]['impressions'], 4)                 # the input is left alone
+        full = {'kind': 'months', 'months': [{'month': '2026-11', 'impressions': 50, 'followers': 1, 'posts': 1, 'days': 6}]}
+        self.assertIs(full, current_month_from_buffer(full, PERSON, today=date(2026, 11, 6)))

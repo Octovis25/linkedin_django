@@ -64,7 +64,7 @@ and calls  window.postTimelines[prefix].setRange(from, to)  whenever its period 
 
 <div class="ptl" id="{{ prefix }}-ptl">
   <div class="card"><div class="ch"><h2>Timeline</h2>
-      <div class="chips" data-r="mode"><button data-v="cum" class="on">Cumulative</button><button data-v="day">Daily</button></div>
+      <div class="chips" data-r="mode"><button data-v="cum" class="on">Cumulative</button><button data-v="day">Daily</button><button data-v="rate" title="New impressions per hour between two measurements – at the times the numbers were measured">Per hour</button></div>
       <div class="chips" data-r="span" title="How much of each post's life the timeline shows"><button data-v="3">3 days</button><button data-v="7">7 days</button><button data-v="30" class="on">30 days</button></div>
       <label class="lbl"><input type="checkbox" data-r="engov"> + Eng. rate %</label>
       <div class="right chips" data-r="metric"></div></div>
@@ -111,6 +111,23 @@ const points = (p, k) => (TL[p.id] || []).filter(d => d[k] != null).map(d => ({x
 // Rates (engagement rate, CTR) are always shown as they are.
 function series(p, k, m) {
   const c = points(p, k), out = [], gapMax = CFG.maxGap;
+  // Per hour (07.11.2026): what came in between two measurements, divided by
+  // the hours between them, held as a step from one measurement to the next.
+  // Every measurement time shows; nothing is spread over whole days.
+  if ((m || mode) === 'rate' && !CFG.rates.includes(k)) {
+    const all = (c.length && c[0].x > 0 && c[0].x <= 30 ? [{x: 0, y: 0, est: 1}] : []).concat(c);
+    all.forEach((pt, i) => {
+      if (!i) return;
+      const prev = all[i - 1], hours = (pt.x - prev.x) * 24;
+      if (hours <= 0) return;
+      if (pt.x - prev.x > gapMax) { out.push({x: prev.x, y: null}); return; }
+      const r = +(Math.max(0, pt.y - prev.y) / hours).toFixed(2);
+      // the interval as a flat piece from one measurement to the next; the dot sits on the measurement
+      out.push({x: prev.x, y: r, est: prev.est, from: prev.x, to: pt.x, start: 1});
+      out.push({x: pt.x, y: r, from: prev.x, to: pt.x});
+    });
+    return out;
+  }
   if ((m || mode) === 'cum' || CFG.rates.includes(k)) {
     // Cumulative counts start at 0 on the day of posting. When the first fetch
     // came later, that stretch is drawn dashed: it is estimated, not measured.
@@ -140,7 +157,7 @@ const colorOf = id => { const i = sel.indexOf(id); return i < 0 ? null : COL[i %
 const inWindow = (p, k) => points(p, k).some(q => q.x >= 0 && q.x <= span);
 const firstDay = (p, k) => { const c = points(p, k); return c.length ? c[0].x : null; };
 const estDash = {borderDash: s => (s.p0.raw && s.p0.raw.est ? [5, 4] : undefined)};
-const estPoint = r => ctx => (ctx.raw && ctx.raw.est ? 0 : r);
+const estPoint = r => ctx => (ctx.raw && (ctx.raw.est || ctx.raw.start) ? 0 : r);
 // 1.54 -> "Day 1 + 13 h" (the time since posting, to the hour)
 const dayTitle = x => { if (span === 3) return Math.round(x * 24) + ' h after posting'; let d = Math.floor(x), h = Math.round((x - d) * 24); if (h === 24) { d += 1; h = 0; } return 'Day ' + d + (h ? ' + ' + h + ' h' : ''); };
 
@@ -179,7 +196,7 @@ function drawMini(cv) {
     if (!d.length) return;
     const extra = ax === 'y2' ? {borderDash: [5, 4], borderWidth: 1.5, pointRadius: 0}
                 : ax === 'y1' ? {borderWidth: 1.5, pointRadius: 2, stepped: mode === 'cum'} : {};
-    ds.push(Object.assign({type: 'line', label: lab, data: d, spanGaps: false, borderColor: col, backgroundColor: col, yAxisID: ax, pointRadius: estPoint(2), tension: mode === 'day' ? 0 : .3, cubicInterpolationMode: 'monotone', borderWidth: 2, segment: estDash}, extra));
+    ds.push(Object.assign({type: 'line', label: lab, data: d, spanGaps: false, borderColor: col, backgroundColor: col, yAxisID: ax, pointRadius: estPoint(2), tension: mode === 'cum' ? .3 : 0, cubicInterpolationMode: 'monotone', borderWidth: 2, segment: estDash}, extra));
   });
   const xmax = Math.max(30, ...ds.flatMap(s => s.data.map(q => q.x)));
   if (cv._chart) cv._chart.destroy();
@@ -207,7 +224,7 @@ function draw() {
         + CFG.detail.filter(dt => dt[2] !== 'vid' || vid).map(dt => `<div class="${dt[2] || ''}"><em>${esc(dt[1])}</em><b>${dt[3] === 'pct' ? pct(v(p, dt[0])) : n(v(p, dt[0]))}${dt[3] === 'min' && v(p, dt[0]) != null ? ' min' : ''}</b></div>`).join('')
         + `<div><em>Impressions vs Ø</em><b>${av ? (imp >= av ? '+' : '') + Math.round((imp / av - 1) * 100) : 0} %</b></div><div><em>Days tracked</em><b>${p.days}</b></div></div>
         <div class="mini"><div style="height:240px"><canvas data-mini="${esc(p.id)}"></canvas></div><div class="mtg"></div></div>
-        <div class="note" style="margin-top:.3rem">All numbers of this post in one chart – switch them on and off on the right. Impressions, reach and views on the left axis, clicks, reactions, comments and shares on the right, dashed = rates in %. ${mode === 'day' ? 'Daily: what came in on each day (a post starts at 0 on the day it went out).' : 'Cumulative: total up to each day.'}${p.days < 2 ? ' Only one fetch so far – the course grows with each fetch.' : ''}</div></td></tr>` : '');
+        <div class="note" style="margin-top:.3rem">All numbers of this post in one chart – switch them on and off on the right. Impressions, reach and views on the left axis, clicks, reactions, comments and shares on the right, dashed = rates in %. ${mode === 'day' ? 'Daily: what came in on each day (a post starts at 0 on the day it went out).' : mode === 'rate' ? 'Per hour: what came in between two measurements, per hour – one step from measurement to measurement.' : 'Cumulative: total up to each day.'}${p.days < 2 ? ' Only one fetch so far – the course grows with each fetch.' : ''}</div></td></tr>` : '');
   }).join('') || `<tr><td colspan="${ncol}" class="l muted">No posts in this period.</td></tr>`;
   ROOT.querySelectorAll('.ptt th[data-k]').forEach(th => { th.textContent = th.textContent.replace(/ [▲▼]$/, ''); if (th.dataset.k === sk) th.textContent += sd < 0 ? ' ▼' : ' ▲'; });
   R('rows').querySelectorAll('tr.post').forEach(tr => {
@@ -229,15 +246,19 @@ function draw() {
   const ov = R('engov').checked, ds = [];
   ps.filter(p => !hidden.has(p.id)).forEach(p => {
     const c = colorOf(p.id);
-    ds.push({label: fmtD(p.date) + ' ' + p.title.slice(0, 30), data: series(p, metric).filter(q => q.x <= span), spanGaps: false, borderColor: c, backgroundColor: c, tension: mode === 'day' ? 0 : .3, cubicInterpolationMode: 'monotone', pointRadius: estPoint(2.5), pointHoverRadius: estPoint(4), borderWidth: 2.2, yAxisID: 'y', segment: estDash});
+    ds.push({label: fmtD(p.date) + ' ' + p.title.slice(0, 30), data: series(p, metric).filter(q => q.x <= span), spanGaps: false, borderColor: c, backgroundColor: c,
+      tension: mode === 'cum' ? .3 : 0, cubicInterpolationMode: 'monotone',
+      pointRadius: estPoint(2.5), pointHoverRadius: estPoint(4), borderWidth: 2.2, yAxisID: 'y', segment: estDash});
     if (ov) ds.push({label: 'Eng. rate · ' + fmtD(p.date), data: series(p, 'engagementRate').filter(q => q.x <= span), spanGaps: false, borderColor: c, backgroundColor: c, borderDash: [5, 4], borderWidth: 1.5, pointRadius: 0, tension: .3, yAxisID: 'y2'});
   });
   chart = new Chart(R('chart'), {type: 'line', data: {datasets: ds},
     options: {maintainAspectRatio: false, animation: false, interaction: {mode: 'nearest', intersect: false},
-      plugins: {legend: {display: false}, tooltip: {filter: it => !(it.raw && it.raw.est), callbacks: {title: it => dayTitle(it[0].parsed.x), label: it => it.dataset.yAxisID === 'y2' ? ` ${it.dataset.label}: ${it.parsed.y.toFixed(1)} %` : ` ${it.dataset.label}: ${it.parsed.y}`}}},
+      plugins: {legend: {display: false}, tooltip: {filter: it => !(it.raw && (it.raw.est || it.raw.start)), callbacks: {title: it => dayTitle(it[0].parsed.x), label: it => it.dataset.yAxisID === 'y2' ? ` ${it.dataset.label}: ${it.parsed.y.toFixed(1)} %`
+          : mode === 'rate' && it.raw && it.raw.to != null ? ` ${it.dataset.label}: ${it.parsed.y} per hour (${dayTitle(it.raw.from)} → ${dayTitle(it.raw.to)})`
+          : ` ${it.dataset.label}: ${it.parsed.y}`}}},
       scales: {x: {type: 'linear', min: 0, max: span, ticks: {stepSize: span === 3 ? .25 : span === 7 ? 1 : 5, callback: x => span === 3 ? Math.round(x * 24) + ' h' : x},
           title: {display: true, text: span === 3 ? 'Hours after posting' : 'Days after posting'}, grid: {color: s => span === 3 && s.tick && s.tick.value % 1 === 0 ? '#ced4da' : '#f1f3f5'}},
-        y: {beginAtZero: true, grid: {color: '#f1f3f5'}, title: {display: true, text: R('metric').querySelector('.on').textContent + (mode === 'day' && !CFG.rates.includes(metric) ? ' per day' : '')}},
+        y: {beginAtZero: true, grid: {color: '#f1f3f5'}, title: {display: true, text: R('metric').querySelector('.on').textContent + (CFG.rates.includes(metric) ? '' : mode === 'day' ? ' per day' : mode === 'rate' ? ' per hour' : '')}},
         y2: {display: ov, position: 'right', beginAtZero: true, grid: {display: false}, title: {display: true, text: 'Eng. rate % (dashed)'}, ticks: {callback: x => x + ' %'}}}}});
 }
 
