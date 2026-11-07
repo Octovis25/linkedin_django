@@ -171,38 +171,10 @@ def oj_analysis(request):
         'von': von.isoformat(), 'bis': bis.isoformat(), 'hinweis': hinweis, 'heute': today.isoformat(),
         'quick': quick, 'since': OLDEST_SHOWN.isoformat(),
         'timeline': timeline, 'n_company': len(company), 'n_oj': len(person),
-        'first_days': {'company': first_days(company, buf['org_channel']),
-                       'oj': first_days(person, buf['person_channel'])},
+        'first_days': bm.first_days(person, buf['person_channel']),   # Octovis: under Statistics → Timeline
         'export': meta, 'last_fetch': bm.last_fetch_at(),
         'heatmaps': {'company': posting_times.heatmap(company), 'oj': posting_times.heatmap(person)},
     })
-
-
-FIRST_HOURS = 120
-
-
-def first_days(posts, channel):
-    """The first five days of every post, to compare them hour by hour
-    (07.11.2026: "damit ich die Posts über die ersten 5 Tage vergleichen
-    kann"). [[hours after posting, impressions so far], ...] at the moments
-    Buffer had new numbers; 'young' while the five days are not over. One
-    point past the five days is kept, so the value at 120 h can be read
-    between two measurements."""
-    if not posts:
-        return []
-    from datetime import datetime as _dt
-    tl = bm.channel_timelines(channel)
-    now = _dt.utcnow()
-    out = []
-    for p in posts:
-        pts = [[round(d['day'] * 24, 1), int(round(float(d['impressions'])))] for d in tl.get(p['id'], [])
-               if d.get('impressions') is not None and d['day'] * 24 <= FIRST_HOURS + 36]
-        if not pts:
-            continue
-        sent = bm._ts(p['sent_at'])
-        out.append({'id': p['id'], 'date': p['date'].isoformat(), 'title': p['title'][:70], 'pts': pts,
-                    'young': bool(sent) and (now - sent).total_seconds() < FIRST_HOURS * 3600})
-    return sorted(out, key=lambda x: x['date'], reverse=True)
 
 
 OLDEST_SHOWN = date(2023, 1, 1)           # posts before 2023 never show

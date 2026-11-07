@@ -1,0 +1,80 @@
+{% comment %}
+The first five days of every post, hour by hour (07.11.2026). Buffer numbers.
+OJ analysis shows the OJ profile, Statistics → Timeline the company page.
+  fd_data   list from buffer_metrics.first_days()
+  fd_title  heading
+  fd_note   optional extra sentence
+Needs Chart.js on the page; draws after the page has loaded.
+{% endcomment %}
+<style>
+.fd5 { background:#fff; border-radius:.5rem; box-shadow:0 1px 4px rgba(0,0,0,.08); margin-bottom:1.25rem; }
+.fd5 .fd-h { display:flex; align-items:center; flex-wrap:wrap; gap:.6rem; padding:.85rem 1.2rem .6rem; border-bottom:1px solid #f0f0f0; }
+.fd5 .fd-h h2 { margin:0; font-size:1rem; font-weight:600; color:var(--octo-dark-petrol, #005F68); }
+.fd5 .fd-b { padding:1rem 1.2rem; }
+.fd5 .fd-chips { display:flex; gap:4px; }
+.fd5 .fd-chips button { border:1px solid #ced4da; background:#fff; border-radius:99px; padding:.2rem .7rem; font-size:.78rem; cursor:pointer; }
+.fd5 .fd-chips button.on { background:var(--octo-petrol, #008591); color:#fff; border-color:var(--octo-petrol, #008591); }
+.fd5 .fd-n { margin-left:auto; font-size:.7rem; font-weight:600; padding:.12rem .55rem; border-radius:99px; background:#f1f3f5; color:#868e96; }
+.fd5 .fd-note { font-size:.74rem; color:#868e96; margin:.5rem 0 0; }
+.fd5 table { width:100%; border-collapse:collapse; font-size:.84rem; margin-top:.8rem; }
+.fd5 th { font-size:.68rem; text-transform:uppercase; letter-spacing:.04em; color:#868e96; text-align:left; padding:.45rem .5rem; border-bottom:1px solid #e9ecef; }
+.fd5 td { padding:.4rem .5rem; border-bottom:1px solid #f1f3f5; }
+.fd5 .r { text-align:right; } .fd5 .est, .fd5 .muted { color:#868e96; }
+.fd5 td.t { max-width:420px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.fd5 i.sw { display:inline-block; width:10px; height:10px; border-radius:2px; margin-right:6px; vertical-align:-1px; }
+</style>
+<div class="fd5" id="fd-card">
+  <div class="fd-h"><h2>{{ fd_title }}</h2>
+    <div class="fd-chips" id="fd-mode"><button type="button" data-m="cum" class="on">Impressions so far</button><button type="button" data-m="rate">Per hour</button></div>
+    <span class="fd-n" id="fd-unit"></span></div>
+  <div class="fd-b"><div style="height:300px"><canvas id="fd-chart"></canvas></div>
+    <p class="fd-note">Hours after posting, from Buffer. A point is a moment Buffer had new numbers – about twice a day; they are fetched every hour.{% if fd_note %} {{ fd_note }}{% endif %} Coloured: the 8 newest posts, grey: older ones (hover shows which). Dashed: the five days are not over yet.</p>
+    <table id="fd-table"></table></div>
+</div>
+{{ fd_data|json_script:"fd-data" }}
+<script>
+window.addEventListener('DOMContentLoaded', () => {
+  if (!window.Chart) return;
+  const F = JSON.parse(document.getElementById('fd-data').textContent);
+  const COL = ['#008591', '#EB6E08', '#6B21A8', '#185FA5', '#B8860B', '#0F6E56', '#A61B1B', '#5C6BC0'];
+  const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'}[c]));
+  const fmtD = d => new Date(d + 'T12:00:00').toLocaleDateString('en-GB', {day: '2-digit', month: 'short'});
+  let mode = 'cum', chart;
+  // from 0 at posting; measurements with unchanged numbers are skipped (Buffer repeats them)
+  const course = p => [[0, 0]].concat(p.pts.filter((q, i, a) => !i || q[1] !== a[i - 1][1]));
+  // value at hour h, on the straight line between the two measurements around it
+  const at = (p, h) => { const c = course(p); for (let i = 1; i < c.length; i++) if (c[i][0] >= h) {
+      const [x0, y0] = c[i - 1], [x1, y1] = c[i]; return {v: Math.round(y0 + (y1 - y0) * (h - x0) / ((x1 - x0) || 1)), est: x1 !== h, from: x0, to: x1}; }
+    return null; };
+  function data(p) {
+    const c = course(p);
+    if (mode === 'cum') return c.map(([x, y]) => ({x, y}));
+    const out = [];
+    for (let i = 1; i < c.length; i++) { const r = +((c[i][1] - c[i - 1][1]) / ((c[i][0] - c[i - 1][0]) || 1)).toFixed(1);
+      out.push({x: c[i - 1][0], y: r}, {x: c[i][0], y: r}); }
+    return out;
+  }
+  function draw() {
+    const ds = F.map((p, i) => { const col = i < COL.length ? COL[i] : '#ced4da';
+      return {label: fmtD(p.date) + ' · ' + p.title, data: data(p), borderColor: col, backgroundColor: col, borderWidth: i < COL.length ? 2 : 1,
+        borderDash: p.young ? [5, 4] : undefined, pointRadius: mode === 'cum' ? (i < COL.length ? 2.5 : 0) : 0, tension: 0, order: i < COL.length ? 1 : 2}; });
+    if (chart) chart.destroy();
+    chart = new Chart(document.getElementById('fd-chart'), {type: 'line', data: {datasets: ds},
+      options: {maintainAspectRatio: false, animation: false, parsing: false, interaction: {mode: 'nearest', intersect: false},
+        plugins: {legend: {display: false},
+          tooltip: {callbacks: {title: it => it[0].dataset.label, label: it => mode === 'cum' ? ` ${it.parsed.y} impressions after ${Math.round(it.parsed.x)} h` : ` ${it.parsed.y} per hour`}}},
+        scales: {x: {type: 'linear', min: 0, max: 120, grid: {color: '#f1f3f5'}, ticks: {stepSize: 12, callback: v => v % 24 ? v + ' h' : 'Day ' + v / 24}},
+                 y: {beginAtZero: true, grid: {color: '#f1f3f5'}, title: {display: true, text: mode === 'cum' ? 'impressions so far' : 'impressions per hour'}}}}});
+    document.getElementById('fd-unit').textContent = F.length + ' posts';
+    const cell = r => r ? `<td class="r${r.est ? ' est' : ''}" title="${r.est ? 'between the measurements at ' + Math.round(r.from) + ' h and ' + Math.round(r.to) + ' h' : 'measured'}">${r.est ? '~' : ''}${r.v}</td>` : '<td class="r muted">–</td>';
+    const rows = F.map((p, i) => ({p, i, a: at(p, 24), b: at(p, 48), c: at(p, 120)}))
+      .sort((x, y) => (y.a ? y.a.v : -1) - (x.a ? x.a.v : -1));
+    document.getElementById('fd-table').innerHTML = F.length ? '<thead><tr><th>Post</th><th>Sent</th><th class="r">after 24 h</th><th class="r">after 48 h</th><th class="r">after 5 days</th></tr></thead><tbody>'
+      + rows.map(({p, i, a, b, c}) => `<tr><td class="t"><i class="sw" style="background:${i < COL.length ? COL[i] : '#ced4da'}"></i>${esc(p.title)}</td><td>${fmtD(p.date)}</td>${cell(a)}${cell(b)}${cell(c)}</tr>`).join('') + '</tbody>'
+      : '<tbody><tr><td class="muted">No post in this period has Buffer numbers from its first five days.</td></tr></tbody>';
+  }
+  document.querySelectorAll('#fd-mode button').forEach(b => b.onclick = () => {
+    document.querySelectorAll('#fd-mode button').forEach(x => x.classList.toggle('on', x === b)); mode = b.dataset.m; draw(); });
+  draw();
+});
+</script>

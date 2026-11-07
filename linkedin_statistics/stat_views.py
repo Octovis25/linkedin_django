@@ -383,6 +383,17 @@ def timeline(request):
     post_data = {'today': date.today().isoformat(), 'posts': posts, 'timelines': timelines,
                  'cfg': company_posts.CFG}
 
+    # The first 5 days of every company post, hour by hour, from Buffer
+    # (07.11.2026: the Octovis posts belong here, not under OJ analysis).
+    first_days = []
+    try:
+        from . import buffer_metrics as bm
+        org = bm.superuser_buffer()['org_channel']
+        first_days = bm.first_days([p for p in bm.posts_with_latest(org)
+                                    if p['date'] and d_from <= p['date'].isoformat() <= d_to], org)
+    except Exception as e:
+        print('timeline, first 5 days:', e)
+
     # Charts: Content Metrics + Interactions (same as Overview)
     tl_labels, tl_imps, _ = _chart_content_metrics(d_from, d_to, group_by)
     _, tl_clicks, tl_reactions, tl_comments, tl_shares, tl_eng_rate, tl_views, tl_ctr = \
@@ -390,6 +401,7 @@ def timeline(request):
 
     return render(request, 'linkedin_statistics/stat_timeline.html', {
         'post_data': post_data,
+        'first_days': first_days,
         'date_from': d_from, 'date_to': d_to,
         'tab': 'timeline', 'group_by': group_by,
         'agg_text': _agg_text(group_by),

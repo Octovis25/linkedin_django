@@ -190,6 +190,7 @@
 <div class="section-divider"><span>Posts</span></div>
 {% include "linkedin_statistics/_post_timeline.html" with prefix="co" data_id="co-data" %}
 <script>window.postTimelines.co.setRange('{{ date_from|escapejs }}', '{{ date_to|escapejs }}');</script>
+{% include "linkedin_statistics/_first_days.html" with fd_data=first_days fd_title="The first 5 days" fd_note="Company page, posts from the period above." %}
 
 </div><!-- /.tl-page -->
 

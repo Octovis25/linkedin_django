@@ -158,30 +158,51 @@ class Zeitraum(_Basis):
 
 
 def first(html):
-    return json.loads(re.search(r'<script id="oja-first" type="application/json">(.*?)</script>', html, re.S).group(1))
+    return json.loads(re.search(r'<script id="fd-data" type="application/json">(.*?)</script>', html, re.S).group(1))
 
 
 class ErsteFuenfTage(_Basis):
-    """07.11.2026: "damit ich die Posts über die ersten 5 Tage vergleichen kann"."""
+    """07.11.2026: "damit ich die Posts über die ersten 5 Tage vergleichen kann" -
+    OJ profile on OJ analysis, the Octovis posts under Statistics → Timeline."""
 
-    def test_stunden_nach_dem_posten(self):
+    def setUp(self):
+        super().setUp()
         now = bm._utcnow()
-        sent = now - timedelta(days=3)
         iso = lambda dt: dt.strftime('%Y-%m-%dT%H:%M:%SZ')
+        sent = now - timedelta(days=3)
         for hours, imp in ((9, 120), (33, 300)):
             p = buffer_post('p1', PERSON, iso(sent), impressions=imp)
             p['metrics_updated_at'] = iso(sent + timedelta(hours=hours))
             bm.store_snapshot([p])
-        old = buffer_post('o1', ORG, iso(now - timedelta(days=40)), impressions=500)
+        for hours, imp in ((20, 50), (44, 90)):
+            p = buffer_post('o1', ORG, iso(sent), impressions=imp)
+            p['metrics_updated_at'] = iso(sent + timedelta(hours=hours))
+            bm.store_snapshot([p])
+        old = buffer_post('o-alt', ORG, iso(now - timedelta(days=40)), impressions=500)
         old['metrics_updated_at'] = iso(now - timedelta(days=40) + timedelta(hours=200))   # day 8: outside
         bm.store_snapshot([old])
+        self.today = bm.today_berlin()
+
+    def test_oj_analysis_nur_oj_profile(self):
         html = self.client.get('/statistics/oj/analysis/').content.decode()
         f = first(html)
-        self.assertEqual([[9.0, 120], [33.0, 300]], f['oj'][0]['pts'])
-        self.assertTrue(f['oj'][0]['young'])
-        self.assertEqual([], f['company'])
+        self.assertEqual(['p1'], [p['id'] for p in f])
+        self.assertEqual([[9.0, 120], [33.0, 300]], f[0]['pts'])
+        self.assertTrue(f[0]['young'])
+        self.assertIn('The first 5 days · OJ profile', html)
         self.assertLess(html.index('id="tl-card"'), html.index('id="fd-card"'))
         self.assertLess(html.index('id="fd-card"'), html.index('id="hm-card"'))
+
+    def test_octovis_unter_timeline(self):
+        from django.db import connection
+        with connection.cursor() as c:
+            c.execute("CREATE TABLE IF NOT EXISTS planner_topics (id INT AUTO_INCREMENT PRIMARY KEY, name VARCHAR(100), color VARCHAR(20))")
+        frm = (self.today - timedelta(days=30)).isoformat()
+        html = self.client.get('/statistics/timeline/', {'from': frm, 'to': self.today.isoformat()}).content.decode()
+        f = first(html)
+        self.assertEqual(['o1'], [p['id'] for p in f])           # o-alt is outside the period, p1 is OJ
+        self.assertEqual([[20.0, 50], [44.0, 90]], f[0]['pts'])
+        self.assertIn('Company page, posts from the period above.', html)
 
 
 class LetzterAbruf(_Basis):

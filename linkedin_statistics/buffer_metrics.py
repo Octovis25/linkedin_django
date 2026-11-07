@@ -457,6 +457,33 @@ def channel_timelines(channel_id):
     return {bpid: sorted(pts.values(), key=lambda d: d['day']) for bpid, pts in out.items()}
 
 
+FIRST_HOURS = 120
+
+
+def first_days(posts, channel_id):
+    """The first five days of every post, to compare them hour by hour
+    (07.11.2026: "damit ich die Posts über die ersten 5 Tage vergleichen
+    kann"). posts: from posts_with_latest(), already cut to the period.
+    [[hours after posting, impressions so far], ...] at the moments Buffer
+    had new numbers; 'young' while the five days are not over. One point
+    past the five days is kept, so the value at 120 h can be read between
+    two measurements. OJ profile → OJ analysis, company page → Timeline."""
+    if not posts:
+        return []
+    tl = channel_timelines(channel_id)
+    now = _utcnow()
+    out = []
+    for p in posts:
+        pts = [[round(d['day'] * 24, 1), int(round(float(d['impressions'])))] for d in tl.get(p['id'], [])
+               if d.get('impressions') is not None and d['day'] * 24 <= FIRST_HOURS + 36]
+        if not pts:
+            continue
+        sent = _ts(p['sent_at'])
+        out.append({'id': p['id'], 'date': p['date'].isoformat(), 'title': p['title'][:70], 'pts': pts,
+                    'young': bool(sent) and (now - sent).total_seconds() < FIRST_HOURS * 3600})
+    return sorted(out, key=lambda x: x['date'], reverse=True)
+
+
 def month_gain(channel_id, first_day, metric='impressions'):
     """What the posts of one channel gained since first_day, from the daily
     rows: for each post its newest value minus its value before first_day
