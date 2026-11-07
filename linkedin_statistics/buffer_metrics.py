@@ -17,7 +17,7 @@ posts_posted/buffer_sync.py). So the fetch runs in the background when OJ
 profile or the planner's Scheduled tab is opened and today's snapshot is
 still missing, and by hand with "Fetch now" (05.11.2026: 04.11. was missing).
 """
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from zoneinfo import ZoneInfo
 
 from django.db import connection
@@ -121,6 +121,10 @@ def ensure_table():
         """)
         # When the app last fetched (any way: hourly, the button, the daily sync).
         c.execute("CREATE TABLE IF NOT EXISTS buffer_metrics_state (id TINYINT PRIMARY KEY, fetched_at DATETIME)")
+        # Make's last call on /statistics/oj/tick/. The clock starts when the
+        # table is made, so a scenario that never calls is noticed as well.
+        c.execute("CREATE TABLE IF NOT EXISTS buffer_metrics_ticks (id TINYINT PRIMARY KEY, at DATETIME)")
+        c.execute("INSERT IGNORE INTO buffer_metrics_ticks (id, at) VALUES (1, %s)", [_utcnow()])
 
 
 def _planner_post_id(c, buffer_post_id):
@@ -362,6 +366,45 @@ def last_fetch_at():
         return {'at': berlin(row[0]), 'buffer': buffer_at}
     day = last_fetch_day()
     return {'day': day, 'buffer': buffer_at} if day else None
+
+
+STALE_HOURS = 3
+
+
+def note_tick():
+    """Make called: remember when."""
+    ensure_table()
+    with connection.cursor() as c:
+        c.execute("REPLACE INTO buffer_metrics_ticks (id, at) VALUES (1, %s)", [_utcnow()])
+
+
+def fetch_problem():
+    """One short sentence when the hourly fetch has stopped or failed, else ''.
+
+    Shown to a superuser after logging in (07.11.2026: "eine kurze Nachricht,
+    wenn the last zu lange her ist, wenn ich mich einlogge").
+    Runs during the login: no CREATE TABLE here (MySQL commits on DDL), and
+    a missing table only rolls back its own savepoint - then there is no note.
+    """
+    from django.db import transaction
+    try:
+        with transaction.atomic(), connection.cursor() as c:
+            c.execute("SELECT at FROM buffer_metrics_ticks WHERE id=1")
+            row = c.fetchone()
+            c.execute("""SELECT finished_at, ok, note FROM buffer_metrics_runs
+                         WHERE finished_at IS NOT NULL ORDER BY slot DESC LIMIT 1""")
+            run = c.fetchone()
+    except Exception:
+        return ''
+    berlin = lambda dt: dt.replace(tzinfo=UTC).astimezone(BERLIN)
+    tick = row[0] if row else None
+    if tick and _utcnow() - tick > timedelta(hours=STALE_HOURS):
+        hours = int((_utcnow() - tick).total_seconds() // 3600)
+        return (f'Hourly Buffer fetch stopped: no call from Make since {berlin(tick):%d.%m. %H:%M} '
+                f'({hours} hours). Check the scenario “Integration HTTP” in Make.')
+    if run and not run[1]:
+        return f'Hourly Buffer fetch failed at {berlin(run[0]):%d.%m. %H:%M}: {run[2] or "no reason given"}.'
+    return ''
 
 
 def channel_timelines(channel_id):

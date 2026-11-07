@@ -33,7 +33,7 @@ class _Basis(TransactionTestCase):
         pv._li_tabelle_geprueft = False
         with connection.cursor() as c:
             for t in ('buffer_post_metrics', 'buffer_posts_posted', 'planner_linkedin_tokens', 'buffer_sync_log',
-                      'buffer_post_measurements', 'buffer_metrics_runs', 'buffer_metrics_state'):
+                      'buffer_post_measurements', 'buffer_metrics_runs', 'buffer_metrics_state', 'buffer_metrics_ticks'):
                 c.execute(f"DROP TABLE IF EXISTS {t}")
         buffer_sync._tabelle_geprueft = False
         pv._li_ensure_table()
@@ -211,3 +211,62 @@ class Stuendlich(_Basis):
             html = self.client.get('/statistics/oj/').content.decode()
         self.assertIn('/statistics/oj/tick/"', html)
         self.assertNotIn('tick/?key=', html)
+
+
+class MeldungBeimLogin(_Basis):
+    """07.11.2026: "eine kurze Nachricht, wenn the last zu lange her ist, wenn ich mich einlogge"."""
+
+    def login_note(self, user=None):
+        from django.contrib.auth.signals import user_logged_in
+        from django.contrib.messages import get_messages
+        from django.contrib.messages.storage.fallback import FallbackStorage
+        from django.contrib.sessions.backends.db import SessionStore
+        from django.test import RequestFactory
+        req = RequestFactory().post('/login/')
+        req.session = SessionStore()
+        req._messages = FallbackStorage(req)
+        user_logged_in.send(sender=User, request=req, user=user or self.chefin)
+        return [str(m) for m in get_messages(req)]
+
+    def set_tick(self, hours_ago):
+        bm.ensure_table()
+        with connection.cursor() as c:
+            c.execute("UPDATE buffer_metrics_ticks SET at=%s WHERE id=1", [bm._utcnow() - timedelta(hours=hours_ago)])
+
+    def test_alles_gut_keine_nachricht(self):
+        self.client.logout()
+        self.client.get('/statistics/oj/tick/')
+        self.assertEqual([], self.login_note())
+
+    def test_make_ruft_nicht_mehr_an(self):
+        self.set_tick(5)
+        notes = self.login_note()
+        self.assertEqual(1, len(notes))
+        self.assertIn('no call from Make since', notes[0])
+        self.assertIn('(5 hours)', notes[0])
+        self.assertEqual([], self.login_note(User.objects.create_user('kollegin', password='x')))
+        self.client.logout()
+        self.client.get('/statistics/oj/tick/')                # Make calls again
+        self.assertEqual([], self.login_note())
+
+    def test_ohne_jeden_aufruf_faellt_es_auch_auf(self):
+        self.set_tick(4)                                       # table made 4 hours ago, Make never called
+        self.assertIn('no call from Make', self.login_note()[0])
+
+    def test_abruf_fehlgeschlagen(self):
+        with mock.patch.object(bm, 'fetch_and_store', side_effect=Exception('Buffer did not answer as expected: 401')):
+            self.assertTrue(bm.fetch_hourly(background=False))
+        notes = self.login_note()
+        self.assertIn('Hourly Buffer fetch failed at', notes[0])
+        self.assertIn('401', notes[0])
+
+    def test_ohne_tabellen_keine_nachricht(self):
+        with connection.cursor() as c:
+            c.execute("DROP TABLE IF EXISTS buffer_metrics_ticks")
+        self.assertEqual([], self.login_note())
+        self.assertEqual(0, self.rows("SELECT COUNT(*) FROM information_schema.tables "
+                                      "WHERE table_name='buffer_metrics_ticks' AND table_schema=DATABASE()")[0][0])
+
+    def test_login_bricht_nie(self):
+        with mock.patch.object(bm, 'fetch_problem', side_effect=Exception('db down')):
+            self.assertEqual([], self.login_note())
