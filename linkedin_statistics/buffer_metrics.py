@@ -119,6 +119,8 @@ def ensure_table():
                 ok TINYINT DEFAULT 0, note VARCHAR(255) DEFAULT ''
             )
         """)
+        # When the app last fetched (any way: hourly, the button, the daily sync).
+        c.execute("CREATE TABLE IF NOT EXISTS buffer_metrics_state (id TINYINT PRIMARY KEY, fetched_at DATETIME)")
 
 
 def _planner_post_id(c, buffer_post_id):
@@ -178,6 +180,8 @@ def store_snapshot(posts, day=None):
                               [bpid, p.get('channel_id'), m.get('type'), measured, value, now])
                 n_rows += 1
             n_posts += 1
+        if n_posts:
+            c.execute("REPLACE INTO buffer_metrics_state (id, fetched_at) VALUES (1, %s)", [now])
     return n_posts, n_rows
 
 
@@ -339,6 +343,25 @@ def last_fetch_day():
         c.execute("SELECT MAX(fetched_date) FROM buffer_post_metrics")
         row = c.fetchone()
     return row[0] if row else None
+
+
+def last_fetch_at():
+    """When the numbers were last fetched and when Buffer itself last
+    refreshed them, both in Berlin time (07.11.2026: "bei last auch die
+    Uhrzeit"). {'at': datetime, 'buffer': datetime or None}; before the first
+    fetch with a time only the day is known: {'day': date}. None without data."""
+    ensure_table()
+    with connection.cursor() as c:
+        c.execute("SELECT fetched_at FROM buffer_metrics_state WHERE id=1")
+        row = c.fetchone()
+        c.execute("SELECT MAX(metrics_updated_at) FROM buffer_post_metrics WHERE fetched_date=(SELECT MAX(fetched_date) FROM buffer_post_metrics)")
+        newest = c.fetchone()
+    berlin = lambda dt: dt.replace(tzinfo=UTC).astimezone(BERLIN).replace(tzinfo=None) if dt else None
+    buffer_at = berlin(_ts(newest[0])) if newest and newest[0] else None
+    if row and row[0]:
+        return {'at': berlin(row[0]), 'buffer': buffer_at}
+    day = last_fetch_day()
+    return {'day': day, 'buffer': buffer_at} if day else None
 
 
 def channel_timelines(channel_id):

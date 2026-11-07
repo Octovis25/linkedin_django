@@ -96,7 +96,7 @@ class OjStatistik(TransactionTestCase):
         schema_aufbauen()
         pv._li_tabelle_geprueft = False
         with connection.cursor() as c:
-            for t in ('buffer_post_metrics', 'buffer_posts_posted', 'planner_linkedin_tokens',
+            for t in ('buffer_post_metrics', 'buffer_metrics_state', 'buffer_posts_posted', 'planner_linkedin_tokens',
                       'oj_export_meta', 'oj_export_daily', 'oj_export_top', 'oj_export_demo', 'oj_contacts'):
                 c.execute(f"DROP TABLE IF EXISTS {t}")
         pv._li_ensure_table()
@@ -393,8 +393,8 @@ class OjStatistik(TransactionTestCase):
         self.assertEqual(r.status_code, 200)
         html = r.content.decode()
         self.assertIn('OJ analysis', html)
-        self.assertIn('too few posts yet', html)
-        self.assertIn('oja-charts', html)
+        self.assertIn('<script id="oja-timeline"', html)
+        self.assertNotIn('oja-charts', html)               # the six findings are gone (07.11.2026)
         self.client.force_login(User.objects.create_user('kollegin', password='x'))
         self.assertEqual(self.client.get('/statistics/oj/analysis/').status_code, 302)
 

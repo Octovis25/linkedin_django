@@ -1,0 +1,1 @@
+{% if last_fetch.at %}last fetch {{ last_fetch.at|date:"d.m.Y H:i" }}{% elif last_fetch.day %}last fetch {{ last_fetch.day|date:"d.m.Y" }}{% endif %}{% if last_fetch.buffer %} · Buffer's numbers from {{ last_fetch.buffer|date:"d.m. H:i" }}{% endif %}

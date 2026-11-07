@@ -28,32 +28,35 @@
 .oja table.hm td { width:70px; height:44px; text-align:center; border-radius:5px; vertical-align:middle; border:0; padding:0; }
 .oja table.hm td b { display:block; font-size:.88rem; } .oja table.hm td span { font-size:.64rem; opacity:.85; }
 .oja table.hm td.e { background:#f8f9fa; } .oja table.hm td.few { background:#eef1f2; color:#868e96; background-image:repeating-linear-gradient(45deg,rgba(255,255,255,.7) 0 4px,transparent 4px 8px); }
+.oja .period { display:flex; flex-wrap:wrap; align-items:flex-end; gap:.8rem; padding:.8rem 1.2rem; }
+.oja .period label { display:block; font-size:.68rem; text-transform:uppercase; letter-spacing:.04em; color:var(--muted); margin-bottom:2px; }
+.oja .period input[type=date] { border:1px solid #ced4da; border-radius:4px; padding:.25rem .4rem; font-size:.84rem; }
+.oja .period .go { background:var(--octo-petrol, #008591); color:#fff; border:0; border-radius:4px; padding:.35rem .9rem; font-size:.84rem; cursor:pointer; }
+.oja .period .chips a { border:1px solid #ced4da; background:#fff; border-radius:99px; padding:.2rem .7rem; font-size:.78rem; color:#333; text-decoration:none; }
+.oja .period .chips a.on { background:var(--octo-petrol, #008591); color:#fff; border-color:var(--octo-petrol, #008591); }
+.oja .period .chan { margin-left:auto; }
+.oja .tl-note { font-size:.74rem; color:var(--muted); margin:.5rem 0 0; }
 .oja .hm-leg { display:flex; align-items:center; gap:6px; font-size:.7rem; color:#868e96; margin-top:.5rem; } .oja .hm-leg i { display:inline-block; width:24px; height:10px; border-radius:2px; }
 </style>
 
 <div class="oja">
   <div class="head"><h1>OJ analysis</h1>
-    <p>Patterns in your own posts: {{ result.n_posts }} posts with Buffer numbers in the last 12 months{% if last_fetch %} (last fetch {{ last_fetch|date:"d.m.Y" }}){% endif %}{% if export %}, LinkedIn export {{ export.period_from|date:"d.m.Y" }} – {{ export.period_to|date:"d.m.Y" }}{% endif %}.
-      Each finding says how sure it is: <span class="sure v-solid">solid</span> <span class="sure v-hint">hint</span> <span class="sure v-few">too few posts</span>. The page recalculates itself as data comes in.</p></div>
+    <p>When the posts went out and how they did, for the period you choose. Posts: Buffer{% if last_fetch %} · {% include "linkedin_statistics/_last_fetch.html" %}{% endif %}{% if export %} · LinkedIn export {{ export.period_from|date:"d.m.Y" }} – {{ export.period_to|date:"d.m.Y" }}{% endif %}.</p></div>
 
-  {% if not result.has_export %}<div class="card"><div class="cb muted">Upload the LinkedIn export under <a href="{% url 'linkedin_statistics:oj' %}">OJ profile</a> – most findings need the daily values from it.</div></div>{% endif %}
+  <div class="card"><form class="period" method="get">
+    <div><label for="von">From</label><input type="date" name="von" id="von" value="{{ von }}" min="{{ since }}" max="{{ heute }}"></div>
+    <div><label for="bis">To</label><input type="date" name="bis" id="bis" value="{{ bis }}" min="{{ since }}" max="{{ heute }}"></div>
+    <button type="submit" class="go">Show</button>
+    <div class="chips">{% for label, start in quick %}<a href="?von={{ start }}&amp;bis={{ heute }}" class="{% if von == start and bis == heute %}on{% endif %}">{{ label }}</a>{% endfor %}<a href="?von={{ since }}&amp;bis={{ heute }}" class="{% if von == since and bis == heute %}on{% endif %}">All since 2023</a></div>
+    <div class="chips chan" id="hm-chan"><button type="button" data-c="company" class="on">Company page · {{ n_company }}</button><button type="button" data-c="oj">OJ profile · {{ n_oj }}</button></div>
+  </form>
+  {% if hinweis %}<div class="cb muted" style="padding-top:0">{{ hinweis }}</div>{% endif %}</div>
 
-  {% for f in result.findings %}
-  <div class="card"><div class="ch"><h2>{{ forloop.counter }} · {{ f.title }}</h2>
-      <span class="sure v-{{ f.verdict }}">{% if f.verdict == 'solid' %}solid{% elif f.verdict == 'hint' %}hint{% elif f.verdict == 'none' %}no clear effect{% else %}too few posts yet{% endif %} · {{ f.basis }}</span></div>
-    <div class="cb">
-      {% if f.text %}<p class="lead">{{ f.text|safe }}</p>{% endif %}
-      {% if f.chart %}<div style="height:{% if f.chart.height %}{{ f.chart.height }}px{% elif f.chart.kind == 'pair' %}190px{% else %}230px{% endif %}"><canvas id="oja-{{ f.key }}"></canvas></div>{% endif %}
-      {% if f.table %}<table><thead><tr><th>Factor</th><th>What your posts show</th><th class="r">Posts</th></tr></thead><tbody>
-        {% for row in f.table %}<tr><td>{{ row.0 }}</td><td>{{ row.1 }}</td><td class="r">{{ row.2 }}</td></tr>{% endfor %}</tbody></table>{% endif %}
-      {% if f.so %}<p class="so">{{ f.so }}</p>{% endif %}
-    </div></div>
-  {% empty %}
-  <div class="card"><div class="cb muted">No posts with numbers yet – press “Fetch now” under OJ profile.</div></div>
-  {% endfor %}
+  <div class="card" id="tl-card"><div class="ch"><h2>Impressions over time</h2><span class="sure v-few" id="tl-unit"></span></div>
+    <div class="cb"><div style="height:260px"><canvas id="oja-tl"></canvas></div>
+      <p class="tl-note" id="tl-note"></p></div></div>
 
   <div class="card" id="hm-card"><div class="ch"><h2>When the posts went out</h2>
-      <div class="chips" id="hm-chan"><button data-c="company" class="on">Company page</button><button data-c="oj">OJ profile</button></div>
       <div class="chips" id="hm-stat"><button data-s="med" class="on">Median per post</button><button data-s="sum">Total impressions</button></div>
       <span class="sure" id="hm-sure"></span></div>
     <div class="cb"><div class="hm-wrap">
@@ -65,45 +68,51 @@
 </div>
 {{ heatmaps|json_script:"oja-heatmaps" }}
 
-{{ charts|json_script:"oja-charts" }}
+{{ timeline|json_script:"oja-timeline" }}
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 <script>
+let ojaChannel = 'company';
+const ojaRedraw = [];
+// ── timeline: impressions per post on its sending day; for OJ also the whole profile per day ──
 (() => {
   if (!window.Chart) return;
   Chart.defaults.font.family = getComputedStyle(document.body).fontFamily; Chart.defaults.color = '#555';
-  const C = JSON.parse(document.getElementById('oja-charts').textContent);
-  const el = k => document.getElementById('oja-' + k);
-  const TYPE = {Conference: '#008591', Achievement: '#6B21A8', Topic: '#EB6E08'};
-  const grid = {color: '#f1f3f5'}, base = {maintainAspectRatio: false, animation: false};
-  const mon = k => new Date(k + '-01T12:00:00').toLocaleString('en-US', {month: 'short', year: '2-digit'});
-  Object.entries(C).forEach(([key, c]) => {
-    if (!c || !el(key)) return;
-    if (c.kind === 'event') new Chart(el(key), {data: {labels: c.values.map((_, i) => 'Day ' + i), datasets: [
-        {type: 'bar', label: 'Ø impressions of your profile', data: c.values, backgroundColor: '#20B8B0', borderRadius: 3},
-        {type: 'line', label: 'a normal day without a post', data: c.values.map(() => c.baseline), borderColor: '#868e96', borderDash: [4, 4], pointRadius: 0}]},
-      options: {...base, plugins: {legend: {position: 'bottom', labels: {boxWidth: 10}}}, scales: {y: {beginAtZero: true, grid}, x: {grid: {display: false}}}}});
-    if (c.kind === 'pair') new Chart(el(key), {type: 'bar', data: {labels: c.labels, datasets: [{data: c.values, backgroundColor: ['#008591', '#ced4da'], borderRadius: 4}]},
-      options: {...base, indexAxis: c.horizontal ? 'y' : 'x', plugins: {legend: {display: false}}, scales: {x: {beginAtZero: true, grid: c.horizontal ? grid : {display: false}}, y: {beginAtZero: true, grid: c.horizontal ? {display: false} : grid}}}});
-    if (c.kind === 'bars') new Chart(el(key), {type: 'bar', data: {labels: c.rows.map(r => r.label + (r.young ? ' (young)' : '')),
-        datasets: [{data: c.rows.map(r => r.impressions), backgroundColor: c.rows.map(r => (TYPE[r.type] || '#868e96') + (r.young ? '66' : '')), borderRadius: 4}]},
-      options: {...base, indexAxis: 'y', plugins: {legend: {display: false}, tooltip: {callbacks: {afterLabel: it => c.rows[it.dataIndex].type}}},
-        scales: {x: {beginAtZero: true, grid, title: {display: true, text: 'impressions · teal = conference, purple = achievement, orange = topic'}}, y: {grid: {display: false}, ticks: {font: {size: 11}}}}}});
-    if (c.kind === 'months2') new Chart(el(key), {type: 'bar', data: {labels: c.labels.map(mon), datasets: [
-        {label: 'New followers', data: c.followers, backgroundColor: '#008591', borderRadius: 3},
-        {label: 'New contacts', data: c.contacts, backgroundColor: '#B8860B', borderRadius: 3}]},
-      options: {...base, plugins: {legend: {position: 'bottom', labels: {boxWidth: 10}}}, scales: {y: {beginAtZero: true, grid}, x: {grid: {display: false}}}}});
-    if (c.kind === 'months') new Chart(el(key), {data: {labels: c.months.map(m => mon(m.month)), datasets: [
-        {type: 'bar', label: 'Impressions (grey = no post that month, light = this month so far)', data: c.months.map(m => m.impressions), backgroundColor: c.months.map(m => m.partial ? 'rgba(32,184,176,.45)' : m.posts ? '#20B8B0' : '#ced4da'), borderRadius: 3, yAxisID: 'y'},
-        {type: 'line', label: 'New followers', data: c.months.map(m => m.followers), borderColor: '#005F68', backgroundColor: '#005F68', tension: .3, yAxisID: 'y2'}]},
-      options: {...base, plugins: {legend: {position: 'bottom', labels: {boxWidth: 10}}, tooltip: {callbacks: {afterTitle: it => { const m = c.months[it[0].dataIndex]; return m.posts + ' post' + (m.posts === 1 ? '' : 's') + (m.partial ? ' · so far, from Buffer (the LinkedIn export does not cover this month yet)' : ''); }}}},
-        scales: {y: {beginAtZero: true, grid}, y2: {position: 'right', beginAtZero: true, grid: {display: false}}, x: {grid: {display: false}}}}});
-  });
+  const T = JSON.parse(document.getElementById('oja-timeline').textContent);
+  const day = s => new Date(s + 'T12:00:00'), iso = d => d.toISOString().slice(0, 10);
+  const span = Math.round((day(T.bis) - day(T.von)) / 864e5) + 1, weekly = span > 120;
+  const key = s => { if (!weekly) return s; const d = day(s); d.setDate(d.getDate() - (d.getDay() + 6) % 7); return iso(d); };
+  const keys = []; for (let d = day(T.von); d <= day(T.bis); d.setDate(d.getDate() + 1)) keys.push(key(iso(d)));
+  const uniq = [...new Set(keys)];
+  const fmt = k => day(k).toLocaleDateString('en-GB', {day: '2-digit', month: 'short', year: span > 360 ? '2-digit' : undefined});
+  let chart;
+  function draw() {
+    const posts = T[ojaChannel], P = {}, N = {}, L = {};
+    posts.forEach(p => { const k = key(p.date); P[k] = (P[k] || 0) + p.imp; (N[k] = N[k] || []).push(p); });
+    const prof = ojaChannel === 'oj' && T.profile.length;
+    if (prof) T.profile.forEach(([d, v]) => { const k = key(d); L[k] = (L[k] || 0) + v; });
+    const ds = [{type: 'bar', label: 'Impressions of the posts sent ' + (weekly ? 'that week' : 'that day') + ' (so far)', data: uniq.map(k => P[k] || null),
+                 backgroundColor: '#20B8B0', borderRadius: 3, yAxisID: 'y', order: 2, maxBarThickness: 18}];
+    if (prof) ds.push({type: 'line', label: 'Whole profile ' + (weekly ? 'per week' : 'per day') + ' (LinkedIn export)', data: uniq.map(k => L[k] ?? null),
+                 borderColor: '#005F68', backgroundColor: '#005F68', pointRadius: 0, borderWidth: 1.6, tension: .25, spanGaps: false, yAxisID: 'y', order: 1});
+    if (chart) chart.destroy();
+    chart = new Chart(document.getElementById('oja-tl'), {data: {labels: uniq.map(fmt), datasets: ds},
+      options: {maintainAspectRatio: false, animation: false, interaction: {mode: 'index', intersect: false},
+        plugins: {legend: {position: 'bottom', labels: {boxWidth: 10}},
+          tooltip: {callbacks: {title: it => (weekly ? 'Week of ' : '') + day(uniq[it[0].dataIndex]).toLocaleDateString('en-GB', {weekday: weekly ? undefined : 'short', day: '2-digit', month: 'short', year: 'numeric'}),
+                                afterBody: it => (N[uniq[it[0].dataIndex]] || []).slice(0, 4).map(p => p.imp + ' · ' + p.title)}}},
+        scales: {y: {beginAtZero: true, grid: {color: '#f1f3f5'}}, x: {grid: {display: false}, ticks: {autoSkip: true, maxTicksLimit: 14, maxRotation: 0}}}}});
+    const total = posts.reduce((a, p) => a + p.imp, 0);
+    document.getElementById('tl-unit').textContent = (weekly ? 'per week' : 'per day') + ' · ' + posts.length + ' posts';
+    document.getElementById('tl-note').textContent = posts.length ? `${posts.length} posts, ${total.toLocaleString('de-DE')} impressions so far. A post's impressions are shown on the day it went out, even if they came in later.`
+      + (ojaChannel === 'oj' && !T.profile.length ? ' The LinkedIn export does not cover this period – no line for the whole profile.' : '') : 'No posts with numbers in this period.';
+  }
+  ojaRedraw.push(draw); draw();
 })();
 
 // ── heatmap: weekday × time of day ──
 (() => {
   const H = JSON.parse(document.getElementById('oja-heatmaps').textContent);
-  let ch = 'company', st = 'med';
+  let st = 'med';
   const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'}[c]));
   const med = a => { const s = [...a].sort((x, y) => x - y), m = s.length >> 1; return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2; };
   const sum = a => a.reduce((x, y) => x + y, 0);
@@ -112,7 +121,7 @@
     return `rgb(${a.map((v, k) => Math.round(v + (b[k] - v) * t))})`; };
   const LABEL = {solid: 'solid', hint: 'hint', none: 'no clear effect', few: 'too few posts yet'};
   function draw() {
-    const h = H[ch], cells = h.cells, val = a => st === 'med' ? med(a) : sum(a);
+    const h = H[ojaChannel], cells = h.cells, val = a => st === 'med' ? med(a) : sum(a);
     const counted = Object.values(cells).filter(a => a.length >= h.min_posts).map(val), mx = Math.max(1, ...counted);
     let t = '<tr><th></th>' + h.blocks.map(b => `<th>${esc(b)}</th>`).join('') + '</tr>';
     h.days.forEach((d, di) => {
@@ -132,7 +141,10 @@
   }
   const chips = (id, cb) => document.querySelectorAll('#' + id + ' button').forEach(b => b.onclick = () => {
     document.querySelectorAll('#' + id + ' button').forEach(x => x.classList.toggle('on', x === b)); cb(b.dataset); draw(); });
-  chips('hm-chan', d => { ch = d.c; });
+  ojaRedraw.push(draw);
+  document.querySelectorAll('#hm-chan button').forEach(b => b.onclick = () => {
+    document.querySelectorAll('#hm-chan button').forEach(x => x.classList.toggle('on', x === b));
+    ojaChannel = b.dataset.c; ojaRedraw.forEach(f => f()); });
   chips('hm-stat', d => { st = d.s; });
   draw();
 })();

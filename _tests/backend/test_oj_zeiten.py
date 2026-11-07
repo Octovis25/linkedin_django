@@ -2,7 +2,7 @@
 impressions per post, in Berlin time."""
 import json
 import re
-from datetime import date
+from datetime import date, timedelta
 
 from django.test import SimpleTestCase
 
@@ -106,3 +106,80 @@ class AktuellerMonat(_Basis):
         self.assertEqual(chart['months'][1]['impressions'], 4)                 # the input is left alone
         full = {'kind': 'months', 'months': [{'month': '2026-11', 'impressions': 50, 'followers': 1, 'posts': 1, 'days': 6}]}
         self.assertIs(full, current_month_from_buffer(full, PERSON, today=date(2026, 11, 6)))
+
+
+def timeline(html):
+    return json.loads(re.search(r'<script id="oja-timeline" type="application/json">(.*?)</script>', html, re.S).group(1))
+
+
+class Zeitraum(_Basis):
+    """OJ analysis, 07.11.2026: only the heatmap, a timeline above it, a period like Web Analytics."""
+
+    def setUp(self):
+        super().setUp()
+        today = bm.today_berlin()
+        self.today = today
+        self.old = (today - timedelta(days=200)).isoformat() + 'T08:00:00Z'
+        self.new = (today - timedelta(days=20)).isoformat() + 'T08:00:00Z'
+        bm.store_snapshot([buffer_post('o-alt', ORG, self.old, impressions=70),
+                           buffer_post('o-neu', ORG, self.new, impressions=65),
+                           buffer_post('p-neu', PERSON, self.new, impressions=399),
+                           buffer_post('p-2022', PERSON, '2022-06-01T08:00:00Z', impressions=500)], day=today)
+
+    def get(self, **q):
+        return self.client.get('/statistics/oj/analysis/', q).content.decode()
+
+    def test_standard_zwoelf_monate(self):
+        html = self.get()
+        t = timeline(html)
+        self.assertEqual(((self.today - timedelta(days=364)).isoformat(), self.today.isoformat()), (t['von'], t['bis']))
+        self.assertEqual(2, len(t['company']))
+        self.assertEqual([399], [p['imp'] for p in t['oj']])
+        self.assertNotIn('· 1 ·', html)                    # no numbered findings any more
+        self.assertLess(html.index('id="tl-card"'), html.index('id="hm-card"'))
+
+    def test_zeitraum_filtert_timeline_und_heatmap(self):
+        von = (self.today - timedelta(days=60)).isoformat()
+        html = self.get(von=von, bis=self.today.isoformat())
+        self.assertEqual([65], [p['imp'] for p in timeline(html)['company']])
+        data = json.loads(re.search(r'<script id="oja-heatmaps" type="application/json">(.*?)</script>', html, re.S).group(1))
+        self.assertEqual(1, data['company']['n'])
+        self.assertIn(f'value="{von}"', html)
+
+    def test_nie_vor_2023_und_nicht_in_der_zukunft(self):
+        t = timeline(self.get(von='2020-01-01', bis='2099-01-01'))
+        self.assertEqual(('2023-01-01', self.today.isoformat()), (t['von'], t['bis']))
+        self.assertNotIn(500, [p['imp'] for p in t['oj']])
+
+    def test_falsches_datum(self):
+        html = self.get(von='gestern')
+        self.assertIn('could not be read', html)
+        self.assertEqual(self.today.isoformat(), timeline(html)['bis'])
+
+
+class LetzterAbruf(_Basis):
+    """OJ profile, 07.11.2026: "bei last auch die Uhrzeit"."""
+
+    def test_uhrzeit_des_abrufs_und_von_buffer(self):
+        from datetime import datetime
+        from unittest import mock
+        from posts_posted import buffer_sync
+        self.assertIsNone(bm.last_fetch_at())
+        p = buffer_post('p1', PERSON, '2026-11-02T08:00:00Z', impressions=9)
+        p['metrics_updated_at'] = '2026-11-07T13:12:40.946Z'          # 14:12 in Berlin (CET)
+        with mock.patch.object(bm, '_utcnow', return_value=datetime(2026, 11, 7, 13, 45, 3)):
+            bm.store_snapshot([p], day=date(2026, 11, 7))
+        self.assertEqual({'at': datetime(2026, 11, 7, 14, 45, 3), 'buffer': datetime(2026, 11, 7, 14, 12, 40)},
+                         bm.last_fetch_at())
+        with mock.patch.object(bm, 'fetch_hourly', return_value=False), \
+             mock.patch.object(buffer_sync, 'sync_for_today_in_background', return_value=False):
+            html = self.client.get('/statistics/oj/').content.decode()
+        self.assertIn("last fetch 07.11.2026 14:45 · Buffer's numbers from 07.11. 14:12", html)
+        self.assertIn('last fetch 07.11.2026 14:45', self.client.get('/statistics/oj/analysis/').content.decode())
+
+    def test_vor_dem_ersten_abruf_mit_uhrzeit_nur_der_tag(self):
+        from django.db import connection
+        bm.store_snapshot([buffer_post('p1', PERSON, '2026-11-02T08:00:00Z', impressions=9)], day=date(2026, 11, 6))
+        with connection.cursor() as c:
+            c.execute("DELETE FROM buffer_metrics_state")
+        self.assertEqual({'day': date(2026, 11, 6), 'buffer': None}, bm.last_fetch_at())

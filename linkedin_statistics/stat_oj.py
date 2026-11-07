@@ -9,6 +9,8 @@ Two sources side by side:
 
 Only for superusers: it is one person's own profile ("da muss nur ich drauf").
 """
+from datetime import date, timedelta
+
 from django.contrib.auth.decorators import user_passes_test
 from django.http import JsonResponse
 from django.middleware.csrf import get_token
@@ -104,7 +106,7 @@ def oj(request):
         'months': months,
         'channel_ok': bool(channel),
         'key_ok': bool(buf['token']),
-        'last_fetch': bm.last_fetch_day(),
+        'last_fetch': bm.last_fetch_at(),
         'export': meta,
         'upload_msg': request.GET.get('upload'),
         'upload_n': request.GET.get('n'),
@@ -144,23 +146,55 @@ def current_month_from_buffer(chart, channel, today=None):
 
 @superuser_required
 def oj_analysis(request):
-    from . import oj_analysis as analysis
+    """The posting-time heatmap under a timeline of the chosen period
+    (07.11.2026: the six findings are gone, "nur noch die Heatmap" and
+    "Zeiträume auswählen wie bei der Webanalyse")."""
     from . import posting_times
+    von, bis, hinweis = _period(request.GET)
     buf = bm.superuser_buffer()
+    inside = lambda posts: [p for p in posts if p['date'] and von <= p['date'] <= bis]
+    company = inside(bm.posts_with_latest(buf['org_channel']))
+    person = inside(bm.posts_with_latest(buf['person_channel']))
     meta = oj_export.meta()
-    person = bm.posts_with_latest(buf['person_channel'])
-    company = bm.posts_with_latest(buf['org_channel'])
-    result = analysis.analyse(person, company,
-                              oj_export.daily(), meta['followers_total'] if meta else None,
-                              contacts=oj_contacts.listing())
-    charts = {f['key']: f.get('chart') for f in result['findings']}
-    if charts.get('months'):
-        charts['months'] = current_month_from_buffer(charts['months'], buf['person_channel'])
+    daily = [d for d in oj_export.daily() if von.isoformat() <= d[0] <= bis.isoformat()]
+    imp = lambda p: int(round(float((p.get('m') or {}).get('impressions') or 0)))
+    timeline = {
+        'von': von.isoformat(), 'bis': bis.isoformat(),
+        'company': [{'date': p['date'].isoformat(), 'imp': imp(p), 'title': p['title'][:90]} for p in company],
+        'oj': [{'date': p['date'].isoformat(), 'imp': imp(p), 'title': p['title'][:90]} for p in person],
+        'profile': [[d[0], d[1]] for d in daily],          # the whole profile per day, LinkedIn export
+    }
+    today = bm.today_berlin()
+    quick = [(label, (today - timedelta(days=days - 1)).isoformat()) for label, days in
+             (('3 months', 91), ('6 months', 182), ('12 months', 365))]
     return render(request, 'linkedin_statistics/stat_oj_analysis.html', {
-        'result': result, 'charts': charts,
-        'export': meta, 'last_fetch': bm.last_fetch_day(),
+        'von': von.isoformat(), 'bis': bis.isoformat(), 'hinweis': hinweis, 'heute': today.isoformat(),
+        'quick': quick, 'since': OLDEST_SHOWN.isoformat(),
+        'timeline': timeline, 'n_company': len(company), 'n_oj': len(person),
+        'export': meta, 'last_fetch': bm.last_fetch_at(),
         'heatmaps': {'company': posting_times.heatmap(company), 'oj': posting_times.heatmap(person)},
     })
+
+
+OLDEST_SHOWN = date(2023, 1, 1)           # posts before 2023 never show
+
+
+def _period(get):
+    """From/to out of ?von=&bis= (like Web Analytics); 12 months by default."""
+    today = bm.today_berlin()
+    hinweis = ''
+    try:
+        bis = date.fromisoformat(get.get('bis') or '') if get.get('bis') else today
+        von = date.fromisoformat(get.get('von') or '') if get.get('von') else bis - timedelta(days=364)
+    except ValueError:
+        bis, von, hinweis = today, today - timedelta(days=364), 'That date could not be read – showing the last 12 months.'
+    if von > bis:
+        von, bis = bis, von
+    if von < OLDEST_SHOWN:
+        von = OLDEST_SHOWN
+    if bis > today:
+        bis = today
+    return von, bis, hinweis
 
 
 @superuser_required

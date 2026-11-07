@@ -33,7 +33,7 @@ class _Basis(TransactionTestCase):
         pv._li_tabelle_geprueft = False
         with connection.cursor() as c:
             for t in ('buffer_post_metrics', 'buffer_posts_posted', 'planner_linkedin_tokens', 'buffer_sync_log',
-                      'buffer_post_measurements', 'buffer_metrics_runs'):
+                      'buffer_post_measurements', 'buffer_metrics_runs', 'buffer_metrics_state'):
                 c.execute(f"DROP TABLE IF EXISTS {t}")
         buffer_sync._tabelle_geprueft = False
         pv._li_ensure_table()
